@@ -7,21 +7,26 @@ import {
   Calendar,
   Clock,
   ExternalLink,
-  Search
+  Search,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { mockCourses } from '@/lib/mock-data';
+import { useCoursesData } from '@/hooks/useCoursesData';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useState } from 'react';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function Courses() {
   const [searchQuery, setSearchQuery] = useState('');
+  const { courses, isLoading, error, refetch } = useCoursesData();
+  const { syncData, isLoading: isSyncing } = useAuth();
 
-  const filteredCourses = mockCourses.filter(course =>
+  const filteredCourses = courses.filter(course =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.short_name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -36,6 +41,19 @@ export default function Courses() {
     return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
   };
 
+  const handleSync = async () => {
+    await syncData();
+    refetch();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -43,22 +61,41 @@ export default function Courses() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Cursos</h1>
           <p className="text-muted-foreground">
-            {mockCourses.length} cursos vinculados à sua conta
+            {courses.length} cursos vinculados à sua conta
           </p>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full md:w-72">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Buscar curso..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
+        <div className="flex items-center gap-2">
+          {/* Sync button */}
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={handleSync}
+            disabled={isSyncing}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+            Sincronizar
+          </Button>
+
+          {/* Search */}
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Buscar curso..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+          </div>
         </div>
       </div>
+
+      {error && (
+        <div className="bg-destructive/10 text-destructive p-4 rounded-lg">
+          {error}
+        </div>
+      )}
 
       {/* Courses grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -72,9 +109,11 @@ export default function Courses() {
                     <h3 className="font-semibold leading-tight line-clamp-2">
                       {course.name}
                     </h3>
-                    <Badge variant="secondary" className="shrink-0 text-xs">
-                      {course.short_name}
-                    </Badge>
+                    {course.short_name && (
+                      <Badge variant="secondary" className="shrink-0 text-xs">
+                        {course.short_name}
+                      </Badge>
+                    )}
                   </div>
                   {course.category && (
                     <p className="text-xs text-muted-foreground mt-1">
@@ -135,7 +174,7 @@ export default function Courses() {
         ))}
       </div>
 
-      {filteredCourses.length === 0 && (
+      {filteredCourses.length === 0 && !isLoading && (
         <div className="text-center py-12">
           <BookOpen className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
           <h3 className="text-lg font-medium">Nenhum curso encontrado</h3>
@@ -145,6 +184,12 @@ export default function Courses() {
               : 'Sincronize com o Moodle para carregar seus cursos'
             }
           </p>
+          {!searchQuery && (
+            <Button onClick={handleSync} className="mt-4" disabled={isSyncing}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+              Sincronizar agora
+            </Button>
+          )}
         </div>
       )}
     </div>

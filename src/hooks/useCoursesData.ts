@@ -1,0 +1,103 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { Course } from '@/types';
+
+interface CourseWithStats extends Course {
+  students_count: number;
+  at_risk_count: number;
+  pending_tasks_count: number;
+}
+
+export function useCoursesData() {
+  const { user } = useAuth();
+  const [courses, setCourses] = useState<CourseWithStats[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchCourses = useCallback(async () => {
+    if (!user) {
+      setCourses([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Get user's courses
+      const { data: userCourses, error: userCoursesError } = await supabase
+        .from('user_courses')
+        .select(`
+          course_id,
+          courses (*)
+        `)
+        .eq('user_id', user.id);
+
+      if (userCoursesError) throw userCoursesError;
+
+      if (!userCourses || userCourses.length === 0) {
+        setCourses([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Extract courses
+      const coursesData = userCourses
+        .map(uc => uc.courses)
+        .filter((c): c is NonNullable<typeof c> => c !== null);
+
+      // Get stats for each course
+      const coursesWithStats: CourseWithStats[] = await Promise.all(
+        coursesData.map(async (course) => {
+          // Count students in this course
+          const { count: studentsCount } = await supabase
+            .from('student_courses')
+            .select('*', { count: 'exact', head: true })
+            .eq('course_id', course.id);
+
+          // Count at-risk students
+          const { data: atRiskData } = await supabase
+            .from('student_courses')
+            .select(`
+              student_id,
+              students!inner (current_risk_level)
+            `)
+            .eq('course_id', course.id);
+
+          const atRiskCount = atRiskData?.filter(
+            sc => sc.students && ['risco', 'critico'].includes((sc.students as any).current_risk_level)
+          ).length || 0;
+
+          // Count pending tasks
+          const { count: pendingTasksCount } = await supabase
+            .from('pending_tasks')
+            .select('*', { count: 'exact', head: true })
+            .eq('course_id', course.id)
+            .neq('status', 'resolvida');
+
+          return {
+            ...course,
+            students_count: studentsCount || 0,
+            at_risk_count: atRiskCount,
+            pending_tasks_count: pendingTasksCount || 0,
+          } as CourseWithStats;
+        })
+      );
+
+      setCourses(coursesWithStats);
+    } catch (err) {
+      console.error('Error fetching courses:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao carregar cursos');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
+
+  return { courses, isLoading, error, refetch: fetchCourses };
+}

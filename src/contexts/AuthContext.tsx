@@ -1,77 +1,112 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { User, AuthContextType } from '@/types';
+import { User, AuthContextType, Course } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface MoodleSession {
+  moodleToken: string;
+  moodleUserId: number;
+  moodleUrl: string;
+}
 
-// Mock user for development (simulating Moodle auth)
-const MOCK_USER: User = {
-  id: 'mock-user-id',
-  moodle_user_id: '12345',
-  moodle_username: 'tutor.demo',
-  full_name: 'Maria Silva',
-  email: 'maria.silva@senai.br',
-  avatar_url: undefined,
-  last_login: new Date().toISOString(),
-  last_sync: new Date().toISOString(),
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-};
+interface ExtendedAuthContextType extends AuthContextType {
+  moodleSession: MoodleSession | null;
+  courses: Course[];
+  setCourses: (courses: Course[]) => void;
+}
+
+const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
+
+const STORAGE_KEY = 'guia_tutor_session';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [moodleSession, setMoodleSession] = useState<MoodleSession | null>(null);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
-  // Check for existing session on mount
+  // Load session from storage on mount
   useEffect(() => {
-    const storedUser = localStorage.getItem('guia_tutor_user');
-    if (storedUser) {
+    const loadSession = () => {
       try {
-        const parsed = JSON.parse(storedUser);
-        setUser(parsed);
-        setLastSync(parsed.last_sync);
-      } catch {
-        localStorage.removeItem('guia_tutor_user');
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const session = JSON.parse(stored);
+          setUser(session.user);
+          setMoodleSession(session.moodleSession);
+          setLastSync(session.user?.last_sync || null);
+        }
+      } catch (err) {
+        console.error('Error loading session:', err);
+        localStorage.removeItem(STORAGE_KEY);
+      } finally {
+        setIsLoading(false);
       }
+    };
+
+    loadSession();
+  }, []);
+
+  // Save session to storage whenever it changes
+  const saveSession = useCallback((newUser: User | null, newMoodleSession: MoodleSession | null) => {
+    if (newUser && newMoodleSession) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        user: newUser,
+        moodleSession: newMoodleSession,
+      }));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
     }
-    setIsLoading(false);
   }, []);
 
   const login = useCallback(async (username: string, password: string, moodleUrl: string): Promise<boolean> => {
     setIsLoading(true);
     
     try {
-      // TODO: Replace with actual Moodle API authentication
-      // For now, simulate successful login for demo
+      const cleanUrl = moodleUrl.replace(/\/$/, '');
       
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Check credentials (demo mode)
-      if (!username || !password) {
+      const { data, error } = await supabase.functions.invoke('moodle-api', {
+        body: {
+          action: 'login',
+          moodleUrl: cleanUrl,
+          username,
+          password,
+        },
+      });
+
+      if (error) {
+        console.error('Login error:', error);
         toast({
           title: "Erro de autenticação",
-          description: "Usuário e senha são obrigatórios",
+          description: error.message || "Não foi possível conectar ao Moodle",
           variant: "destructive",
         });
         return false;
       }
 
-      // Create/update user in Supabase
-      const newUser: User = {
-        ...MOCK_USER,
-        moodle_username: username,
-        full_name: username.split('.').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' '),
-        last_login: new Date().toISOString(),
-        last_sync: new Date().toISOString(),
+      if (data.error) {
+        toast({
+          title: "Erro de autenticação",
+          description: data.error === 'invalidlogin' 
+            ? "Usuário ou senha inválidos" 
+            : data.error,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      const newUser: User = data.user;
+      const newSession: MoodleSession = {
+        moodleToken: data.moodleToken,
+        moodleUserId: data.moodleUserId,
+        moodleUrl: cleanUrl,
       };
 
-      // Store in local storage for session persistence
-      localStorage.setItem('guia_tutor_user', JSON.stringify(newUser));
       setUser(newUser);
-      setLastSync(newUser.last_sync!);
+      setMoodleSession(newSession);
+      setLastSync(newUser.last_sync || null);
+      saveSession(newUser, newSession);
       
       toast({
         title: "Login realizado com sucesso",
@@ -79,23 +114,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       return true;
-    } catch (error) {
-      console.error('Login error:', error);
+    } catch (err) {
+      console.error('Login error:', err);
       toast({
         title: "Erro de autenticação",
-        description: "Não foi possível conectar ao Moodle. Verifique suas credenciais.",
+        description: "Não foi possível conectar ao Moodle. Verifique suas credenciais e a URL.",
         variant: "destructive",
       });
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [saveSession]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('guia_tutor_user');
     setUser(null);
+    setMoodleSession(null);
+    setCourses([]);
     setLastSync(null);
+    localStorage.removeItem(STORAGE_KEY);
     toast({
       title: "Logout realizado",
       description: "Você foi desconectado com sucesso.",
@@ -103,48 +140,88 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const syncData = useCallback(async () => {
-    if (!user) return;
+    if (!user || !moodleSession) {
+      toast({
+        title: "Erro",
+        description: "Sessão expirada. Faça login novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     try {
       toast({
         title: "Sincronizando...",
-        description: "Atualizando dados do Moodle",
+        description: "Atualizando cursos do Moodle",
       });
 
-      // TODO: Implement actual Moodle sync
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Sync courses
+      const { data: coursesData, error: coursesError } = await supabase.functions.invoke('moodle-api', {
+        body: {
+          action: 'sync_courses',
+          moodleUrl: moodleSession.moodleUrl,
+          token: moodleSession.moodleToken,
+          userId: moodleSession.moodleUserId,
+        },
+      });
+
+      if (coursesError || coursesData.error) {
+        throw new Error(coursesError?.message || coursesData.error);
+      }
+
+      setCourses(coursesData.courses || []);
+
+      // Sync students for each course
+      let totalStudents = 0;
+      for (const course of coursesData.courses || []) {
+        const { data: studentsData } = await supabase.functions.invoke('moodle-api', {
+          body: {
+            action: 'sync_students',
+            moodleUrl: moodleSession.moodleUrl,
+            token: moodleSession.moodleToken,
+            courseId: parseInt(course.moodle_course_id, 10),
+          },
+        });
+
+        if (studentsData?.students) {
+          totalStudents += studentsData.students.length;
+        }
+      }
       
       const newSyncTime = new Date().toISOString();
       setLastSync(newSyncTime);
       
       const updatedUser = { ...user, last_sync: newSyncTime };
-      localStorage.setItem('guia_tutor_user', JSON.stringify(updatedUser));
       setUser(updatedUser);
+      saveSession(updatedUser, moodleSession);
       
       toast({
         title: "Sincronização concluída",
-        description: "Dados atualizados com sucesso!",
+        description: `${coursesData.courses?.length || 0} cursos e ${totalStudents} alunos sincronizados!`,
       });
-    } catch (error) {
-      console.error('Sync error:', error);
+    } catch (err) {
+      console.error('Sync error:', err);
       toast({
         title: "Erro na sincronização",
-        description: "Não foi possível sincronizar com o Moodle.",
+        description: err instanceof Error ? err.message : "Não foi possível sincronizar com o Moodle.",
         variant: "destructive",
       });
     }
-  }, [user]);
+  }, [user, moodleSession, saveSession]);
 
   return (
     <AuthContext.Provider
       value={{
         user,
         isLoading,
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && !!moodleSession,
         login,
         logout,
         syncData,
         lastSync,
+        moodleSession,
+        courses,
+        setCourses,
       }}
     >
       {children}

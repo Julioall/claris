@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { Calendar, Filter } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Calendar, Filter, Loader2 } from 'lucide-react';
 import { 
   Select,
   SelectContent,
@@ -12,35 +11,41 @@ import { WeeklyIndicators } from '@/components/dashboard/WeeklyIndicators';
 import { PriorityList } from '@/components/dashboard/PriorityList';
 import { CourseOverview } from '@/components/dashboard/CourseOverview';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import { 
-  mockWeeklySummary, 
-  mockCourses, 
-  mockStudents, 
-  mockPendingTasks,
-  mockActivityFeed 
-} from '@/lib/mock-data';
-import { isPast, isToday, addDays } from 'date-fns';
+import { useDashboardData } from '@/hooks/useDashboardData';
+import { useCoursesData } from '@/hooks/useCoursesData';
 
 export default function Dashboard() {
-  const [selectedWeek, setSelectedWeek] = useState('current');
+  const [selectedWeek, setSelectedWeek] = useState<'current' | 'last'>('current');
   const [selectedCourse, setSelectedCourse] = useState('all');
 
-  // Filter data based on selections
-  const overdueActions = mockPendingTasks.filter(task => {
-    if (!task.due_date) return false;
-    return isPast(new Date(task.due_date)) && task.status !== 'resolvida';
-  });
+  const { 
+    summary, 
+    overdueActions, 
+    upcomingTasks, 
+    criticalStudents, 
+    activityFeed,
+    isLoading 
+  } = useDashboardData(selectedWeek, selectedCourse);
 
-  const upcomingTasks = mockPendingTasks.filter(task => {
-    if (!task.due_date) return false;
-    const dueDate = new Date(task.due_date);
-    const threeDaysFromNow = addDays(new Date(), 3);
-    return dueDate <= threeDaysFromNow && !isPast(dueDate) && task.status !== 'resolvida';
-  });
+  const { courses, isLoading: coursesLoading } = useCoursesData();
 
-  const criticalStudents = mockStudents.filter(
-    student => ['risco', 'critico'].includes(student.current_risk_level)
-  );
+  const defaultSummary = {
+    completed_actions: 0,
+    pending_actions: 0,
+    overdue_actions: 0,
+    pending_tasks: 0,
+    students_at_risk: 0,
+    new_at_risk_this_week: 0,
+    students_without_contact: 0,
+  };
+
+  if (isLoading || coursesLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -55,7 +60,7 @@ export default function Dashboard() {
 
         {/* Filters */}
         <div className="flex items-center gap-2">
-          <Select value={selectedWeek} onValueChange={setSelectedWeek}>
+          <Select value={selectedWeek} onValueChange={(v) => setSelectedWeek(v as 'current' | 'last')}>
             <SelectTrigger className="w-[160px]">
               <Calendar className="h-4 w-4 mr-2" />
               <SelectValue placeholder="Selecione" />
@@ -73,7 +78,7 @@ export default function Dashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os cursos</SelectItem>
-              {mockCourses.map(course => (
+              {courses.map(course => (
                 <SelectItem key={course.id} value={course.id}>
                   {course.short_name || course.name}
                 </SelectItem>
@@ -84,7 +89,7 @@ export default function Dashboard() {
       </div>
 
       {/* Weekly Indicators */}
-      <WeeklyIndicators summary={mockWeeklySummary} />
+      <WeeklyIndicators summary={summary || defaultSummary} />
 
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-2">
@@ -96,11 +101,11 @@ export default function Dashboard() {
         />
 
         {/* Course Overview */}
-        <CourseOverview courses={mockCourses} />
+        <CourseOverview courses={courses} />
       </div>
 
       {/* Activity Feed */}
-      <ActivityFeed items={mockActivityFeed} />
+      <ActivityFeed items={activityFeed} />
     </div>
   );
 }
