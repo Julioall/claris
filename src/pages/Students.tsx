@@ -6,7 +6,9 @@ import {
   Filter,
   ExternalLink,
   Clock,
-  ClipboardList
+  ClipboardList,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +28,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { RiskBadge } from '@/components/ui/RiskBadge';
-import { mockStudents, mockCourses } from '@/lib/mock-data';
+import { useStudentsData } from '@/hooks/useStudentsData';
+import { useCoursesData } from '@/hooks/useCoursesData';
+import { useAuth } from '@/contexts/AuthContext';
 import { RiskLevel } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,17 +39,20 @@ export default function Students() {
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
+  
+  const { students, isLoading, error, refetch } = useStudentsData(
+    courseFilter !== 'all' ? courseFilter : undefined
+  );
+  const { courses } = useCoursesData();
+  const { syncData, isLoading: isSyncing } = useAuth();
 
-  const filteredStudents = mockStudents.filter(student => {
+  const filteredStudents = students.filter(student => {
     const matchesSearch = student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       student.email?.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesRisk = riskFilter === 'all' || student.current_risk_level === riskFilter;
     
-    // In a real app, we'd filter by course relationship
-    const matchesCourse = courseFilter === 'all' || true;
-    
-    return matchesSearch && matchesRisk && matchesCourse;
+    return matchesSearch && matchesRisk;
   });
 
   const formatLastAccess = (date: string | undefined) => {
@@ -58,6 +65,19 @@ export default function Students() {
     return format(new Date(date), "dd/MM", { locale: ptBR });
   };
 
+  const handleSync = async () => {
+    await syncData();
+    refetch();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -65,10 +85,26 @@ export default function Students() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Alunos</h1>
           <p className="text-muted-foreground">
-            {mockStudents.length} alunos em seus cursos
+            {students.length} alunos em seus cursos
           </p>
         </div>
+
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleSync}
+          disabled={isSyncing}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+          Sincronizar
+        </Button>
       </div>
+
+      {error && (
+        <div className="bg-destructive/10 text-destructive p-4 rounded-lg">
+          {error}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -104,7 +140,7 @@ export default function Students() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os cursos</SelectItem>
-              {mockCourses.map(course => (
+              {courses.map(course => (
                 <SelectItem key={course.id} value={course.id}>
                   {course.short_name || course.name}
                 </SelectItem>
@@ -185,13 +221,22 @@ export default function Students() {
           </TableBody>
         </Table>
 
-        {filteredStudents.length === 0 && (
+        {filteredStudents.length === 0 && !isLoading && (
           <div className="text-center py-12">
             <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-medium">Nenhum aluno encontrado</h3>
             <p className="text-muted-foreground text-sm mt-1">
-              Tente ajustar os filtros de busca
+              {searchQuery || riskFilter !== 'all' 
+                ? 'Tente ajustar os filtros de busca'
+                : 'Sincronize com o Moodle para carregar seus alunos'
+              }
             </p>
+            {!searchQuery && riskFilter === 'all' && (
+              <Button onClick={handleSync} className="mt-4" disabled={isSyncing}>
+                <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
+                Sincronizar agora
+              </Button>
+            )}
           </div>
         )}
       </div>

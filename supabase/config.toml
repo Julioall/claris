@@ -1,1 +1,4 @@
 project_id = "untfmrzswzjandjloqgy"
+
+[functions.moodle-api]
+verify_jwt = false

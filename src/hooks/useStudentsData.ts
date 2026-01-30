@@ -1,0 +1,121 @@
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { Student, RiskLevel } from '@/types';
+
+interface StudentWithStats extends Student {
+  pending_tasks_count: number;
+  last_action_date?: string;
+}
+
+export function useStudentsData(courseId?: string) {
+  const { user } = useAuth();
+  const [students, setStudents] = useState<StudentWithStats[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchStudents = useCallback(async () => {
+    if (!user) {
+      setStudents([]);
+      setIsLoading(false);
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Get user's courses first
+      const { data: userCourses, error: userCoursesError } = await supabase
+        .from('user_courses')
+        .select('course_id')
+        .eq('user_id', user.id);
+
+      if (userCoursesError) throw userCoursesError;
+
+      if (!userCourses || userCourses.length === 0) {
+        setStudents([]);
+        setIsLoading(false);
+        return;
+      }
+
+      const courseIds = courseId 
+        ? [courseId] 
+        : userCourses.map(uc => uc.course_id);
+
+      // Get students in these courses
+      const { data: studentCourses, error: studentCoursesError } = await supabase
+        .from('student_courses')
+        .select(`
+          student_id,
+          students (*)
+        `)
+        .in('course_id', courseIds);
+
+      if (studentCoursesError) throw studentCoursesError;
+
+      if (!studentCourses || studentCourses.length === 0) {
+        setStudents([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Deduplicate students (same student can be in multiple courses)
+      const uniqueStudentsMap = new Map<string, any>();
+      studentCourses.forEach(sc => {
+        if (sc.students && !uniqueStudentsMap.has((sc.students as any).id)) {
+          uniqueStudentsMap.set((sc.students as any).id, sc.students);
+        }
+      });
+
+      const uniqueStudents = Array.from(uniqueStudentsMap.values());
+
+      // Get stats for each student
+      const studentsWithStats: StudentWithStats[] = await Promise.all(
+        uniqueStudents.map(async (student) => {
+          // Count pending tasks
+          const { count: pendingTasksCount } = await supabase
+            .from('pending_tasks')
+            .select('*', { count: 'exact', head: true })
+            .eq('student_id', student.id)
+            .neq('status', 'resolvida');
+
+          // Get last action date
+          const { data: lastAction } = await supabase
+            .from('actions')
+            .select('completed_at, created_at')
+            .eq('student_id', student.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .single();
+
+          return {
+            ...student,
+            current_risk_level: student.current_risk_level as RiskLevel,
+            pending_tasks_count: pendingTasksCount || 0,
+            last_action_date: lastAction?.completed_at || lastAction?.created_at,
+          } as StudentWithStats;
+        })
+      );
+
+      // Sort by risk level (critical first)
+      const riskOrder = { critico: 0, risco: 1, atencao: 2, normal: 3 };
+      studentsWithStats.sort((a, b) => 
+        riskOrder[a.current_risk_level] - riskOrder[b.current_risk_level]
+      );
+
+      setStudents(studentsWithStats);
+    } catch (err) {
+      console.error('Error fetching students:', err);
+      setError(err instanceof Error ? err.message : 'Erro ao carregar alunos');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user, courseId]);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [fetchStudents]);
+
+  return { students, isLoading, error, refetch: fetchStudents };
+}
