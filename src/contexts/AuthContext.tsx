@@ -214,10 +214,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     
+    setIsLoading(true);
+    
     try {
       toast({
-        title: "Sincronizando...",
-        description: "Atualizando cursos do Moodle",
+        title: "Sincronizando cursos...",
+        description: "Buscando cursos do Moodle",
       });
 
       // Sync courses
@@ -234,22 +236,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(coursesError?.message || coursesData.error);
       }
 
-      setCourses(coursesData.courses || []);
+      const syncedCourses = coursesData.courses || [];
+      setCourses(syncedCourses);
 
-      // Sync students for each course
+      toast({
+        title: `${syncedCourses.length} cursos encontrados`,
+        description: "Sincronizando alunos em paralelo...",
+      });
+
+      // Sync students in parallel batches (max 5 concurrent requests)
+      const BATCH_SIZE = 5;
       let totalStudents = 0;
-      for (const course of coursesData.courses || []) {
-        const { data: studentsData } = await supabase.functions.invoke('moodle-api', {
-          body: {
-            action: 'sync_students',
-            moodleUrl: moodleSession.moodleUrl,
-            token: moodleSession.moodleToken,
-            courseId: parseInt(course.moodle_course_id, 10),
-          },
-        });
+      let syncedCoursesCount = 0;
+      
+      for (let i = 0; i < syncedCourses.length; i += BATCH_SIZE) {
+        const batch = syncedCourses.slice(i, i + BATCH_SIZE);
+        
+        const results = await Promise.allSettled(
+          batch.map(async (course: any) => {
+            const { data: studentsData } = await supabase.functions.invoke('moodle-api', {
+              body: {
+                action: 'sync_students',
+                moodleUrl: moodleSession.moodleUrl,
+                token: moodleSession.moodleToken,
+                courseId: parseInt(course.moodle_course_id, 10),
+              },
+            });
+            return studentsData?.students?.length || 0;
+          })
+        );
 
-        if (studentsData?.students) {
-          totalStudents += studentsData.students.length;
+        // Count successful syncs
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            totalStudents += result.value;
+          }
+        }
+        
+        syncedCoursesCount += batch.length;
+        
+        // Update progress
+        if (syncedCoursesCount < syncedCourses.length) {
+          toast({
+            title: `Sincronizando alunos...`,
+            description: `${syncedCoursesCount}/${syncedCourses.length} cursos processados`,
+          });
         }
       }
       
@@ -261,8 +292,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       saveSession(updatedUser, moodleSession);
       
       toast({
-        title: "Sincronização concluída",
-        description: `${coursesData.courses?.length || 0} cursos e ${totalStudents} alunos sincronizados!`,
+        title: "Sincronização concluída! ✓",
+        description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados`,
       });
     } catch (err) {
       console.error('Sync error:', err);
@@ -271,6 +302,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: err instanceof Error ? err.message : "Não foi possível sincronizar com o Moodle.",
         variant: "destructive",
       });
+    } finally {
+      setIsLoading(false);
     }
   }, [user, moodleSession, saveSession]);
 
