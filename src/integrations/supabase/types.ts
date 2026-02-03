@@ -358,6 +358,72 @@ export type Database = {
           },
         ]
       }
+      student_activities: {
+        Row: {
+          activity_name: string
+          activity_type: string | null
+          completed_at: string | null
+          course_id: string
+          created_at: string
+          due_date: string | null
+          grade: number | null
+          grade_max: number | null
+          id: string
+          moodle_activity_id: string
+          percentage: number | null
+          status: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          activity_name: string
+          activity_type?: string | null
+          completed_at?: string | null
+          course_id: string
+          created_at?: string
+          due_date?: string | null
+          grade?: number | null
+          grade_max?: number | null
+          id?: string
+          moodle_activity_id: string
+          percentage?: number | null
+          status?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          activity_name?: string
+          activity_type?: string | null
+          completed_at?: string | null
+          course_id?: string
+          created_at?: string
+          due_date?: string | null
+          grade?: number | null
+          grade_max?: number | null
+          id?: string
+          moodle_activity_id?: string
+          percentage?: number | null
+          status?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_activities_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_activities_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_courses: {
         Row: {
           course_id: string

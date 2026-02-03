@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { User, AuthContextType, Course } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { SyncStep } from '@/components/sync/SyncProgressDialog';
 
 interface MoodleSession {
   moodleToken: string;
@@ -9,15 +10,35 @@ interface MoodleSession {
   moodleUrl: string;
 }
 
+interface SyncProgress {
+  isOpen: boolean;
+  steps: SyncStep[];
+  currentStep: string | null;
+  isComplete: boolean;
+  summary?: {
+    courses: number;
+    students: number;
+    activities: number;
+  };
+}
+
 interface ExtendedAuthContextType extends AuthContextType {
   moodleSession: MoodleSession | null;
   courses: Course[];
   setCourses: (courses: Course[]) => void;
+  syncProgress: SyncProgress;
+  closeSyncProgress: () => void;
 }
 
 const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'guia_tutor_session';
+
+const initialSteps: SyncStep[] = [
+  { id: 'courses', label: 'Sincronizar cursos', icon: 'courses', status: 'pending' },
+  { id: 'students', label: 'Sincronizar alunos', icon: 'students', status: 'pending' },
+  { id: 'activities', label: 'Sincronizar atividades', icon: 'activities', status: 'pending' },
+];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -25,6 +46,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>({
+    isOpen: false,
+    steps: initialSteps,
+    currentStep: null,
+    isComplete: false,
+  });
 
   // Load session from storage on mount
   useEffect(() => {
@@ -58,6 +85,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } else {
       localStorage.removeItem(STORAGE_KEY);
     }
+  }, []);
+
+  const updateStep = useCallback((stepId: string, updates: Partial<SyncStep>) => {
+    setSyncProgress(prev => ({
+      ...prev,
+      currentStep: updates.status === 'in_progress' ? stepId : prev.currentStep,
+      steps: prev.steps.map(step => 
+        step.id === stepId ? { ...step, ...updates } : step
+      ),
+    }));
+  }, []);
+
+  const closeSyncProgress = useCallback(() => {
+    setSyncProgress(prev => ({ ...prev, isOpen: false }));
   }, []);
 
   const login = useCallback(async (username: string, password: string, moodleUrl: string, service: string = 'moodle_mobile_app'): Promise<boolean> => {
@@ -216,13 +257,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     setIsLoading(true);
     
-    try {
-      toast({
-        title: "Sincronizando cursos...",
-        description: "Buscando cursos do Moodle",
-      });
+    // Reset and open sync progress dialog
+    setSyncProgress({
+      isOpen: true,
+      steps: initialSteps.map(s => ({ ...s, status: 'pending' as const })),
+      currentStep: null,
+      isComplete: false,
+    });
 
-      // Sync courses
+    let syncedCourses: Course[] = [];
+    let totalStudents = 0;
+    let totalActivities = 0;
+
+    try {
+      // ============ STEP 1: SYNC COURSES ============
+      updateStep('courses', { status: 'in_progress' });
+      
       const { data: coursesData, error: coursesError } = await supabase.functions.invoke('moodle-api', {
         body: {
           action: 'sync_courses',
@@ -233,28 +283,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (coursesError || coursesData.error) {
+        updateStep('courses', { 
+          status: 'error', 
+          errorMessage: coursesError?.message || coursesData.error 
+        });
         throw new Error(coursesError?.message || coursesData.error);
       }
 
-      const syncedCourses = coursesData.courses || [];
+      syncedCourses = coursesData.courses || [];
       setCourses(syncedCourses);
+      updateStep('courses', { status: 'completed', count: syncedCourses.length });
 
-      toast({
-        title: `${syncedCourses.length} cursos encontrados`,
-        description: "Sincronizando alunos em paralelo...",
-      });
-
-      // Sync students in parallel batches (max 5 concurrent requests)
-      const BATCH_SIZE = 5;
-      let totalStudents = 0;
-      let syncedCoursesCount = 0;
+      // ============ STEP 2: SYNC STUDENTS ============
+      updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
       
-      for (let i = 0; i < syncedCourses.length; i += BATCH_SIZE) {
-        const batch = syncedCourses.slice(i, i + BATCH_SIZE);
+      const STUDENT_BATCH_SIZE = 5;
+      let processedCoursesStudents = 0;
+
+      for (let i = 0; i < syncedCourses.length; i += STUDENT_BATCH_SIZE) {
+        const batch = syncedCourses.slice(i, i + STUDENT_BATCH_SIZE);
         
         const results = await Promise.allSettled(
           batch.map(async (course: any) => {
-            const { data: studentsData } = await supabase.functions.invoke('moodle-api', {
+            const { data } = await supabase.functions.invoke('moodle-api', {
               body: {
                 action: 'sync_students',
                 moodleUrl: moodleSession.moodleUrl,
@@ -262,28 +313,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 courseId: parseInt(course.moodle_course_id, 10),
               },
             });
-            return studentsData?.students?.length || 0;
+            return data?.students?.length || 0;
           })
         );
 
-        // Count successful syncs
         for (const result of results) {
           if (result.status === 'fulfilled') {
             totalStudents += result.value;
           }
         }
         
-        syncedCoursesCount += batch.length;
-        
-        // Update progress
-        if (syncedCoursesCount < syncedCourses.length) {
-          toast({
-            title: `Sincronizando alunos...`,
-            description: `${syncedCoursesCount}/${syncedCourses.length} cursos processados`,
-          });
-        }
+        processedCoursesStudents += batch.length;
+        updateStep('students', { count: processedCoursesStudents, total: syncedCourses.length });
       }
+
+      updateStep('students', { status: 'completed', count: totalStudents });
+
+      // ============ STEP 3: SYNC ACTIVITIES ============
+      updateStep('activities', { status: 'in_progress', count: 0, total: syncedCourses.length });
       
+      const ACTIVITY_BATCH_SIZE = 3;
+      let processedCoursesActivities = 0;
+
+      for (let i = 0; i < syncedCourses.length; i += ACTIVITY_BATCH_SIZE) {
+        const batch = syncedCourses.slice(i, i + ACTIVITY_BATCH_SIZE);
+        
+        const results = await Promise.allSettled(
+          batch.map(async (course: any) => {
+            const { data } = await supabase.functions.invoke('moodle-api', {
+              body: {
+                action: 'sync_activities',
+                moodleUrl: moodleSession.moodleUrl,
+                token: moodleSession.moodleToken,
+                courseId: parseInt(course.moodle_course_id, 10),
+              },
+            });
+            return data?.activitiesCount || 0;
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            totalActivities += result.value;
+          }
+        }
+        
+        processedCoursesActivities += batch.length;
+        updateStep('activities', { count: processedCoursesActivities, total: syncedCourses.length });
+      }
+
+      updateStep('activities', { status: 'completed', count: totalActivities });
+      
+      // ============ FINALIZE ============
       const newSyncTime = new Date().toISOString();
       setLastSync(newSyncTime);
       
@@ -291,12 +372,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(updatedUser);
       saveSession(updatedUser, moodleSession);
       
-      toast({
-        title: "Sincronização concluída! ✓",
-        description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados`,
-      });
+      setSyncProgress(prev => ({
+        ...prev,
+        isComplete: true,
+        summary: {
+          courses: syncedCourses.length,
+          students: totalStudents,
+          activities: totalActivities,
+        },
+      }));
+
     } catch (err) {
       console.error('Sync error:', err);
+      setSyncProgress(prev => ({ ...prev, isComplete: true }));
       toast({
         title: "Erro na sincronização",
         description: err instanceof Error ? err.message : "Não foi possível sincronizar com o Moodle.",
@@ -305,7 +393,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [user, moodleSession, saveSession]);
+  }, [user, moodleSession, saveSession, updateStep]);
 
   return (
     <AuthContext.Provider
@@ -321,6 +409,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         moodleSession,
         courses,
         setCourses,
+        syncProgress,
+        closeSyncProgress,
       }}
     >
       {children}

@@ -1,13 +1,12 @@
-import { useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { TopBar } from './TopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
+import { SyncProgressDialog } from '@/components/sync/SyncProgressDialog';
 
 export function AppLayout() {
-  const { isAuthenticated } = useAuth();
-  const location = useLocation();
+  const { isAuthenticated, syncProgress, closeSyncProgress } = useAuth();
 
   if (!isAuthenticated) {
     return <Outlet />;
@@ -26,6 +25,17 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+      
+      {/* Sync Progress Dialog */}
+      <SyncProgressDialog
+        open={syncProgress.isOpen}
+        onOpenChange={(open) => !open && closeSyncProgress()}
+        steps={syncProgress.steps}
+        currentStep={syncProgress.currentStep}
+        isComplete={syncProgress.isComplete}
+        onClose={closeSyncProgress}
+        summary={syncProgress.summary}
+      />
     </SidebarProvider>
   );
 }

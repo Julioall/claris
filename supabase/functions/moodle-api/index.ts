@@ -536,6 +536,111 @@ Deno.serve(async (req) => {
         );
       }
 
+      case 'sync_activities': {
+        if (!moodleUrl || !token || !courseId) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required fields: moodleUrl, token, courseId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get course from database
+        const { data: dbCourse } = await supabase
+          .from('courses')
+          .select('id')
+          .eq('moodle_course_id', String(courseId))
+          .maybeSingle();
+
+        if (!dbCourse) {
+          return new Response(
+            JSON.stringify({ error: 'Course not found in database', activitiesCount: 0 }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get course contents (activities) from Moodle
+        let courseContents: any[] = [];
+        try {
+          courseContents = await callMoodleApi(moodleUrl, token, 'core_course_get_contents', { courseid: courseId });
+          console.log(`Found ${courseContents?.length || 0} sections in course ${courseId}`);
+        } catch (err) {
+          console.error(`Error fetching course contents for ${courseId}:`, err);
+          return new Response(
+            JSON.stringify({ success: true, activitiesCount: 0 }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get all students enrolled in this course
+        const { data: studentCourses } = await supabase
+          .from('student_courses')
+          .select('student_id')
+          .eq('course_id', dbCourse.id);
+
+        const studentIds = studentCourses?.map(sc => sc.student_id) || [];
+        
+        if (studentIds.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, activitiesCount: 0 }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Extract all activities from course contents
+        const activities: any[] = [];
+        for (const section of courseContents) {
+          if (section.modules) {
+            for (const module of section.modules) {
+              activities.push({
+                id: module.id,
+                name: module.name,
+                modname: module.modname, // Type: assign, quiz, forum, etc.
+                completion: module.completion,
+                completiondata: module.completiondata,
+              });
+            }
+          }
+        }
+
+        console.log(`Found ${activities.length} activities in course ${courseId}`);
+
+        let activitiesCount = 0;
+
+        // For each activity, check completion status for each student
+        // Note: This uses core_completion_get_activities_completion_status if available
+        // For now, we'll create basic activity records
+        for (const activity of activities) {
+          for (const studentId of studentIds) {
+            const activityData = {
+              student_id: studentId,
+              course_id: dbCourse.id,
+              moodle_activity_id: String(activity.id),
+              activity_name: activity.name,
+              activity_type: activity.modname,
+              status: activity.completiondata?.state === 1 ? 'completed' : 
+                      activity.completiondata?.state === 2 ? 'completed' : 'pending',
+              updated_at: new Date().toISOString(),
+            };
+
+            // Upsert activity record
+            const { error } = await supabase
+              .from('student_activities')
+              .upsert(activityData, {
+                onConflict: 'student_id,course_id,moodle_activity_id',
+              });
+
+            if (!error) {
+              activitiesCount++;
+            }
+          }
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, activitiesCount }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),
