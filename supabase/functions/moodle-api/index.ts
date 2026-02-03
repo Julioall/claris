@@ -43,22 +43,52 @@ interface MoodleEnrolledUser {
 }
 
 // Get Moodle token using username/password
-async function getMoodleToken(moodleUrl: string, username: string, password: string): Promise<MoodleTokenResponse> {
+async function getMoodleToken(moodleUrl: string, username: string, password: string, service: string = 'moodle_mobile_app'): Promise<MoodleTokenResponse> {
   const tokenUrl = `${moodleUrl}/login/token.php`;
   const params = new URLSearchParams({
     username,
     password,
-    service: 'moodle_mobile_app'
+    service
   });
 
-  console.log(`Requesting token from: ${tokenUrl}`);
+  console.log(`Requesting token from: ${tokenUrl} with service: ${service}`);
   
-  const response = await fetch(`${tokenUrl}?${params.toString()}`);
-  const data = await response.json();
-  
-  console.log('Token response:', JSON.stringify(data));
-  
-  return data;
+  try {
+    const response = await fetch(`${tokenUrl}?${params.toString()}`);
+    const contentType = response.headers.get('content-type') || '';
+    const text = await response.text();
+    
+    console.log(`Response status: ${response.status}, content-type: ${contentType}`);
+    console.log(`Response body (first 500 chars): ${text.substring(0, 500)}`);
+    
+    // Check if response is HTML (error page)
+    if (contentType.includes('text/html') || text.trim().startsWith('<!DOCTYPE') || text.trim().startsWith('<html')) {
+      console.error('Moodle returned HTML instead of JSON - possibly invalid URL or service not enabled');
+      return { 
+        error: `O serviço "${service}" não está disponível neste Moodle. Verifique com o administrador se os Web Services estão habilitados.`,
+        errorcode: 'service_unavailable'
+      };
+    }
+    
+    // Try to parse JSON
+    try {
+      const data = JSON.parse(text);
+      console.log('Token response:', JSON.stringify(data));
+      return data;
+    } catch (parseError) {
+      console.error('Failed to parse JSON response:', text.substring(0, 200));
+      return { 
+        error: 'Resposta inválida do Moodle. Verifique a URL.',
+        errorcode: 'parse_error'
+      };
+    }
+  } catch (fetchError) {
+    console.error('Fetch error:', fetchError);
+    return { 
+      error: `Erro de conexão: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
+      errorcode: 'network_error'
+    };
+  }
 }
 
 // Call Moodle Web Service API
@@ -114,7 +144,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, moodleUrl, username, password, token, userId, courseId } = await req.json();
+    const { action, moodleUrl, username, password, token, userId, courseId, service } = await req.json();
 
     console.log(`Moodle API action: ${action}`);
 
@@ -133,7 +163,7 @@ Deno.serve(async (req) => {
         }
 
         // Get token from Moodle
-        const tokenResponse = await getMoodleToken(moodleUrl, username, password);
+        const tokenResponse = await getMoodleToken(moodleUrl, username, password, service || 'moodle_mobile_app');
         
         if (tokenResponse.error || !tokenResponse.token) {
           return new Response(
@@ -197,6 +227,82 @@ Deno.serve(async (req) => {
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
+      }
+
+      case 'login_with_token': {
+        if (!moodleUrl || !token) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required fields: moodleUrl, token' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          // Validate token by getting site info
+          const siteInfo = await getSiteInfo(moodleUrl, token);
+          
+          if (!siteInfo || !siteInfo.userid) {
+            return new Response(
+              JSON.stringify({ error: 'Token inválido ou expirado' }),
+              { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          // Create or update user in Supabase
+          const { data: existingUser } = await supabase
+            .from('users')
+            .select('*')
+            .eq('moodle_user_id', String(siteInfo.userid))
+            .single();
+
+          const userData = {
+            moodle_user_id: String(siteInfo.userid),
+            moodle_username: siteInfo.username,
+            full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
+            email: siteInfo.email || null,
+            avatar_url: siteInfo.profileimageurl || null,
+            last_login: new Date().toISOString(),
+            last_sync: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+
+          let user;
+          if (existingUser) {
+            const { data, error } = await supabase
+              .from('users')
+              .update(userData)
+              .eq('id', existingUser.id)
+              .select()
+              .single();
+            
+            if (error) throw error;
+            user = data;
+          } else {
+            const { data, error } = await supabase
+              .from('users')
+              .insert(userData)
+              .select()
+              .single();
+            
+            if (error) throw error;
+            user = data;
+          }
+
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              user,
+              moodleUserId: siteInfo.userid
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (err) {
+          console.error('Token validation error:', err);
+          return new Response(
+            JSON.stringify({ error: err instanceof Error ? err.message : 'Token inválido ou expirado' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       case 'sync_courses': {

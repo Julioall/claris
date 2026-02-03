@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (username: string, password: string, moodleUrl: string): Promise<boolean> => {
+  const login = useCallback(async (username: string, password: string, moodleUrl: string, service: string = 'moodle_mobile_app'): Promise<boolean> => {
     setIsLoading(true);
     
     try {
@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           moodleUrl: cleanUrl,
           username,
           password,
+          service,
         },
       });
 
@@ -119,6 +120,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast({
         title: "Erro de autenticação",
         description: "Não foi possível conectar ao Moodle. Verifique suas credenciais e a URL.",
+        variant: "destructive",
+      });
+      return false;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [saveSession]);
+
+  const loginWithToken = useCallback(async (token: string, moodleUrl: string): Promise<boolean> => {
+    setIsLoading(true);
+    
+    try {
+      const cleanUrl = moodleUrl.replace(/\/$/, '');
+      
+      const { data, error } = await supabase.functions.invoke('moodle-api', {
+        body: {
+          action: 'login_with_token',
+          moodleUrl: cleanUrl,
+          token,
+        },
+      });
+
+      if (error) {
+        console.error('Token login error:', error);
+        toast({
+          title: "Erro de autenticação",
+          description: error.message || "Não foi possível validar o token",
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      if (data.error) {
+        toast({
+          title: "Erro de autenticação",
+          description: data.error,
+          variant: "destructive",
+        });
+        return false;
+      }
+
+      const newUser: User = data.user;
+      const newSession: MoodleSession = {
+        moodleToken: token,
+        moodleUserId: data.moodleUserId,
+        moodleUrl: cleanUrl,
+      };
+
+      setUser(newUser);
+      setMoodleSession(newSession);
+      setLastSync(newUser.last_sync || null);
+      saveSession(newUser, newSession);
+      
+      toast({
+        title: "Login realizado com sucesso",
+        description: `Bem-vindo, ${newUser.full_name}!`,
+      });
+
+      return true;
+    } catch (err) {
+      console.error('Token login error:', err);
+      toast({
+        title: "Erro de autenticação",
+        description: "Não foi possível validar o token. Verifique se está correto.",
         variant: "destructive",
       });
       return false;
@@ -216,6 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user && !!moodleSession,
         login,
+        loginWithToken,
         logout,
         syncData,
         lastSync,

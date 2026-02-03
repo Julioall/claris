@@ -160,7 +160,8 @@ export interface AuthContextType {
   user: User | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (username: string, password: string, moodleUrl: string) => Promise<boolean>;
+  login: (username: string, password: string, moodleUrl: string, service?: string) => Promise<boolean>;
+  loginWithToken: (token: string, moodleUrl: string) => Promise<boolean>;
   logout: () => void;
   syncData: () => Promise<void>;
   lastSync: string | null;
