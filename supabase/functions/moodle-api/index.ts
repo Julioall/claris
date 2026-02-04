@@ -849,6 +849,48 @@ Deno.serve(async (req) => {
         );
       }
 
+      case 'debug_grades': {
+        if (!moodleUrl || !token || !courseId || !userId) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required fields: moodleUrl, token, courseId, userId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Debug grades for user ${userId} in course ${courseId}`);
+
+        try {
+          const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
+            courseid: courseId,
+            userid: userId
+          });
+
+          // Return the raw response for debugging
+          return new Response(
+            JSON.stringify({ 
+              success: true, 
+              raw_response: gradesData,
+              course_grade_item: gradesData.usergrades?.[0]?.gradeitems?.find((item: any) => item.itemtype === 'course'),
+              all_item_types: gradesData.usergrades?.[0]?.gradeitems?.map((item: any) => ({
+                itemtype: item.itemtype,
+                itemname: item.itemname,
+                graderaw: item.graderaw,
+                grademax: item.grademax,
+                gradeformatted: item.gradeformatted,
+                percentageformatted: item.percentageformatted
+              }))
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (err) {
+          console.error('Debug grades error:', err);
+          return new Response(
+            JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to fetch grades' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),
