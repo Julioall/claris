@@ -322,7 +322,7 @@ Deno.serve(async (req) => {
           .from('users')
           .select('id')
           .eq('moodle_user_id', String(userId))
-          .single();
+          .maybeSingle();
 
         if (!dbUser) {
           return new Response(
@@ -335,84 +335,71 @@ Deno.serve(async (req) => {
         const moodleCourses = await getUserCourses(moodleUrl, token, userId);
         console.log(`Found ${moodleCourses.length} courses for user ${userId}`);
 
-        const syncedCourses = [];
+        // Prepare course data for batch upsert
+        const now = new Date().toISOString();
+        const coursesData = moodleCourses.map(course => ({
+          moodle_course_id: String(course.id),
+          name: course.fullname,
+          short_name: course.shortname,
+          category: course.categoryid ? String(course.categoryid) : null,
+          start_date: course.startdate ? new Date(course.startdate * 1000).toISOString() : null,
+          end_date: course.enddate ? new Date(course.enddate * 1000).toISOString() : null,
+          last_sync: now,
+          updated_at: now,
+        }));
 
-        for (const course of moodleCourses) {
-          // Check if course exists
-          const { data: existingCourse } = await supabase
-            .from('courses')
-            .select('id')
-            .eq('moodle_course_id', String(course.id))
-            .single();
+        // Batch upsert courses (uses unique constraint on moodle_course_id)
+        const { data: syncedCourses, error: upsertError } = await supabase
+          .from('courses')
+          .upsert(coursesData, { 
+            onConflict: 'moodle_course_id',
+            ignoreDuplicates: false 
+          })
+          .select();
 
-          const courseData = {
-            moodle_course_id: String(course.id),
-            name: course.fullname,
-            short_name: course.shortname,
-            category: course.categoryid ? String(course.categoryid) : null,
-            start_date: course.startdate ? new Date(course.startdate * 1000).toISOString() : null,
-            end_date: course.enddate ? new Date(course.enddate * 1000).toISOString() : null,
-            last_sync: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
+        if (upsertError) {
+          console.error('Error upserting courses:', upsertError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to sync courses', details: upsertError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
-          let dbCourse;
-          if (existingCourse) {
-            const { data, error } = await supabase
-              .from('courses')
-              .update(courseData)
-              .eq('id', existingCourse.id)
-              .select()
-              .single();
-            
-            if (error) {
-              console.error(`Error updating course ${course.id}:`, error);
-              continue;
-            }
-            dbCourse = data;
-          } else {
-            const { data, error } = await supabase
-              .from('courses')
-              .insert(courseData)
-              .select()
-              .single();
-            
-            if (error) {
-              console.error(`Error inserting course ${course.id}:`, error);
-              continue;
-            }
-            dbCourse = data;
-          }
+        console.log(`Upserted ${syncedCourses?.length || 0} courses`);
 
-          // Link user to course
-          const { data: existingLink } = await supabase
-            .from('user_courses')
-            .select('id')
-            .eq('user_id', dbUser.id)
-            .eq('course_id', dbCourse.id)
-            .single();
+        // Batch upsert user-course links
+        if (syncedCourses && syncedCourses.length > 0) {
+          const userCourseLinks = syncedCourses.map(course => ({
+            user_id: dbUser.id,
+            course_id: course.id,
+            role: 'tutor'
+          }));
 
-          if (!existingLink) {
-            await supabase
+          // Upsert in batches of 100 to avoid payload limits
+          const LINK_BATCH_SIZE = 100;
+          for (let i = 0; i < userCourseLinks.length; i += LINK_BATCH_SIZE) {
+            const batch = userCourseLinks.slice(i, i + LINK_BATCH_SIZE);
+            const { error: linkError } = await supabase
               .from('user_courses')
-              .insert({
-                user_id: dbUser.id,
-                course_id: dbCourse.id,
-                role: 'tutor'
+              .upsert(batch, { 
+                onConflict: 'user_id,course_id',
+                ignoreDuplicates: true 
               });
+            
+            if (linkError) {
+              console.error('Error linking user to courses:', linkError);
+            }
           }
-
-          syncedCourses.push(dbCourse);
         }
 
         // Update user's last_sync
         await supabase
           .from('users')
-          .update({ last_sync: new Date().toISOString() })
+          .update({ last_sync: now })
           .eq('id', dbUser.id);
 
         return new Response(
-          JSON.stringify({ success: true, courses: syncedCourses }),
+          JSON.stringify({ success: true, courses: syncedCourses || [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
