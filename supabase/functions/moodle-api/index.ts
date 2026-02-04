@@ -20,8 +20,17 @@ interface MoodleCourse {
   shortname: string;
   fullname: string;
   categoryid?: number;
+  categoryname?: string; // Some Moodle versions include this directly
   startdate?: number;
   enddate?: number;
+}
+
+interface MoodleCategory {
+  id: number;
+  name: string;
+  parent: number;
+  path: string; // e.g., "/1/5/10" - hierarchy of category IDs
+  description?: string;
 }
 
 interface MoodleUser {
@@ -128,6 +137,40 @@ async function getSiteInfo(moodleUrl: string, token: string): Promise<MoodleUser
 async function getUserCourses(moodleUrl: string, token: string, userId: number): Promise<MoodleCourse[]> {
   const data = await callMoodleApi(moodleUrl, token, 'core_enrol_get_users_courses', { userid: userId });
   return data;
+}
+
+// Get all categories from Moodle
+async function getCategories(moodleUrl: string, token: string): Promise<MoodleCategory[]> {
+  try {
+    const data = await callMoodleApi(moodleUrl, token, 'core_course_get_categories');
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching categories (function may not be available):', error);
+    return [];
+  }
+}
+
+// Build category name with path (e.g., "Parent > Child > SubChild")
+function buildCategoryPath(categoryId: number, categories: MoodleCategory[]): string {
+  const categoryMap = new Map(categories.map(c => [c.id, c]));
+  const category = categoryMap.get(categoryId);
+  
+  if (!category) {
+    return '';
+  }
+
+  // Parse the path string (e.g., "/1/5/10") to get the hierarchy
+  const pathIds = category.path
+    .split('/')
+    .filter(id => id !== '')
+    .map(id => parseInt(id, 10));
+
+  // Build the full path name
+  const pathNames = pathIds
+    .map(id => categoryMap.get(id)?.name)
+    .filter((name): name is string => !!name);
+
+  return pathNames.join(' > ');
 }
 
 // Get enrolled users in a course
@@ -335,18 +378,36 @@ Deno.serve(async (req) => {
         const moodleCourses = await getUserCourses(moodleUrl, token, userId);
         console.log(`Found ${moodleCourses.length} courses for user ${userId}`);
 
+        // Get all categories to build category names
+        const categories = await getCategories(moodleUrl, token);
+        console.log(`Found ${categories.length} categories`);
+
         // Prepare course data for batch upsert
         const now = new Date().toISOString();
-        const coursesData = moodleCourses.map(course => ({
-          moodle_course_id: String(course.id),
-          name: course.fullname,
-          short_name: course.shortname,
-          category: course.categoryid ? String(course.categoryid) : null,
-          start_date: course.startdate ? new Date(course.startdate * 1000).toISOString() : null,
-          end_date: course.enddate ? new Date(course.enddate * 1000).toISOString() : null,
-          last_sync: now,
-          updated_at: now,
-        }));
+        const coursesData = moodleCourses.map(course => {
+          // Try to get category name: first from course itself, then from categories list
+          let categoryName = course.categoryname || null;
+          
+          if (!categoryName && course.categoryid && categories.length > 0) {
+            categoryName = buildCategoryPath(course.categoryid, categories);
+          }
+          
+          // Fallback to just the category ID if we couldn't get the name
+          if (!categoryName && course.categoryid) {
+            categoryName = String(course.categoryid);
+          }
+
+          return {
+            moodle_course_id: String(course.id),
+            name: course.fullname,
+            short_name: course.shortname,
+            category: categoryName,
+            start_date: course.startdate ? new Date(course.startdate * 1000).toISOString() : null,
+            end_date: course.enddate ? new Date(course.enddate * 1000).toISOString() : null,
+            last_sync: now,
+            updated_at: now,
+          };
+        });
 
         // Batch upsert courses (uses unique constraint on moodle_course_id)
         const { data: syncedCourses, error: upsertError } = await supabase
