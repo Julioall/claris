@@ -3,8 +3,7 @@ import {
   Search,
   Loader2,
   Building2,
-  Pencil,
-  X
+  Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,10 +11,11 @@ import { useAllCoursesData } from '@/hooks/useAllCoursesData';
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { CategoryHierarchy } from '@/components/courses/CategoryHierarchy';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function MyCourses() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isEditMode, setIsEditMode] = useState(false);
+  const { isEditMode } = useAuth();
   const { courses, isLoading, error, toggleFollow, unfollowMultiple } = useAllCoursesData();
 
   // Filter only followed courses that are active (end_date is null or in the future)
@@ -61,25 +61,6 @@ export default function MyCourses() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Edit mode toggle */}
-          <Button 
-            variant={isEditMode ? "default" : "outline"} 
-            size="sm"
-            onClick={() => setIsEditMode(!isEditMode)}
-          >
-            {isEditMode ? (
-              <>
-                <X className="h-4 w-4 mr-2" />
-                Sair da edição
-              </>
-            ) : (
-              <>
-                <Pencil className="h-4 w-4 mr-2" />
-                Editar
-              </>
-            )}
-          </Button>
-
           {/* Link to Schools catalog */}
           <Button variant="outline" size="sm" asChild>
             <Link to="/escolas">

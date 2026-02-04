@@ -1,14 +1,16 @@
-import { RefreshCw, Search, Bell } from 'lucide-react';
+import { RefreshCw, Search, Bell, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarTrigger } from '@/components/ui/sidebar';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 
 export function TopBar() {
-  const { syncData, lastSync, isLoading, setShowCourseSelector, courses } = useAuth();
+  const { syncData, lastSync, isLoading, setShowCourseSelector, courses, isEditMode, setIsEditMode } = useAuth();
 
   const handleSync = () => {
     // If we have courses, show selector; otherwise trigger full sync
@@ -67,6 +69,28 @@ export function TopBar() {
             3
           </span>
         </Button>
+
+        {/* Edit mode toggle */}
+        <div className={cn(
+          "flex items-center gap-2 pl-2 border-l border-border",
+          isEditMode && "text-primary"
+        )}>
+          <Switch
+            id="edit-mode"
+            checked={isEditMode}
+            onCheckedChange={setIsEditMode}
+          />
+          <Label 
+            htmlFor="edit-mode" 
+            className={cn(
+              "text-xs cursor-pointer hidden sm:inline",
+              isEditMode ? "text-primary font-medium" : "text-muted-foreground"
+            )}
+          >
+            <Pencil className="h-3 w-3 inline mr-1" />
+            Editar
+          </Label>
+        </div>
       </div>
     </header>
   );

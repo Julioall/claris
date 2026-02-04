@@ -67,9 +67,9 @@ type HierarchyTree = Record<string, SchoolNode>;
 
 interface SchoolHierarchyProps {
   courses: CourseWithStats[];
-  onToggleFollow: (courseId: string) => void;
-  onToggleIgnore: (courseId: string) => void;
-  onToggleIgnoreMultiple: (courseIds: string[], shouldIgnore: boolean) => void;
+  onToggleFollow?: (courseId: string) => void;
+  onToggleIgnore?: (courseId: string) => void;
+  onToggleIgnoreMultiple?: (courseIds: string[], shouldIgnore: boolean) => void;
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
@@ -129,9 +129,10 @@ function IgnoreAllButton({
   level 
 }: { 
   courses: CourseWithStats[]; 
-  onToggleIgnoreMultiple: (courseIds: string[], shouldIgnore: boolean) => void;
+  onToggleIgnoreMultiple?: (courseIds: string[], shouldIgnore: boolean) => void;
   level: 'escola' | 'curso' | 'turma';
 }) {
+  if (!onToggleIgnoreMultiple) return null;
   const allIgnored = courses.every(c => c.is_ignored);
   const someIgnored = courses.some(c => c.is_ignored) && !allIgnored;
   
