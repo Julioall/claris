@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Search, RefreshCw, BookOpen } from 'lucide-react';
+import { Search, RefreshCw, BookOpen, AlertCircle } from 'lucide-react';
 import { Course } from '@/types';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 interface CourseSelectorDialogProps {
   open: boolean;
@@ -15,6 +17,13 @@ interface CourseSelectorDialogProps {
   onSync: (selectedCourseIds: string[] | 'all') => void;
   isLoading?: boolean;
 }
+
+// Helper to check if a course is still active (not ended)
+const isCourseActive = (course: Course): boolean => {
+  if (!course.end_date) return true; // No end date = always active
+  const endDate = new Date(course.end_date);
+  return endDate >= new Date();
+};
 
 export function CourseSelectorDialog({
   open,
@@ -25,19 +34,43 @@ export function CourseSelectorDialog({
 }: CourseSelectorDialogProps) {
   const [selectedCourses, setSelectedCourses] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [showFinished, setShowFinished] = useState(false);
+
+  // Separate active and finished courses
+  const { activeCourses, finishedCourses } = useMemo(() => {
+    const active: Course[] = [];
+    const finished: Course[] = [];
+    
+    courses.forEach(course => {
+      if (isCourseActive(course)) {
+        active.push(course);
+      } else {
+        finished.push(course);
+      }
+    });
+    
+    return { activeCourses: active, finishedCourses: finished };
+  }, [courses]);
 
   // Reset selection when dialog opens
   useEffect(() => {
     if (open) {
       setSelectedCourses(new Set());
       setSearchQuery('');
+      setShowFinished(false);
     }
   }, [open]);
 
-  const filteredCourses = courses.filter(course =>
-    course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    course.short_name?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Filter courses based on search and active/finished toggle
+  const displayedCourses = useMemo(() => {
+    const coursesToFilter = showFinished ? finishedCourses : activeCourses;
+    return coursesToFilter.filter(course =>
+      course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      course.short_name?.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  }, [activeCourses, finishedCourses, showFinished, searchQuery]);
+
+  const filteredCourses = displayedCourses;
 
   const toggleCourse = (courseId: string) => {
     const newSelected = new Set(selectedCourses);
@@ -80,15 +113,31 @@ export function CourseSelectorDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Info about active courses */}
+          {finishedCourses.length > 0 && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-sm">
+              <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+              <div>
+                <p className="text-muted-foreground">
+                  <strong>{activeCourses.length}</strong> cursos ativos • 
+                  <strong className="ml-1">{finishedCourses.length}</strong> cursos finalizados
+                </p>
+                <p className="text-xs text-muted-foreground/70 mt-0.5">
+                  Apenas cursos ativos serão sincronizados por padrão
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Quick actions */}
           <div className="flex gap-2">
             <Button 
               onClick={() => handleSync('all')} 
               className="flex-1"
-              disabled={isLoading}
+              disabled={isLoading || activeCourses.length === 0}
             >
               <RefreshCw className="h-4 w-4 mr-2" />
-              Sincronizar tudo ({courses.length} cursos)
+              Sincronizar ativos ({activeCourses.length} cursos)
             </Button>
           </div>
 
@@ -101,6 +150,26 @@ export function CourseSelectorDialog({
                 ou selecione cursos específicos
               </span>
             </div>
+          </div>
+
+          {/* Toggle between active and finished */}
+          <div className="flex gap-2">
+            <Button
+              variant={!showFinished ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowFinished(false)}
+              className="flex-1"
+            >
+              Ativos ({activeCourses.length})
+            </Button>
+            <Button
+              variant={showFinished ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setShowFinished(true)}
+              className="flex-1"
+            >
+              Finalizados ({finishedCourses.length})
+            </Button>
           </div>
 
           {/* Search */}
@@ -159,11 +228,18 @@ export function CourseSelectorDialog({
                       <p className="text-sm font-medium leading-tight line-clamp-2">
                         {course.name}
                       </p>
-                      {course.short_name && (
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {course.short_name}
-                        </p>
-                      )}
+                      <div className="flex items-center gap-2 mt-0.5">
+                        {course.short_name && (
+                          <span className="text-xs text-muted-foreground">
+                            {course.short_name}
+                          </span>
+                        )}
+                        {course.end_date && (
+                          <span className="text-xs text-muted-foreground/70">
+                            • Término: {format(new Date(course.end_date), 'dd/MM/yyyy', { locale: ptBR })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </label>
                 ))}

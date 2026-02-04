@@ -303,12 +303,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
+    // Helper to check if course is active (not finished)
+    const isCourseActive = (course: Course): boolean => {
+      if (!course.end_date) return true;
+      return new Date(course.end_date) >= new Date();
+    };
+
     try {
       // ============ STEP 1: SYNC COURSES ============
       const isSelectiveSync = courseIds !== 'all';
       
       if (isSelectiveSync) {
-        // For selective sync, use existing courses
+        // For selective sync, use existing courses (already filtered by user selection)
         syncedCourses = courses.filter(c => (courseIds as string[]).includes(c.id));
         updateStep('courses', { status: 'completed', count: syncedCourses.length });
       } else {
@@ -330,9 +336,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           throw new Error(coursesError?.message || coursesData?.error);
         }
 
-        syncedCourses = coursesData.courses || [];
-        setCourses(syncedCourses);
-        updateStep('courses', { status: 'completed', count: syncedCourses.length });
+        const allCourses = coursesData.courses || [];
+        setCourses(allCourses);
+        
+        // Filter to only sync active courses (not finished)
+        syncedCourses = allCourses.filter(isCourseActive);
+        
+        const finishedCount = allCourses.length - syncedCourses.length;
+        updateStep('courses', { 
+          status: 'completed', 
+          count: syncedCourses.length,
+          errorMessage: finishedCount > 0 ? `${finishedCount} cursos finalizados ignorados` : undefined
+        });
       }
 
       // ============ STEP 2: SYNC STUDENTS ============
