@@ -9,7 +9,8 @@ import { AppLayout } from "@/components/layout/AppLayout";
 // Pages
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
-import Courses from "@/pages/Courses";
+import MyCourses from "@/pages/MyCourses";
+import Schools from "@/pages/Schools";
 import CoursePanel from "@/pages/CoursePanel";
 import Students from "@/pages/Students";
 import StudentProfile from "@/pages/StudentProfile";
@@ -40,7 +41,8 @@ function AppRoutes() {
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/cursos" element={<Courses />} />
+        <Route path="/meus-cursos" element={<MyCourses />} />
+        <Route path="/escolas" element={<Schools />} />
         <Route path="/cursos/:id" element={<CoursePanel />} />
         <Route path="/alunos" element={<Students />} />
         <Route path="/alunos/:id" element={<StudentProfile />} />
