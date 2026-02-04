@@ -1,19 +1,19 @@
 import { 
-  BookOpen, 
+  Building2, 
   Search,
   RefreshCw,
   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useCoursesData } from '@/hooks/useCoursesData';
+import { useAllCoursesData } from '@/hooks/useAllCoursesData';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { CategoryHierarchy } from '@/components/courses/CategoryHierarchy';
+import { SchoolHierarchy } from '@/components/schools/SchoolHierarchy';
 
-export default function Courses() {
+export default function Schools() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { courses, isLoading, error } = useCoursesData();
+  const { courses, isLoading, error, toggleFollow } = useAllCoursesData();
   const { isLoading: isSyncing, setShowCourseSelector } = useAuth();
 
   const filteredCourses = courses.filter(course =>
@@ -35,14 +35,14 @@ export default function Courses() {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Cursos</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Escolas</h1>
           <p className="text-muted-foreground">
-            {courses.length} cursos vinculados à sua conta
+            Catálogo completo com {courses.length} cursos disponíveis
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Sync button - opens course selector */}
+          {/* Sync button */}
           <Button 
             variant="outline" 
             size="sm" 
@@ -58,7 +58,7 @@ export default function Courses() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Buscar curso..."
+              placeholder="Buscar escola, curso ou disciplina..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -73,17 +73,17 @@ export default function Courses() {
         </div>
       )}
 
-      {/* Courses hierarchy */}
+      {/* Schools hierarchy */}
       {filteredCourses.length > 0 ? (
-        <CategoryHierarchy courses={filteredCourses} />
+        <SchoolHierarchy courses={filteredCourses} onToggleFollow={toggleFollow} />
       ) : (
         <div className="text-center py-12">
-          <BookOpen className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+          <Building2 className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
           <h3 className="text-lg font-medium">Nenhum curso encontrado</h3>
           <p className="text-muted-foreground text-sm mt-1">
             {searchQuery 
               ? 'Tente uma busca diferente'
-              : 'Sincronize com o Moodle para carregar seus cursos'
+              : 'Sincronize com o Moodle para carregar os cursos'
             }
           </p>
           {!searchQuery && (

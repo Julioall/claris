@@ -1,12 +1,12 @@
 import { 
   LayoutDashboard, 
-  GraduationCap, 
   Users, 
   ClipboardList, 
   CheckSquare,
   Settings,
   LogOut,
-  BookOpen
+  BookOpen,
+  Building2
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,7 +28,8 @@ import { Separator } from '@/components/ui/separator';
 
 const mainNavItems = [
   { title: 'Resumo da Semana', url: '/', icon: LayoutDashboard },
-  { title: 'Cursos', url: '/cursos', icon: BookOpen },
+  { title: 'Meus Cursos', url: '/meus-cursos', icon: BookOpen },
+  { title: 'Escolas', url: '/escolas', icon: Building2 },
   { title: 'Alunos', url: '/alunos', icon: Users },
   { title: 'Pendências', url: '/pendencias', icon: ClipboardList },
   { title: 'Ações', url: '/acoes', icon: CheckSquare },
