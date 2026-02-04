@@ -11,7 +11,8 @@ import {
   MessageSquare,
   ClipboardList,
   History,
-  Loader2
+  Loader2,
+  GraduationCap
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ import { RiskBadge } from '@/components/ui/RiskBadge';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
+import { StudentGradesTab } from '@/components/student/StudentGradesTab';
 import { getRiskLevelLabel } from '@/lib/mock-data';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -227,8 +229,12 @@ export default function StudentProfile() {
             Ações
           </TabsTrigger>
           <TabsTrigger value="notas" className="gap-2">
-            <MessageSquare className="h-4 w-4" />
+            <GraduationCap className="h-4 w-4" />
             Notas
+          </TabsTrigger>
+          <TabsTrigger value="observacoes" className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Observações
             {notes.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
                 {notes.length}
@@ -336,13 +342,18 @@ export default function StudentProfile() {
           )}
         </TabsContent>
 
-        {/* Notas */}
+        {/* Notas (Grades) */}
         <TabsContent value="notas" className="mt-4">
+          {id && <StudentGradesTab studentId={id} />}
+        </TabsContent>
+
+        {/* Observações (Notes) */}
+        <TabsContent value="observacoes" className="mt-4">
           <div className="flex justify-between items-center mb-3">
-            <h3 className="font-medium">Notas e Observações</h3>
+            <h3 className="font-medium">Observações</h3>
             <Button size="sm" variant="outline">
               <Plus className="h-4 w-4 mr-2" />
-              Adicionar nota
+              Adicionar observação
             </Button>
           </div>
           
@@ -362,7 +373,7 @@ export default function StudentProfile() {
           ) : (
             <div className="text-center py-8 text-muted-foreground">
               <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>Nenhuma nota registrada</p>
+              <p>Nenhuma observação registrada</p>
             </div>
           )}
         </TabsContent>

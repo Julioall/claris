@@ -702,6 +702,114 @@ Deno.serve(async (req) => {
         );
       }
 
+      case 'sync_grades': {
+        if (!moodleUrl || !token || !courseId) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required fields: moodleUrl, token, courseId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get course from database
+        const { data: gradesCourse } = await supabase
+          .from('courses')
+          .select('id')
+          .eq('moodle_course_id', String(courseId))
+          .maybeSingle();
+
+        if (!gradesCourse) {
+          return new Response(
+            JSON.stringify({ error: 'Course not found in database', gradesCount: 0 }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get all students enrolled in this course with their moodle_user_id
+        const { data: enrolledStudents } = await supabase
+          .from('student_courses')
+          .select('student_id, students!inner(id, moodle_user_id)')
+          .eq('course_id', gradesCourse.id);
+
+        if (!enrolledStudents || enrolledStudents.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, gradesCount: 0 }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`);
+
+        // Fetch grades for all students using gradereport_user_get_grade_items
+        const gradeRecords: any[] = [];
+        const now = new Date().toISOString();
+
+        for (const enrollment of enrolledStudents) {
+          const student = enrollment.students as any;
+          const moodleUserId = parseInt(student.moodle_user_id, 10);
+
+          try {
+            const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
+              courseid: courseId,
+              userid: moodleUserId
+            });
+
+            // Find the course total grade (itemtype = 'course')
+            if (gradesData.usergrades && gradesData.usergrades.length > 0) {
+              const userGrade = gradesData.usergrades[0];
+              const courseGrade = userGrade.gradeitems?.find((item: any) => item.itemtype === 'course');
+
+              if (courseGrade) {
+                gradeRecords.push({
+                  student_id: student.id,
+                  course_id: gradesCourse.id,
+                  grade_raw: courseGrade.graderaw ?? null,
+                  grade_max: courseGrade.grademax ?? 100,
+                  grade_percentage: courseGrade.percentageformatted ? 
+                    parseFloat(courseGrade.percentageformatted.replace(',', '.').replace('%', '').trim()) : null,
+                  grade_formatted: courseGrade.gradeformatted ?? null,
+                  letter_grade: courseGrade.lettergradeformatted ?? null,
+                  last_sync: now,
+                  updated_at: now
+                });
+              }
+            }
+          } catch (gradeErr) {
+            console.error(`Error fetching grades for student ${moodleUserId}:`, gradeErr);
+            // Continue with other students
+          }
+        }
+
+        console.log(`Prepared ${gradeRecords.length} grade records for upsert`);
+
+        // Batch upsert grades
+        let gradesCount = 0;
+        if (gradeRecords.length > 0) {
+          const BATCH_SIZE = 100;
+          for (let i = 0; i < gradeRecords.length; i += BATCH_SIZE) {
+            const batch = gradeRecords.slice(i, i + BATCH_SIZE);
+            const { error } = await supabase
+              .from('student_course_grades')
+              .upsert(batch, {
+                onConflict: 'student_id,course_id',
+                ignoreDuplicates: false
+              });
+
+            if (error) {
+              console.error(`Error upserting grade batch ${i / BATCH_SIZE}:`, error);
+            } else {
+              gradesCount += batch.length;
+            }
+          }
+        }
+
+        console.log(`Upserted ${gradesCount} grade records`);
+
+        return new Response(
+          JSON.stringify({ success: true, gradesCount }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),
