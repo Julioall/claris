@@ -260,7 +260,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [courses.length]);
 
   const syncSelectedCourses = useCallback(async (courseIds: string[] | 'all') => {
-    if (!user || !moodleSession) {
+    // Try to get session from state or from localStorage as fallback
+    let sessionToUse = moodleSession;
+    let userToUse = user;
+    
+    if (!sessionToUse || !userToUse) {
+      // Try to recover from localStorage (handles race condition after login)
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          sessionToUse = parsed.moodleSession;
+          userToUse = parsed.user;
+        }
+      } catch (e) {
+        console.error('Error recovering session:', e);
+      }
+    }
+    
+    if (!userToUse || !sessionToUse) {
       toast({
         title: "Erro",
         description: "Sessão expirada. Faça login novamente.",
@@ -323,9 +341,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         const { data: coursesData, error: coursesError } = await invokeWithTimeout({
           action: 'sync_courses',
-          moodleUrl: moodleSession.moodleUrl,
-          token: moodleSession.moodleToken,
-          userId: moodleSession.moodleUserId,
+          moodleUrl: sessionToUse.moodleUrl,
+          token: sessionToUse.moodleToken,
+          userId: sessionToUse.moodleUserId,
         }, 60000); // 60s for courses since it's one big call
 
         if (coursesError || coursesData?.error) {
@@ -366,8 +384,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
               const { data, error } = await invokeWithTimeout({
                 action: 'sync_students',
-                moodleUrl: moodleSession.moodleUrl,
-                token: moodleSession.moodleToken,
+                moodleUrl: sessionToUse.moodleUrl,
+                token: sessionToUse.moodleToken,
                 courseId: parseInt(course.moodle_course_id, 10),
               }, 20000); // 20s timeout per course
               
@@ -416,8 +434,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
               const { data, error } = await invokeWithTimeout({
                 action: 'sync_activities',
-                moodleUrl: moodleSession.moodleUrl,
-                token: moodleSession.moodleToken,
+                moodleUrl: sessionToUse.moodleUrl,
+                token: sessionToUse.moodleToken,
                 courseId: parseInt(course.moodle_course_id, 10),
               }, 25000); // 25s timeout per course
               
@@ -455,9 +473,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const newSyncTime = new Date().toISOString();
       setLastSync(newSyncTime);
       
-      const updatedUser = { ...user, last_sync: newSyncTime };
+      const updatedUser = { ...userToUse, last_sync: newSyncTime };
       setUser(updatedUser);
-      saveSession(updatedUser, moodleSession);
+      saveSession(updatedUser, sessionToUse);
       
       setSyncProgress(prev => ({
         ...prev,
