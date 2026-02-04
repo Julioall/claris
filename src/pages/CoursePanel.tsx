@@ -79,12 +79,7 @@ export default function CoursePanel() {
               </Link>
             </Button>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight line-clamp-1">{course.name}</h1>
-                {course.short_name && (
-                  <Badge variant="secondary">{course.short_name}</Badge>
-                )}
-              </div>
+              <h1 className="text-2xl font-bold tracking-tight line-clamp-1">{course.name}</h1>
               {course.category && (
                 <p className="text-sm text-muted-foreground">{course.category}</p>
               )}
