@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { BookOpen, Users, AlertTriangle, ClipboardList, ExternalLink, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Course } from '@/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -24,8 +25,9 @@ export function CourseOverview({ courses }: CourseOverviewProps) {
           Visão por Curso
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="space-y-3">
+      <CardContent className="p-0">
+        <ScrollArea className="h-[300px] px-6 pb-6">
+          <div className="space-y-3">
           {courses.map((course) => (
             <div 
               key={course.id}
@@ -72,7 +74,8 @@ export function CourseOverview({ courses }: CourseOverviewProps) {
               <p className="text-xs mt-1">Sincronize com o Moodle para carregar seus cursos</p>
             </div>
           )}
-        </div>
+          </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   );

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { PendingTask, Student } from '@/types';
@@ -38,7 +39,9 @@ export function PriorityList({ overdueActions, upcomingTasks, criticalStudents }
           Prioridades - O que fazer agora
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="p-0">
+        <ScrollArea className="h-[300px] px-6 pb-6">
+        <div className="space-y-4">
         {/* Overdue actions and tasks */}
         {overdueActions.length > 0 && (
           <div className="space-y-2">
@@ -166,6 +169,8 @@ export function PriorityList({ overdueActions, upcomingTasks, criticalStudents }
             <p className="text-sm">Nenhuma prioridade pendente!</p>
           </div>
         )}
+        </div>
+        </ScrollArea>
       </CardContent>
     </Card>
   );
