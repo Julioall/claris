@@ -195,6 +195,20 @@ export function useCoursePanel(courseId: string | undefined) {
 
       if (activitiesError) throw activitiesError;
 
+      // Recalculate risk for all students in this course
+      toast({
+        title: "Recalculando riscos...",
+        description: `Atualizando níveis de risco dos alunos`,
+      });
+
+      const { data: riskUpdateResult, error: riskError } = await supabase
+        .rpc('update_course_students_risk', { p_course_id: course.id });
+
+      if (riskError) {
+        console.error('Error updating risk:', riskError);
+        // Don't throw - risk calculation is not critical
+      }
+
       // Update course last_sync
       await supabase
         .from('courses')
@@ -203,7 +217,7 @@ export function useCoursePanel(courseId: string | undefined) {
 
       toast({
         title: "Sincronização concluída",
-        description: `${studentsData?.students?.length || 0} alunos e ${activitiesData?.activitiesCount || 0} atividades sincronizadas.`,
+        description: `${studentsData?.students?.length || 0} alunos e ${activitiesData?.activitiesCount || 0} atividades sincronizadas. Riscos recalculados.`,
       });
 
       // Refresh data
