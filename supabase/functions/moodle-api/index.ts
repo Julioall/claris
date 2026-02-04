@@ -624,23 +624,27 @@ Deno.serve(async (req) => {
           );
         }
 
-        // Extract all activities from course contents
+        // Extract only quiz, assign, and forum activities from course contents
+        const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum'];
         const activities: any[] = [];
         for (const section of courseContents) {
           if (section.modules) {
             for (const module of section.modules) {
-              activities.push({
-                id: module.id,
-                name: module.name,
-                modname: module.modname, // Type: assign, quiz, forum, etc.
-                completion: module.completion,
-                completiondata: module.completiondata,
-              });
+              // Only include quiz, assign, and forum activities
+              if (ALLOWED_ACTIVITY_TYPES.includes(module.modname)) {
+                activities.push({
+                  id: module.id,
+                  name: module.name,
+                  modname: module.modname,
+                  completion: module.completion,
+                  completiondata: module.completiondata,
+                });
+              }
             }
           }
         }
 
-        console.log(`Found ${activities.length} activities in course ${courseId}`);
+        console.log(`Found ${activities.length} activities (quiz/assign/forum) in course ${courseId}`);
 
         if (activities.length === 0) {
           return new Response(
