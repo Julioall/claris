@@ -427,6 +427,63 @@ export type Database = {
           },
         ]
       }
+      student_course_grades: {
+        Row: {
+          course_id: string
+          created_at: string
+          grade_formatted: string | null
+          grade_max: number | null
+          grade_percentage: number | null
+          grade_raw: number | null
+          id: string
+          last_sync: string
+          letter_grade: string | null
+          student_id: string
+          updated_at: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          grade_formatted?: string | null
+          grade_max?: number | null
+          grade_percentage?: number | null
+          grade_raw?: number | null
+          id?: string
+          last_sync?: string
+          letter_grade?: string | null
+          student_id: string
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          grade_formatted?: string | null
+          grade_max?: number | null
+          grade_percentage?: number | null
+          grade_raw?: number | null
+          id?: string
+          last_sync?: string
+          letter_grade?: string | null
+          student_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_course_grades_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_course_grades_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_courses: {
         Row: {
           course_id: string
