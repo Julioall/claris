@@ -10,6 +10,7 @@ import { AppLayout } from "@/components/layout/AppLayout";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import Courses from "@/pages/Courses";
+import CoursePanel from "@/pages/CoursePanel";
 import Students from "@/pages/Students";
 import StudentProfile from "@/pages/StudentProfile";
 import PendingTasks from "@/pages/PendingTasks";
@@ -40,7 +41,7 @@ function AppRoutes() {
       <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
         <Route path="/" element={<Dashboard />} />
         <Route path="/cursos" element={<Courses />} />
-        <Route path="/cursos/:id" element={<Courses />} />
+        <Route path="/cursos/:id" element={<CoursePanel />} />
         <Route path="/alunos" element={<Students />} />
         <Route path="/alunos/:id" element={<StudentProfile />} />
         <Route path="/pendencias" element={<PendingTasks />} />
