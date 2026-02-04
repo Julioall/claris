@@ -753,24 +753,63 @@ Deno.serve(async (req) => {
               userid: moodleUserId
             });
 
+            // Log raw response for debugging (first student only)
+            if (gradeRecords.length === 0 && gradesData.usergrades?.length > 0) {
+              console.log('Sample grade response:', JSON.stringify(gradesData.usergrades[0]?.gradeitems?.slice(0, 3)));
+            }
+
             // Find the course total grade (itemtype = 'course')
             if (gradesData.usergrades && gradesData.usergrades.length > 0) {
               const userGrade = gradesData.usergrades[0];
               const courseGrade = userGrade.gradeitems?.find((item: any) => item.itemtype === 'course');
 
               if (courseGrade) {
+                // Parse graderaw - it may be a number or a string depending on Moodle version
+                let gradeRaw: number | null = null;
+                if (courseGrade.graderaw !== undefined && courseGrade.graderaw !== null) {
+                  const parsed = typeof courseGrade.graderaw === 'string' 
+                    ? parseFloat(courseGrade.graderaw) 
+                    : courseGrade.graderaw;
+                }
+
+                // Parse grademax
+                let gradeMax: number = 100;
+                if (courseGrade.grademax !== undefined && courseGrade.grademax !== null) {
+                  gradeMax = typeof courseGrade.grademax === 'string'
+                    ? parseFloat(courseGrade.grademax)
+                    : courseGrade.grademax;
+                  if (isNaN(gradeMax)) gradeMax = 100;
+                }
+
+                // Calculate percentage from graderaw if percentageformatted is not available
+                let gradePercentage: number | null = null;
+                if (courseGrade.percentageformatted) {
+                  // Remove % sign, replace comma with dot, trim spaces
+                  const cleanPercentage = courseGrade.percentageformatted
+                    .replace(/[%\s]/g, '')
+                    .replace(',', '.');
+                  gradePercentage = parseFloat(cleanPercentage);
+                  if (isNaN(gradePercentage)) gradePercentage = null;
+                } else if (gradeRaw !== null && gradeMax > 0) {
+                  // Calculate percentage from raw values
+                  gradePercentage = (gradeRaw / gradeMax) * 100;
+                }
+
                 gradeRecords.push({
                   student_id: student.id,
                   course_id: gradesCourse.id,
-                  grade_raw: courseGrade.graderaw ?? null,
-                  grade_max: courseGrade.grademax ?? 100,
-                  grade_percentage: courseGrade.percentageformatted ? 
-                    parseFloat(courseGrade.percentageformatted.replace(',', '.').replace('%', '').trim()) : null,
+                  grade_raw: gradeRaw,
+                  grade_max: gradeMax,
+                  grade_percentage: gradePercentage,
                   grade_formatted: courseGrade.gradeformatted ?? null,
                   letter_grade: courseGrade.lettergradeformatted ?? null,
                   last_sync: now,
                   updated_at: now
                 });
+              } else {
+                // Log when no course grade is found
+                console.log(`No course grade found for student ${moodleUserId}. Available itemtypes:`, 
+                  userGrade.gradeitems?.map((item: any) => item.itemtype).filter((v: any, i: number, a: any[]) => a.indexOf(v) === i));
               }
             }
           } catch (gradeErr) {
