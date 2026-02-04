@@ -19,6 +19,7 @@ interface SyncProgress {
     courses: number;
     students: number;
     activities: number;
+    grades: number;
   };
 }
 
@@ -43,6 +44,7 @@ const initialSteps: SyncStep[] = [
   { id: 'courses', label: 'Sincronizar cursos', icon: 'courses', status: 'pending' },
   { id: 'students', label: 'Sincronizar alunos', icon: 'students', status: 'pending' },
   { id: 'activities', label: 'Sincronizar atividades', icon: 'activities', status: 'pending' },
+  { id: 'grades', label: 'Sincronizar notas', icon: 'grades', status: 'pending' },
 ];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -303,6 +305,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let syncedCourses: Course[] = [];
     let totalStudents = 0;
     let totalActivities = 0;
+    let totalGrades = 0;
 
     // Helper to invoke edge function with timeout
     const invokeWithTimeout = async (body: Record<string, unknown>, timeoutMs = 25000) => {
@@ -471,6 +474,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         count: totalActivities,
         errorMessage: activityErrors > 0 ? `${activityErrors} cursos com erro` : undefined
       });
+
+      // ============ STEP 4: SYNC GRADES ============
+      updateStep('grades', { status: 'in_progress', count: 0, total: syncedCourses.length });
+      
+      const GRADE_BATCH_SIZE = 3;
+      let processedCoursesGrades = 0;
+      let gradeErrors = 0;
+
+      for (let i = 0; i < syncedCourses.length; i += GRADE_BATCH_SIZE) {
+        const batch = syncedCourses.slice(i, i + GRADE_BATCH_SIZE);
+        
+        const results = await Promise.allSettled(
+          batch.map(async (course: Course) => {
+            try {
+              const { data, error } = await invokeWithTimeout({
+                action: 'sync_grades',
+                moodleUrl: sessionToUse.moodleUrl,
+                token: sessionToUse.moodleToken,
+                courseId: parseInt(course.moodle_course_id, 10),
+              }, 25000);
+              
+              if (error) {
+                console.warn(`Grade sync failed for course ${course.moodle_course_id}:`, error);
+                return 0;
+              }
+              return data?.gradesCount || 0;
+            } catch (err) {
+              console.warn(`Grade sync error for course ${course.moodle_course_id}:`, err);
+              return 0;
+            }
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            totalGrades += result.value;
+          } else {
+            gradeErrors++;
+          }
+        }
+        
+        processedCoursesGrades += batch.length;
+        updateStep('grades', { count: processedCoursesGrades, total: syncedCourses.length });
+      }
+
+      updateStep('grades', { 
+        status: gradeErrors > 0 && totalGrades === 0 ? 'error' : 'completed', 
+        count: totalGrades,
+        errorMessage: gradeErrors > 0 ? `${gradeErrors} cursos com erro` : undefined
+      });
       
       // ============ FINALIZE ============
       const newSyncTime = new Date().toISOString();
@@ -487,6 +540,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           courses: syncedCourses.length,
           students: totalStudents,
           activities: totalActivities,
+          grades: totalGrades,
         },
       }));
 
