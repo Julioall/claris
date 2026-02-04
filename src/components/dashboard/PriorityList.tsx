@@ -22,10 +22,9 @@ interface PriorityListProps {
   overdueActions: PendingTask[];
   upcomingTasks: PendingTask[];
   criticalStudents: Student[];
-  lastSync?: string;
 }
 
-export function PriorityList({ overdueActions, upcomingTasks, criticalStudents, lastSync }: PriorityListProps) {
+export function PriorityList({ overdueActions, upcomingTasks, criticalStudents }: PriorityListProps) {
   const formatDueDate = (date: string) => {
     const d = new Date(date);
     if (isToday(d)) return 'Hoje';
@@ -33,23 +32,17 @@ export function PriorityList({ overdueActions, upcomingTasks, criticalStudents, 
   };
 
   const formatLastSync = (date: string | undefined) => {
-    if (!date) return 'Nunca';
+    if (!date) return null;
     return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
   };
 
   return (
     <Card>
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-risk-risco" />
-            Prioridades - O que fazer agora
-          </CardTitle>
-        </div>
-        <div className="flex items-center gap-1 text-xs text-muted-foreground/70">
-          <Clock className="h-3 w-3" />
-          Sincronizado: {formatLastSync(lastSync)}
-        </div>
+        <CardTitle className="text-lg flex items-center gap-2">
+          <AlertCircle className="h-5 w-5 text-risk-risco" />
+          Prioridades - O que fazer agora
+        </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[300px] px-6 pb-6">
@@ -72,6 +65,12 @@ export function PriorityList({ overdueActions, upcomingTasks, criticalStudents, 
                     <p className="text-xs text-muted-foreground">
                       {item.student.full_name}
                     </p>
+                  )}
+                  {item.updated_at && (
+                    <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/70">
+                      <Clock className="h-3 w-3" />
+                      Sincronizado: {formatLastSync(item.updated_at)}
+                    </div>
                   )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -113,6 +112,12 @@ export function PriorityList({ overdueActions, upcomingTasks, criticalStudents, 
                       {item.student.full_name}
                     </p>
                   )}
+                  {item.updated_at && (
+                    <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/70">
+                      <Clock className="h-3 w-3" />
+                      Sincronizado: {formatLastSync(item.updated_at)}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {item.due_date && (
@@ -153,6 +158,12 @@ export function PriorityList({ overdueActions, upcomingTasks, criticalStudents, 
                         </span>
                       )}
                     </div>
+                    {student.updated_at && (
+                      <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/70">
+                        <Clock className="h-3 w-3" />
+                        Sincronizado: {formatLastSync(student.updated_at)}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
