@@ -591,6 +591,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_student_risk: {
+        Args: { p_student_id: string }
+        Returns: {
+          risk_level: Database["public"]["Enums"]["risk_level"]
+          risk_reasons: string[]
+        }[]
+      }
+      update_course_students_risk: {
+        Args: { p_course_id: string }
+        Returns: number
+      }
+      update_student_risk: {
+        Args: { p_student_id: string }
+        Returns: undefined
+      }
       user_has_course_access: {
         Args: { p_course_id: string; p_user_id: string }
         Returns: boolean
