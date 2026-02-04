@@ -12,7 +12,9 @@ import {
   CheckCircle2,
   XCircle,
   Loader2,
-  GraduationCap
+  GraduationCap,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,10 +27,13 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { RiskBadge } from '@/components/ui/RiskBadge';
+import { Switch } from '@/components/ui/switch';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 export default function CoursePanel() {
   const { id } = useParams<{ id: string }>();
-  const { course, students, activities, stats, isLoading, error, syncCourse, isSyncing, refetch } = useCoursePanel(id);
+  const { course, students, activities, stats, isLoading, error, syncCourse, isSyncing, refetch, toggleActivityVisibility } = useCoursePanel(id);
+  const { isEditMode } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
 
   const formatDate = (date: string | null | undefined) => {
@@ -297,10 +302,26 @@ export default function CoursePanel() {
               ) : (
                 <div className="divide-y">
                   {activities.map((activity) => (
-                    <div key={activity.id} className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <p className="font-medium">{activity.activity_name}</p>
+                    <div 
+                      key={activity.id} 
+                      className={cn(
+                        "p-4 transition-opacity",
+                        activity.hidden && "opacity-50 bg-muted/30"
+                      )}
+                    >
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="space-y-1 flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className={cn("font-medium", activity.hidden && "line-through text-muted-foreground")}>
+                              {activity.activity_name}
+                            </p>
+                            {activity.hidden && (
+                              <Badge variant="secondary" className="text-xs">
+                                <EyeOff className="h-3 w-3 mr-1" />
+                                Oculta
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             {activity.activity_type && (
                               <Badge variant="outline" className="text-xs">
@@ -312,17 +333,47 @@ export default function CoursePanel() {
                             )}
                           </div>
                         </div>
-                        <div className="text-right">
-                          {activity.grade !== null && activity.grade_max !== null ? (
-                            <div>
-                              <span className="font-semibold">{activity.grade}</span>
-                              <span className="text-muted-foreground">/{activity.grade_max}</span>
-                            </div>
-                          ) : (
-                            <Badge variant={activity.status === 'completed' ? 'default' : 'secondary'}>
-                              {activity.status === 'completed' ? 'Concluída' : 'Pendente'}
-                            </Badge>
+
+                        <div className="flex items-center gap-3">
+                          {/* Edit mode: visibility toggle */}
+                          {isEditMode && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-2">
+                                    <Switch
+                                      checked={!activity.hidden}
+                                      onCheckedChange={(checked) => 
+                                        toggleActivityVisibility(activity.moodle_activity_id, !checked)
+                                      }
+                                    />
+                                    {activity.hidden ? (
+                                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                    ) : (
+                                      <Eye className="h-4 w-4 text-primary" />
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{activity.hidden ? 'Exibir atividade nas métricas' : 'Ocultar atividade das métricas'}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
+
+                          {/* Grade/Status display */}
+                          <div className="text-right">
+                            {activity.grade !== null && activity.grade_max !== null ? (
+                              <div>
+                                <span className="font-semibold">{activity.grade}</span>
+                                <span className="text-muted-foreground">/{activity.grade_max}</span>
+                              </div>
+                            ) : (
+                              <Badge variant={activity.status === 'completed' ? 'default' : 'secondary'}>
+                                {activity.status === 'completed' ? 'Concluída' : 'Pendente'}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

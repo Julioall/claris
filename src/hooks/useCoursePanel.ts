@@ -17,6 +17,7 @@ interface StudentActivity {
   status: string | null;
   completed_at: string | null;
   due_date: string | null;
+  hidden: boolean;
 }
 
 interface CourseStats {
@@ -127,13 +128,15 @@ export function useCoursePanel(courseId: string | undefined) {
         }
       });
 
-      const completedActivities = activitiesData?.filter(a => a.status === 'completed').length || 0;
-      const totalActivityRecords = activitiesData?.length || 0;
+      // Only count visible activities for metrics
+      const visibleActivities = activitiesData?.filter(a => !a.hidden) || [];
+      const completedActivities = visibleActivities.filter(a => a.status === 'completed').length;
+      const totalActivityRecords = visibleActivities.length;
 
       setStats({
         totalStudents: studentsData.length,
         atRiskStudents: riskDistribution.risco + riskDistribution.critico,
-        totalActivities: uniqueActivities.length,
+        totalActivities: uniqueActivities.filter(a => !a.hidden).length,
         completionRate: totalActivityRecords > 0 
           ? Math.round((completedActivities / totalActivityRecords) * 100) 
           : 0,
@@ -235,6 +238,48 @@ export function useCoursePanel(courseId: string | undefined) {
     }
   }, [course, moodleSession, fetchCourseData]);
 
+  const toggleActivityVisibility = useCallback(async (moodleActivityId: string, hidden: boolean) => {
+    if (!courseId) return;
+
+    try {
+      // Update all student_activities with this moodle_activity_id in this course
+      const { error: updateError } = await supabase
+        .from('student_activities')
+        .update({ hidden })
+        .eq('course_id', courseId)
+        .eq('moodle_activity_id', moodleActivityId);
+
+      if (updateError) throw updateError;
+
+      // Update local state
+      setActivities(prev => 
+        prev.map(a => 
+          a.moodle_activity_id === moodleActivityId 
+            ? { ...a, hidden } 
+            : a
+        )
+      );
+
+      toast({
+        title: hidden ? "Atividade oculta" : "Atividade visível",
+        description: hidden 
+          ? "Esta atividade não será contabilizada nas métricas." 
+          : "Esta atividade será contabilizada nas métricas.",
+      });
+
+      // Refresh data to update stats
+      await fetchCourseData();
+
+    } catch (err) {
+      console.error('Error toggling activity visibility:', err);
+      toast({
+        title: "Erro",
+        description: "Não foi possível alterar a visibilidade da atividade.",
+        variant: "destructive",
+      });
+    }
+  }, [courseId, fetchCourseData]);
+
   useEffect(() => {
     fetchCourseData();
   }, [fetchCourseData]);
@@ -249,5 +294,6 @@ export function useCoursePanel(courseId: string | undefined) {
     error,
     syncCourse,
     refetch: fetchCourseData,
+    toggleActivityVisibility,
   };
 }
