@@ -764,15 +764,16 @@ Deno.serve(async (req) => {
               const courseGrade = userGrade.gradeitems?.find((item: any) => item.itemtype === 'course');
 
               if (courseGrade) {
-                // Parse graderaw - it may be a number or a string depending on Moodle version
+                // Parse graderaw - Moodle returns it as "graderaw" (not "grade_raw")
                 let gradeRaw: number | null = null;
                 if (courseGrade.graderaw !== undefined && courseGrade.graderaw !== null) {
                   const parsed = typeof courseGrade.graderaw === 'string' 
                     ? parseFloat(courseGrade.graderaw) 
                     : courseGrade.graderaw;
+                  gradeRaw = isNaN(parsed) ? null : parsed;
                 }
 
-                // Parse grademax
+                // Parse grademax - Moodle returns it as "grademax" (not "grade_max")
                 let gradeMax: number = 100;
                 if (courseGrade.grademax !== undefined && courseGrade.grademax !== null) {
                   gradeMax = typeof courseGrade.grademax === 'string'
@@ -781,18 +782,18 @@ Deno.serve(async (req) => {
                   if (isNaN(gradeMax)) gradeMax = 100;
                 }
 
-                // Calculate percentage from graderaw if percentageformatted is not available
+                // Calculate percentage - Moodle may not return percentageformatted for course totals
                 let gradePercentage: number | null = null;
-                if (courseGrade.percentageformatted) {
-                  // Remove % sign, replace comma with dot, trim spaces
+                if (gradeRaw !== null && gradeMax > 0) {
+                  // Calculate percentage from raw values (most reliable method)
+                  gradePercentage = (gradeRaw / gradeMax) * 100;
+                } else if (courseGrade.percentageformatted) {
+                  // Fallback to percentageformatted if available
                   const cleanPercentage = courseGrade.percentageformatted
                     .replace(/[%\s]/g, '')
                     .replace(',', '.');
                   gradePercentage = parseFloat(cleanPercentage);
                   if (isNaN(gradePercentage)) gradePercentage = null;
-                } else if (gradeRaw !== null && gradeMax > 0) {
-                  // Calculate percentage from raw values
-                  gradePercentage = (gradeRaw / gradeMax) * 100;
                 }
 
                 gradeRecords.push({
