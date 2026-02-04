@@ -19,8 +19,7 @@ interface MoodleCourse {
   id: number;
   shortname: string;
   fullname: string;
-  categoryid?: number;
-  categoryname?: string; // Some Moodle versions include this directly
+  category?: number; // Category ID (not name) - from core_enrol_get_users_courses
   startdate?: number;
   enddate?: number;
 }
@@ -384,17 +383,24 @@ Deno.serve(async (req) => {
 
         // Prepare course data for batch upsert
         const now = new Date().toISOString();
+        
+        // Log first course for debugging
+        if (moodleCourses.length > 0) {
+          console.log('Sample course data:', JSON.stringify(moodleCourses[0]));
+        }
+        
         const coursesData = moodleCourses.map(course => {
-          // Try to get category name: first from course itself, then from categories list
-          let categoryName = course.categoryname || null;
+          // The API returns 'category' as the category ID (not 'categoryid')
+          let categoryName: string | null = null;
           
-          if (!categoryName && course.categoryid && categories.length > 0) {
-            categoryName = buildCategoryPath(course.categoryid, categories);
+          if (course.category && categories.length > 0) {
+            categoryName = buildCategoryPath(course.category, categories);
+            console.log(`Course "${course.fullname}" - category ID: ${course.category}, resolved name: "${categoryName}"`);
           }
           
           // Fallback to just the category ID if we couldn't get the name
-          if (!categoryName && course.categoryid) {
-            categoryName = String(course.categoryid);
+          if (!categoryName && course.category) {
+            categoryName = String(course.category);
           }
 
           return {
