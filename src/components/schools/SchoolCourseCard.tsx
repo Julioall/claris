@@ -63,14 +63,9 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
           <div className="flex-1 min-w-0">
             <Link to={`/cursos/${course.id}`}>
               <CardTitle className={`text-sm font-medium hover:text-primary transition-colors line-clamp-2 ${course.is_ignored ? 'text-muted-foreground' : ''}`}>
-                {course.short_name || course.name}
+                {course.name}
               </CardTitle>
             </Link>
-            {course.short_name && (
-              <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                {course.name}
-              </p>
-            )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {isEditMode && (
