@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -47,16 +46,9 @@ export function CourseCard({ course }: CourseCardProps) {
         <div className="space-y-4">
           {/* Header */}
           <div>
-            <div className="flex items-start justify-between gap-2">
-              <h3 className="font-semibold leading-tight line-clamp-2">
-                {course.name}
-              </h3>
-              {course.short_name && (
-                <Badge variant="secondary" className="shrink-0 text-xs">
-                  {course.short_name}
-                </Badge>
-              )}
-            </div>
+            <h3 className="font-semibold leading-tight line-clamp-2">
+              {course.name}
+            </h3>
           </div>
 
           {/* Stats */}

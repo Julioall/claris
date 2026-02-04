@@ -2,8 +2,7 @@ import {
   BookOpen, 
   Search,
   Loader2,
-  Building2,
-  Pencil
+  Building2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -82,16 +81,6 @@ export default function MyCourses() {
           </div>
         </div>
       </div>
-
-      {/* Edit mode banner */}
-      {isEditMode && (
-        <div className="bg-primary/10 text-primary border border-primary/20 p-3 rounded-lg flex items-center gap-2">
-          <Pencil className="h-4 w-4" />
-          <span className="text-sm font-medium">
-            Modo de edição ativo - clique nos botões para remover cursos
-          </span>
-        </div>
-      )}
 
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-lg">
