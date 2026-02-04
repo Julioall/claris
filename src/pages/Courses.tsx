@@ -24,7 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function Courses() {
   const [searchQuery, setSearchQuery] = useState('');
   const { courses, isLoading, error, refetch } = useCoursesData();
-  const { syncData, isLoading: isSyncing } = useAuth();
+  const { syncData, isLoading: isSyncing, setShowCourseSelector } = useAuth();
 
   const filteredCourses = courses.filter(course =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -41,8 +41,7 @@ export default function Courses() {
     return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
   };
 
-  const handleSync = async () => {
-    await syncData();
+  const handleRefreshData = () => {
     refetch();
   };
 
@@ -66,11 +65,11 @@ export default function Courses() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Sync button */}
+          {/* Sync button - opens course selector */}
           <Button 
             variant="outline" 
             size="sm" 
-            onClick={handleSync}
+            onClick={() => setShowCourseSelector(true)}
             disabled={isSyncing}
           >
             <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -185,7 +184,7 @@ export default function Courses() {
             }
           </p>
           {!searchQuery && (
-            <Button onClick={handleSync} className="mt-4" disabled={isSyncing}>
+            <Button onClick={() => setShowCourseSelector(true)} className="mt-4" disabled={isSyncing}>
               <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
               Sincronizar agora
             </Button>

@@ -28,6 +28,9 @@ interface ExtendedAuthContextType extends AuthContextType {
   setCourses: (courses: Course[]) => void;
   syncProgress: SyncProgress;
   closeSyncProgress: () => void;
+  syncSelectedCourses: (courseIds: string[] | 'all') => Promise<void>;
+  showCourseSelector: boolean;
+  setShowCourseSelector: (show: boolean) => void;
 }
 
 const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
@@ -46,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [courses, setCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
+  const [showCourseSelector, setShowCourseSelector] = useState(false);
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({
     isOpen: false,
     steps: initialSteps,
@@ -246,6 +250,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const syncData = useCallback(async () => {
+    // If we have courses cached, show selector; otherwise do full sync
+    if (courses.length > 0) {
+      setShowCourseSelector(true);
+      return;
+    }
+    // No courses yet, do full sync
+    await syncSelectedCourses('all');
+  }, [courses.length]);
+
+  const syncSelectedCourses = useCallback(async (courseIds: string[] | 'all') => {
     if (!user || !moodleSession) {
       toast({
         title: "Erro",
@@ -291,26 +305,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       // ============ STEP 1: SYNC COURSES ============
-      updateStep('courses', { status: 'in_progress' });
+      const isSelectiveSync = courseIds !== 'all';
       
-      const { data: coursesData, error: coursesError } = await invokeWithTimeout({
-        action: 'sync_courses',
-        moodleUrl: moodleSession.moodleUrl,
-        token: moodleSession.moodleToken,
-        userId: moodleSession.moodleUserId,
-      }, 60000); // 60s for courses since it's one big call
+      if (isSelectiveSync) {
+        // For selective sync, use existing courses
+        syncedCourses = courses.filter(c => (courseIds as string[]).includes(c.id));
+        updateStep('courses', { status: 'completed', count: syncedCourses.length });
+      } else {
+        // Full sync: fetch all courses from Moodle
+        updateStep('courses', { status: 'in_progress' });
+        
+        const { data: coursesData, error: coursesError } = await invokeWithTimeout({
+          action: 'sync_courses',
+          moodleUrl: moodleSession.moodleUrl,
+          token: moodleSession.moodleToken,
+          userId: moodleSession.moodleUserId,
+        }, 60000); // 60s for courses since it's one big call
 
-      if (coursesError || coursesData?.error) {
-        updateStep('courses', { 
-          status: 'error', 
-          errorMessage: coursesError?.message || coursesData?.error 
-        });
-        throw new Error(coursesError?.message || coursesData?.error);
+        if (coursesError || coursesData?.error) {
+          updateStep('courses', { 
+            status: 'error', 
+            errorMessage: coursesError?.message || coursesData?.error 
+          });
+          throw new Error(coursesError?.message || coursesData?.error);
+        }
+
+        syncedCourses = coursesData.courses || [];
+        setCourses(syncedCourses);
+        updateStep('courses', { status: 'completed', count: syncedCourses.length });
       }
-
-      syncedCourses = coursesData.courses || [];
-      setCourses(syncedCourses);
-      updateStep('courses', { status: 'completed', count: syncedCourses.length });
 
       // ============ STEP 2: SYNC STUDENTS ============
       updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
@@ -442,7 +465,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [user, moodleSession, saveSession, updateStep]);
+  }, [user, moodleSession, courses, saveSession, updateStep]);
 
   return (
     <AuthContext.Provider
@@ -460,6 +483,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setCourses,
         syncProgress,
         closeSyncProgress,
+        syncSelectedCourses,
+        showCourseSelector,
+        setShowCourseSelector,
       }}
     >
       {children}
