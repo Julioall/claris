@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { 
   Users, 
   AlertTriangle, 
@@ -6,7 +6,9 @@ import {
   Building2,
   GraduationCap,
   Users2,
-  BookOpen
+  BookOpen,
+  EyeOff,
+  Eye
 } from 'lucide-react';
 import {
   Accordion,
@@ -14,7 +16,10 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { SchoolCourseCard } from './SchoolCourseCard';
+import { toast } from 'sonner';
 
 interface CourseWithStats {
   id: string;
@@ -28,6 +33,7 @@ interface CourseWithStats {
   at_risk_count: number;
   pending_tasks_count: number;
   is_following: boolean;
+  is_ignored: boolean;
 }
 
 interface CategoryStats {
@@ -36,6 +42,7 @@ interface CategoryStats {
   totalPending: number;
   coursesCount: number;
   followingCount: number;
+  ignoredCount: number;
 }
 
 interface ClassNode {
@@ -61,6 +68,8 @@ type HierarchyTree = Record<string, SchoolNode>;
 interface SchoolHierarchyProps {
   courses: CourseWithStats[];
   onToggleFollow: (courseId: string) => void;
+  onToggleIgnore: (courseId: string) => void;
+  onToggleIgnoreMultiple: (courseIds: string[], shouldIgnore: boolean) => void;
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
@@ -70,6 +79,7 @@ function calculateStats(courses: CourseWithStats[]): CategoryStats {
     totalPending: courses.reduce((sum, c) => sum + (c.pending_tasks_count || 0), 0),
     coursesCount: courses.length,
     followingCount: courses.filter(c => c.is_following).length,
+    ignoredCount: courses.filter(c => c.is_ignored).length,
   };
 }
 
@@ -85,6 +95,12 @@ function StatsDisplay({ stats, showCourses = false }: { stats: CategoryStats; sh
       {stats.followingCount > 0 && (
         <span className="flex items-center gap-1 text-primary">
           ★ {stats.followingCount}
+        </span>
+      )}
+      {stats.ignoredCount > 0 && (
+        <span className="flex items-center gap-1 text-muted-foreground/50">
+          <EyeOff className="h-3.5 w-3.5" />
+          {stats.ignoredCount}
         </span>
       )}
       <span className="flex items-center gap-1">
@@ -107,7 +123,55 @@ function StatsDisplay({ stats, showCourses = false }: { stats: CategoryStats; sh
   );
 }
 
-export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProps) {
+function IgnoreAllButton({ 
+  courses, 
+  onToggleIgnoreMultiple,
+  level 
+}: { 
+  courses: CourseWithStats[]; 
+  onToggleIgnoreMultiple: (courseIds: string[], shouldIgnore: boolean) => void;
+  level: 'escola' | 'curso' | 'turma';
+}) {
+  const allIgnored = courses.every(c => c.is_ignored);
+  const someIgnored = courses.some(c => c.is_ignored) && !allIgnored;
+  
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const courseIds = courses.map(c => c.id);
+    const shouldIgnore = !allIgnored;
+    onToggleIgnoreMultiple(courseIds, shouldIgnore);
+    
+    const levelName = level === 'escola' ? 'escola' : level === 'curso' ? 'curso' : 'turma';
+    if (shouldIgnore) {
+      toast.success(`${levelName.charAt(0).toUpperCase() + levelName.slice(1)} marcada como ignorada`);
+    } else {
+      toast.success(`${levelName.charAt(0).toUpperCase() + levelName.slice(1)} desmarcada`);
+    }
+  };
+
+  return (
+    <Button 
+      variant="ghost" 
+      size="sm" 
+      className="h-7 px-2 text-xs"
+      onClick={handleClick}
+    >
+      {allIgnored ? (
+        <>
+          <Eye className="h-3.5 w-3.5 mr-1" />
+          Desmarcar
+        </>
+      ) : (
+        <>
+          <EyeOff className="h-3.5 w-3.5 mr-1" />
+          {someIgnored ? 'Ignorar restante' : 'Ignorar todos'}
+        </>
+      )}
+    </Button>
+  );
+}
+
+export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onToggleIgnoreMultiple }: SchoolHierarchyProps) {
   const hierarchy = useMemo(() => {
     const tree: HierarchyTree = {};
     const uncategorized: CourseWithStats[] = [];
@@ -128,7 +192,7 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
         tree[school] = {
           name: school,
           courses: {},
-          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0, followingCount: 0 },
+          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0, followingCount: 0, ignoredCount: 0 },
         };
       }
 
@@ -136,7 +200,7 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
         tree[school].courses[courseName] = {
           name: courseName,
           classes: {},
-          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0, followingCount: 0 },
+          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0, followingCount: 0, ignoredCount: 0 },
         };
       }
 
@@ -144,7 +208,7 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
         tree[school].courses[courseName].classes[className] = {
           name: className,
           courses: [],
-          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0, followingCount: 0 },
+          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0, followingCount: 0, ignoredCount: 0 },
         };
       }
 
@@ -178,6 +242,28 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
     return null;
   }
 
+  // Helper to get all course IDs from a school
+  const getSchoolCourseIds = (schoolKey: string): CourseWithStats[] => {
+    const school = hierarchy.tree[schoolKey];
+    const allCourses: CourseWithStats[] = [];
+    Object.values(school.courses).forEach(courseNode => {
+      Object.values(courseNode.classes).forEach(classNode => {
+        allCourses.push(...classNode.courses);
+      });
+    });
+    return allCourses;
+  };
+
+  // Helper to get all course IDs from a course node
+  const getCourseNodeCourseIds = (schoolKey: string, courseKey: string): CourseWithStats[] => {
+    const courseNode = hierarchy.tree[schoolKey].courses[courseKey];
+    const allCourses: CourseWithStats[] = [];
+    Object.values(courseNode.classes).forEach(classNode => {
+      allCourses.push(...classNode.courses);
+    });
+    return allCourses;
+  };
+
   return (
     <div className="space-y-4">
       <Accordion 
@@ -188,6 +274,7 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
         {hierarchy.sortedSchools.map(schoolKey => {
           const school = hierarchy.tree[schoolKey];
           const courseKeys = Object.keys(school.courses).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+          const schoolCourses = getSchoolCourseIds(schoolKey);
 
           return (
             <AccordionItem 
@@ -206,7 +293,14 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
                       </p>
                     </div>
                   </div>
-                  <StatsDisplay stats={school.stats} />
+                  <div className="flex items-center gap-2">
+                    <IgnoreAllButton 
+                      courses={schoolCourses} 
+                      onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                      level="escola"
+                    />
+                    <StatsDisplay stats={school.stats} />
+                  </div>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
@@ -218,6 +312,7 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
                   {courseKeys.map(courseKey => {
                     const courseNode = school.courses[courseKey];
                     const classKeys = Object.keys(courseNode.classes).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+                    const courseCourses = getCourseNodeCourseIds(schoolKey, courseKey);
 
                     return (
                       <AccordionItem 
@@ -236,7 +331,14 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
                                 </p>
                               </div>
                             </div>
-                            <StatsDisplay stats={courseNode.stats} />
+                            <div className="flex items-center gap-2">
+                              <IgnoreAllButton 
+                                courses={courseCourses} 
+                                onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                                level="curso"
+                              />
+                              <StatsDisplay stats={courseNode.stats} />
+                            </div>
                           </div>
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-3">
@@ -265,7 +367,14 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
                                           </p>
                                         </div>
                                       </div>
-                                      <StatsDisplay stats={classNode.stats} showCourses />
+                                      <div className="flex items-center gap-2">
+                                        <IgnoreAllButton 
+                                          courses={classNode.courses} 
+                                          onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                                          level="turma"
+                                        />
+                                        <StatsDisplay stats={classNode.stats} showCourses />
+                                      </div>
                                     </div>
                                   </AccordionTrigger>
                                   <AccordionContent className="px-3 pb-3">
@@ -275,6 +384,7 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
                                           key={course.id} 
                                           course={course} 
                                           onToggleFollow={onToggleFollow}
+                                          onToggleIgnore={onToggleIgnore}
                                         />
                                       ))}
                                     </div>
@@ -311,7 +421,14 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
                     </p>
                   </div>
                 </div>
-                <StatsDisplay stats={calculateStats(hierarchy.uncategorized)} />
+                <div className="flex items-center gap-2">
+                  <IgnoreAllButton 
+                    courses={hierarchy.uncategorized} 
+                    onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                    level="escola"
+                  />
+                  <StatsDisplay stats={calculateStats(hierarchy.uncategorized)} />
+                </div>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
@@ -321,6 +438,7 @@ export function SchoolHierarchy({ courses, onToggleFollow }: SchoolHierarchyProp
                     key={course.id} 
                     course={course} 
                     onToggleFollow={onToggleFollow}
+                    onToggleIgnore={onToggleIgnore}
                   />
                 ))}
               </div>

@@ -6,7 +6,8 @@ import {
   Building2,
   GraduationCap,
   Users2,
-  BookOpen
+  BookOpen,
+  StarOff
 } from 'lucide-react';
 import {
   Accordion,
@@ -14,7 +15,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { CourseCard } from './CourseCard';
+import { Button } from '@/components/ui/button';
+import { MyCourseCard } from './MyCourseCard';
+import { toast } from 'sonner';
 
 interface CourseWithStats {
   id: string;
@@ -59,6 +62,8 @@ type HierarchyTree = Record<string, SchoolNode>;
 
 interface CategoryHierarchyProps {
   courses: CourseWithStats[];
+  onUnfollow?: (courseId: string) => void;
+  onUnfollowMultiple?: (courseIds: string[]) => void;
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
@@ -99,7 +104,40 @@ function StatsDisplay({ stats, showCourses = false }: { stats: CategoryStats; sh
   );
 }
 
-export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
+function RemoveAllButton({ 
+  courses, 
+  onUnfollowMultiple,
+  level 
+}: { 
+  courses: CourseWithStats[]; 
+  onUnfollowMultiple?: (courseIds: string[]) => void;
+  level: 'escola' | 'curso' | 'turma';
+}) {
+  if (!onUnfollowMultiple) return null;
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const courseIds = courses.map(c => c.id);
+    onUnfollowMultiple(courseIds);
+    
+    const levelName = level === 'escola' ? 'escola' : level === 'curso' ? 'curso' : 'turma';
+    toast.success(`${courses.length} curso${courses.length !== 1 ? 's' : ''} removido${courses.length !== 1 ? 's' : ''} de Meus Cursos`);
+  };
+
+  return (
+    <Button 
+      variant="ghost" 
+      size="sm" 
+      className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+      onClick={handleClick}
+    >
+      <StarOff className="h-3.5 w-3.5 mr-1" />
+      Remover todos
+    </Button>
+  );
+}
+
+export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: CategoryHierarchyProps) {
   const hierarchy = useMemo(() => {
     const tree: HierarchyTree = {};
     const uncategorized: CourseWithStats[] = [];
@@ -180,6 +218,28 @@ export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
     return null;
   }
 
+  // Helper to get all course IDs from a school
+  const getSchoolCourseIds = (schoolKey: string): CourseWithStats[] => {
+    const school = hierarchy.tree[schoolKey];
+    const allCourses: CourseWithStats[] = [];
+    Object.values(school.courses).forEach(courseNode => {
+      Object.values(courseNode.classes).forEach(classNode => {
+        allCourses.push(...classNode.courses);
+      });
+    });
+    return allCourses;
+  };
+
+  // Helper to get all course IDs from a course node
+  const getCourseNodeCourseIds = (schoolKey: string, courseKey: string): CourseWithStats[] => {
+    const courseNode = hierarchy.tree[schoolKey].courses[courseKey];
+    const allCourses: CourseWithStats[] = [];
+    Object.values(courseNode.classes).forEach(classNode => {
+      allCourses.push(...classNode.courses);
+    });
+    return allCourses;
+  };
+
   return (
     <div className="space-y-4">
       {/* Schools */}
@@ -191,6 +251,7 @@ export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
         {hierarchy.sortedSchools.map(schoolKey => {
           const school = hierarchy.tree[schoolKey];
           const courseKeys = Object.keys(school.courses).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+          const schoolCourses = getSchoolCourseIds(schoolKey);
 
           return (
             <AccordionItem 
@@ -209,7 +270,14 @@ export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
                       </p>
                     </div>
                   </div>
-                  <StatsDisplay stats={school.stats} />
+                  <div className="flex items-center gap-2">
+                    <RemoveAllButton 
+                      courses={schoolCourses} 
+                      onUnfollowMultiple={onUnfollowMultiple}
+                      level="escola"
+                    />
+                    <StatsDisplay stats={school.stats} />
+                  </div>
                 </div>
               </AccordionTrigger>
               <AccordionContent className="px-4 pb-4">
@@ -222,6 +290,7 @@ export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
                   {courseKeys.map(courseKey => {
                     const courseNode = school.courses[courseKey];
                     const classKeys = Object.keys(courseNode.classes).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+                    const courseCourses = getCourseNodeCourseIds(schoolKey, courseKey);
 
                     return (
                       <AccordionItem 
@@ -240,7 +309,14 @@ export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
                                 </p>
                               </div>
                             </div>
-                            <StatsDisplay stats={courseNode.stats} />
+                            <div className="flex items-center gap-2">
+                              <RemoveAllButton 
+                                courses={courseCourses} 
+                                onUnfollowMultiple={onUnfollowMultiple}
+                                level="curso"
+                              />
+                              <StatsDisplay stats={courseNode.stats} />
+                            </div>
                           </div>
                         </AccordionTrigger>
                         <AccordionContent className="px-4 pb-3">
@@ -270,14 +346,25 @@ export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
                                           </p>
                                         </div>
                                       </div>
-                                      <StatsDisplay stats={classNode.stats} showCourses />
+                                      <div className="flex items-center gap-2">
+                                        <RemoveAllButton 
+                                          courses={classNode.courses} 
+                                          onUnfollowMultiple={onUnfollowMultiple}
+                                          level="turma"
+                                        />
+                                        <StatsDisplay stats={classNode.stats} showCourses />
+                                      </div>
                                     </div>
                                   </AccordionTrigger>
                                   <AccordionContent className="px-3 pb-3">
                                     {/* Disciplines/Courses */}
                                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-2">
                                       {classNode.courses.map(course => (
-                                        <CourseCard key={course.id} course={course} />
+                                        <MyCourseCard 
+                                          key={course.id} 
+                                          course={course}
+                                          onUnfollow={onUnfollow}
+                                        />
                                       ))}
                                     </div>
                                   </AccordionContent>
@@ -314,13 +401,24 @@ export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
                     </p>
                   </div>
                 </div>
-                <StatsDisplay stats={calculateStats(hierarchy.uncategorized)} />
+                <div className="flex items-center gap-2">
+                  <RemoveAllButton 
+                    courses={hierarchy.uncategorized} 
+                    onUnfollowMultiple={onUnfollowMultiple}
+                    level="escola"
+                  />
+                  <StatsDisplay stats={calculateStats(hierarchy.uncategorized)} />
+                </div>
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-2">
                 {hierarchy.uncategorized.map(course => (
-                  <CourseCard key={course.id} course={course} />
+                  <MyCourseCard 
+                    key={course.id} 
+                    course={course}
+                    onUnfollow={onUnfollow}
+                  />
                 ))}
               </div>
             </AccordionContent>

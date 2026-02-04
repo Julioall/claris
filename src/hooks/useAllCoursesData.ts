@@ -8,6 +8,7 @@ interface CourseWithStats extends Course {
   at_risk_count: number;
   pending_tasks_count: number;
   is_following: boolean;
+  is_ignored: boolean;
 }
 
 export function useAllCoursesData() {
@@ -49,6 +50,14 @@ export function useAllCoursesData() {
 
       const followedCourseIds = new Set(userCourses?.map(uc => uc.course_id) || []);
 
+      // Get user's ignored courses
+      const { data: ignoredCourses } = await supabase
+        .from('user_ignored_courses')
+        .select('course_id')
+        .eq('user_id', user.id);
+
+      const ignoredCourseIds = new Set(ignoredCourses?.map(ic => ic.course_id) || []);
+
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
         allCourses.map(async (course) => {
@@ -84,6 +93,7 @@ export function useAllCoursesData() {
             at_risk_count: atRiskCount,
             pending_tasks_count: pendingTasksCount || 0,
             is_following: followedCourseIds.has(course.id),
+            is_ignored: ignoredCourseIds.has(course.id),
           } as CourseWithStats;
         })
       );
@@ -134,9 +144,119 @@ export function useAllCoursesData() {
     }
   }, [user, courses]);
 
+  const toggleIgnore = useCallback(async (courseId: string) => {
+    if (!user) return;
+
+    const course = courses.find(c => c.id === courseId);
+    if (!course) return;
+
+    try {
+      if (course.is_ignored) {
+        // Remove from ignored
+        await supabase
+          .from('user_ignored_courses')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('course_id', courseId);
+      } else {
+        // Add to ignored
+        await supabase
+          .from('user_ignored_courses')
+          .insert({
+            user_id: user.id,
+            course_id: courseId
+          });
+      }
+
+      // Update local state
+      setCourses(prev => prev.map(c => 
+        c.id === courseId 
+          ? { ...c, is_ignored: !c.is_ignored }
+          : c
+      ));
+    } catch (err) {
+      console.error('Error toggling ignore:', err);
+      throw err;
+    }
+  }, [user, courses]);
+
+  const toggleIgnoreMultiple = useCallback(async (courseIds: string[], shouldIgnore: boolean) => {
+    if (!user || courseIds.length === 0) return;
+
+    try {
+      if (shouldIgnore) {
+        // Get current ignored to avoid duplicates
+        const currentlyIgnored = courses
+          .filter(c => courseIds.includes(c.id) && c.is_ignored)
+          .map(c => c.id);
+        
+        const toInsert = courseIds
+          .filter(id => !currentlyIgnored.includes(id))
+          .map(course_id => ({
+            user_id: user.id,
+            course_id
+          }));
+
+        if (toInsert.length > 0) {
+          await supabase
+            .from('user_ignored_courses')
+            .insert(toInsert);
+        }
+      } else {
+        // Remove from ignored
+        await supabase
+          .from('user_ignored_courses')
+          .delete()
+          .eq('user_id', user.id)
+          .in('course_id', courseIds);
+      }
+
+      // Update local state
+      setCourses(prev => prev.map(c => 
+        courseIds.includes(c.id)
+          ? { ...c, is_ignored: shouldIgnore }
+          : c
+      ));
+    } catch (err) {
+      console.error('Error toggling ignore multiple:', err);
+      throw err;
+    }
+  }, [user, courses]);
+
+  const unfollowMultiple = useCallback(async (courseIds: string[]) => {
+    if (!user || courseIds.length === 0) return;
+
+    try {
+      await supabase
+        .from('user_courses')
+        .delete()
+        .eq('user_id', user.id)
+        .in('course_id', courseIds);
+
+      // Update local state
+      setCourses(prev => prev.map(c => 
+        courseIds.includes(c.id)
+          ? { ...c, is_following: false }
+          : c
+      ));
+    } catch (err) {
+      console.error('Error unfollowing multiple:', err);
+      throw err;
+    }
+  }, [user, courses]);
+
   useEffect(() => {
     fetchCourses();
   }, [fetchCourses]);
 
-  return { courses, isLoading, error, refetch: fetchCourses, toggleFollow };
+  return { 
+    courses, 
+    isLoading, 
+    error, 
+    refetch: fetchCourses, 
+    toggleFollow, 
+    toggleIgnore, 
+    toggleIgnoreMultiple,
+    unfollowMultiple 
+  };
 }
