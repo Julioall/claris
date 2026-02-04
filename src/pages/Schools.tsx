@@ -2,7 +2,8 @@ import {
   Building2, 
   Search,
   RefreshCw,
-  Loader2
+  Loader2,
+  Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +15,7 @@ import { SchoolHierarchy } from '@/components/schools/SchoolHierarchy';
 export default function Schools() {
   const [searchQuery, setSearchQuery] = useState('');
   const { courses, isLoading, error, toggleFollow, toggleIgnore, toggleIgnoreMultiple } = useAllCoursesData();
-  const { isLoading: isSyncing, setShowCourseSelector } = useAuth();
+  const { isLoading: isSyncing, setShowCourseSelector, isEditMode } = useAuth();
 
   const filteredCourses = courses.filter(course =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -73,13 +74,23 @@ export default function Schools() {
         </div>
       )}
 
+      {/* Edit mode banner */}
+      {isEditMode && (
+        <div className="bg-primary/10 text-primary border border-primary/20 p-3 rounded-lg flex items-center gap-2">
+          <Pencil className="h-4 w-4" />
+          <span className="text-sm font-medium">
+            Modo de edição ativo - gerencie favoritos e cursos ignorados
+          </span>
+        </div>
+      )}
+
       {/* Schools hierarchy */}
       {filteredCourses.length > 0 ? (
         <SchoolHierarchy 
           courses={filteredCourses} 
-          onToggleFollow={toggleFollow}
-          onToggleIgnore={toggleIgnore}
-          onToggleIgnoreMultiple={toggleIgnoreMultiple}
+          onToggleFollow={isEditMode ? toggleFollow : undefined}
+          onToggleIgnore={isEditMode ? toggleIgnore : undefined}
+          onToggleIgnoreMultiple={isEditMode ? toggleIgnoreMultiple : undefined}
         />
       ) : (
         <div className="text-center py-12">

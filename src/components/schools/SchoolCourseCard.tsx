@@ -23,8 +23,8 @@ interface CourseWithStats {
 
 interface SchoolCourseCardProps {
   course: CourseWithStats;
-  onToggleFollow: (courseId: string) => void;
-  onToggleIgnore: (courseId: string) => void;
+  onToggleFollow?: (courseId: string) => void;
+  onToggleIgnore?: (courseId: string) => void;
 }
 
 export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: SchoolCourseCardProps) {
@@ -33,6 +33,7 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
   const handleToggleFollow = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!onToggleFollow) return;
     onToggleFollow(course.id);
     if (course.is_following) {
       toast.success('Removido dos Meus Cursos');
@@ -44,6 +45,7 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
   const handleToggleIgnore = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (!onToggleIgnore) return;
     onToggleIgnore(course.id);
     if (course.is_ignored) {
       toast.success('Curso será sincronizado');
@@ -51,6 +53,8 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
       toast.success('Curso ignorado na sincronização');
     }
   };
+
+  const isEditMode = !!onToggleFollow || !!onToggleIgnore;
 
   return (
     <Card className={`hover:shadow-md transition-shadow ${isExpired ? 'opacity-60' : ''} ${course.is_ignored ? 'bg-muted/50' : ''}`}>
@@ -69,32 +73,40 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant={course.is_ignored ? "secondary" : "outline"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleToggleIgnore}
-              title={course.is_ignored ? "Parar de ignorar" : "Ignorar na sincronização"}
-            >
-              {course.is_ignored ? (
-                <Eye className="h-4 w-4" />
-              ) : (
-                <EyeOff className="h-4 w-4" />
-              )}
-            </Button>
-            <Button
-              variant={course.is_following ? "default" : "outline"}
-              size="icon"
-              className="h-8 w-8"
-              onClick={handleToggleFollow}
-              title={course.is_following ? "Remover dos Meus Cursos" : "Adicionar aos Meus Cursos"}
-            >
-              {course.is_following ? (
-                <Star className="h-4 w-4 fill-current" />
-              ) : (
-                <StarOff className="h-4 w-4" />
-              )}
-            </Button>
+            {isEditMode && (
+              <>
+                {onToggleIgnore && (
+                  <Button
+                    variant={course.is_ignored ? "secondary" : "outline"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleToggleIgnore}
+                    title={course.is_ignored ? "Parar de ignorar" : "Ignorar na sincronização"}
+                  >
+                    {course.is_ignored ? (
+                      <Eye className="h-4 w-4" />
+                    ) : (
+                      <EyeOff className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+                {onToggleFollow && (
+                  <Button
+                    variant={course.is_following ? "default" : "outline"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleToggleFollow}
+                    title={course.is_following ? "Remover dos Meus Cursos" : "Adicionar aos Meus Cursos"}
+                  >
+                    {course.is_following ? (
+                      <Star className="h-4 w-4 fill-current" />
+                    ) : (
+                      <StarOff className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+              </>
+            )}
           </div>
         </div>
       </CardHeader>

@@ -31,6 +31,8 @@ interface ExtendedAuthContextType extends AuthContextType {
   syncSelectedCourses: (courseIds: string[] | 'all') => Promise<void>;
   showCourseSelector: boolean;
   setShowCourseSelector: (show: boolean) => void;
+  isEditMode: boolean;
+  setIsEditMode: (mode: boolean) => void;
 }
 
 const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
@@ -50,6 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const [showCourseSelector, setShowCourseSelector] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [syncProgress, setSyncProgress] = useState<SyncProgress>({
     isOpen: false,
     steps: initialSteps,
@@ -519,6 +522,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         syncSelectedCourses,
         showCourseSelector,
         setShowCourseSelector,
+        isEditMode,
+        setIsEditMode,
       }}
     >
       {children}
