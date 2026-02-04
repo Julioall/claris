@@ -368,6 +368,7 @@ export type Database = {
           due_date: string | null
           grade: number | null
           grade_max: number | null
+          hidden: boolean
           id: string
           moodle_activity_id: string
           percentage: number | null
@@ -384,6 +385,7 @@ export type Database = {
           due_date?: string | null
           grade?: number | null
           grade_max?: number | null
+          hidden?: boolean
           id?: string
           moodle_activity_id: string
           percentage?: number | null
@@ -400,6 +402,7 @@ export type Database = {
           due_date?: string | null
           grade?: number | null
           grade_max?: number | null
+          hidden?: boolean
           id?: string
           moodle_activity_id?: string
           percentage?: number | null
