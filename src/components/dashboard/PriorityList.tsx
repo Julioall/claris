@@ -22,22 +22,34 @@ interface PriorityListProps {
   overdueActions: PendingTask[];
   upcomingTasks: PendingTask[];
   criticalStudents: Student[];
+  lastSync?: string;
 }
 
-export function PriorityList({ overdueActions, upcomingTasks, criticalStudents }: PriorityListProps) {
+export function PriorityList({ overdueActions, upcomingTasks, criticalStudents, lastSync }: PriorityListProps) {
   const formatDueDate = (date: string) => {
     const d = new Date(date);
     if (isToday(d)) return 'Hoje';
     return format(d, "dd 'de' MMM", { locale: ptBR });
   };
 
+  const formatLastSync = (date: string | undefined) => {
+    if (!date) return 'Nunca';
+    return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <AlertCircle className="h-5 w-5 text-risk-risco" />
-          Prioridades - O que fazer agora
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-risk-risco" />
+            Prioridades - O que fazer agora
+          </CardTitle>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-muted-foreground/70">
+          <Clock className="h-3 w-3" />
+          Sincronizado: {formatLastSync(lastSync)}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <ScrollArea className="h-[300px] px-6 pb-6">
