@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
@@ -64,11 +64,6 @@ export function MyCourseCard({ course, onUnfollow }: MyCourseCardProps) {
                 {course.name}
               </h3>
               <div className="flex items-center gap-1 shrink-0">
-                {course.short_name && (
-                  <Badge variant="secondary" className="text-xs">
-                    {course.short_name}
-                  </Badge>
-                )}
                 {onUnfollow && (
                   <Button
                     variant="ghost"
