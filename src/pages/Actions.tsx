@@ -26,7 +26,8 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { mockActions, mockCourses } from '@/lib/mock-data';
+import { NewActionDialog } from '@/components/actions/NewActionDialog';
+import { mockActions, mockCourses, mockStudents } from '@/lib/mock-data';
 import { ActionType } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -45,6 +46,7 @@ export default function Actions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [isNewActionDialogOpen, setIsNewActionDialogOpen] = useState(false);
 
   const filteredActions = mockActions.filter(action => {
     const matchesSearch = action.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -64,6 +66,11 @@ export default function Actions() {
     return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
   };
 
+  const handleActionCreated = () => {
+    // TODO: Refresh actions list from database
+    console.log('Action created successfully');
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -75,7 +82,7 @@ export default function Actions() {
           </p>
         </div>
 
-        <Button>
+        <Button onClick={() => setIsNewActionDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nova ação
         </Button>
@@ -211,6 +218,15 @@ export default function Actions() {
           </p>
         </div>
       )}
+
+      {/* New Action Dialog */}
+      <NewActionDialog
+        open={isNewActionDialogOpen}
+        onOpenChange={setIsNewActionDialogOpen}
+        students={mockStudents.map(s => ({ id: s.id, full_name: s.full_name }))}
+        courses={mockCourses.map(c => ({ id: c.id, name: c.name }))}
+        onSuccess={handleActionCreated}
+      />
     </div>
   );
 }
