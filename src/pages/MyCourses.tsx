@@ -2,7 +2,9 @@ import {
   BookOpen, 
   Search,
   Loader2,
-  Building2
+  Building2,
+  Pencil,
+  X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +15,7 @@ import { CategoryHierarchy } from '@/components/courses/CategoryHierarchy';
 
 export default function MyCourses() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [isEditMode, setIsEditMode] = useState(false);
   const { courses, isLoading, error, toggleFollow, unfollowMultiple } = useAllCoursesData();
 
   // Filter only followed courses that are active (end_date is null or in the future)
@@ -58,6 +61,25 @@ export default function MyCourses() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Edit mode toggle */}
+          <Button 
+            variant={isEditMode ? "default" : "outline"} 
+            size="sm"
+            onClick={() => setIsEditMode(!isEditMode)}
+          >
+            {isEditMode ? (
+              <>
+                <X className="h-4 w-4 mr-2" />
+                Sair da edição
+              </>
+            ) : (
+              <>
+                <Pencil className="h-4 w-4 mr-2" />
+                Editar
+              </>
+            )}
+          </Button>
+
           {/* Link to Schools catalog */}
           <Button variant="outline" size="sm" asChild>
             <Link to="/escolas">
@@ -80,6 +102,16 @@ export default function MyCourses() {
         </div>
       </div>
 
+      {/* Edit mode banner */}
+      {isEditMode && (
+        <div className="bg-primary/10 text-primary border border-primary/20 p-3 rounded-lg flex items-center gap-2">
+          <Pencil className="h-4 w-4" />
+          <span className="text-sm font-medium">
+            Modo de edição ativo - clique nos botões para remover cursos
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="bg-destructive/10 text-destructive p-4 rounded-lg">
           {error}
@@ -90,8 +122,8 @@ export default function MyCourses() {
       {filteredCourses.length > 0 ? (
         <CategoryHierarchy 
           courses={filteredCourses}
-          onUnfollow={handleUnfollow}
-          onUnfollowMultiple={handleUnfollowMultiple}
+          onUnfollow={isEditMode ? handleUnfollow : undefined}
+          onUnfollowMultiple={isEditMode ? handleUnfollowMultiple : undefined}
         />
       ) : (
         <div className="text-center py-12">
