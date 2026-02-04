@@ -269,25 +269,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let totalStudents = 0;
     let totalActivities = 0;
 
+    // Helper to invoke edge function with timeout
+    const invokeWithTimeout = async (body: Record<string, unknown>, timeoutMs = 25000) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      
+      try {
+        const { data, error } = await supabase.functions.invoke('moodle-api', {
+          body,
+        });
+        clearTimeout(timeoutId);
+        return { data, error };
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err instanceof Error && err.name === 'AbortError') {
+          return { data: null, error: { message: 'Request timeout' } };
+        }
+        throw err;
+      }
+    };
+
     try {
       // ============ STEP 1: SYNC COURSES ============
       updateStep('courses', { status: 'in_progress' });
       
-      const { data: coursesData, error: coursesError } = await supabase.functions.invoke('moodle-api', {
-        body: {
-          action: 'sync_courses',
-          moodleUrl: moodleSession.moodleUrl,
-          token: moodleSession.moodleToken,
-          userId: moodleSession.moodleUserId,
-        },
-      });
+      const { data: coursesData, error: coursesError } = await invokeWithTimeout({
+        action: 'sync_courses',
+        moodleUrl: moodleSession.moodleUrl,
+        token: moodleSession.moodleToken,
+        userId: moodleSession.moodleUserId,
+      }, 60000); // 60s for courses since it's one big call
 
-      if (coursesError || coursesData.error) {
+      if (coursesError || coursesData?.error) {
         updateStep('courses', { 
           status: 'error', 
-          errorMessage: coursesError?.message || coursesData.error 
+          errorMessage: coursesError?.message || coursesData?.error 
         });
-        throw new Error(coursesError?.message || coursesData.error);
+        throw new Error(coursesError?.message || coursesData?.error);
       }
 
       syncedCourses = coursesData.courses || [];
@@ -297,29 +315,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // ============ STEP 2: SYNC STUDENTS ============
       updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
       
-      const STUDENT_BATCH_SIZE = 5;
+      // Process in smaller batches with individual error handling
+      const STUDENT_BATCH_SIZE = 3; // Smaller batch to avoid timeout
       let processedCoursesStudents = 0;
+      let studentErrors = 0;
 
       for (let i = 0; i < syncedCourses.length; i += STUDENT_BATCH_SIZE) {
         const batch = syncedCourses.slice(i, i + STUDENT_BATCH_SIZE);
         
         const results = await Promise.allSettled(
-          batch.map(async (course: any) => {
-            const { data } = await supabase.functions.invoke('moodle-api', {
-              body: {
+          batch.map(async (course: Course) => {
+            try {
+              const { data, error } = await invokeWithTimeout({
                 action: 'sync_students',
                 moodleUrl: moodleSession.moodleUrl,
                 token: moodleSession.moodleToken,
                 courseId: parseInt(course.moodle_course_id, 10),
-              },
-            });
-            return data?.students?.length || 0;
+              }, 20000); // 20s timeout per course
+              
+              if (error) {
+                console.warn(`Student sync failed for course ${course.moodle_course_id}:`, error);
+                return 0;
+              }
+              return data?.students?.length || 0;
+            } catch (err) {
+              console.warn(`Student sync error for course ${course.moodle_course_id}:`, err);
+              return 0;
+            }
           })
         );
 
         for (const result of results) {
           if (result.status === 'fulfilled') {
             totalStudents += result.value;
+          } else {
+            studentErrors++;
           }
         }
         
@@ -327,34 +357,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateStep('students', { count: processedCoursesStudents, total: syncedCourses.length });
       }
 
-      updateStep('students', { status: 'completed', count: totalStudents });
+      updateStep('students', { 
+        status: studentErrors > 0 && totalStudents === 0 ? 'error' : 'completed', 
+        count: totalStudents,
+        errorMessage: studentErrors > 0 ? `${studentErrors} cursos com erro` : undefined
+      });
 
       // ============ STEP 3: SYNC ACTIVITIES ============
       updateStep('activities', { status: 'in_progress', count: 0, total: syncedCourses.length });
       
-      const ACTIVITY_BATCH_SIZE = 3;
+      const ACTIVITY_BATCH_SIZE = 2; // Even smaller for activities (more data per course)
       let processedCoursesActivities = 0;
+      let activityErrors = 0;
 
       for (let i = 0; i < syncedCourses.length; i += ACTIVITY_BATCH_SIZE) {
         const batch = syncedCourses.slice(i, i + ACTIVITY_BATCH_SIZE);
         
         const results = await Promise.allSettled(
-          batch.map(async (course: any) => {
-            const { data } = await supabase.functions.invoke('moodle-api', {
-              body: {
+          batch.map(async (course: Course) => {
+            try {
+              const { data, error } = await invokeWithTimeout({
                 action: 'sync_activities',
                 moodleUrl: moodleSession.moodleUrl,
                 token: moodleSession.moodleToken,
                 courseId: parseInt(course.moodle_course_id, 10),
-              },
-            });
-            return data?.activitiesCount || 0;
+              }, 25000); // 25s timeout per course
+              
+              if (error) {
+                console.warn(`Activity sync failed for course ${course.moodle_course_id}:`, error);
+                return 0;
+              }
+              return data?.activitiesCount || 0;
+            } catch (err) {
+              console.warn(`Activity sync error for course ${course.moodle_course_id}:`, err);
+              return 0;
+            }
           })
         );
 
         for (const result of results) {
           if (result.status === 'fulfilled') {
             totalActivities += result.value;
+          } else {
+            activityErrors++;
           }
         }
         
@@ -362,7 +407,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updateStep('activities', { count: processedCoursesActivities, total: syncedCourses.length });
       }
 
-      updateStep('activities', { status: 'completed', count: totalActivities });
+      updateStep('activities', { 
+        status: activityErrors > 0 && totalActivities === 0 ? 'error' : 'completed', 
+        count: totalActivities,
+        errorMessage: activityErrors > 0 ? `${activityErrors} cursos com erro` : undefined
+      });
       
       // ============ FINALIZE ============
       const newSyncTime = new Date().toISOString();
