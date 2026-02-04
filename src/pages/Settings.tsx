@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DataCleanupCard } from '@/components/settings/DataCleanupCard';
+import { GradeDebugCard } from '@/components/settings/GradeDebugCard';
 
 export default function Settings() {
   const { user, logout, syncData, lastSync } = useAuth();
@@ -97,6 +98,9 @@ export default function Settings() {
 
       {/* Data Cleanup */}
       <DataCleanupCard />
+
+      {/* Grade Debug */}
+      <GradeDebugCard />
 
       {/* Logout */}
       <Card className="border-destructive/30">
