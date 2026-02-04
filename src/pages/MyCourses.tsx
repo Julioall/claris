@@ -6,26 +6,37 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useCoursesData } from '@/hooks/useCoursesData';
-import { useState } from 'react';
+import { useAllCoursesData } from '@/hooks/useAllCoursesData';
+import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { CategoryHierarchy } from '@/components/courses/CategoryHierarchy';
 
 export default function MyCourses() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { courses, isLoading, error } = useCoursesData();
+  const { courses, isLoading, error, toggleFollow, unfollowMultiple } = useAllCoursesData();
 
-  // Filter only active courses (end_date is null or in the future)
-  const activeCourses = courses.filter(course => {
-    if (!course.end_date) return true;
-    return new Date(course.end_date) >= new Date();
-  });
+  // Filter only followed courses that are active (end_date is null or in the future)
+  const followedCourses = useMemo(() => {
+    return courses.filter(course => {
+      if (!course.is_following) return false;
+      if (!course.end_date) return true;
+      return new Date(course.end_date) >= new Date();
+    });
+  }, [courses]);
 
-  const filteredCourses = activeCourses.filter(course =>
+  const filteredCourses = followedCourses.filter(course =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.short_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     course.category?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleUnfollow = (courseId: string) => {
+    toggleFollow(courseId);
+  };
+
+  const handleUnfollowMultiple = (courseIds: string[]) => {
+    unfollowMultiple(courseIds);
+  };
 
   if (isLoading) {
     return (
@@ -42,7 +53,7 @@ export default function MyCourses() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Meus Cursos</h1>
           <p className="text-muted-foreground">
-            {activeCourses.length} cursos em acompanhamento
+            {followedCourses.length} cursos em acompanhamento
           </p>
         </div>
 
@@ -77,7 +88,11 @@ export default function MyCourses() {
 
       {/* Courses hierarchy */}
       {filteredCourses.length > 0 ? (
-        <CategoryHierarchy courses={filteredCourses} />
+        <CategoryHierarchy 
+          courses={filteredCourses}
+          onUnfollow={handleUnfollow}
+          onUnfollowMultiple={handleUnfollowMultiple}
+        />
       ) : (
         <div className="text-center py-12">
           <BookOpen className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />

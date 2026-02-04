@@ -13,7 +13,7 @@ import { SchoolHierarchy } from '@/components/schools/SchoolHierarchy';
 
 export default function Schools() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { courses, isLoading, error, toggleFollow } = useAllCoursesData();
+  const { courses, isLoading, error, toggleFollow, toggleIgnore, toggleIgnoreMultiple } = useAllCoursesData();
   const { isLoading: isSyncing, setShowCourseSelector } = useAuth();
 
   const filteredCourses = courses.filter(course =>
@@ -75,7 +75,12 @@ export default function Schools() {
 
       {/* Schools hierarchy */}
       {filteredCourses.length > 0 ? (
-        <SchoolHierarchy courses={filteredCourses} onToggleFollow={toggleFollow} />
+        <SchoolHierarchy 
+          courses={filteredCourses} 
+          onToggleFollow={toggleFollow}
+          onToggleIgnore={toggleIgnore}
+          onToggleIgnoreMultiple={toggleIgnoreMultiple}
+        />
       ) : (
         <div className="text-center py-12">
           <Building2 className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
