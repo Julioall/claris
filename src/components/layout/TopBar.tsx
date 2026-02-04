@@ -1,21 +1,22 @@
-import { RefreshCw, Search, Bell, Menu } from 'lucide-react';
+import { RefreshCw, Search, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarTrigger } from '@/components/ui/sidebar';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 export function TopBar() {
-  const { syncData, lastSync, isLoading } = useAuth();
-  const [isSyncing, setIsSyncing] = useState(false);
+  const { syncData, lastSync, isLoading, setShowCourseSelector, courses } = useAuth();
 
-  const handleSync = async () => {
-    setIsSyncing(true);
-    await syncData();
-    setIsSyncing(false);
+  const handleSync = () => {
+    // If we have courses, show selector; otherwise trigger full sync
+    if (courses.length > 0) {
+      setShowCourseSelector(true);
+    } else {
+      syncData();
+    }
   };
 
   const formatLastSync = (date: string | null) => {
@@ -52,10 +53,10 @@ export function TopBar() {
           variant="outline"
           size="sm"
           onClick={handleSync}
-          disabled={isSyncing}
+          disabled={isLoading}
           className="gap-2"
         >
-          <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
           <span className="hidden sm:inline">Sincronizar</span>
         </Button>
 

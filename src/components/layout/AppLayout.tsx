@@ -4,9 +4,19 @@ import { TopBar } from './TopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { SyncProgressDialog } from '@/components/sync/SyncProgressDialog';
+import { CourseSelectorDialog } from '@/components/sync/CourseSelectorDialog';
 
 export function AppLayout() {
-  const { isAuthenticated, syncProgress, closeSyncProgress } = useAuth();
+  const { 
+    isAuthenticated, 
+    syncProgress, 
+    closeSyncProgress,
+    courses,
+    syncSelectedCourses,
+    showCourseSelector,
+    setShowCourseSelector,
+    isLoading,
+  } = useAuth();
 
   if (!isAuthenticated) {
     return <Outlet />;
@@ -25,6 +35,15 @@ export function AppLayout() {
           </main>
         </div>
       </div>
+      
+      {/* Course Selector Dialog */}
+      <CourseSelectorDialog
+        open={showCourseSelector}
+        onOpenChange={setShowCourseSelector}
+        courses={courses}
+        onSync={syncSelectedCourses}
+        isLoading={isLoading}
+      />
       
       {/* Sync Progress Dialog */}
       <SyncProgressDialog
