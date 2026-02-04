@@ -1,0 +1,332 @@
+import { useMemo } from 'react';
+import { 
+  Users, 
+  AlertTriangle, 
+  ClipboardList, 
+  Building2,
+  GraduationCap,
+  Users2,
+  BookOpen
+} from 'lucide-react';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
+import { CourseCard } from './CourseCard';
+
+interface CourseWithStats {
+  id: string;
+  name: string;
+  short_name?: string;
+  category?: string;
+  start_date?: string;
+  end_date?: string;
+  last_sync?: string;
+  students_count: number;
+  at_risk_count: number;
+  pending_tasks_count: number;
+}
+
+interface CategoryStats {
+  totalStudents: number;
+  totalAtRisk: number;
+  totalPending: number;
+  coursesCount: number;
+}
+
+// Hierarchical structure: School > Course > Class > Disciplines
+interface ClassNode {
+  name: string;
+  courses: CourseWithStats[];
+  stats: CategoryStats;
+}
+
+interface CourseNode {
+  name: string;
+  classes: Record<string, ClassNode>;
+  stats: CategoryStats;
+}
+
+interface SchoolNode {
+  name: string;
+  courses: Record<string, CourseNode>;
+  stats: CategoryStats;
+}
+
+type HierarchyTree = Record<string, SchoolNode>;
+
+interface CategoryHierarchyProps {
+  courses: CourseWithStats[];
+}
+
+function calculateStats(courses: CourseWithStats[]): CategoryStats {
+  return {
+    totalStudents: courses.reduce((sum, c) => sum + (c.students_count || 0), 0),
+    totalAtRisk: courses.reduce((sum, c) => sum + (c.at_risk_count || 0), 0),
+    totalPending: courses.reduce((sum, c) => sum + (c.pending_tasks_count || 0), 0),
+    coursesCount: courses.length,
+  };
+}
+
+function StatsDisplay({ stats, showCourses = false }: { stats: CategoryStats; showCourses?: boolean }) {
+  return (
+    <div className="flex items-center gap-4 text-xs text-muted-foreground mr-2">
+      {showCourses && (
+        <span className="flex items-center gap-1">
+          <BookOpen className="h-3.5 w-3.5" />
+          {stats.coursesCount}
+        </span>
+      )}
+      <span className="flex items-center gap-1">
+        <Users className="h-3.5 w-3.5" />
+        {stats.totalStudents}
+      </span>
+      {stats.totalAtRisk > 0 && (
+        <span className="flex items-center gap-1 text-risk-risco">
+          <AlertTriangle className="h-3.5 w-3.5" />
+          {stats.totalAtRisk}
+        </span>
+      )}
+      {stats.totalPending > 0 && (
+        <span className="flex items-center gap-1 text-status-pending">
+          <ClipboardList className="h-3.5 w-3.5" />
+          {stats.totalPending}
+        </span>
+      )}
+    </div>
+  );
+}
+
+export function CategoryHierarchy({ courses }: CategoryHierarchyProps) {
+  const hierarchy = useMemo(() => {
+    const tree: HierarchyTree = {};
+    const uncategorized: CourseWithStats[] = [];
+
+    courses.forEach(course => {
+      if (!course.category) {
+        uncategorized.push(course);
+        return;
+      }
+
+      // Parse category path: "Senai > Escola > Curso > Turma"
+      // We ignore first level (Senai/institution)
+      const parts = course.category.split(' > ').map(p => p.trim());
+      
+      // Skip first element (institution), then:
+      // [1] = School, [2] = Course, [3] = Class
+      const school = parts[1] || 'Sem escola';
+      const courseName = parts[2] || 'Sem curso';
+      const className = parts[3] || 'Sem turma';
+
+      // Initialize school
+      if (!tree[school]) {
+        tree[school] = {
+          name: school,
+          courses: {},
+          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
+        };
+      }
+
+      // Initialize course within school
+      if (!tree[school].courses[courseName]) {
+        tree[school].courses[courseName] = {
+          name: courseName,
+          classes: {},
+          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
+        };
+      }
+
+      // Initialize class within course
+      if (!tree[school].courses[courseName].classes[className]) {
+        tree[school].courses[courseName].classes[className] = {
+          name: className,
+          courses: [],
+          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
+        };
+      }
+
+      // Add discipline/course to class
+      tree[school].courses[courseName].classes[className].courses.push(course);
+    });
+
+    // Calculate stats for each level (bottom-up)
+    Object.values(tree).forEach(school => {
+      let schoolCourses: CourseWithStats[] = [];
+      
+      Object.values(school.courses).forEach(courseNode => {
+        let courseCourses: CourseWithStats[] = [];
+        
+        Object.values(courseNode.classes).forEach(classNode => {
+          classNode.stats = calculateStats(classNode.courses);
+          courseCourses = [...courseCourses, ...classNode.courses];
+        });
+        
+        courseNode.stats = calculateStats(courseCourses);
+        schoolCourses = [...schoolCourses, ...courseCourses];
+      });
+      
+      school.stats = calculateStats(schoolCourses);
+    });
+
+    // Sort schools alphabetically
+    const sortedSchools = Object.keys(tree).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+    return { tree, sortedSchools, uncategorized };
+  }, [courses]);
+
+  if (hierarchy.sortedSchools.length === 0 && hierarchy.uncategorized.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Schools */}
+      <Accordion 
+        type="multiple" 
+        defaultValue={hierarchy.sortedSchools}
+        className="space-y-4"
+      >
+        {hierarchy.sortedSchools.map(schoolKey => {
+          const school = hierarchy.tree[schoolKey];
+          const courseKeys = Object.keys(school.courses).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+          return (
+            <AccordionItem 
+              key={schoolKey} 
+              value={schoolKey}
+              className="border rounded-lg bg-card overflow-hidden"
+            >
+              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+                <div className="flex items-center justify-between w-full pr-2">
+                  <div className="flex items-center gap-3">
+                    <Building2 className="h-5 w-5 text-primary" />
+                    <div className="text-left">
+                      <p className="font-semibold">{school.name}</p>
+                      <p className="text-xs text-muted-foreground font-normal">
+                        {courseKeys.length} curso{courseKeys.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <StatsDisplay stats={school.stats} />
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4">
+                {/* Courses within school */}
+                <Accordion 
+                  type="multiple" 
+                  defaultValue={courseKeys}
+                  className="space-y-3 pt-2"
+                >
+                  {courseKeys.map(courseKey => {
+                    const courseNode = school.courses[courseKey];
+                    const classKeys = Object.keys(courseNode.classes).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+                    return (
+                      <AccordionItem 
+                        key={courseKey} 
+                        value={courseKey}
+                        className="border rounded-lg bg-muted/30 overflow-hidden"
+                      >
+                        <AccordionTrigger className="px-4 py-2.5 hover:no-underline hover:bg-muted/50">
+                          <div className="flex items-center justify-between w-full pr-2">
+                            <div className="flex items-center gap-3">
+                              <GraduationCap className="h-4 w-4 text-primary/80" />
+                              <div className="text-left">
+                                <p className="font-medium text-sm">{courseNode.name}</p>
+                                <p className="text-xs text-muted-foreground font-normal">
+                                  {classKeys.length} turma{classKeys.length !== 1 ? 's' : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <StatsDisplay stats={courseNode.stats} />
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-3">
+                          {/* Classes within course */}
+                          <Accordion 
+                            type="multiple" 
+                            defaultValue={classKeys}
+                            className="space-y-2 pt-2"
+                          >
+                            {classKeys.map(classKey => {
+                              const classNode = courseNode.classes[classKey];
+
+                              return (
+                                <AccordionItem 
+                                  key={classKey} 
+                                  value={classKey}
+                                  className="border rounded-lg bg-background overflow-hidden"
+                                >
+                                  <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-muted/30">
+                                    <div className="flex items-center justify-between w-full pr-2">
+                                      <div className="flex items-center gap-2">
+                                        <Users2 className="h-4 w-4 text-muted-foreground" />
+                                        <div className="text-left">
+                                          <p className="font-medium text-sm">{classNode.name}</p>
+                                          <p className="text-xs text-muted-foreground font-normal">
+                                            {classNode.courses.length} disciplina{classNode.courses.length !== 1 ? 's' : ''}
+                                          </p>
+                                        </div>
+                                      </div>
+                                      <StatsDisplay stats={classNode.stats} showCourses />
+                                    </div>
+                                  </AccordionTrigger>
+                                  <AccordionContent className="px-3 pb-3">
+                                    {/* Disciplines/Courses */}
+                                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-2">
+                                      {classNode.courses.map(course => (
+                                        <CourseCard key={course.id} course={course} />
+                                      ))}
+                                    </div>
+                                  </AccordionContent>
+                                </AccordionItem>
+                              );
+                            })}
+                          </Accordion>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+
+      {/* Uncategorized courses */}
+      {hierarchy.uncategorized.length > 0 && (
+        <Accordion type="multiple" defaultValue={['uncategorized']} className="space-y-4">
+          <AccordionItem 
+            value="uncategorized"
+            className="border rounded-lg bg-card overflow-hidden"
+          >
+            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
+              <div className="flex items-center justify-between w-full pr-2">
+                <div className="flex items-center gap-3">
+                  <BookOpen className="h-5 w-5 text-muted-foreground" />
+                  <div className="text-left">
+                    <p className="font-semibold">Sem categoria</p>
+                    <p className="text-xs text-muted-foreground font-normal">
+                      {hierarchy.uncategorized.length} curso{hierarchy.uncategorized.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                <StatsDisplay stats={calculateStats(hierarchy.uncategorized)} />
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-2">
+                {hierarchy.uncategorized.map(course => (
+                  <CourseCard key={course.id} course={course} />
+                ))}
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      )}
+    </div>
+  );
+}
