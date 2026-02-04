@@ -58,10 +58,9 @@ export function CourseOverview({ courses }: CourseOverviewProps) {
                   Sincronizado: {formatLastSync(course.last_sync)}
                 </div>
               </div>
-              <Button size="sm" variant="outline" asChild>
+              <Button size="sm" variant="ghost" asChild>
                 <Link to={`/cursos/${course.id}`}>
-                  Ver painel
-                  <ExternalLink className="h-3 w-3 ml-1" />
+                  <ExternalLink className="h-4 w-4" />
                 </Link>
               </Button>
             </div>
