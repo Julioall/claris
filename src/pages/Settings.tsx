@@ -12,6 +12,7 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { DataCleanupCard } from '@/components/settings/DataCleanupCard';
 
 export default function Settings() {
   const { user, logout, syncData, lastSync } = useAuth();
@@ -93,6 +94,9 @@ export default function Settings() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Data Cleanup */}
+      <DataCleanupCard />
 
       {/* Logout */}
       <Card className="border-destructive/30">
