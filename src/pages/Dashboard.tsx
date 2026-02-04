@@ -98,7 +98,6 @@ export default function Dashboard() {
           overdueActions={overdueActions}
           upcomingTasks={upcomingTasks}
           criticalStudents={criticalStudents}
-          lastSync={courses[0]?.last_sync}
         />
 
         {/* Course Overview */}
