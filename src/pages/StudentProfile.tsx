@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import { 
   ArrowLeft,
   User,
-  BookOpen,
   Clock,
   AlertTriangle,
   Plus,
@@ -11,7 +10,8 @@ import {
   CheckCircle2,
   MessageSquare,
   ClipboardList,
-  History
+  History,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,17 +20,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { 
-  mockStudents, 
-  mockPendingTasks, 
-  mockActions, 
-  getTasksByStudent,
-  getActionsByStudent,
-  getRiskLevelLabel
-} from '@/lib/mock-data';
+import { useStudentProfile } from '@/hooks/useStudentProfile';
+import { getRiskLevelLabel } from '@/lib/mock-data';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
 
 const riskReasonLabels: Record<string, string> = {
   atividades_atrasadas: 'Atividades atrasadas',
@@ -39,18 +32,50 @@ const riskReasonLabels: Record<string, string> = {
   nao_responde: 'Não responde contato',
 };
 
+const actionTypeLabels: Record<string, string> = {
+  contato: 'Contato',
+  orientacao: 'Orientação',
+  cobranca: 'Cobrança',
+  suporte_tecnico: 'Suporte Técnico',
+  reuniao: 'Reunião',
+  outro: 'Outro',
+};
+
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState('pendencias');
   
-  // Find student
-  const student = mockStudents.find(s => s.id === id);
-  
-  if (!student) {
+  const { 
+    student, 
+    pendingTasks, 
+    actions, 
+    notes, 
+    stats, 
+    isLoading, 
+    error 
+  } = useStudentProfile(id);
+
+  const formatDate = (date: string) => {
+    return format(new Date(date), "dd/MM/yyyy", { locale: ptBR });
+  };
+
+  const formatTime = (date: string) => {
+    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error || !student) {
     return (
       <div className="text-center py-12">
         <User className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-        <h3 className="text-lg font-medium">Aluno não encontrado</h3>
+        <h3 className="text-lg font-medium">{error || 'Aluno não encontrado'}</h3>
         <Button asChild variant="outline" className="mt-4">
           <Link to="/alunos">
             <ArrowLeft className="h-4 w-4 mr-2" />
@@ -61,16 +86,7 @@ export default function StudentProfile() {
     );
   }
 
-  const studentTasks = getTasksByStudent(student.id);
-  const studentActions = getActionsByStudent(student.id);
-
-  const formatDate = (date: string) => {
-    return format(new Date(date), "dd/MM/yyyy", { locale: ptBR });
-  };
-
-  const formatTime = (date: string) => {
-    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
-  };
+  const openTasks = pendingTasks.filter(t => t.status !== 'resolvida');
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -90,7 +106,7 @@ export default function StudentProfile() {
           </div>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{student.full_name}</h1>
-            <p className="text-muted-foreground">{student.email}</p>
+            <p className="text-muted-foreground">{student.email || 'Email não informado'}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <RiskBadge level={student.current_risk_level} size="lg" />
               {student.tags?.map(tag => (
@@ -138,7 +154,7 @@ export default function StudentProfile() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Pendências</p>
-                <p className="font-medium">{studentTasks.filter(t => t.status !== 'resolvida').length} abertas</p>
+                <p className="font-medium">{stats.pendingTasksCount} abertas</p>
               </div>
             </div>
           </CardContent>
@@ -152,7 +168,7 @@ export default function StudentProfile() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Ações</p>
-                <p className="font-medium">{studentActions.length} registradas</p>
+                <p className="font-medium">{stats.actionsCount} registradas</p>
               </div>
             </div>
           </CardContent>
@@ -166,7 +182,7 @@ export default function StudentProfile() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Última ação</p>
-                <p className="font-medium">{student.last_action_date ? formatTime(student.last_action_date) : 'Nunca'}</p>
+                <p className="font-medium">{stats.lastActionDate ? formatTime(stats.lastActionDate) : 'Nunca'}</p>
               </div>
             </div>
           </CardContent>
@@ -200,9 +216,9 @@ export default function StudentProfile() {
           <TabsTrigger value="pendencias" className="gap-2">
             <ClipboardList className="h-4 w-4" />
             Pendências
-            {studentTasks.filter(t => t.status !== 'resolvida').length > 0 && (
+            {openTasks.length > 0 && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {studentTasks.filter(t => t.status !== 'resolvida').length}
+                {openTasks.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -213,6 +229,11 @@ export default function StudentProfile() {
           <TabsTrigger value="notas" className="gap-2">
             <MessageSquare className="h-4 w-4" />
             Notas
+            {notes.length > 0 && (
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                {notes.length}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="historico" className="gap-2">
             <History className="h-4 w-4" />
@@ -230,9 +251,9 @@ export default function StudentProfile() {
             </Button>
           </div>
           
-          {studentTasks.length > 0 ? (
+          {pendingTasks.length > 0 ? (
             <div className="space-y-2">
-              {studentTasks.map(task => (
+              {pendingTasks.map(task => (
                 <Card key={task.id} className="card-interactive">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3">
@@ -284,22 +305,22 @@ export default function StudentProfile() {
             </Button>
           </div>
           
-          {studentActions.length > 0 ? (
+          {actions.length > 0 ? (
             <div className="space-y-2">
-              {studentActions.map(action => (
+              {actions.map(action => (
                 <Card key={action.id} className="card-interactive">
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <Badge variant="outline" className="capitalize">
-                            {action.action_type.replace('_', ' ')}
+                            {actionTypeLabels[action.action_type] || action.action_type}
                           </Badge>
                           <StatusBadge status={action.status} size="sm" />
                         </div>
                         <p className="text-sm mt-2">{action.description}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {formatTime(action.created_at)}
+                          {action.created_at && formatTime(action.created_at)}
                         </p>
                       </div>
                     </div>
@@ -324,10 +345,26 @@ export default function StudentProfile() {
               Adicionar nota
             </Button>
           </div>
-          <div className="text-center py-8 text-muted-foreground">
-            <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>Nenhuma nota registrada</p>
-          </div>
+          
+          {notes.length > 0 ? (
+            <div className="space-y-2">
+              {notes.map(note => (
+                <Card key={note.id} className="card-interactive">
+                  <CardContent className="p-4">
+                    <p className="text-sm whitespace-pre-wrap">{note.content}</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {note.created_at && formatTime(note.created_at)}
+                    </p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>Nenhuma nota registrada</p>
+            </div>
+          )}
         </TabsContent>
 
         {/* Histórico */}
