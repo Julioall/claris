@@ -1,13 +1,13 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, XCircle, Loader2, BookOpen, Users, ClipboardList } from 'lucide-react';
+import { CheckCircle2, XCircle, Loader2, BookOpen, Users, ClipboardList, GraduationCap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export interface SyncStep {
   id: string;
   label: string;
-  icon: 'courses' | 'students' | 'activities';
+  icon: 'courses' | 'students' | 'activities' | 'grades';
   status: 'pending' | 'in_progress' | 'completed' | 'error';
   count?: number;
   total?: number;
@@ -25,6 +25,7 @@ interface SyncProgressDialogProps {
     courses: number;
     students: number;
     activities: number;
+    grades: number;
   };
 }
 
@@ -32,6 +33,7 @@ const iconMap = {
   courses: BookOpen,
   students: Users,
   activities: ClipboardList,
+  grades: GraduationCap,
 };
 
 export function SyncProgressDialog({
@@ -114,7 +116,7 @@ export function SyncProgressDialog({
                     )}
                     {step.status === 'completed' && step.count !== undefined && (
                       <span className="text-xs font-medium text-primary">
-                        {step.count} {step.icon === 'courses' ? 'cursos' : step.icon === 'students' ? 'alunos' : 'atividades'}
+                        {step.count} {step.icon === 'courses' ? 'cursos' : step.icon === 'students' ? 'alunos' : step.icon === 'grades' ? 'notas' : 'atividades'}
                       </span>
                     )}
                     {step.status === 'completed' && (
@@ -148,7 +150,7 @@ export function SyncProgressDialog({
         {isComplete && summary && (
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
             <h4 className="text-sm font-medium">Resumo da sincronização</h4>
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-4 gap-2 text-center">
               <div>
                 <p className="text-2xl font-bold text-primary">{summary.courses}</p>
                 <p className="text-xs text-muted-foreground">Cursos</p>
@@ -160,6 +162,10 @@ export function SyncProgressDialog({
               <div>
                 <p className="text-2xl font-bold text-primary">{summary.activities}</p>
                 <p className="text-xs text-muted-foreground">Atividades</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-primary">{summary.grades}</p>
+                <p className="text-xs text-muted-foreground">Notas</p>
               </div>
             </div>
           </div>
