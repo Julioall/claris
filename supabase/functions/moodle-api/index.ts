@@ -417,7 +417,7 @@ Deno.serve(async (req) => {
           .from('courses')
           .select('id')
           .eq('moodle_course_id', String(courseId))
-          .single();
+          .maybeSingle();
 
         if (!dbCourse) {
           return new Response(
@@ -437,88 +437,72 @@ Deno.serve(async (req) => {
         
         console.log(`Found ${students.length} students in course ${courseId}`);
 
-        const syncedStudents = [];
+        if (students.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, students: [] }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
-        for (const student of students) {
-          // Check if student exists
-          const { data: existingStudent } = await supabase
-            .from('students')
-            .select('id')
-            .eq('moodle_user_id', String(student.id))
-            .single();
+        // Prepare student data for batch upsert
+        const now = new Date().toISOString();
+        const studentsData = students.map(student => ({
+          moodle_user_id: String(student.id),
+          full_name: student.fullname || `${student.firstname} ${student.lastname}`,
+          email: student.email || null,
+          avatar_url: student.profileimageurl || null,
+          last_access: student.lastaccess ? new Date(student.lastaccess * 1000).toISOString() : null,
+          updated_at: now,
+        }));
 
-          const studentData = {
-            moodle_user_id: String(student.id),
-            full_name: student.fullname || `${student.firstname} ${student.lastname}`,
-            email: student.email || null,
-            avatar_url: student.profileimageurl || null,
-            last_access: student.lastaccess ? new Date(student.lastaccess * 1000).toISOString() : null,
-            updated_at: new Date().toISOString(),
-          };
+        // Batch upsert students
+        const { data: syncedStudents, error: upsertError } = await supabase
+          .from('students')
+          .upsert(studentsData, { 
+            onConflict: 'moodle_user_id',
+            ignoreDuplicates: false 
+          })
+          .select();
 
-          let dbStudent;
-          if (existingStudent) {
-            const { data, error } = await supabase
-              .from('students')
-              .update(studentData)
-              .eq('id', existingStudent.id)
-              .select()
-              .single();
-            
-            if (error) {
-              console.error(`Error updating student ${student.id}:`, error);
-              continue;
-            }
-            dbStudent = data;
-          } else {
-            const { data, error } = await supabase
-              .from('students')
-              .insert({ ...studentData, current_risk_level: 'normal' })
-              .select()
-              .single();
-            
-            if (error) {
-              console.error(`Error inserting student ${student.id}:`, error);
-              continue;
-            }
-            dbStudent = data;
-          }
+        if (upsertError) {
+          console.error('Error upserting students:', upsertError);
+          return new Response(
+            JSON.stringify({ error: 'Failed to sync students', details: upsertError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
-          // Link student to course
-          const { data: existingLink } = await supabase
+        console.log(`Upserted ${syncedStudents?.length || 0} students`);
+
+        // Batch upsert student-course links
+        if (syncedStudents && syncedStudents.length > 0) {
+          const studentCourseLinks = syncedStudents.map(student => ({
+            student_id: student.id,
+            course_id: dbCourse.id,
+            enrollment_status: 'ativo',
+            last_sync: now
+          }));
+
+          const { error: linkError } = await supabase
             .from('student_courses')
-            .select('id')
-            .eq('student_id', dbStudent.id)
-            .eq('course_id', dbCourse.id)
-            .single();
-
-          if (!existingLink) {
-            await supabase
-              .from('student_courses')
-              .insert({
-                student_id: dbStudent.id,
-                course_id: dbCourse.id,
-                enrollment_status: 'ativo',
-                last_sync: new Date().toISOString()
-              });
-          } else {
-            await supabase
-              .from('student_courses')
-              .update({ last_sync: new Date().toISOString() })
-              .eq('id', existingLink.id);
+            .upsert(studentCourseLinks, { 
+              onConflict: 'student_id,course_id',
+              ignoreDuplicates: false 
+            });
+          
+          if (linkError) {
+            console.error('Error linking students to course:', linkError);
           }
-
-          syncedStudents.push(dbStudent);
         }
 
         // Update course's last_sync
         await supabase
           .from('courses')
-          .update({ last_sync: new Date().toISOString() })
+          .update({ last_sync: now })
           .eq('id', dbCourse.id);
 
         return new Response(
-          JSON.stringify({ success: true, students: syncedStudents }),
+          JSON.stringify({ success: true, students: syncedStudents || [] }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -591,14 +575,20 @@ Deno.serve(async (req) => {
 
         console.log(`Found ${activities.length} activities in course ${courseId}`);
 
-        let activitiesCount = 0;
+        if (activities.length === 0) {
+          return new Response(
+            JSON.stringify({ success: true, activitiesCount: 0 }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
-        // For each activity, check completion status for each student
-        // Note: This uses core_completion_get_activities_completion_status if available
-        // For now, we'll create basic activity records
+        // Prepare all activity records for batch upsert
+        const now = new Date().toISOString();
+        const activityRecords: any[] = [];
+        
         for (const activity of activities) {
           for (const studentId of studentIds) {
-            const activityData = {
+            activityRecords.push({
               student_id: studentId,
               course_id: dbCourse.id,
               moodle_activity_id: String(activity.id),
@@ -606,21 +596,34 @@ Deno.serve(async (req) => {
               activity_type: activity.modname,
               status: activity.completiondata?.state === 1 ? 'completed' : 
                       activity.completiondata?.state === 2 ? 'completed' : 'pending',
-              updated_at: new Date().toISOString(),
-            };
-
-            // Upsert activity record
-            const { error } = await supabase
-              .from('student_activities')
-              .upsert(activityData, {
-                onConflict: 'student_id,course_id,moodle_activity_id',
-              });
-
-            if (!error) {
-              activitiesCount++;
-            }
+              updated_at: now,
+            });
           }
         }
+
+        console.log(`Preparing to upsert ${activityRecords.length} activity records`);
+
+        // Batch upsert in chunks of 500 to avoid payload limits
+        const BATCH_SIZE = 500;
+        let activitiesCount = 0;
+
+        for (let i = 0; i < activityRecords.length; i += BATCH_SIZE) {
+          const batch = activityRecords.slice(i, i + BATCH_SIZE);
+          const { data, error } = await supabase
+            .from('student_activities')
+            .upsert(batch, {
+              onConflict: 'student_id,course_id,moodle_activity_id',
+              ignoreDuplicates: false
+            });
+
+          if (error) {
+            console.error(`Error upserting activity batch ${i / BATCH_SIZE}:`, error);
+          } else {
+            activitiesCount += batch.length;
+          }
+        }
+
+        console.log(`Upserted ${activitiesCount} activity records`);
 
         return new Response(
           JSON.stringify({ success: true, activitiesCount }),
