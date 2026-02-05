@@ -85,7 +85,7 @@ interface Student {
 
 interface Course {
   id: string;
-  name: string;
+  short_name: string;
 }
 
 interface NewActionDialogProps {
@@ -135,7 +135,7 @@ export function NewActionDialog({
           course_id,
           courses!inner (
             id,
-            name,
+            short_name,
             end_date
           )
         `)
@@ -149,13 +149,13 @@ export function NewActionDialog({
       const now = new Date();
       const activeCourses = data
         ?.map(uc => uc.courses)
-        .filter((c): c is { id: string; name: string; end_date: string | null } => {
+        .filter((c): c is { id: string; short_name: string | null; end_date: string | null } => {
           if (!c) return false;
           const isActive = !c.end_date || new Date(c.end_date) > now;
-          const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase());
+          const matchesSearch = !search || (c.short_name?.toLowerCase().includes(search.toLowerCase()) ?? false);
           return isActive && matchesSearch;
         })
-        .map(c => ({ id: c.id, name: c.name })) || [];
+        .map(c => ({ id: c.id, short_name: c.short_name || '' })) || [];
 
       setCourses(activeCourses);
     } catch (err) {
@@ -355,7 +355,7 @@ export function NewActionDialog({
                       <Input
                         ref={courseInputRef}
                         placeholder="Digite para buscar curso..."
-                        value={selectedCourse ? selectedCourse.name : courseSearch}
+                        value={selectedCourse ? selectedCourse.short_name : courseSearch}
                         onChange={(e) => {
                           setCourseSearch(e.target.value);
                           if (field.value) {
@@ -396,7 +396,7 @@ export function NewActionDialog({
                                   setShowCourseSuggestions(false);
                                 }}
                               >
-                                {course.name}
+                                {course.short_name}
                               </li>
                             ))}
                           </ul>
