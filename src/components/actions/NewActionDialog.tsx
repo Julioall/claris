@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -46,6 +47,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
 import { ActionType } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -105,10 +107,12 @@ export function NewActionDialog({
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [isLoadingStudents, setIsLoadingStudents] = useState(false);
-  const [courseOpen, setCourseOpen] = useState(false);
-  const [studentOpen, setStudentOpen] = useState(false);
   const [courseSearch, setCourseSearch] = useState('');
   const [studentSearch, setStudentSearch] = useState('');
+  const [showCourseSuggestions, setShowCourseSuggestions] = useState(false);
+  const [showStudentSuggestions, setShowStudentSuggestions] = useState(false);
+  const courseInputRef = useRef<HTMLInputElement>(null);
+  const studentInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -346,63 +350,60 @@ export function NewActionDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Curso *</FormLabel>
-                  <Popover open={courseOpen} onOpenChange={setCourseOpen}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={courseOpen}
-                          className={cn(
-                            "w-full justify-between",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {selectedCourse?.name || "Buscar curso..."}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <Command shouldFilter={false}>
-                        <CommandInput 
-                          placeholder="Buscar curso..." 
-                          value={courseSearch}
-                          onValueChange={setCourseSearch}
-                        />
-                        <CommandList>
-                          {isLoadingCourses ? (
-                            <div className="flex items-center justify-center py-6">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            </div>
-                          ) : courses.length === 0 ? (
-                            <CommandEmpty>Nenhum curso encontrado.</CommandEmpty>
-                          ) : (
-                            <CommandGroup>
-                              {courses.map((course) => (
-                                <CommandItem
-                                  key={course.id}
-                                  value={course.id}
-                                  onSelect={() => {
-                                    field.onChange(course.id);
-                                    setCourseOpen(false);
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      field.value === course.id ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  {course.name}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <div className="relative">
+                    <FormControl>
+                      <Input
+                        ref={courseInputRef}
+                        placeholder="Digite para buscar curso..."
+                        value={selectedCourse ? selectedCourse.name : courseSearch}
+                        onChange={(e) => {
+                          setCourseSearch(e.target.value);
+                          if (field.value) {
+                            field.onChange(undefined);
+                          }
+                          setShowCourseSuggestions(true);
+                        }}
+                        onFocus={() => setShowCourseSuggestions(true)}
+                        onBlur={() => {
+                          // Delay to allow click on suggestion
+                          setTimeout(() => setShowCourseSuggestions(false), 200);
+                        }}
+                      />
+                    </FormControl>
+                    {showCourseSuggestions && (courseSearch || !field.value) && (
+                      <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md">
+                        {isLoadingCourses ? (
+                          <div className="flex items-center justify-center py-3">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </div>
+                        ) : courses.length === 0 ? (
+                          <div className="py-3 px-3 text-sm text-muted-foreground text-center">
+                            Nenhum curso encontrado.
+                          </div>
+                        ) : (
+                          <ul className="py-1 max-h-[200px] overflow-auto">
+                            {courses.slice(0, 5).map((course) => (
+                              <li
+                                key={course.id}
+                                className={cn(
+                                  "px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors",
+                                  field.value === course.id && "bg-accent"
+                                )}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  field.onChange(course.id);
+                                  setCourseSearch('');
+                                  setShowCourseSuggestions(false);
+                                }}
+                              >
+                                {course.name}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <FormDescription>
                     Selecione um dos seus cursos ativos
                   </FormDescription>
@@ -417,64 +418,60 @@ export function NewActionDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Aluno (opcional)</FormLabel>
-                  <Popover open={studentOpen} onOpenChange={setStudentOpen}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={studentOpen}
-                          disabled={!selectedCourseId}
-                          className={cn(
-                            "w-full justify-between",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {selectedStudent?.full_name || (selectedCourseId ? "Buscar aluno..." : "Selecione um curso primeiro")}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <Command shouldFilter={false}>
-                        <CommandInput 
-                          placeholder="Buscar aluno..." 
-                          value={studentSearch}
-                          onValueChange={setStudentSearch}
-                        />
-                        <CommandList>
-                          {isLoadingStudents ? (
-                            <div className="flex items-center justify-center py-6">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            </div>
-                          ) : students.length === 0 ? (
-                            <CommandEmpty>Nenhum aluno encontrado.</CommandEmpty>
-                          ) : (
-                            <CommandGroup>
-                              {students.map((student) => (
-                                <CommandItem
-                                  key={student.id}
-                                  value={student.id}
-                                  onSelect={() => {
-                                    field.onChange(student.id);
-                                    setStudentOpen(false);
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      field.value === student.id ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  {student.full_name}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          )}
-                        </CommandList>
-                      </Command>
-                    </PopoverContent>
-                  </Popover>
+                  <div className="relative">
+                    <FormControl>
+                      <Input
+                        ref={studentInputRef}
+                        placeholder={selectedCourseId ? "Digite para buscar aluno..." : "Selecione um curso primeiro"}
+                        disabled={!selectedCourseId}
+                        value={selectedStudent ? selectedStudent.full_name : studentSearch}
+                        onChange={(e) => {
+                          setStudentSearch(e.target.value);
+                          if (field.value) {
+                            field.onChange(undefined);
+                          }
+                          setShowStudentSuggestions(true);
+                        }}
+                        onFocus={() => setShowStudentSuggestions(true)}
+                        onBlur={() => {
+                          setTimeout(() => setShowStudentSuggestions(false), 200);
+                        }}
+                      />
+                    </FormControl>
+                    {showStudentSuggestions && selectedCourseId && (studentSearch || !field.value) && (
+                      <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md">
+                        {isLoadingStudents ? (
+                          <div className="flex items-center justify-center py-3">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          </div>
+                        ) : students.length === 0 ? (
+                          <div className="py-3 px-3 text-sm text-muted-foreground text-center">
+                            Nenhum aluno encontrado.
+                          </div>
+                        ) : (
+                          <ul className="py-1 max-h-[200px] overflow-auto">
+                            {students.slice(0, 5).map((student) => (
+                              <li
+                                key={student.id}
+                                className={cn(
+                                  "px-3 py-2 text-sm cursor-pointer hover:bg-accent transition-colors",
+                                  field.value === student.id && "bg-accent"
+                                )}
+                                onMouseDown={(e) => {
+                                  e.preventDefault();
+                                  field.onChange(student.id);
+                                  setStudentSearch('');
+                                  setShowStudentSuggestions(false);
+                                }}
+                              >
+                                {student.full_name}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   <FormDescription>
                     {selectedCourseId 
                       ? `${students.length} aluno(s) no curso. Deixe vazio para aplicar a todos.`
