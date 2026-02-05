@@ -9,6 +9,7 @@ interface CourseWithStats extends Course {
   pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
+  student_ids: string[];
 }
 
 export function useAllCoursesData() {
@@ -62,10 +63,12 @@ export function useAllCoursesData() {
       const coursesWithStats: CourseWithStats[] = await Promise.all(
         allCourses.map(async (course) => {
           // Count students in this course
-          const { count: studentsCount } = await supabase
+          const { data: studentData } = await supabase
             .from('student_courses')
-            .select('*', { count: 'exact', head: true })
+            .select('student_id')
             .eq('course_id', course.id);
+
+          const studentIds = studentData?.map(s => s.student_id) || [];
 
           // Count at-risk students
           const { data: atRiskData } = await supabase
@@ -89,7 +92,8 @@ export function useAllCoursesData() {
 
           return {
             ...course,
-            students_count: studentsCount || 0,
+            students_count: studentIds.length,
+            student_ids: studentIds,
             at_risk_count: atRiskCount,
             pending_tasks_count: pendingTasksCount || 0,
             is_following: followedCourseIds.has(course.id),

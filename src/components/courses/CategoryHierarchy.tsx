@@ -30,10 +30,12 @@ interface CourseWithStats {
   students_count: number;
   at_risk_count: number;
   pending_tasks_count: number;
+  student_ids?: string[];
 }
 
 interface CategoryStats {
   totalStudents: number;
+  uniqueStudentIds: string[];
   totalAtRisk: number;
   totalPending: number;
   coursesCount: number;
@@ -67,8 +69,13 @@ interface CategoryHierarchyProps {
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
+  // Collect all student IDs and deduplicate
+  const allStudentIds = courses.flatMap(c => c.student_ids || []);
+  const uniqueStudentIds = [...new Set(allStudentIds)];
+  
   return {
-    totalStudents: courses.reduce((sum, c) => sum + (c.students_count || 0), 0),
+    totalStudents: uniqueStudentIds.length,
+    uniqueStudentIds,
     totalAtRisk: courses.reduce((sum, c) => sum + (c.at_risk_count || 0), 0),
     totalPending: courses.reduce((sum, c) => sum + (c.pending_tasks_count || 0), 0),
     coursesCount: courses.length,
@@ -163,7 +170,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
         tree[school] = {
           name: school,
           courses: {},
-          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
+          stats: { totalStudents: 0, uniqueStudentIds: [], totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
         };
       }
 
@@ -172,7 +179,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
         tree[school].courses[courseName] = {
           name: courseName,
           classes: {},
-          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
+          stats: { totalStudents: 0, uniqueStudentIds: [], totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
         };
       }
 
@@ -181,7 +188,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
         tree[school].courses[courseName].classes[className] = {
           name: className,
           courses: [],
-          stats: { totalStudents: 0, totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
+          stats: { totalStudents: 0, uniqueStudentIds: [], totalAtRisk: 0, totalPending: 0, coursesCount: 0 },
         };
       }
 
