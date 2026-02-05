@@ -65,18 +65,24 @@ import { useAuth } from '@/contexts/AuthContext';
  }
  
 const actionTypeOptions: { value: ActionType; label: string }[] = [
-  { value: 'contato', label: 'Contato' },
-  { value: 'orientacao', label: 'Orientação' },
-  { value: 'cobranca', label: 'Cobrança' },
-  { value: 'suporte_tecnico', label: 'Suporte Técnico' },
-  { value: 'reuniao', label: 'Reunião' },
-  { value: 'outro', label: 'Outro' },
+ ];
+ 
+ interface ActionTypeOption {
+   value: string;
+   label: string;
+ }
+ 
+ const DEFAULT_ACTION_TYPES: ActionTypeOption[] = [
+   { value: 'contato', label: 'Contato' },
+   { value: 'orientacao', label: 'Orientação' },
+   { value: 'cobranca', label: 'Cobrança' },
+   { value: 'suporte_tecnico', label: 'Suporte Técnico' },
+   { value: 'reuniao', label: 'Reunião' },
+   { value: 'outro', label: 'Outro' },
 ];
 
 const formSchema = z.object({
-  action_type: z.enum(['contato', 'orientacao', 'cobranca', 'suporte_tecnico', 'reuniao', 'outro'], {
-    required_error: 'Selecione o tipo de ação',
-  }),
+   action_type: z.string().min(1, 'Selecione o tipo de ação'),
   description: z.string()
     .min(5, 'A descrição deve ter pelo menos 5 caracteres')
     .max(500, 'A descrição deve ter no máximo 500 caracteres'),
@@ -122,6 +128,8 @@ export function NewActionDialog({
   const [studentSearch, setStudentSearch] = useState('');
   const [showCourseSuggestions, setShowCourseSuggestions] = useState(false);
   const [showStudentSuggestions, setShowStudentSuggestions] = useState(false);
+   const [actionTypes, setActionTypes] = useState<ActionTypeOption[]>(DEFAULT_ACTION_TYPES);
+   const [isLoadingTypes, setIsLoadingTypes] = useState(false);
   const courseInputRef = useRef<HTMLInputElement>(null);
   const studentInputRef = useRef<HTMLInputElement>(null);
 
@@ -134,6 +142,38 @@ export function NewActionDialog({
 
   const selectedCourseId = form.watch('course_id');
    const isEditMode = !!actionToEdit;
+ 
+   // Fetch action types from database
+   const fetchActionTypes = async () => {
+     if (!user) return;
+     
+     setIsLoadingTypes(true);
+     try {
+       const { data, error } = await supabase
+         .from('action_types')
+         .select('name, label')
+         .eq('user_id', user.id)
+         .order('created_at', { ascending: true });
+ 
+       if (error) throw error;
+ 
+       if (data && data.length > 0) {
+         setActionTypes(data.map(t => ({ value: t.name, label: t.label })));
+       }
+     } catch (err) {
+       console.error('Error fetching action types:', err);
+       // Keep default types on error
+     } finally {
+       setIsLoadingTypes(false);
+     }
+   };
+ 
+   // Load action types when dialog opens
+   useEffect(() => {
+     if (open) {
+       fetchActionTypes();
+     }
+   }, [open, user]);
  
    // Pre-fill form when editing
    useEffect(() => {
@@ -271,7 +311,7 @@ export function NewActionDialog({
          const { error } = await supabase
            .from('actions')
            .update({
-             action_type: data.action_type,
+             action_type: data.action_type as ActionType,
              description: data.description.trim(),
              course_id: data.course_id,
              scheduled_date: data.scheduled_date?.toISOString() || null,
@@ -296,7 +336,7 @@ export function NewActionDialog({
            }
  
            const actions = courseStudents.map(sc => ({
-             action_type: data.action_type,
+             action_type: data.action_type as ActionType,
              description: data.description.trim(),
              student_id: sc.student_id,
              course_id: data.course_id,
@@ -311,7 +351,7 @@ export function NewActionDialog({
            toast.success(`${actions.length} ações criadas com sucesso!`);
          } else {
            const { error } = await supabase.from('actions').insert({
-          action_type: data.action_type,
+             action_type: data.action_type as ActionType,
           description: data.description.trim(),
              student_id: data.student_id,
           course_id: data.course_id,
@@ -374,14 +414,18 @@ export function NewActionDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Tipo de ação *</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                   <Select 
+                     onValueChange={field.onChange} 
+                     value={field.value}
+                     disabled={isLoadingTypes}
+                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione o tipo" />
+                         <SelectValue placeholder={isLoadingTypes ? "Carregando..." : "Selecione o tipo"} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {actionTypeOptions.map((option) => (
+                       {actionTypes.map((option) => (
                         <SelectItem key={option.value} value={option.value}>
                           {option.label}
                         </SelectItem>

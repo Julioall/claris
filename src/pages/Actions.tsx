@@ -1,4 +1,4 @@
-import { useState } from 'react';
+ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   CheckSquare, 
@@ -36,6 +36,8 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
  import { Skeleton } from '@/components/ui/skeleton';
  import { toast } from 'sonner';
+ import { supabase } from '@/integrations/supabase/client';
+ import { useAuth } from '@/contexts/AuthContext';
 
 const actionTypeConfig: Record<ActionType, { label: string; icon: typeof Phone; color: string }> = {
   contato: { label: 'Contato', icon: Phone, color: 'text-blue-500' },
@@ -46,15 +48,66 @@ const actionTypeConfig: Record<ActionType, { label: string; icon: typeof Phone; 
   outro: { label: 'Outro', icon: CheckSquare, color: 'text-muted-foreground' },
 };
 
+ const defaultIconForType = CheckSquare;
+ 
+ interface ActionTypeOption {
+   value: string;
+   label: string;
+ }
+ 
 export default function Actions() {
+   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isNewActionDialogOpen, setIsNewActionDialogOpen] = useState(false);
    const [actionToEdit, setActionToEdit] = useState<ActionToEdit | null>(null);
+   const [actionTypes, setActionTypes] = useState<ActionTypeOption[]>([]);
    
    const { actions, isLoading, refetch, markAsCompleted } = useActionsData();
 
+   // Fetch action types from database
+   useEffect(() => {
+     const fetchActionTypes = async () => {
+       if (!user) return;
+       
+       try {
+         const { data, error } = await supabase
+           .from('action_types')
+           .select('name, label')
+           .eq('user_id', user.id)
+           .order('created_at', { ascending: true });
+ 
+         if (error) throw error;
+ 
+         if (data && data.length > 0) {
+           setActionTypes(data.map(t => ({ value: t.name, label: t.label })));
+         } else {
+           setActionTypes(Object.entries(actionTypeConfig).map(([key, config]) => ({
+             value: key,
+             label: config.label,
+           })));
+         }
+       } catch (err) {
+         console.error('Error fetching action types:', err);
+       }
+     };
+ 
+     fetchActionTypes();
+   }, [user]);
+ 
+   const getActionTypeLabel = (typeName: string): string => {
+     const customType = actionTypes.find(t => t.value === typeName);
+     if (customType) return customType.label;
+     const defaultConfig = actionTypeConfig[typeName as ActionType];
+     return defaultConfig?.label || typeName;
+   };
+ 
+   const getActionTypeConfig = (typeName: string) => {
+     const defaultConfig = actionTypeConfig[typeName as ActionType];
+     return defaultConfig || { label: typeName, icon: defaultIconForType, color: 'text-muted-foreground' };
+   };
+ 
    const filteredActions = actions.filter(action => {
     const matchesSearch = action.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       action.student?.full_name.toLowerCase().includes(searchQuery.toLowerCase());
@@ -173,9 +226,9 @@ export default function Actions() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os tipos</SelectItem>
-              {Object.entries(actionTypeConfig).map(([key, config]) => (
-                <SelectItem key={key} value={key}>
-                  {config.label}
+               {actionTypes.map((type) => (
+                 <SelectItem key={type.value} value={type.value}>
+                   {type.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -186,7 +239,7 @@ export default function Actions() {
       {/* Actions list */}
       <div className="space-y-3">
         {filteredActions.map((action) => {
-          const config = actionTypeConfig[action.action_type];
+           const config = getActionTypeConfig(action.action_type);
           const Icon = config.icon;
           
           return (
@@ -207,7 +260,7 @@ export default function Actions() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge variant="outline" className="capitalize">
-                        {config.label}
+                         {getActionTypeLabel(action.action_type)}
                       </Badge>
                       <StatusBadge status={action.status} size="sm" />
                     </div>
