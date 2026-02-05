@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: moodle-monitor-frontend
+    ports:
+      - "8080:8080"
+    environment:
+      - VITE_SUPABASE_PROJECT_ID=${VITE_SUPABASE_PROJECT_ID:-untfmrzswzjandjloqgy}
+      - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY:-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVudGZtcnpzd3pqYW5kamxvcWd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0ODQxMDAsImV4cCI6MjA4NTA2MDEwMH0.ErPsoJ57rh-Am6R0KNpUEtwcyKjEYE0Z7s0gRR17H6g}
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-https://untfmrzswzjandjloqgy.supabase.co}
+    volumes:
+      - ./src:/app/src:delegated
+      - ./public:/app/public:delegated
+      - ./index.html:/app/index.html:delegated
+      - /app/node_modules
+    networks:
+      - moodle-network
+
+networks:
+  moodle-network:
+    driver: bridge
