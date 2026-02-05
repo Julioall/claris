@@ -53,6 +53,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
+ export interface ActionToEdit {
+   id: string;
+   action_type: ActionType;
+   description: string;
+   student_id: string;
+   course_id: string | null;
+   scheduled_date: string | null;
+   student?: { full_name: string };
+   course?: { short_name: string | null };
+ }
+ 
 const actionTypeOptions: { value: ActionType; label: string }[] = [
   { value: 'contato', label: 'Contato' },
   { value: 'orientacao', label: 'Orientação' },
@@ -91,16 +102,16 @@ interface Course {
 interface NewActionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  students: Student[];
-  courses: Course[];
+   actionToEdit?: ActionToEdit | null;
   onSuccess?: () => void;
 }
 
 export function NewActionDialog({ 
   open, 
   onOpenChange, 
+   actionToEdit,
   onSuccess 
-}: Omit<NewActionDialogProps, 'students' | 'courses'>) {
+ }: NewActionDialogProps) {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -122,6 +133,27 @@ export function NewActionDialog({
   });
 
   const selectedCourseId = form.watch('course_id');
+   const isEditMode = !!actionToEdit;
+ 
+   // Pre-fill form when editing
+   useEffect(() => {
+     if (open && actionToEdit) {
+       form.reset({
+         action_type: actionToEdit.action_type,
+         description: actionToEdit.description,
+         student_id: actionToEdit.student_id,
+         course_id: actionToEdit.course_id || undefined,
+         scheduled_date: actionToEdit.scheduled_date ? new Date(actionToEdit.scheduled_date) : undefined,
+       });
+       // Set search values for display
+       if (actionToEdit.course?.short_name) {
+         setCourseSearch('');
+       }
+       if (actionToEdit.student?.full_name) {
+         setStudentSearch('');
+       }
+     }
+   }, [open, actionToEdit]);
 
   // Fetch user's active courses
   const fetchCourses = async (search: string) => {
@@ -234,49 +266,63 @@ export function NewActionDialog({
         return;
       }
 
-      // If no student selected, create actions for all students in the course
-      if (!data.student_id) {
-        const { data: courseStudents, error: studentsError } = await supabase
-          .from('student_courses')
-          .select('student_id')
-          .eq('course_id', data.course_id);
-
-        if (studentsError) throw studentsError;
-
-        if (!courseStudents || courseStudents.length === 0) {
-          toast.error('Nenhum aluno encontrado neste curso');
-          return;
-        }
-
-        // Create action for each student
-        const actions = courseStudents.map(sc => ({
+       if (isEditMode && actionToEdit) {
+         // Update existing action
+         const { error } = await supabase
+           .from('actions')
+           .update({
+             action_type: data.action_type,
+             description: data.description.trim(),
+             course_id: data.course_id,
+             scheduled_date: data.scheduled_date?.toISOString() || null,
+           })
+           .eq('id', actionToEdit.id);
+ 
+         if (error) throw error;
+         toast.success('Ação atualizada com sucesso!');
+       } else {
+         // Create new action(s)
+         if (!data.student_id) {
+           const { data: courseStudents, error: studentsError } = await supabase
+             .from('student_courses')
+             .select('student_id')
+             .eq('course_id', data.course_id);
+ 
+           if (studentsError) throw studentsError;
+ 
+           if (!courseStudents || courseStudents.length === 0) {
+             toast.error('Nenhum aluno encontrado neste curso');
+             return;
+           }
+ 
+           const actions = courseStudents.map(sc => ({
+             action_type: data.action_type,
+             description: data.description.trim(),
+             student_id: sc.student_id,
+             course_id: data.course_id,
+             user_id: user.id,
+             scheduled_date: data.scheduled_date?.toISOString() || null,
+             status: 'planejada' as const,
+           }));
+ 
+           const { error } = await supabase.from('actions').insert(actions);
+           if (error) throw error;
+ 
+           toast.success(`${actions.length} ações criadas com sucesso!`);
+         } else {
+           const { error } = await supabase.from('actions').insert({
           action_type: data.action_type,
           description: data.description.trim(),
-          student_id: sc.student_id,
+             student_id: data.student_id,
           course_id: data.course_id,
           user_id: user.id,
           scheduled_date: data.scheduled_date?.toISOString() || null,
-          status: 'planejada' as const,
-        }));
-
-        const { error } = await supabase.from('actions').insert(actions);
-        if (error) throw error;
-
-        toast.success(`${actions.length} ações criadas com sucesso!`);
-      } else {
-        // Create single action for selected student
-        const { error } = await supabase.from('actions').insert({
-          action_type: data.action_type,
-          description: data.description.trim(),
-          student_id: data.student_id,
-          course_id: data.course_id,
-          user_id: user.id,
-          scheduled_date: data.scheduled_date?.toISOString() || null,
-          status: 'planejada',
-        });
-
-        if (error) throw error;
-        toast.success('Ação criada com sucesso!');
+             status: 'planejada',
+           });
+ 
+           if (error) throw error;
+           toast.success('Ação criada com sucesso!');
+         }
       }
 
       form.reset();
@@ -311,9 +357,12 @@ export function NewActionDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
-          <DialogTitle>Nova Ação</DialogTitle>
+           <DialogTitle>{isEditMode ? 'Editar Ação' : 'Nova Ação'}</DialogTitle>
           <DialogDescription>
-            Registre uma nova ação para acompanhamento de aluno.
+             {isEditMode 
+               ? 'Atualize os dados da ação de acompanhamento.'
+               : 'Registre uma nova ação para acompanhamento de aluno.'
+             }
           </DialogDescription>
         </DialogHeader>
 
@@ -412,33 +461,41 @@ export function NewActionDialog({
               )}
             />
 
+             {/* Student field - readonly in edit mode */}
             <FormField
               control={form.control}
               name="student_id"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Aluno (opcional)</FormLabel>
+                   <FormLabel>Aluno {isEditMode ? '' : '(opcional)'}</FormLabel>
                   <div className="relative">
                     <FormControl>
                       <Input
                         ref={studentInputRef}
-                        placeholder={selectedCourseId ? "Digite para buscar aluno..." : "Selecione um curso primeiro"}
-                        disabled={!selectedCourseId}
+                         placeholder={
+                           isEditMode 
+                             ? '' 
+                             : selectedCourseId 
+                               ? "Digite para buscar aluno..." 
+                               : "Selecione um curso primeiro"
+                         }
+                         disabled={!selectedCourseId || isEditMode}
                         value={selectedStudent ? selectedStudent.full_name : studentSearch}
                         onChange={(e) => {
+                           if (isEditMode) return;
                           setStudentSearch(e.target.value);
                           if (field.value) {
                             field.onChange(undefined);
                           }
                           setShowStudentSuggestions(true);
                         }}
-                        onFocus={() => setShowStudentSuggestions(true)}
+                         onFocus={() => !isEditMode && setShowStudentSuggestions(true)}
                         onBlur={() => {
                           setTimeout(() => setShowStudentSuggestions(false), 200);
                         }}
                       />
                     </FormControl>
-                    {showStudentSuggestions && selectedCourseId && (studentSearch || !field.value) && (
+                     {!isEditMode && showStudentSuggestions && selectedCourseId && (studentSearch || !field.value) && (
                       <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md">
                         {isLoadingStudents ? (
                           <div className="flex items-center justify-center py-3">
@@ -473,9 +530,11 @@ export function NewActionDialog({
                     )}
                   </div>
                   <FormDescription>
-                    {selectedCourseId 
-                      ? `${students.length} aluno(s) no curso. Deixe vazio para aplicar a todos.`
-                      : "Selecione um curso primeiro"
+                     {isEditMode
+                       ? 'O aluno não pode ser alterado'
+                       : selectedCourseId 
+                         ? `${students.length} aluno(s) no curso. Deixe vazio para aplicar a todos.`
+                         : "Selecione um curso primeiro"
                     }
                   </FormDescription>
                   <FormMessage />
@@ -560,7 +619,7 @@ export function NewActionDialog({
               </Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Criar ação
+                 {isEditMode ? 'Atualizar ação' : 'Criar ação'}
               </Button>
             </DialogFooter>
           </form>

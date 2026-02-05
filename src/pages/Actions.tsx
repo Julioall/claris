@@ -13,7 +13,8 @@ import {
   Users,
   Wrench,
    Calendar,
-   Loader2
+   Loader2,
+   Pencil
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,7 +28,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { NewActionDialog } from '@/components/actions/NewActionDialog';
+ import { NewActionDialog, ActionToEdit } from '@/components/actions/NewActionDialog';
  import { useActionsData } from '@/hooks/useActionsData';
 import { ActionType } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -50,6 +51,7 @@ export default function Actions() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isNewActionDialogOpen, setIsNewActionDialogOpen] = useState(false);
+   const [actionToEdit, setActionToEdit] = useState<ActionToEdit | null>(null);
    
    const { actions, isLoading, refetch, markAsCompleted } = useActionsData();
 
@@ -74,6 +76,18 @@ export default function Actions() {
   const handleActionCreated = () => {
      refetch();
   };
+ 
+   const handleEditAction = (action: ActionToEdit) => {
+     setActionToEdit(action);
+     setIsNewActionDialogOpen(true);
+   };
+ 
+   const handleDialogClose = (open: boolean) => {
+     setIsNewActionDialogOpen(open);
+     if (!open) {
+       setActionToEdit(null);
+     }
+   };
  
    const handleMarkAsCompleted = async (actionId: string) => {
      const success = await markAsCompleted(actionId);
@@ -228,6 +242,24 @@ export default function Actions() {
                   
                   <div className="flex items-center gap-1 shrink-0">
                     {action.status === 'planejada' && (
+                       <>
+                         <Button
+                           size="sm"
+                           variant="ghost"
+                           title="Editar ação"
+                           onClick={() => handleEditAction({
+                             id: action.id,
+                             action_type: action.action_type,
+                             description: action.description,
+                             student_id: action.student_id,
+                             course_id: action.course_id,
+                             scheduled_date: action.scheduled_date,
+                             student: action.student,
+                             course: action.course,
+                           })}
+                         >
+                           <Pencil className="h-4 w-4" />
+                         </Button>
                        <Button 
                          size="sm" 
                          variant="ghost" 
@@ -236,6 +268,7 @@ export default function Actions() {
                        >
                         <CheckCircle2 className="h-4 w-4" />
                       </Button>
+                       </>
                     )}
                     <Button size="sm" variant="ghost" asChild>
                       <Link to={`/alunos/${action.student_id}`}>
@@ -266,7 +299,8 @@ export default function Actions() {
       {/* New Action Dialog */}
       <NewActionDialog
         open={isNewActionDialogOpen}
-        onOpenChange={setIsNewActionDialogOpen}
+         onOpenChange={handleDialogClose}
+         actionToEdit={actionToEdit}
         onSuccess={handleActionCreated}
       />
     </div>
