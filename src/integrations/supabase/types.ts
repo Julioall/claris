@@ -14,6 +14,30 @@ export type Database = {
   }
   public: {
     Tables: {
+      action_types: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       actions: {
         Row: {
           action_type: Database["public"]["Enums"]["action_type"]

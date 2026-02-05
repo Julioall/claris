@@ -1,11 +1,4 @@
-import { 
-  Settings as SettingsIcon, 
-  User, 
-  RefreshCw, 
-  LogOut,
-  Clock,
-  Globe
-} from 'lucide-react';
+ import { User, RefreshCw, LogOut, Clock, Globe } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
@@ -14,6 +7,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DataCleanupCard } from '@/components/settings/DataCleanupCard';
 import { GradeDebugCard } from '@/components/settings/GradeDebugCard';
+ import { ActionTypesCard } from '@/components/settings/ActionTypesCard';
 
 export default function Settings() {
   const { user, logout, syncData, lastSync } = useAuth();
@@ -99,6 +93,9 @@ export default function Settings() {
       {/* Data Cleanup */}
       <DataCleanupCard />
 
+       {/* Action Types */}
+       <ActionTypesCard />
+ 
       {/* Grade Debug */}
       <GradeDebugCard />
 
