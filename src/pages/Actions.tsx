@@ -27,7 +27,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { NewActionDialog } from '@/components/actions/NewActionDialog';
-import { mockActions, mockCourses, mockStudents } from '@/lib/mock-data';
+import { mockActions } from '@/lib/mock-data';
 import { ActionType } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -223,8 +223,6 @@ export default function Actions() {
       <NewActionDialog
         open={isNewActionDialogOpen}
         onOpenChange={setIsNewActionDialogOpen}
-        students={mockStudents.map(s => ({ id: s.id, full_name: s.full_name }))}
-        courses={mockCourses.map(c => ({ id: c.id, name: c.name }))}
         onSuccess={handleActionCreated}
       />
     </div>
