@@ -6,6 +6,7 @@ import { Student, RiskLevel } from '@/types';
 interface StudentWithStats extends Student {
   pending_tasks_count: number;
   last_action_date?: string;
+  enrollment_status?: string;
 }
 
 export function useStudentsData(courseId?: string) {
@@ -48,6 +49,7 @@ export function useStudentsData(courseId?: string) {
         .from('student_courses')
         .select(`
           student_id,
+          enrollment_status,
           students (*)
         `)
         .in('course_id', courseIds);
@@ -61,18 +63,25 @@ export function useStudentsData(courseId?: string) {
       }
 
       // Deduplicate students (same student can be in multiple courses)
-      const uniqueStudentsMap = new Map<string, any>();
+      const uniqueStudentsMap = new Map<string, { student: any; enrollment_status: string | null }>();
       studentCourses.forEach(sc => {
-        if (sc.students && !uniqueStudentsMap.has((sc.students as any).id)) {
-          uniqueStudentsMap.set((sc.students as any).id, sc.students);
+        if (sc.students) {
+          const studentId = (sc.students as any).id;
+          // Keep the first (or most relevant) enrollment status
+          if (!uniqueStudentsMap.has(studentId)) {
+            uniqueStudentsMap.set(studentId, { 
+              student: sc.students, 
+              enrollment_status: sc.enrollment_status 
+            });
+          }
         }
       });
 
-      const uniqueStudents = Array.from(uniqueStudentsMap.values());
+      const uniqueStudentEntries = Array.from(uniqueStudentsMap.values());
 
       // Get stats for each student
       const studentsWithStats: StudentWithStats[] = await Promise.all(
-        uniqueStudents.map(async (student) => {
+        uniqueStudentEntries.map(async ({ student, enrollment_status }) => {
           // Count pending tasks
           const { count: pendingTasksCount } = await supabase
             .from('pending_tasks')
@@ -94,6 +103,7 @@ export function useStudentsData(courseId?: string) {
             current_risk_level: student.current_risk_level as RiskLevel,
             pending_tasks_count: pendingTasksCount || 0,
             last_action_date: lastAction?.completed_at || lastAction?.created_at,
+            enrollment_status: enrollment_status || 'ativo',
           } as StudentWithStats;
         })
       );

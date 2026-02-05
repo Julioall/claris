@@ -8,7 +8,8 @@ import {
   Clock,
   ClipboardList,
   Loader2,
-  RefreshCw
+  RefreshCw,
+  UserCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,10 +36,32 @@ import { RiskLevel } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// Enrollment status config
+const enrollmentStatusConfig: Record<string, { label: string; className: string }> = {
+  ativo: { label: 'Ativo', className: 'bg-status-success-bg text-status-success' },
+  suspenso: { label: 'Suspenso', className: 'bg-status-warning-bg text-status-warning' },
+  inativo: { label: 'Inativo', className: 'bg-muted text-muted-foreground' },
+  concluido: { label: 'Concluído', className: 'bg-primary/10 text-primary' },
+};
+
+function EnrollmentStatusBadge({ status }: { status: string }) {
+  const config = enrollmentStatusConfig[status?.toLowerCase()] || { 
+    label: status || 'Ativo', 
+    className: 'bg-muted text-muted-foreground' 
+  };
+  
+  return (
+    <span className={`inline-flex items-center rounded text-xs px-2 py-1 font-medium ${config.className}`}>
+      {config.label}
+    </span>
+  );
+}
+
 export default function Students() {
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   
   const { students, isLoading, error, refetch } = useStudentsData(
     courseFilter !== 'all' ? courseFilter : undefined
@@ -52,7 +75,10 @@ export default function Students() {
     
     const matchesRisk = riskFilter === 'all' || student.current_risk_level === riskFilter;
     
-    return matchesSearch && matchesRisk;
+    const matchesStatus = statusFilter === 'all' || 
+      (student.enrollment_status?.toLowerCase() || 'ativo') === statusFilter;
+    
+    return matchesSearch && matchesRisk && matchesStatus;
   });
 
   const formatLastAccess = (date: string | undefined) => {
@@ -134,6 +160,20 @@ export default function Students() {
             </SelectContent>
           </Select>
 
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[140px]">
+              <UserCheck className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="ativo">Ativo</SelectItem>
+              <SelectItem value="suspenso">Suspenso</SelectItem>
+              <SelectItem value="inativo">Inativo</SelectItem>
+              <SelectItem value="concluido">Concluído</SelectItem>
+            </SelectContent>
+          </Select>
+
           <Select value={courseFilter} onValueChange={setCourseFilter}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Curso" />
@@ -157,6 +197,7 @@ export default function Students() {
             <TableRow className="bg-muted/50">
               <TableHead>Aluno</TableHead>
               <TableHead>Risco</TableHead>
+              <TableHead className="hidden sm:table-cell">Status</TableHead>
               <TableHead className="hidden md:table-cell">Pendências</TableHead>
               <TableHead className="hidden lg:table-cell">Último Acesso</TableHead>
               <TableHead className="hidden lg:table-cell">Última Ação</TableHead>
@@ -181,6 +222,9 @@ export default function Students() {
                 </TableCell>
                 <TableCell>
                   <RiskBadge level={student.current_risk_level} />
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  <EnrollmentStatusBadge status={student.enrollment_status || 'ativo'} />
                 </TableCell>
                 <TableCell className="hidden md:table-cell">
                   {student.pending_tasks_count && student.pending_tasks_count > 0 ? (
