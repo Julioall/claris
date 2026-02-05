@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft,
   User,
@@ -23,6 +23,7 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { StudentGradesTab } from '@/components/student/StudentGradesTab';
+ import { NewActionDialog, PreselectedStudent } from '@/components/actions/NewActionDialog';
 import { getRiskLevelLabel } from '@/lib/mock-data';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -46,6 +47,7 @@ const actionTypeLabels: Record<string, string> = {
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState('pendencias');
+   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
   
   const { 
     student, 
@@ -90,6 +92,15 @@ export default function StudentProfile() {
 
   const openTasks = pendingTasks.filter(t => t.status !== 'resolvida');
 
+   const preselectedStudent: PreselectedStudent | null = student ? {
+     id: student.id,
+     full_name: student.full_name,
+   } : null;
+ 
+   const handleOpenActionDialog = () => {
+     setIsActionDialogOpen(true);
+   };
+ 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Back button */}
@@ -125,7 +136,7 @@ export default function StudentProfile() {
             <Edit className="h-4 w-4 mr-2" />
             Editar risco
           </Button>
-          <Button size="sm">
+           <Button size="sm" onClick={handleOpenActionDialog}>
             <Plus className="h-4 w-4 mr-2" />
             Nova ação
           </Button>
@@ -305,7 +316,7 @@ export default function StudentProfile() {
         <TabsContent value="acoes" className="mt-4 space-y-3">
           <div className="flex justify-between items-center">
             <h3 className="font-medium">Ações Realizadas</h3>
-            <Button size="sm" variant="outline">
+             <Button size="sm" variant="outline" onClick={handleOpenActionDialog}>
               <Plus className="h-4 w-4 mr-2" />
               Registrar ação
             </Button>
@@ -387,6 +398,17 @@ export default function StudentProfile() {
           </div>
         </TabsContent>
       </Tabs>
+
+       {/* New Action Dialog with preselected student */}
+       <NewActionDialog
+         open={isActionDialogOpen}
+         onOpenChange={setIsActionDialogOpen}
+         preselectedStudent={preselectedStudent}
+         onSuccess={() => {
+           // Optionally refetch data or navigate
+           window.location.reload();
+         }}
+       />
     </div>
   );
 }

@@ -64,6 +64,11 @@ import { useAuth } from '@/contexts/AuthContext';
    course?: { short_name: string | null };
  }
  
+ export interface PreselectedStudent {
+   id: string;
+   full_name: string;
+ }
+ 
 const actionTypeOptions: { value: ActionType; label: string }[] = [
  ];
  
@@ -109,6 +114,7 @@ interface NewActionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
    actionToEdit?: ActionToEdit | null;
+   preselectedStudent?: PreselectedStudent | null;
   onSuccess?: () => void;
 }
 
@@ -116,6 +122,7 @@ export function NewActionDialog({
   open, 
   onOpenChange, 
    actionToEdit,
+   preselectedStudent,
   onSuccess 
  }: NewActionDialogProps) {
   const { user } = useAuth();
@@ -142,6 +149,7 @@ export function NewActionDialog({
 
   const selectedCourseId = form.watch('course_id');
    const isEditMode = !!actionToEdit;
+   const hasPreselectedStudent = !!preselectedStudent;
  
    // Fetch action types from database
    const fetchActionTypes = async () => {
@@ -172,8 +180,12 @@ export function NewActionDialog({
    useEffect(() => {
      if (open) {
        fetchActionTypes();
+       // Pre-fill student if preselected
+       if (preselectedStudent && !actionToEdit) {
+         form.setValue('student_id', preselectedStudent.id);
+       }
      }
-   }, [open, user]);
+    }, [open, user, preselectedStudent, actionToEdit]);
  
    // Pre-fill form when editing
    useEffect(() => {
@@ -196,40 +208,82 @@ export function NewActionDialog({
    }, [open, actionToEdit]);
 
   // Fetch user's active courses
-  const fetchCourses = async (search: string) => {
+   const fetchCourses = async (search: string, studentIdFilter?: string) => {
     if (!user) return;
     
     setIsLoadingCourses(true);
     try {
-      let query = supabase
-        .from('user_courses')
-        .select(`
-          course_id,
-          courses!inner (
-            id,
-            short_name,
-            end_date
-          )
-        `)
-        .eq('user_id', user.id);
-
-      const { data, error } = await query;
-      
-      if (error) throw error;
-
-      // Filter active courses (end_date is null or in the future) and by search
-      const now = new Date();
-      const activeCourses = data
-        ?.map(uc => uc.courses)
-        .filter((c): c is { id: string; short_name: string | null; end_date: string | null } => {
-          if (!c) return false;
-          const isActive = !c.end_date || new Date(c.end_date) > now;
-          const matchesSearch = !search || (c.short_name?.toLowerCase().includes(search.toLowerCase()) ?? false);
-          return isActive && matchesSearch;
-        })
-        .map(c => ({ id: c.id, short_name: c.short_name || '' })) || [];
-
-      setCourses(activeCourses);
+       if (studentIdFilter) {
+         // Fetch courses that both the user has access to AND the student is enrolled in
+         const { data: studentCourses, error: scError } = await supabase
+           .from('student_courses')
+           .select(`
+             course_id,
+             courses!inner (
+               id,
+               short_name,
+               end_date
+             )
+           `)
+           .eq('student_id', studentIdFilter);
+ 
+         if (scError) throw scError;
+ 
+         // Get user's courses to filter
+         const { data: userCourses, error: ucError } = await supabase
+           .from('user_courses')
+           .select('course_id')
+           .eq('user_id', user.id);
+ 
+         if (ucError) throw ucError;
+ 
+         const userCourseIds = new Set(userCourses?.map(uc => uc.course_id) || []);
+         const now = new Date();
+ 
+         const filteredCourses = studentCourses
+           ?.filter(sc => {
+             const c = sc.courses;
+             if (!c) return false;
+             if (!userCourseIds.has(sc.course_id)) return false;
+             const isActive = !c.end_date || new Date(c.end_date) > now;
+             const matchesSearch = !search || (c.short_name?.toLowerCase().includes(search.toLowerCase()) ?? false);
+             return isActive && matchesSearch;
+           })
+           .map(sc => {
+             const c = sc.courses as { id: string; short_name: string | null };
+             return { id: c.id, short_name: c.short_name || '' };
+           }) || [];
+ 
+         setCourses(filteredCourses);
+       } else {
+         // Original behavior: fetch all user's active courses
+         const { data, error } = await supabase
+           .from('user_courses')
+           .select(`
+             course_id,
+             courses!inner (
+               id,
+               short_name,
+               end_date
+             )
+           `)
+           .eq('user_id', user.id);
+ 
+         if (error) throw error;
+ 
+         const now = new Date();
+         const activeCourses = data
+           ?.map(uc => uc.courses)
+           .filter((c): c is { id: string; short_name: string | null; end_date: string | null } => {
+             if (!c) return false;
+             const isActive = !c.end_date || new Date(c.end_date) > now;
+             const matchesSearch = !search || (c.short_name?.toLowerCase().includes(search.toLowerCase()) ?? false);
+             return isActive && matchesSearch;
+           })
+           .map(c => ({ id: c.id, short_name: c.short_name || '' })) || [];
+ 
+         setCourses(activeCourses);
+       }
     } catch (err) {
       console.error('Error fetching courses:', err);
     } finally {
@@ -279,21 +333,22 @@ export function NewActionDialog({
   // Load courses when dialog opens or search changes
   useEffect(() => {
     if (open) {
-      fetchCourses(courseSearch);
+       fetchCourses(courseSearch, preselectedStudent?.id);
     }
-  }, [open, courseSearch, user]);
+   }, [open, courseSearch, user, preselectedStudent]);
 
   // Load students when course changes or search changes
   useEffect(() => {
-    if (selectedCourseId) {
+     if (selectedCourseId && !hasPreselectedStudent) {
       fetchStudents(selectedCourseId, studentSearch);
     } else {
       setStudents([]);
     }
-  }, [selectedCourseId, studentSearch]);
+   }, [selectedCourseId, studentSearch, hasPreselectedStudent]);
 
   // Reset student when course changes
   useEffect(() => {
+     if (hasPreselectedStudent) return; // Don't reset if student is preselected
     form.setValue('student_id', undefined);
     setStudentSearch('');
   }, [selectedCourseId]);
@@ -517,29 +572,35 @@ export function NewActionDialog({
                       <Input
                         ref={studentInputRef}
                          placeholder={
-                           isEditMode 
+                           isEditMode || hasPreselectedStudent
                              ? '' 
                              : selectedCourseId 
                                ? "Digite para buscar aluno..." 
                                : "Selecione um curso primeiro"
                          }
-                         disabled={!selectedCourseId || isEditMode}
-                        value={selectedStudent ? selectedStudent.full_name : studentSearch}
+                          disabled={!selectedCourseId || isEditMode || hasPreselectedStudent}
+                         value={
+                           hasPreselectedStudent 
+                             ? preselectedStudent?.full_name || ''
+                             : selectedStudent 
+                               ? selectedStudent.full_name 
+                               : studentSearch
+                         }
                         onChange={(e) => {
-                           if (isEditMode) return;
+                           if (isEditMode || hasPreselectedStudent) return;
                           setStudentSearch(e.target.value);
                           if (field.value) {
                             field.onChange(undefined);
                           }
                           setShowStudentSuggestions(true);
                         }}
-                         onFocus={() => !isEditMode && setShowStudentSuggestions(true)}
+                          onFocus={() => !isEditMode && !hasPreselectedStudent && setShowStudentSuggestions(true)}
                         onBlur={() => {
                           setTimeout(() => setShowStudentSuggestions(false), 200);
                         }}
                       />
                     </FormControl>
-                     {!isEditMode && showStudentSuggestions && selectedCourseId && (studentSearch || !field.value) && (
+                      {!isEditMode && !hasPreselectedStudent && showStudentSuggestions && selectedCourseId && (studentSearch || !field.value) && (
                       <div className="absolute z-50 w-full mt-1 bg-popover border border-border rounded-md shadow-md">
                         {isLoadingStudents ? (
                           <div className="flex items-center justify-center py-3">
@@ -574,7 +635,9 @@ export function NewActionDialog({
                     )}
                   </div>
                   <FormDescription>
-                     {isEditMode
+                      {hasPreselectedStudent
+                        ? 'Aluno pré-selecionado'
+                        : isEditMode
                        ? 'O aluno não pode ser alterado'
                        : selectedCourseId 
                          ? `${students.length} aluno(s) no curso. Deixe vazio para aplicar a todos.`
