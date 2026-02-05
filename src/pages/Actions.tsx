@@ -12,7 +12,8 @@ import {
   MessageSquare,
   Users,
   Wrench,
-  Calendar
+   Calendar,
+   Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,11 +28,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { NewActionDialog } from '@/components/actions/NewActionDialog';
-import { mockActions } from '@/lib/mock-data';
+ import { useActionsData } from '@/hooks/useActionsData';
 import { ActionType } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+ import { Skeleton } from '@/components/ui/skeleton';
+ import { toast } from 'sonner';
 
 const actionTypeConfig: Record<ActionType, { label: string; icon: typeof Phone; color: string }> = {
   contato: { label: 'Contato', icon: Phone, color: 'text-blue-500' },
@@ -47,8 +50,10 @@ export default function Actions() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isNewActionDialogOpen, setIsNewActionDialogOpen] = useState(false);
+   
+   const { actions, isLoading, refetch, markAsCompleted } = useActionsData();
 
-  const filteredActions = mockActions.filter(action => {
+   const filteredActions = actions.filter(action => {
     const matchesSearch = action.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
       action.student?.full_name.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -67,9 +72,43 @@ export default function Actions() {
   };
 
   const handleActionCreated = () => {
-    // TODO: Refresh actions list from database
-    console.log('Action created successfully');
+     refetch();
   };
+ 
+   const handleMarkAsCompleted = async (actionId: string) => {
+     const success = await markAsCompleted(actionId);
+     if (success) {
+       toast.success('Ação marcada como concluída');
+     } else {
+       toast.error('Erro ao marcar ação como concluída');
+     }
+   };
+ 
+   if (isLoading) {
+     return (
+       <div className="space-y-6 animate-fade-in">
+         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+           <div>
+             <Skeleton className="h-8 w-32 mb-2" />
+             <Skeleton className="h-4 w-48" />
+           </div>
+           <Skeleton className="h-10 w-28" />
+         </div>
+         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+           <Skeleton className="h-10 flex-1 max-w-md" />
+           <div className="flex gap-2">
+             <Skeleton className="h-10 w-[140px]" />
+             <Skeleton className="h-10 w-[160px]" />
+           </div>
+         </div>
+         <div className="space-y-3">
+           {[1, 2, 3].map((i) => (
+             <Skeleton key={i} className="h-24 w-full" />
+           ))}
+         </div>
+       </div>
+     );
+   }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -189,7 +228,12 @@ export default function Actions() {
                   
                   <div className="flex items-center gap-1 shrink-0">
                     {action.status === 'planejada' && (
-                      <Button size="sm" variant="ghost" title="Marcar como concluída">
+                       <Button 
+                         size="sm" 
+                         variant="ghost" 
+                         title="Marcar como concluída"
+                         onClick={() => handleMarkAsCompleted(action.id)}
+                       >
                         <CheckCircle2 className="h-4 w-4" />
                       </Button>
                     )}
