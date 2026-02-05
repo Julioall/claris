@@ -1,9 +1,26 @@
  import { useState, useEffect } from 'react';
- import { Plus, Trash2, Tag, Loader2 } from 'lucide-react';
+ import { Plus, Trash2, Tag, Loader2, Pencil, X, Check } from 'lucide-react';
  import { Button } from '@/components/ui/button';
  import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
  import { Input } from '@/components/ui/input';
  import { Badge } from '@/components/ui/badge';
+ import {
+   AlertDialog,
+   AlertDialogAction,
+   AlertDialogCancel,
+   AlertDialogContent,
+   AlertDialogDescription,
+   AlertDialogFooter,
+   AlertDialogHeader,
+   AlertDialogTitle,
+ } from '@/components/ui/alert-dialog';
+ import {
+   Select,
+   SelectContent,
+   SelectItem,
+   SelectTrigger,
+   SelectValue,
+ } from '@/components/ui/select';
  import { supabase } from '@/integrations/supabase/client';
  import { useAuth } from '@/contexts/AuthContext';
  import { toast } from 'sonner';
@@ -31,6 +48,15 @@
    const [isLoading, setIsLoading] = useState(true);
    const [isAdding, setIsAdding] = useState(false);
    const [deletingId, setDeletingId] = useState<string | null>(null);
+   const [editingType, setEditingType] = useState<ActionType | null>(null);
+   const [editLabel, setEditLabel] = useState('');
+   const [isSavingEdit, setIsSavingEdit] = useState(false);
+   const [migrationDialog, setMigrationDialog] = useState<{
+     open: boolean;
+     typeToDelete: ActionType | null;
+     actionsCount: number;
+     targetTypeId: string;
+   }>({ open: false, typeToDelete: null, actionsCount: 0, targetTypeId: '' });
  
    const fetchActionTypes = async () => {
      if (!user) return;
@@ -61,6 +87,114 @@
        toast.error('Erro ao carregar tipos de ação');
      } finally {
        setIsLoading(false);
+     }
+   };
+ 
+   const checkTypeUsage = async (typeName: string): Promise<number> => {
+     if (!user) return 0;
+     
+     try {
+       const { count, error } = await supabase
+         .from('actions')
+         .select('*', { count: 'exact', head: true })
+         .eq('user_id', user.id)
+         .eq('action_type', typeName as any);
+ 
+       if (error) throw error;
+       return count || 0;
+     } catch (err) {
+       console.error('Error checking type usage:', err);
+       return 0;
+     }
+   };
+ 
+   const handleStartEdit = (type: ActionType) => {
+     setEditingType(type);
+     setEditLabel(type.label);
+   };
+ 
+   const handleCancelEdit = () => {
+     setEditingType(null);
+     setEditLabel('');
+   };
+ 
+   const handleSaveEdit = async () => {
+     if (!editingType || !editLabel.trim()) return;
+ 
+     setIsSavingEdit(true);
+     try {
+       const { error } = await supabase
+         .from('action_types')
+         .update({ label: editLabel.trim() })
+         .eq('id', editingType.id);
+ 
+       if (error) throw error;
+ 
+       setActionTypes(prev => prev.map(t => 
+         t.id === editingType.id ? { ...t, label: editLabel.trim() } : t
+       ));
+       setEditingType(null);
+       setEditLabel('');
+       toast.success('Tipo de ação atualizado!');
+     } catch (err) {
+       console.error('Error updating action type:', err);
+       toast.error('Erro ao atualizar tipo de ação');
+     } finally {
+       setIsSavingEdit(false);
+     }
+   };
+ 
+   const handleDeleteClick = async (type: ActionType) => {
+     const usageCount = await checkTypeUsage(type.name);
+     
+     if (usageCount > 0) {
+       // Type is in use, show migration dialog
+       setMigrationDialog({
+         open: true,
+         typeToDelete: type,
+         actionsCount: usageCount,
+         targetTypeId: '',
+       });
+     } else {
+       // Type not in use, delete directly
+       handleDeleteType(type.id);
+     }
+   };
+ 
+   const handleMigrateAndDelete = async () => {
+     const { typeToDelete, targetTypeId } = migrationDialog;
+     if (!typeToDelete || !targetTypeId || !user) return;
+ 
+     const targetType = actionTypes.find(t => t.id === targetTypeId);
+     if (!targetType) return;
+ 
+     setDeletingId(typeToDelete.id);
+     try {
+       // First, migrate all actions to the new type
+       const { error: updateError } = await supabase
+         .from('actions')
+         .update({ action_type: targetType.name as any })
+         .eq('user_id', user.id)
+         .eq('action_type', typeToDelete.name as any);
+ 
+       if (updateError) throw updateError;
+ 
+       // Then delete the type
+       const { error: deleteError } = await supabase
+         .from('action_types')
+         .delete()
+         .eq('id', typeToDelete.id);
+ 
+       if (deleteError) throw deleteError;
+ 
+       setActionTypes(prev => prev.filter(t => t.id !== typeToDelete.id));
+       setMigrationDialog({ open: false, typeToDelete: null, actionsCount: 0, targetTypeId: '' });
+       toast.success('Ações migradas e tipo removido!');
+     } catch (err) {
+       console.error('Error migrating and deleting:', err);
+       toast.error('Erro ao migrar ações');
+     } finally {
+       setDeletingId(null);
      }
    };
  
@@ -183,26 +317,69 @@
              {/* Current types */}
              <div className="flex flex-wrap gap-2">
                {actionTypes.map((type) => (
-                 <Badge
-                   key={type.id}
-                   variant={type.isDefault ? "secondary" : "default"}
-                   className="flex items-center gap-1 py-1.5 px-3"
-                 >
-                   {type.label}
-                   {!type.isDefault && (
-                     <button
-                       onClick={() => handleDeleteType(type.id)}
-                       disabled={deletingId === type.id}
-                       className="ml-1 hover:text-destructive transition-colors"
+                 editingType?.id === type.id ? (
+                   <div key={type.id} className="flex items-center gap-1 bg-muted rounded-md p-1">
+                     <Input
+                       value={editLabel}
+                       onChange={(e) => setEditLabel(e.target.value)}
+                       className="h-7 w-32 text-sm"
+                       autoFocus
+                       onKeyDown={(e) => {
+                         if (e.key === 'Enter') handleSaveEdit();
+                         if (e.key === 'Escape') handleCancelEdit();
+                       }}
+                     />
+                     <Button
+                       size="icon"
+                       variant="ghost"
+                       className="h-6 w-6"
+                       onClick={handleSaveEdit}
+                       disabled={isSavingEdit}
                      >
-                       {deletingId === type.id ? (
+                       {isSavingEdit ? (
                          <Loader2 className="h-3 w-3 animate-spin" />
                        ) : (
-                         <Trash2 className="h-3 w-3" />
+                         <Check className="h-3 w-3 text-primary" />
                        )}
+                     </Button>
+                     <Button
+                       size="icon"
+                       variant="ghost"
+                       className="h-6 w-6"
+                       onClick={handleCancelEdit}
+                       disabled={isSavingEdit}
+                     >
+                       <X className="h-3 w-3" />
+                     </Button>
+                   </div>
+                 ) : (
+                   <Badge
+                     key={type.id}
+                     variant={type.isDefault ? "secondary" : "default"}
+                     className="flex items-center gap-1 py-1.5 px-3 group"
+                   >
+                     {type.label}
+                     <button
+                       onClick={() => handleStartEdit(type)}
+                       className="ml-1 opacity-0 group-hover:opacity-100 hover:text-primary transition-all"
+                     >
+                       <Pencil className="h-3 w-3" />
                      </button>
-                   )}
-                 </Badge>
+                     {!type.isDefault && (
+                       <button
+                         onClick={() => handleDeleteClick(type)}
+                         disabled={deletingId === type.id}
+                         className="opacity-0 group-hover:opacity-100 hover:text-destructive transition-all"
+                       >
+                         {deletingId === type.id ? (
+                           <Loader2 className="h-3 w-3 animate-spin" />
+                         ) : (
+                           <Trash2 className="h-3 w-3" />
+                         )}
+                       </button>
+                     )}
+                   </Badge>
+                 )
                ))}
              </div>
  
@@ -235,10 +412,65 @@
              </div>
  
              <p className="text-xs text-muted-foreground">
-               Tipos padrão não podem ser removidos. Tipos personalizados aparecem em destaque.
+               Passe o mouse sobre um tipo para editar ou remover. Tipos padrão não podem ser removidos.
              </p>
            </>
          )}
+
+         {/* Migration Dialog */}
+         <AlertDialog 
+           open={migrationDialog.open} 
+           onOpenChange={(open) => !open && setMigrationDialog(prev => ({ ...prev, open: false }))}
+         >
+           <AlertDialogContent>
+             <AlertDialogHeader>
+               <AlertDialogTitle>Tipo em uso</AlertDialogTitle>
+               <AlertDialogDescription>
+                 O tipo "{migrationDialog.typeToDelete?.label}" está sendo usado por{' '}
+                 <strong>{migrationDialog.actionsCount}</strong> ação(ões). 
+                 Selecione outro tipo para migrar essas ações antes de excluir.
+               </AlertDialogDescription>
+             </AlertDialogHeader>
+             
+             <div className="py-4">
+               <Select
+                 value={migrationDialog.targetTypeId}
+                 onValueChange={(value) => setMigrationDialog(prev => ({ ...prev, targetTypeId: value }))}
+               >
+                 <SelectTrigger>
+                   <SelectValue placeholder="Selecione o tipo de destino..." />
+                 </SelectTrigger>
+                 <SelectContent>
+                   {actionTypes
+                     .filter(t => t.id !== migrationDialog.typeToDelete?.id)
+                     .map(type => (
+                       <SelectItem key={type.id} value={type.id}>
+                         {type.label}
+                       </SelectItem>
+                     ))
+                   }
+                 </SelectContent>
+               </Select>
+             </div>
+ 
+             <AlertDialogFooter>
+               <AlertDialogCancel>Cancelar</AlertDialogCancel>
+               <AlertDialogAction
+                 onClick={handleMigrateAndDelete}
+                 disabled={!migrationDialog.targetTypeId || deletingId !== null}
+               >
+                 {deletingId ? (
+                   <>
+                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                     Migrando...
+                   </>
+                 ) : (
+                   'Migrar e excluir'
+                 )}
+               </AlertDialogAction>
+             </AlertDialogFooter>
+           </AlertDialogContent>
+         </AlertDialog>
        </CardContent>
      </Card>
    );
