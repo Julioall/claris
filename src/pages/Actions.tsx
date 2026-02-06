@@ -30,7 +30,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
  import { NewActionDialog, ActionToEdit } from '@/components/actions/NewActionDialog';
- import { TrashDialog } from '@/components/actions/TrashDialog';
  import { useActionsData } from '@/hooks/useActionsData';
 import { ActionType } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -58,16 +57,15 @@ const actionTypeConfig: Record<ActionType, { label: string; icon: typeof Phone; 
  }
  
 export default function Actions() {
-   const { user, isEditMode } = useAuth();
+   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isNewActionDialogOpen, setIsNewActionDialogOpen] = useState(false);
-   const [isTrashDialogOpen, setIsTrashDialogOpen] = useState(false);
    const [actionToEdit, setActionToEdit] = useState<ActionToEdit | null>(null);
    const [actionTypes, setActionTypes] = useState<ActionTypeOption[]>([]);
    
-   const { actions, isLoading, refetch, markAsCompleted, moveToTrash } = useActionsData();
+   const { actions, isLoading, refetch, markAsCompleted, deleteAction } = useActionsData();
 
    // Fetch action types from database
    useEffect(() => {
@@ -154,12 +152,12 @@ export default function Actions() {
      }
    };
 
-   const handleMoveToTrash = async (actionId: string) => {
-     const success = await moveToTrash(actionId);
+   const handleDeleteAction = async (actionId: string) => {
+     const success = await deleteAction(actionId);
      if (success) {
-       toast.success('Ação movida para lixeira');
+       toast.success('Ação excluída');
      } else {
-       toast.error('Erro ao mover ação para lixeira');
+       toast.error('Erro ao excluir ação');
      }
    };
  
@@ -201,15 +199,6 @@ export default function Actions() {
         </div>
 
         <div className="flex gap-2">
-          {isEditMode && (
-            <Button 
-              variant="outline" 
-              onClick={() => setIsTrashDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Lixeira
-            </Button>
-          )}
           <Button onClick={() => setIsNewActionDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Nova ação
@@ -346,17 +335,15 @@ export default function Actions() {
                       </Button>
                        </>
                     )}
-                    {isEditMode && (
                       <Button
                         size="sm"
                         variant="ghost"
                         className="text-destructive hover:text-destructive"
-                        title="Mover para lixeira"
-                        onClick={() => handleMoveToTrash(action.id)}
+                        title="Excluir ação"
+                        onClick={() => handleDeleteAction(action.id)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
-                    )}
                     <Button size="sm" variant="ghost" asChild>
                       <Link to={`/alunos/${action.student_id}`}>
                         <ExternalLink className="h-4 w-4" />
@@ -391,14 +378,6 @@ export default function Actions() {
         onSuccess={handleActionCreated}
       />
 
-      {/* Trash Dialog */}
-      <TrashDialog
-        open={isTrashDialogOpen}
-        onOpenChange={setIsTrashDialogOpen}
-        actionTypeConfig={actionTypeConfig}
-        getActionTypeLabel={getActionTypeLabel}
-        getActionTypeConfig={getActionTypeConfig}
-      />
     </div>
   );
 }
