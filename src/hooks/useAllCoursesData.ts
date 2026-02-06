@@ -29,10 +29,36 @@ export function useAllCoursesData() {
     setError(null);
 
     try {
-      // Get ALL courses (not filtered by user)
+      // Get courses where user is a tutor
+      const { data: userCourses, error: userCoursesError } = await supabase
+        .from('user_courses')
+        .select('course_id, role')
+        .eq('user_id', user.id);
+
+      if (userCoursesError) throw userCoursesError;
+
+      if (!userCourses || userCourses.length === 0) {
+        setCourses([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Get only the course IDs where user is tutor
+      const tutorCourseIds = userCourses
+        .filter(uc => uc.role === 'tutor')
+        .map(uc => uc.course_id);
+
+      if (tutorCourseIds.length === 0) {
+        setCourses([]);
+        setIsLoading(false);
+        return;
+      }
+
+      // Get course details only for courses where user is tutor
       const { data: allCourses, error: coursesError } = await supabase
         .from('courses')
         .select('*')
+        .in('id', tutorCourseIds)
         .order('name');
 
       if (coursesError) throw coursesError;
@@ -43,13 +69,7 @@ export function useAllCoursesData() {
         return;
       }
 
-      // Get user's followed courses
-      const { data: userCourses } = await supabase
-        .from('user_courses')
-        .select('course_id')
-        .eq('user_id', user.id);
-
-      const followedCourseIds = new Set(userCourses?.map(uc => uc.course_id) || []);
+      const followedCourseIds = new Set(tutorCourseIds);
 
       // Get user's ignored courses
       const { data: ignoredCourses } = await supabase

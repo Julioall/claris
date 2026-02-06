@@ -30,11 +30,12 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         : startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
 
-      // Get user's courses
+      // Get user's courses where they are a tutor
       const { data: userCourses } = await supabase
         .from('user_courses')
         .select('course_id')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('role', 'tutor');
 
       const courseIds = courseFilter && courseFilter !== 'all'
         ? [courseFilter]

@@ -1,4 +1,38 @@
 project_id = "untfmrzswzjandjloqgy"
 
+[api]
+enabled = true
+port = 54421
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54422
+shadow_port = 54520
+major_version = 15
+
+[studio]
+enabled = true
+port = 54423
+api_url = "http://127.0.0.1:54421"
+
+[inbucket]
+enabled = true
+port = 54424
+smtp_port = 54525
+pop3_port = 54526
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
 [functions.moodle-api]
 verify_jwt = false
