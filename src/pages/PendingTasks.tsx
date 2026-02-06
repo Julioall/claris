@@ -7,7 +7,8 @@ import {
   Plus,
   CheckCircle2,
   Clock,
-  ExternalLink
+  ExternalLink,
+  Loader2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,17 +23,22 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { mockPendingTasks, mockCourses } from '@/lib/mock-data';
+import { usePendingTasksData } from '@/hooks/usePendingTasksData';
+import { NewPendingTaskDialog } from '@/components/pending-tasks/NewPendingTaskDialog';
 import { format, isPast, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export default function PendingTasks() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const filteredTasks = mockPendingTasks.filter(task => {
+  const { tasks, courses, isLoading, markAsResolved, refetch } = usePendingTasksData();
+
+  const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.student?.full_name.toLowerCase().includes(searchQuery.toLowerCase());
     
@@ -54,6 +60,23 @@ export default function PendingTasks() {
     return isPast(new Date(date));
   };
 
+  const handleMarkAsResolved = async (taskId: string) => {
+    const success = await markAsResolved(taskId);
+    if (success) {
+      toast.success('Pendência marcada como resolvida!');
+    } else {
+      toast.error('Erro ao resolver pendência');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -65,7 +88,7 @@ export default function PendingTasks() {
           </p>
         </div>
 
-        <Button>
+        <Button onClick={() => setIsDialogOpen(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Nova pendência
         </Button>
@@ -104,9 +127,9 @@ export default function PendingTasks() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os cursos</SelectItem>
-              {mockCourses.map(course => (
+              {courses.map(course => (
                 <SelectItem key={course.id} value={course.id}>
-                  {course.short_name || course.name}
+                  {course.short_name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -167,7 +190,12 @@ export default function PendingTasks() {
                 
                 <div className="flex items-center gap-1 shrink-0">
                   {task.status !== 'resolvida' && (
-                    <Button size="sm" variant="ghost" title="Marcar como resolvida">
+                    <Button 
+                      size="sm" 
+                      variant="ghost" 
+                      title="Marcar como resolvida"
+                      onClick={() => handleMarkAsResolved(task.id)}
+                    >
                       <CheckCircle2 className="h-4 w-4" />
                     </Button>
                   )}
@@ -195,6 +223,12 @@ export default function PendingTasks() {
           </p>
         </div>
       )}
+
+      <NewPendingTaskDialog 
+        open={isDialogOpen} 
+        onOpenChange={setIsDialogOpen}
+        onSuccess={refetch}
+      />
     </div>
   );
 }
