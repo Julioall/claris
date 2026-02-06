@@ -8,7 +8,8 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +22,17 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { usePendingTasksData } from '@/hooks/usePendingTasksData';
@@ -36,7 +48,7 @@ export default function PendingTasks() {
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const { tasks, courses, isLoading, markAsResolved, refetch } = usePendingTasksData();
+  const { tasks, courses, isLoading, markAsResolved, deleteTask, refetch } = usePendingTasksData();
 
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -66,6 +78,15 @@ export default function PendingTasks() {
       toast.success('Pendência marcada como resolvida!');
     } else {
       toast.error('Erro ao resolver pendência');
+    }
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    const success = await deleteTask(taskId);
+    if (success) {
+      toast.success('Pendência excluída com sucesso!');
+    } else {
+      toast.error('Erro ao excluir pendência');
     }
   };
 
@@ -204,6 +225,35 @@ export default function PendingTasks() {
                       <ExternalLink className="h-4 w-4" />
                     </Link>
                   </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button 
+                        size="sm" 
+                        variant="ghost" 
+                        title="Excluir pendência"
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Excluir pendência</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Tem certeza que deseja excluir esta pendência? Esta ação não pode ser desfeita.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction 
+                          onClick={() => handleDeleteTask(task.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Excluir
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </div>
             </CardContent>
