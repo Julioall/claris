@@ -127,6 +127,23 @@ export function usePendingTasksData() {
       return true;
     } catch (err) {
       console.error('Error marking task as resolved:', err);
+    return false;
+    }
+  }, [fetchTasks]);
+
+  const deleteTask = useCallback(async (taskId: string) => {
+    try {
+      const { error: deleteError } = await supabase
+        .from('pending_tasks')
+        .delete()
+        .eq('id', taskId);
+
+      if (deleteError) throw deleteError;
+
+      await fetchTasks();
+      return true;
+    } catch (err) {
+      console.error('Error deleting task:', err);
       return false;
     }
   }, [fetchTasks]);
@@ -172,6 +189,7 @@ export function usePendingTasksData() {
     error, 
     refetch: fetchTasks, 
     markAsResolved,
-    createTask
+    createTask,
+    deleteTask
   };
 }
