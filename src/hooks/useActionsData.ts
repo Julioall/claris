@@ -15,6 +15,7 @@
    completed_at?: string;
    created_at: string;
    updated_at?: string;
+   deleted_at?: string;
    student?: {
      id: string;
      full_name: string;
@@ -25,7 +26,7 @@
    };
  }
  
- export function useActionsData() {
+ export function useActionsData(includeDeleted: boolean = false) {
    const { user } = useAuth();
    const [actions, setActions] = useState<ActionWithRelations[]>([]);
    const [isLoading, setIsLoading] = useState(true);
@@ -42,7 +43,7 @@
      setError(null);
  
      try {
-       const { data, error: fetchError } = await supabase
+       let query = supabase
          .from('actions')
          .select(`
            *,
@@ -55,11 +56,19 @@
              short_name
            )
          `)
-         .eq('user_id', user.id)
-         .order('created_at', { ascending: false });
- 
+         .eq('user_id', user.id);
+
+       // Filter by deleted status
+       if (includeDeleted) {
+         query = query.not('deleted_at', 'is', null);
+       } else {
+         query = query.is('deleted_at', null);
+       }
+
+       const { data, error: fetchError } = await query.order('created_at', { ascending: false });
+
        if (fetchError) throw fetchError;
- 
+
        const formattedActions: ActionWithRelations[] = (data || []).map(action => ({
          id: action.id,
          student_id: action.student_id,
@@ -72,6 +81,7 @@
          completed_at: action.completed_at || undefined,
          created_at: action.created_at || new Date().toISOString(),
          updated_at: action.updated_at || undefined,
+         deleted_at: action.deleted_at || undefined,
          student: action.students ? {
            id: (action.students as any).id,
            full_name: (action.students as any).full_name,
@@ -89,7 +99,7 @@
      } finally {
        setIsLoading(false);
      }
-   }, [user]);
+   }, [user, includeDeleted]);
  
    const markAsCompleted = useCallback(async (actionId: string) => {
      try {
@@ -111,10 +121,78 @@
        return false;
      }
    }, [fetchActions]);
+
+   const moveToTrash = useCallback(async (actionId: string) => {
+     try {
+       const { error: updateError } = await supabase
+         .from('actions')
+         .update({
+           deleted_at: new Date().toISOString(),
+         })
+         .eq('id', actionId);
+ 
+       if (updateError) throw updateError;
+ 
+       // Refetch to update list
+       await fetchActions();
+       return true;
+     } catch (err) {
+       console.error('Error moving action to trash:', err);
+       return false;
+     }
+   }, [fetchActions]);
+
+   const restoreFromTrash = useCallback(async (actionId: string) => {
+     try {
+       const { error: updateError } = await supabase
+         .from('actions')
+         .update({
+           deleted_at: null,
+         })
+         .eq('id', actionId);
+ 
+       if (updateError) throw updateError;
+ 
+       // Refetch to update list
+       await fetchActions();
+       return true;
+     } catch (err) {
+       console.error('Error restoring action from trash:', err);
+       return false;
+     }
+   }, [fetchActions]);
+
+   const deletePermanently = useCallback(async (actionId: string) => {
+     try {
+       const { error: deleteError } = await supabase
+         .from('actions')
+         .delete()
+         .eq('id', actionId)
+         .not('deleted_at', 'is', null); // Only delete if already in trash
+ 
+       if (deleteError) throw deleteError;
+ 
+       // Refetch to update list
+       await fetchActions();
+       return true;
+     } catch (err) {
+       console.error('Error deleting action permanently:', err);
+       return false;
+     }
+   }, [fetchActions]);
  
    useEffect(() => {
      fetchActions();
    }, [fetchActions]);
  
-   return { actions, isLoading, error, refetch: fetchActions, markAsCompleted };
+   return { 
+     actions, 
+     isLoading, 
+     error, 
+     refetch: fetchActions, 
+     markAsCompleted,
+     moveToTrash,
+     restoreFromTrash,
+     deletePermanently
+   };
  }

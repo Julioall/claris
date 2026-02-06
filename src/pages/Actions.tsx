@@ -14,7 +14,8 @@ import {
   Wrench,
    Calendar,
    Loader2,
-   Pencil
+   Pencil,
+   Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,6 +30,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
  import { NewActionDialog, ActionToEdit } from '@/components/actions/NewActionDialog';
+ import { TrashDialog } from '@/components/actions/TrashDialog';
  import { useActionsData } from '@/hooks/useActionsData';
 import { ActionType } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -56,15 +58,16 @@ const actionTypeConfig: Record<ActionType, { label: string; icon: typeof Phone; 
  }
  
 export default function Actions() {
-   const { user } = useAuth();
+   const { user, isEditMode } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [isNewActionDialogOpen, setIsNewActionDialogOpen] = useState(false);
+   const [isTrashDialogOpen, setIsTrashDialogOpen] = useState(false);
    const [actionToEdit, setActionToEdit] = useState<ActionToEdit | null>(null);
    const [actionTypes, setActionTypes] = useState<ActionTypeOption[]>([]);
    
-   const { actions, isLoading, refetch, markAsCompleted } = useActionsData();
+   const { actions, isLoading, refetch, markAsCompleted, moveToTrash } = useActionsData();
 
    // Fetch action types from database
    useEffect(() => {
@@ -150,6 +153,15 @@ export default function Actions() {
        toast.error('Erro ao marcar ação como concluída');
      }
    };
+
+   const handleMoveToTrash = async (actionId: string) => {
+     const success = await moveToTrash(actionId);
+     if (success) {
+       toast.success('Ação movida para lixeira');
+     } else {
+       toast.error('Erro ao mover ação para lixeira');
+     }
+   };
  
    if (isLoading) {
      return (
@@ -188,10 +200,21 @@ export default function Actions() {
           </p>
         </div>
 
-        <Button onClick={() => setIsNewActionDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova ação
-        </Button>
+        <div className="flex gap-2">
+          {isEditMode && (
+            <Button 
+              variant="outline" 
+              onClick={() => setIsTrashDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Lixeira
+            </Button>
+          )}
+          <Button onClick={() => setIsNewActionDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova ação
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -323,6 +346,17 @@ export default function Actions() {
                       </Button>
                        </>
                     )}
+                    {isEditMode && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        title="Mover para lixeira"
+                        onClick={() => handleMoveToTrash(action.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button size="sm" variant="ghost" asChild>
                       <Link to={`/alunos/${action.student_id}`}>
                         <ExternalLink className="h-4 w-4" />
@@ -355,6 +389,15 @@ export default function Actions() {
          onOpenChange={handleDialogClose}
          actionToEdit={actionToEdit}
         onSuccess={handleActionCreated}
+      />
+
+      {/* Trash Dialog */}
+      <TrashDialog
+        open={isTrashDialogOpen}
+        onOpenChange={setIsTrashDialogOpen}
+        actionTypeConfig={actionTypeConfig}
+        getActionTypeLabel={getActionTypeLabel}
+        getActionTypeConfig={getActionTypeConfig}
       />
     </div>
   );

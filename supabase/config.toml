@@ -1,27 +1,30 @@
 project_id = "untfmrzswzjandjloqgy"
 
+[analytics]
+enabled = false
+
 [api]
 enabled = true
-port = 54421
+port = 54321
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 54422
-shadow_port = 54520
+port = 54322
+shadow_port = 54320
 major_version = 15
 
 [studio]
 enabled = true
-port = 54423
-api_url = "http://127.0.0.1:54421"
+port = 54323
+api_url = "http://127.0.0.1:54321"
 
 [inbucket]
 enabled = true
-port = 54424
-smtp_port = 54525
-pop3_port = 54526
+port = 54324
+smtp_port = 54325
+pop3_port = 54326
 
 [storage]
 enabled = true
