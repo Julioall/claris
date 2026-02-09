@@ -13,18 +13,11 @@ export function TopBar() {
     syncData,
     lastSync,
     isLoading,
-    setShowCourseSelector,
-    courses,
     isEditMode,
     setIsEditMode
   } = useAuth();
   const handleSync = () => {
-    // If we have courses, show selector; otherwise trigger full sync
-    if (courses.length > 0) {
-      setShowCourseSelector(true);
-    } else {
-      syncData();
-    }
+    syncData();
   };
   const formatLastSync = (date: string | null) => {
     if (!date) return 'Nunca';
