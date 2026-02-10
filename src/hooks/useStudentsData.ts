@@ -26,11 +26,12 @@ export function useStudentsData(courseId?: string) {
     setError(null);
 
     try {
-      // Get user's courses first
+      // Get user's courses where they are a tutor
       const { data: userCourses, error: userCoursesError } = await supabase
         .from('user_courses')
         .select('course_id')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .eq('role', 'tutor');
 
       if (userCoursesError) throw userCoursesError;
 

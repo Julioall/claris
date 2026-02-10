@@ -29,7 +29,7 @@ interface ExtendedAuthContextType extends AuthContextType {
   setCourses: (courses: Course[]) => void;
   syncProgress: SyncProgress;
   closeSyncProgress: () => void;
-  syncSelectedCourses: (courseIds: string[] | 'all') => Promise<void>;
+  syncSelectedCourses: (courseIds: string[]) => Promise<void>;
   showCourseSelector: boolean;
   setShowCourseSelector: (show: boolean) => void;
   isEditMode: boolean;
@@ -254,23 +254,87 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const fetchMoodleCourses = useCallback(async (): Promise<Course[]> => {
+    let sessionToUse = moodleSession;
+    let userToUse = user;
+    
+    if (!sessionToUse || !userToUse) {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          sessionToUse = parsed.moodleSession;
+          userToUse = parsed.user;
+        }
+      } catch (e) {
+        console.error('Error recovering session:', e);
+      }
+    }
+    
+    if (!userToUse || !sessionToUse) return [];
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('moodle-api', {
+        body: {
+          action: 'sync_courses',
+          moodleUrl: sessionToUse.moodleUrl,
+          token: sessionToUse.moodleToken,
+          userId: sessionToUse.moodleUserId,
+        },
+      });
+      
+      if (error || data?.error) {
+        console.error('Error fetching courses:', error || data?.error);
+        toast({
+          title: "Erro ao buscar cursos",
+          description: error?.message || data?.error || "Não foi possível obter cursos do Moodle.",
+          variant: "destructive",
+        });
+        return [];
+      }
+      
+      return data.courses || [];
+    } catch (err) {
+      console.error('Error fetching courses:', err);
+      toast({
+        title: "Erro ao buscar cursos",
+        description: "Não foi possível conectar ao Moodle.",
+        variant: "destructive",
+      });
+      return [];
+    }
+  }, [moodleSession, user]);
+
   const syncData = useCallback(async () => {
-    // If we have courses cached, show selector; otherwise do full sync
     if (courses.length > 0) {
       setShowCourseSelector(true);
       return;
     }
-    // No courses yet, do full sync
-    await syncSelectedCourses('all');
-  }, [courses.length]);
+    // Fetch courses first, then show selector
+    setIsLoading(true);
+    try {
+      const fetched = await fetchMoodleCourses();
+      setCourses(fetched);
+      if (fetched.length > 0) {
+        setShowCourseSelector(true);
+      } else {
+        toast({
+          title: "Nenhum curso encontrado",
+          description: "Não foram encontrados cursos no Moodle.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [courses.length, fetchMoodleCourses]);
 
-  const syncSelectedCourses = useCallback(async (courseIds: string[] | 'all') => {
+  const syncSelectedCourses = useCallback(async (courseIds: string[]) => {
     // Try to get session from state or from localStorage as fallback
     let sessionToUse = moodleSession;
     let userToUse = user;
     
     if (!sessionToUse || !userToUse) {
-      // Try to recover from localStorage (handles race condition after login)
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
         if (stored) {
@@ -327,52 +391,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Helper to check if course is active (not finished)
-    const isCourseActive = (course: Course): boolean => {
-      if (!course.end_date) return true;
-      return new Date(course.end_date) >= new Date();
-    };
-
     try {
-      // ============ STEP 1: SYNC COURSES ============
-      const isSelectiveSync = courseIds !== 'all';
+      // ============ STEP 1: COURSES (link only selected to user_courses) ============
+      syncedCourses = courses.filter(c => courseIds.includes(c.id));
       
-      if (isSelectiveSync) {
-        // For selective sync, use existing courses (already filtered by user selection)
-        syncedCourses = courses.filter(c => (courseIds as string[]).includes(c.id));
-        updateStep('courses', { status: 'completed', count: syncedCourses.length });
-      } else {
-        // Full sync: fetch all courses from Moodle
-        updateStep('courses', { status: 'in_progress' });
-        
-        const { data: coursesData, error: coursesError } = await invokeWithTimeout({
-          action: 'sync_courses',
-          moodleUrl: sessionToUse.moodleUrl,
-          token: sessionToUse.moodleToken,
-          userId: sessionToUse.moodleUserId,
-        }, 60000); // 60s for courses since it's one big call
-
-        if (coursesError || coursesData?.error) {
-          updateStep('courses', { 
-            status: 'error', 
-            errorMessage: coursesError?.message || coursesData?.error 
-          });
-          throw new Error(coursesError?.message || coursesData?.error);
-        }
-
-        const allCourses = coursesData.courses || [];
-        setCourses(allCourses);
-        
-        // Filter to only sync active courses (not finished)
-        syncedCourses = allCourses.filter(isCourseActive);
-        
-        const finishedCount = allCourses.length - syncedCourses.length;
-        updateStep('courses', { 
-          status: 'completed', 
-          count: syncedCourses.length,
-          errorMessage: finishedCount > 0 ? `${finishedCount} cursos finalizados ignorados` : undefined
-        });
-      }
+      // Call edge function to update user_courses with only selected courses
+      await invokeWithTimeout({
+        action: 'link_selected_courses',
+        userId: sessionToUse.moodleUserId,
+        selectedCourseIds: courseIds,
+      }, 30000);
+      
+      updateStep('courses', { status: 'completed', count: syncedCourses.length });
 
       // ============ STEP 2: SYNC STUDENTS ============
       updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });

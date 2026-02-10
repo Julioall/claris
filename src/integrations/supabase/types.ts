@@ -667,6 +667,36 @@ export type Database = {
           },
         ]
       }
+      user_sync_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          include_empty_courses: boolean
+          include_finished: boolean
+          selected_keys: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          include_empty_courses?: boolean
+          include_finished?: boolean
+          selected_keys?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          include_empty_courses?: boolean
+          include_finished?: boolean
+          selected_keys?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           avatar_url: string | null

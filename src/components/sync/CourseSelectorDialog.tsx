@@ -1,29 +1,86 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { Search, RefreshCw, BookOpen, AlertCircle } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { RefreshCw, Building2, GraduationCap, Users, ChevronRight, AlertCircle, BookOpen } from 'lucide-react';
 import { Course } from '@/types';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
+import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+
+interface SyncPreferences {
+  selectedKeys: string[];
+  includeEmptyCourses: boolean;
+  includeFinished: boolean;
+}
 
 interface CourseSelectorDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   courses: Course[];
-  onSync: (selectedCourseIds: string[] | 'all') => void;
+  onSync: (selectedCourseIds: string[]) => void;
   isLoading?: boolean;
 }
 
-// Helper to check if a course is still active (not ended)
+interface EventNode {
+  key: string;
+  name: string;
+  courses: Course[];
+  studentCount: number;
+}
+
+interface SchoolNode {
+  name: string;
+  events: EventNode[];
+  totalStudents: number;
+  totalCourses: number;
+}
+
 const isCourseActive = (course: Course): boolean => {
-  if (!course.end_date) return true; // No end date = always active
-  const endDate = new Date(course.end_date);
-  return endDate >= new Date();
+  if (!course.end_date) return true;
+  return new Date(course.end_date) >= new Date();
 };
+
+async function loadPreferencesFromDB(userId: string): Promise<SyncPreferences | null> {
+  try {
+    const { data } = await supabase
+      .from('user_sync_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (data) {
+      return {
+        selectedKeys: data.selected_keys || [],
+        includeEmptyCourses: data.include_empty_courses,
+        includeFinished: data.include_finished,
+      };
+    }
+  } catch (e) {
+    console.error('Error loading sync preferences:', e);
+  }
+  return null;
+}
+
+async function savePreferencesToDB(userId: string, prefs: SyncPreferences) {
+  try {
+    await supabase
+      .from('user_sync_preferences')
+      .upsert({
+        user_id: userId,
+        selected_keys: prefs.selectedKeys,
+        include_empty_courses: prefs.includeEmptyCourses,
+        include_finished: prefs.includeFinished,
+      }, { onConflict: 'user_id' });
+  } catch (e) {
+    console.error('Error saving sync preferences:', e);
+  }
+}
 
 export function CourseSelectorDialog({
   open,
@@ -32,75 +89,233 @@ export function CourseSelectorDialog({
   onSync,
   isLoading,
 }: CourseSelectorDialogProps) {
-  const [selectedCourses, setSelectedCourses] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showFinished, setShowFinished] = useState(false);
+  const { user } = useAuth();
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [includeEmptyCourses, setIncludeEmptyCourses] = useState(false);
+  const [includeFinished, setIncludeFinished] = useState(false);
+  const [studentCounts, setStudentCounts] = useState<Map<string, number>>(new Map());
+  const [openSchools, setOpenSchools] = useState<Set<string>>(new Set());
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
 
-  // Separate active and finished courses
-  const { activeCourses, finishedCourses } = useMemo(() => {
-    const active: Course[] = [];
-    const finished: Course[] = [];
-    
-    courses.forEach(course => {
-      if (isCourseActive(course)) {
-        active.push(course);
-      } else {
-        finished.push(course);
+  // Fetch student counts when dialog opens
+  useEffect(() => {
+    if (!open || courses.length === 0) return;
+
+    const fetchCounts = async () => {
+      const courseIds = courses.map(c => c.id);
+      // Fetch in batches if needed (supabase .in() has limits)
+      const BATCH = 200;
+      const allCounts = new Map<string, number>();
+      
+      for (let i = 0; i < courseIds.length; i += BATCH) {
+        const batch = courseIds.slice(i, i + BATCH);
+        const { data } = await supabase
+          .from('student_courses')
+          .select('course_id')
+          .in('course_id', batch);
+
+        data?.forEach(sc => {
+          allCounts.set(sc.course_id, (allCounts.get(sc.course_id) || 0) + 1);
+        });
       }
+      
+      setStudentCounts(allCounts);
+    };
+
+    fetchCounts();
+  }, [open, courses]);
+
+  // Load preferences when dialog opens
+  useEffect(() => {
+    if (!open || !user) {
+      setPrefsLoaded(false);
+      return;
+    }
+
+    const load = async () => {
+      const prefs = await loadPreferencesFromDB(user.id);
+      if (prefs) {
+        setSelectedKeys(new Set(prefs.selectedKeys));
+        setIncludeEmptyCourses(prefs.includeEmptyCourses);
+        setIncludeFinished(prefs.includeFinished);
+      }
+      setPrefsLoaded(true);
+    };
+    load();
+  }, [open, user]);
+
+  // Count active vs finished courses
+  const courseStats = useMemo(() => {
+    let active = 0;
+    let finished = 0;
+    courses.forEach(c => {
+      if (isCourseActive(c)) active++;
+      else finished++;
     });
-    
-    return { activeCourses: active, finishedCourses: finished };
+    return { active, finished };
   }, [courses]);
 
-  // Reset selection when dialog opens
+  // Build hierarchy from category paths
+  const schools = useMemo(() => {
+    const schoolMap = new Map<string, Map<string, Course[]>>();
+
+    courses.forEach(course => {
+      // Apply filters
+      if (!isCourseActive(course) && !includeFinished) return;
+      const count = studentCounts.get(course.id) || 0;
+      if (count === 0 && !includeEmptyCourses && studentCounts.size > 0) return;
+
+      if (!course.category) return;
+
+      // Parse: "Institution > School > Event > Class"
+      const parts = course.category.split(' > ').map(p => p.trim());
+      const school = parts[1] || 'Sem escola';
+      const event = parts[2] || 'Sem evento';
+
+      if (!schoolMap.has(school)) schoolMap.set(school, new Map());
+      const eventMap = schoolMap.get(school)!;
+      if (!eventMap.has(event)) eventMap.set(event, []);
+      eventMap.get(event)!.push(course);
+    });
+
+    const result: SchoolNode[] = [];
+
+    schoolMap.forEach((eventMap, schoolName) => {
+      const events: EventNode[] = [];
+      let totalStudents = 0;
+      let totalCourses = 0;
+
+      eventMap.forEach((eventCourses, eventName) => {
+        const key = `${schoolName}::${eventName}`;
+        const eventStudentCount = eventCourses.reduce(
+          (sum, c) => sum + (studentCounts.get(c.id) || 0), 0
+        );
+
+        events.push({
+          key,
+          name: eventName,
+          courses: eventCourses,
+          studentCount: eventStudentCount,
+        });
+
+        totalStudents += eventStudentCount;
+        totalCourses += eventCourses.length;
+      });
+
+      events.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+      result.push({
+        name: schoolName,
+        events,
+        totalStudents,
+        totalCourses,
+      });
+    });
+
+    result.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+    return result;
+  }, [courses, includeFinished, includeEmptyCourses, studentCounts]);
+
+  // First-time: select all events
   useEffect(() => {
-    if (open) {
-      setSelectedCourses(new Set());
-      setSearchQuery('');
-      setShowFinished(false);
+    if (!prefsLoaded || schools.length === 0) return;
+
+    // Check if we have saved prefs (selectedKeys would be populated from DB load)
+    if (selectedKeys.size === 0) {
+      // First time: select everything
+      const allKeys = new Set<string>();
+      schools.forEach(school => {
+        school.events.forEach(event => allKeys.add(event.key));
+      });
+      setSelectedKeys(allKeys);
     }
-  }, [open]);
+    // Always open all schools
+    setOpenSchools(new Set(schools.map(s => s.name)));
+  }, [prefsLoaded, schools]);
 
-  // Filter courses based on search and active/finished toggle
-  const displayedCourses = useMemo(() => {
-    const coursesToFilter = showFinished ? finishedCourses : activeCourses;
-    return coursesToFilter.filter(course =>
-      course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      course.short_name?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [activeCourses, finishedCourses, showFinished, searchQuery]);
+  const isSchoolFullyChecked = (school: SchoolNode) =>
+    school.events.length > 0 && school.events.every(e => selectedKeys.has(e.key));
 
-  const filteredCourses = displayedCourses;
+  const isSchoolPartiallyChecked = (school: SchoolNode) =>
+    school.events.some(e => selectedKeys.has(e.key)) && !isSchoolFullyChecked(school);
 
-  const toggleCourse = (courseId: string) => {
-    const newSelected = new Set(selectedCourses);
-    if (newSelected.has(courseId)) {
-      newSelected.delete(courseId);
-    } else {
-      newSelected.add(courseId);
+  const toggleSchool = useCallback((school: SchoolNode) => {
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (school.events.every(e => next.has(e.key))) {
+        school.events.forEach(e => next.delete(e.key));
+      } else {
+        school.events.forEach(e => next.add(e.key));
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleEvent = useCallback((eventKey: string) => {
+    setSelectedKeys(prev => {
+      const next = new Set(prev);
+      if (next.has(eventKey)) next.delete(eventKey);
+      else next.add(eventKey);
+      return next;
+    });
+  }, []);
+
+  const toggleSchoolOpen = useCallback((schoolName: string) => {
+    setOpenSchools(prev => {
+      const next = new Set(prev);
+      if (next.has(schoolName)) next.delete(schoolName);
+      else next.add(schoolName);
+      return next;
+    });
+  }, []);
+
+  // Resolve selections to course IDs
+  const selectedCourseIds = useMemo(() => {
+    const ids: string[] = [];
+    schools.forEach(school => {
+      school.events.forEach(event => {
+        if (selectedKeys.has(event.key)) {
+          event.courses.forEach(c => ids.push(c.id));
+        }
+      });
+    });
+    return ids;
+  }, [schools, selectedKeys]);
+
+  const selectedEventsCount = useMemo(() => {
+    let count = 0;
+    schools.forEach(school => {
+      school.events.forEach(event => {
+        if (selectedKeys.has(event.key)) count++;
+      });
+    });
+    return count;
+  }, [schools, selectedKeys]);
+
+  const totalEventsCount = schools.reduce((sum, s) => sum + s.events.length, 0);
+
+  const handleSync = () => {
+    if (user) {
+      savePreferencesToDB(user.id, {
+        selectedKeys: Array.from(selectedKeys),
+        includeEmptyCourses,
+        includeFinished,
+      });
     }
-    setSelectedCourses(newSelected);
-  };
 
-  const toggleAll = () => {
-    if (selectedCourses.size === filteredCourses.length) {
-      setSelectedCourses(new Set());
-    } else {
-      setSelectedCourses(new Set(filteredCourses.map(c => c.id)));
-    }
-  };
-
-  const handleSync = (mode: 'all' | 'selected') => {
-    if (mode === 'all') {
-      onSync('all');
-    } else {
-      onSync(Array.from(selectedCourses));
-    }
+    onSync(selectedCourseIds);
     onOpenChange(false);
   };
 
-  const allSelected = filteredCourses.length > 0 && selectedCourses.size === filteredCourses.length;
-  const someSelected = selectedCourses.size > 0;
+  const selectAll = () => {
+    const allKeys = new Set<string>();
+    schools.forEach(s => s.events.forEach(e => allKeys.add(e.key)));
+    setSelectedKeys(allKeys);
+  };
+
+  const deselectAll = () => {
+    setSelectedKeys(new Set());
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -113,135 +328,150 @@ export function CourseSelectorDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Info about active courses */}
-          {finishedCourses.length > 0 && (
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-sm">
-              <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-muted-foreground">
-                  <strong>{activeCourses.length}</strong> cursos ativos • 
-                  <strong className="ml-1">{finishedCourses.length}</strong> cursos finalizados
-                </p>
-                <p className="text-xs text-muted-foreground/70 mt-0.5">
-                  Apenas cursos ativos serão sincronizados por padrão
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Quick actions */}
-          <div className="flex gap-2">
-            <Button 
-              onClick={() => handleSync('all')} 
-              className="flex-1"
-              disabled={isLoading || activeCourses.length === 0}
-            >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Sincronizar ativos ({activeCourses.length} cursos)
-            </Button>
-          </div>
-
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">
-                ou selecione cursos específicos
-              </span>
+          {/* Stats */}
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-sm">
+            <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+            <div>
+              <p className="text-muted-foreground">
+                <strong>{courseStats.active}</strong> cursos ativos
+                {courseStats.finished > 0 && (
+                  <> • <strong>{courseStats.finished}</strong> finalizados</>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground/70 mt-0.5">
+                Selecione as escolas e eventos que deseja sincronizar
+              </p>
             </div>
           </div>
 
-          {/* Toggle between active and finished */}
-          <div className="flex gap-2">
-            <Button
-              variant={!showFinished ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setShowFinished(false)}
-              className="flex-1"
-            >
-              Ativos ({activeCourses.length})
-            </Button>
-            <Button
-              variant={showFinished ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setShowFinished(true)}
-              className="flex-1"
-            >
-              Finalizados ({finishedCourses.length})
-            </Button>
-          </div>
-
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Buscar curso..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
-          </div>
-
-          {/* Select all */}
-          {filteredCourses.length > 0 && (
-            <div className="flex items-center justify-between px-1">
-              <label className="flex items-center gap-2 text-sm cursor-pointer">
-                <Checkbox
-                  checked={allSelected}
-                  onCheckedChange={toggleAll}
+          {/* Toggles */}
+          <div className="flex flex-col gap-3 p-3 rounded-lg border">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="include-empty" className="text-sm cursor-pointer">
+                Incluir cursos sem alunos
+              </Label>
+              <Switch
+                id="include-empty"
+                checked={includeEmptyCourses}
+                onCheckedChange={setIncludeEmptyCourses}
+              />
+            </div>
+            {courseStats.finished > 0 && (
+              <div className="flex items-center justify-between">
+                <Label htmlFor="include-finished" className="text-sm cursor-pointer">
+                  Incluir finalizados ({courseStats.finished})
+                </Label>
+                <Switch
+                  id="include-finished"
+                  checked={includeFinished}
+                  onCheckedChange={setIncludeFinished}
                 />
-                <span className="text-muted-foreground">
-                  {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
-                </span>
-              </label>
-              {someSelected && (
-                <Badge variant="secondary">
-                  {selectedCourses.size} selecionado{selectedCourses.size !== 1 ? 's' : ''}
+              </div>
+            )}
+          </div>
+
+          {/* Select / Deselect all */}
+          {totalEventsCount > 0 && (
+            <div className="flex items-center justify-between px-1">
+              <div className="flex gap-2">
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={selectAll}>
+                  Selecionar todos
+                </Button>
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={deselectAll}>
+                  Limpar seleção
+                </Button>
+              </div>
+              {selectedEventsCount > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {selectedEventsCount}/{totalEventsCount} eventos
                 </Badge>
               )}
             </div>
           )}
 
-          {/* Course list */}
-          <ScrollArea className="h-[280px] rounded-md border">
-            {filteredCourses.length === 0 ? (
+          {/* Hierarchy */}
+          <ScrollArea className="h-[320px] rounded-md border">
+            {schools.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                 <BookOpen className="h-10 w-10 text-muted-foreground/50 mb-2" />
                 <p className="text-sm text-muted-foreground">
-                  {searchQuery ? 'Nenhum curso encontrado' : 'Nenhum curso disponível'}
+                  {courses.length === 0 ? 'Nenhum curso disponível' : 'Nenhum curso corresponde aos filtros'}
                 </p>
               </div>
             ) : (
               <div className="p-2 space-y-1">
-                {filteredCourses.map((course) => (
-                  <label
-                    key={course.id}
-                    className="flex items-start gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
+                {schools.map(school => (
+                  <Collapsible
+                    key={school.name}
+                    open={openSchools.has(school.name)}
+                    onOpenChange={() => toggleSchoolOpen(school.name)}
                   >
-                    <Checkbox
-                      checked={selectedCourses.has(course.id)}
-                      onCheckedChange={() => toggleCourse(course.id)}
-                      className="mt-0.5"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium leading-tight line-clamp-2">
-                        {course.name}
-                      </p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        {course.short_name && (
-                          <span className="text-xs text-muted-foreground">
-                            {course.short_name}
-                          </span>
-                        )}
-                        {course.end_date && (
-                          <span className="text-xs text-muted-foreground/70">
-                            • Término: {format(new Date(course.end_date), 'dd/MM/yyyy', { locale: ptBR })}
+                    <div className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/50">
+                      <Checkbox
+                        checked={
+                          isSchoolFullyChecked(school)
+                            ? true
+                            : isSchoolPartiallyChecked(school)
+                              ? 'indeterminate'
+                              : false
+                        }
+                        onCheckedChange={() => toggleSchool(school)}
+                      />
+                      <CollapsibleTrigger className="flex items-center gap-2 flex-1 min-w-0">
+                        <ChevronRight
+                          className={cn(
+                            "h-4 w-4 text-muted-foreground transition-transform shrink-0",
+                            openSchools.has(school.name) && "rotate-90"
+                          )}
+                        />
+                        <Building2 className="h-4 w-4 text-primary shrink-0" />
+                        <span className="text-sm font-medium truncate">{school.name}</span>
+                      </CollapsibleTrigger>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant="secondary" className="text-[10px] px-1.5">
+                          {school.events.length} evento{school.events.length !== 1 ? 's' : ''}
+                        </Badge>
+                        {school.totalStudents > 0 && (
+                          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Users className="h-3 w-3" />
+                            {school.totalStudents}
                           </span>
                         )}
                       </div>
                     </div>
-                  </label>
+                    <CollapsibleContent>
+                      <div className="ml-6 pl-4 border-l border-border space-y-0.5">
+                        {school.events.map(event => (
+                          <label
+                            key={event.key}
+                            className="flex items-center gap-2 p-2 rounded-md hover:bg-muted/30 cursor-pointer"
+                          >
+                            <Checkbox
+                              checked={selectedKeys.has(event.key)}
+                              onCheckedChange={() => toggleEvent(event.key)}
+                            />
+                            <GraduationCap className="h-3.5 w-3.5 text-primary/70 shrink-0" />
+                            <span className="text-sm truncate flex-1">{event.name}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[10px] text-muted-foreground">
+                                {event.courses.length} turma{event.courses.length !== 1 ? 's' : ''}
+                              </span>
+                              {event.studentCount > 0 ? (
+                                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                                  <Users className="h-3 w-3" />
+                                  {event.studentCount}
+                                </span>
+                              ) : studentCounts.size > 0 ? (
+                                <span className="text-[10px] text-muted-foreground/50 italic">
+                                  sem alunos
+                                </span>
+                              ) : null}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 ))}
               </div>
             )}
@@ -249,15 +479,20 @@ export function CourseSelectorDialog({
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
+          <div className="flex items-center gap-2 mr-auto text-xs text-muted-foreground">
+            {selectedCourseIds.length > 0 && (
+              <span>{selectedCourseIds.length} curso{selectedCourseIds.length !== 1 ? 's' : ''} selecionado{selectedCourseIds.length !== 1 ? 's' : ''}</span>
+            )}
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
-          <Button 
-            onClick={() => handleSync('selected')} 
-            disabled={!someSelected || isLoading}
+          <Button
+            onClick={handleSync}
+            disabled={selectedCourseIds.length === 0 || isLoading}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
-            Sincronizar selecionados
+            Sincronizar
           </Button>
         </DialogFooter>
       </DialogContent>
