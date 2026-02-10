@@ -96,12 +96,17 @@ export function CourseSelectorDialog({
   const [studentCounts, setStudentCounts] = useState<Map<string, number>>(new Map());
   const [openSchools, setOpenSchools] = useState<Set<string>>(new Set());
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [countsLoaded, setCountsLoaded] = useState(false);
 
   // Fetch student counts when dialog opens
   useEffect(() => {
-    if (!open || courses.length === 0) return;
+    if (!open || courses.length === 0) {
+      setCountsLoaded(false);
+      return;
+    }
 
     const fetchCounts = async () => {
+      setCountsLoaded(false);
       const courseIds = courses.map(c => c.id);
       // Fetch in batches if needed (supabase .in() has limits)
       const BATCH = 200;
@@ -120,6 +125,8 @@ export function CourseSelectorDialog({
       }
       
       setStudentCounts(allCounts);
+      setCountsLoaded(true);
+      console.log(`✓ Loaded student counts for ${allCounts.size} courses out of ${courseIds.length} total courses`);
     };
 
     fetchCounts();
@@ -162,8 +169,16 @@ export function CourseSelectorDialog({
     courses.forEach(course => {
       // Apply filters
       if (!isCourseActive(course) && !includeFinished) return;
-      const count = studentCounts.get(course.id) || 0;
-      if (count === 0 && !includeEmptyCourses && studentCounts.size > 0) return;
+      
+      // For empty course filter: only filter if studentCounts has been fully loaded
+      // Count of 0 means the course has no students (but has been checked)
+      // undefined means we haven't loaded the data yet, so we should include it
+      const count = studentCounts.get(course.id);
+      
+      if (count === 0 && !includeEmptyCourses && countsLoaded) {
+        console.warn(`Filtering out course "${course.name}" - empty and includeEmptyCourses is false`);
+        return;
+      }
 
       if (!course.category) return;
 
@@ -214,7 +229,7 @@ export function CourseSelectorDialog({
 
     result.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     return result;
-  }, [courses, includeFinished, includeEmptyCourses, studentCounts]);
+  }, [courses, includeFinished, includeEmptyCourses, studentCounts, countsLoaded]);
 
   // First-time: select all events
   useEffect(() => {
@@ -328,6 +343,19 @@ export function CourseSelectorDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Loading status for student counts */}
+          {!countsLoaded && (
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 text-sm">
+              <RefreshCw className="h-4 w-4 text-blue-600 mt-0.5 shrink-0 animate-spin" />
+              <div>
+                <p className="text-blue-700 font-medium">Carregando dados de alunos...</p>
+                <p className="text-xs text-blue-600/70 mt-0.5">
+                  Verificando matrículas em {courses.length} cursos
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Stats */}
           <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-sm">
             <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -461,11 +489,15 @@ export function CourseSelectorDialog({
                                   <Users className="h-3 w-3" />
                                   {event.studentCount}
                                 </span>
-                              ) : studentCounts.size > 0 ? (
+                              ) : countsLoaded ? (
                                 <span className="text-[10px] text-muted-foreground/50 italic">
                                   sem alunos
                                 </span>
-                              ) : null}
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground/40 italic">
+                                  carregando...
+                                </span>
+                              )}
                             </div>
                           </label>
                         ))}
