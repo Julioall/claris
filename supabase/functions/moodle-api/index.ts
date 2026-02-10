@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, moodleUrl, username, password, token, userId, courseId, service } = await req.json();
+    const { action, moodleUrl, username, password, token, userId, courseId, service, selectedCourseIds } = await req.json();
 
     console.log(`Moodle API action: ${action}`);
 
@@ -443,36 +443,8 @@ Deno.serve(async (req) => {
 
         console.log(`Upserted ${syncedCourses?.length || 0} courses`);
 
-        // Batch upsert user-course links
-        if (syncedCourses && syncedCourses.length > 0) {
-          const userCourseLinks = syncedCourses.map(course => ({
-            user_id: dbUser.id,
-            course_id: course.id,
-            role: 'tutor'
-          }));
-
-          // Upsert in batches of 100 to avoid payload limits
-          const LINK_BATCH_SIZE = 100;
-          for (let i = 0; i < userCourseLinks.length; i += LINK_BATCH_SIZE) {
-            const batch = userCourseLinks.slice(i, i + LINK_BATCH_SIZE);
-            const { error: linkError } = await supabase
-              .from('user_courses')
-              .upsert(batch, { 
-                onConflict: 'user_id,course_id',
-                ignoreDuplicates: true 
-              });
-            
-            if (linkError) {
-              console.error('Error linking user to courses:', linkError);
-            }
-          }
-        }
-
-        // Update user's last_sync
-        await supabase
-          .from('users')
-          .update({ last_sync: now })
-          .eq('id', dbUser.id);
+        // NOTE: We no longer auto-link ALL courses to user_courses here.
+        // The client will call 'link_selected_courses' with only the selected course IDs.
 
         return new Response(
           JSON.stringify({ success: true, courses: syncedCourses || [] }),
@@ -940,6 +912,82 @@ Deno.serve(async (req) => {
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+      }
+
+      case 'link_selected_courses': {
+        // Links only selected courses to user_courses, removing unselected ones
+        if (!userId || !selectedCourseIds || !Array.isArray(selectedCourseIds)) {
+          return new Response(
+            JSON.stringify({ error: 'Missing required fields: userId, selectedCourseIds' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get user's Supabase ID
+        const { data: linkUser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('moodle_user_id', String(userId))
+          .maybeSingle();
+
+        if (!linkUser) {
+          return new Response(
+            JSON.stringify({ error: 'User not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Remove existing user_courses that are NOT in the selected list
+        const { data: existingLinks } = await supabase
+          .from('user_courses')
+          .select('course_id')
+          .eq('user_id', linkUser.id);
+
+        const existingCourseIds = new Set(existingLinks?.map(l => l.course_id) || []);
+        const selectedSet = new Set(selectedCourseIds as string[]);
+
+        // Delete courses no longer selected
+        const toRemove = [...existingCourseIds].filter(id => !selectedSet.has(id));
+        if (toRemove.length > 0) {
+          await supabase
+            .from('user_courses')
+            .delete()
+            .eq('user_id', linkUser.id)
+            .in('course_id', toRemove);
+        }
+
+        // Add newly selected courses
+        const toAdd = (selectedCourseIds as string[]).filter(id => !existingCourseIds.has(id));
+        if (toAdd.length > 0) {
+          const links = toAdd.map(course_id => ({
+            user_id: linkUser.id,
+            course_id,
+            role: 'tutor'
+          }));
+
+          const BATCH = 100;
+          for (let i = 0; i < links.length; i += BATCH) {
+            await supabase
+              .from('user_courses')
+              .upsert(links.slice(i, i + BATCH), {
+                onConflict: 'user_id,course_id',
+                ignoreDuplicates: true
+              });
+          }
+        }
+
+        // Update last_sync
+        await supabase
+          .from('users')
+          .update({ last_sync: new Date().toISOString() })
+          .eq('id', linkUser.id);
+
+        console.log(`Linked ${toAdd.length} courses, removed ${toRemove.length} for user ${linkUser.id}`);
+
+        return new Response(
+          JSON.stringify({ success: true, added: toAdd.length, removed: toRemove.length }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       default:
