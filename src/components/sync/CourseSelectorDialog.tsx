@@ -11,8 +11,7 @@ import { RefreshCw, Building2, GraduationCap, Users, ChevronRight, AlertCircle, 
 import { Course } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
-
-const SYNC_PREFS_KEY = 'guia_tutor_sync_prefs';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface SyncPreferences {
   selectedKeys: string[];
@@ -47,16 +46,40 @@ const isCourseActive = (course: Course): boolean => {
   return new Date(course.end_date) >= new Date();
 };
 
-function loadPreferences(): SyncPreferences | null {
+async function loadPreferencesFromDB(userId: string): Promise<SyncPreferences | null> {
   try {
-    const stored = localStorage.getItem(SYNC_PREFS_KEY);
-    if (stored) return JSON.parse(stored);
-  } catch { /* ignore */ }
+    const { data } = await supabase
+      .from('user_sync_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .maybeSingle();
+    
+    if (data) {
+      return {
+        selectedKeys: data.selected_keys || [],
+        includeEmptyCourses: data.include_empty_courses,
+        includeFinished: data.include_finished,
+      };
+    }
+  } catch (e) {
+    console.error('Error loading sync preferences:', e);
+  }
   return null;
 }
 
-function savePreferences(prefs: SyncPreferences) {
-  localStorage.setItem(SYNC_PREFS_KEY, JSON.stringify(prefs));
+async function savePreferencesToDB(userId: string, prefs: SyncPreferences) {
+  try {
+    await supabase
+      .from('user_sync_preferences')
+      .upsert({
+        user_id: userId,
+        selected_keys: prefs.selectedKeys,
+        include_empty_courses: prefs.includeEmptyCourses,
+        include_finished: prefs.includeFinished,
+      }, { onConflict: 'user_id' });
+  } catch (e) {
+    console.error('Error saving sync preferences:', e);
+  }
 }
 
 export function CourseSelectorDialog({
@@ -66,6 +89,7 @@ export function CourseSelectorDialog({
   onSync,
   isLoading,
 }: CourseSelectorDialogProps) {
+  const { user } = useAuth();
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [includeEmptyCourses, setIncludeEmptyCourses] = useState(false);
   const [includeFinished, setIncludeFinished] = useState(false);
@@ -103,19 +127,22 @@ export function CourseSelectorDialog({
 
   // Load preferences when dialog opens
   useEffect(() => {
-    if (!open) {
+    if (!open || !user) {
       setPrefsLoaded(false);
       return;
     }
 
-    const prefs = loadPreferences();
-    if (prefs) {
-      setSelectedKeys(new Set(prefs.selectedKeys));
-      setIncludeEmptyCourses(prefs.includeEmptyCourses);
-      setIncludeFinished(prefs.includeFinished);
-    }
-    setPrefsLoaded(true);
-  }, [open]);
+    const load = async () => {
+      const prefs = await loadPreferencesFromDB(user.id);
+      if (prefs) {
+        setSelectedKeys(new Set(prefs.selectedKeys));
+        setIncludeEmptyCourses(prefs.includeEmptyCourses);
+        setIncludeFinished(prefs.includeFinished);
+      }
+      setPrefsLoaded(true);
+    };
+    load();
+  }, [open, user]);
 
   // Count active vs finished courses
   const courseStats = useMemo(() => {
@@ -193,8 +220,8 @@ export function CourseSelectorDialog({
   useEffect(() => {
     if (!prefsLoaded || schools.length === 0) return;
 
-    const prefs = loadPreferences();
-    if (!prefs) {
+    // Check if we have saved prefs (selectedKeys would be populated from DB load)
+    if (selectedKeys.size === 0) {
       // First time: select everything
       const allKeys = new Set<string>();
       schools.forEach(school => {
@@ -268,11 +295,13 @@ export function CourseSelectorDialog({
   const totalEventsCount = schools.reduce((sum, s) => sum + s.events.length, 0);
 
   const handleSync = () => {
-    savePreferences({
-      selectedKeys: Array.from(selectedKeys),
-      includeEmptyCourses,
-      includeFinished,
-    });
+    if (user) {
+      savePreferencesToDB(user.id, {
+        selectedKeys: Array.from(selectedKeys),
+        includeEmptyCourses,
+        includeFinished,
+      });
+    }
 
     onSync(selectedCourseIds);
     onOpenChange(false);

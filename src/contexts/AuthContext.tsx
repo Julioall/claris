@@ -392,8 +392,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      // ============ STEP 1: COURSES (already fetched - auto-complete) ============
+      // ============ STEP 1: COURSES (link only selected to user_courses) ============
       syncedCourses = courses.filter(c => courseIds.includes(c.id));
+      
+      // Call edge function to update user_courses with only selected courses
+      await invokeWithTimeout({
+        action: 'link_selected_courses',
+        userId: sessionToUse.moodleUserId,
+        selectedCourseIds: courseIds,
+      }, 30000);
+      
       updateStep('courses', { status: 'completed', count: syncedCourses.length });
 
       // ============ STEP 2: SYNC STUDENTS ============
