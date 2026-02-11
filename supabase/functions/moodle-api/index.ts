@@ -302,7 +302,11 @@ Deno.serve(async (req) => {
         // Get user info from Moodle
         const siteInfo = await getSiteInfo(moodleUrl, tokenResponse.token);
         
-        // Create or update user in Supabase
+        const authEmail = `moodle_${siteInfo.userid}@moodle.local`;
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+        const anonClient = createClient(supabaseUrl, anonKey);
+
+        // Check if user exists in our users table
         const { data: existingUser } = await supabase
           .from('users')
           .select('*')
@@ -321,25 +325,84 @@ Deno.serve(async (req) => {
         };
 
         let user;
+        let session;
+
         if (existingUser) {
-          const { data, error } = await supabase
+          // Try to sign in to Supabase Auth
+          let signInResult = await anonClient.auth.signInWithPassword({
+            email: authEmail,
+            password: password,
+          });
+
+          if (signInResult.error) {
+            // Auth user might not exist yet (migrating existing user) or password changed
+            const createResult = await supabase.auth.admin.createUser({
+              id: existingUser.id,
+              email: authEmail,
+              password: password,
+              email_confirm: true,
+              user_metadata: { moodle_user_id: String(siteInfo.userid) }
+            });
+
+            if (createResult.error) {
+              // Auth user exists but password differs - update it
+              await supabase.auth.admin.updateUserById(existingUser.id, { password });
+            }
+
+            // Sign in again
+            signInResult = await anonClient.auth.signInWithPassword({
+              email: authEmail,
+              password: password,
+            });
+
+            if (signInResult.error) {
+              console.error('Failed to sign in after auth user setup:', signInResult.error);
+              throw new Error('Failed to create authentication session');
+            }
+          }
+
+          session = signInResult.data.session;
+
+          // Update user data
+          const { data: updatedUser, error: updateError } = await supabase
             .from('users')
             .update(userData)
             .eq('id', existingUser.id)
             .select()
             .single();
-          
-          if (error) throw error;
-          user = data;
+
+          if (updateError) throw updateError;
+          user = updatedUser;
         } else {
-          const { data, error } = await supabase
+          // Create new Supabase Auth user first
+          const { data: newAuthUser, error: createAuthError } = await supabase.auth.admin.createUser({
+            email: authEmail,
+            password: password,
+            email_confirm: true,
+            user_metadata: { moodle_user_id: String(siteInfo.userid) }
+          });
+
+          if (createAuthError) throw createAuthError;
+          const authUserId = newAuthUser.user.id;
+
+          // Create users record with the same ID as auth user
+          const { data: newUser, error: insertError } = await supabase
             .from('users')
-            .insert(userData)
+            .insert({ ...userData, id: authUserId })
             .select()
             .single();
-          
-          if (error) throw error;
-          user = data;
+
+          if (insertError) throw insertError;
+          user = newUser;
+
+          // Sign in to get session
+          const signInResult = await anonClient.auth.signInWithPassword({
+            email: authEmail,
+            password: password,
+          });
+
+          if (signInResult.error) throw signInResult.error;
+          session = signInResult.data.session;
         }
 
         return new Response(
@@ -347,87 +410,17 @@ Deno.serve(async (req) => {
             success: true, 
             user,
             moodleToken: tokenResponse.token,
-            moodleUserId: siteInfo.userid
+            moodleUserId: siteInfo.userid,
+            session: {
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            }
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      case 'login_with_token': {
-        if (!moodleUrl || !token) {
-          return new Response(
-            JSON.stringify({ error: 'Missing required fields: moodleUrl, token' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        try {
-          // Validate token by getting site info
-          const siteInfo = await getSiteInfo(moodleUrl, token);
-          
-          if (!siteInfo || !siteInfo.userid) {
-            return new Response(
-              JSON.stringify({ error: 'Token inválido ou expirado' }),
-              { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-
-          // Create or update user in Supabase
-          const { data: existingUser } = await supabase
-            .from('users')
-            .select('*')
-            .eq('moodle_user_id', String(siteInfo.userid))
-            .single();
-
-          const userData = {
-            moodle_user_id: String(siteInfo.userid),
-            moodle_username: siteInfo.username,
-            full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
-            email: siteInfo.email || null,
-            avatar_url: siteInfo.profileimageurl || null,
-            last_login: new Date().toISOString(),
-            last_sync: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-
-          let user;
-          if (existingUser) {
-            const { data, error } = await supabase
-              .from('users')
-              .update(userData)
-              .eq('id', existingUser.id)
-              .select()
-              .single();
-            
-            if (error) throw error;
-            user = data;
-          } else {
-            const { data, error } = await supabase
-              .from('users')
-              .insert(userData)
-              .select()
-              .single();
-            
-            if (error) throw error;
-            user = data;
-          }
-
-          return new Response(
-            JSON.stringify({ 
-              success: true, 
-              user,
-              moodleUserId: siteInfo.userid
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        } catch (err) {
-          console.error('Token validation error:', err);
-          return new Response(
-            JSON.stringify({ error: err instanceof Error ? err.message : 'Token inválido ou expirado' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      }
+      // login_with_token removed for security reasons
 
       case 'sync_courses': {
         if (!moodleUrl || !token || !userId) {

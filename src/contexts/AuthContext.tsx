@@ -62,29 +62,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isComplete: false,
   });
 
-  // Load session from storage on mount
+  // Load session from Supabase Auth on mount
   useEffect(() => {
-    const loadSession = () => {
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const session = JSON.parse(stored);
-          setUser(session.user);
-          setMoodleSession(session.moodleSession);
-          setLastSync(session.user?.last_sync || null);
-        }
-      } catch (err) {
-        console.error('Error loading session:', err);
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setMoodleSession(null);
+        setLastSync(null);
+        setCourses([]);
         localStorage.removeItem(STORAGE_KEY);
-      } finally {
+        setIsLoading(false);
+        return;
+      }
+
+      if (session?.user) {
+        // Load moodle session from localStorage
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.user) setUser(parsed.user);
+            if (parsed.moodleSession) setMoodleSession(parsed.moodleSession);
+            setLastSync(parsed.user?.last_sync || null);
+          }
+        } catch (err) {
+          console.error('Error loading moodle session:', err);
+        }
         setIsLoading(false);
       }
-    };
+    });
 
-    loadSession();
+    // Then check existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (parsed.user) setUser(parsed.user);
+            if (parsed.moodleSession) setMoodleSession(parsed.moodleSession);
+            setLastSync(parsed.user?.last_sync || null);
+          }
+        } catch (err) {
+          console.error('Error loading session:', err);
+        }
+      }
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Save session to storage whenever it changes
+  // Save moodle session data to localStorage (not auth - that's handled by Supabase)
   const saveSession = useCallback((newUser: User | null, newMoodleSession: MoodleSession | null) => {
     if (newUser && newMoodleSession) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -147,6 +177,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
+      // Set Supabase Auth session
+      if (data.session) {
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+        if (sessionError) {
+          console.error('Error setting auth session:', sessionError);
+        }
+      }
+
       const newUser: User = data.user;
       const newSession: MoodleSession = {
         moodleToken: data.moodleToken,
@@ -179,7 +220,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [saveSession]);
 
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUser(null);
     setMoodleSession(null);
     setCourses([]);
