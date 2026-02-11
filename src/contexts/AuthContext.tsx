@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Load session from Supabase Auth on mount
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
         setMoodleSession(null);
@@ -95,26 +95,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (session?.user) {
-        const stored = await loadStoredSession();
-        if (stored) {
-          if (stored.user) setUser(stored.user);
-          if (stored.moodleSession) setMoodleSession(stored.moodleSession);
-          setLastSync(stored.user?.last_sync || null);
-        }
+        loadStoredSession().then(stored => {
+          if (stored) {
+            if (stored.user) setUser(stored.user);
+            if (stored.moodleSession) setMoodleSession(stored.moodleSession);
+            setLastSync(stored.user?.last_sync || null);
+          }
+          setIsLoading(false);
+        }).catch(() => setIsLoading(false));
+      } else {
         setIsLoading(false);
       }
     });
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
-        const stored = await loadStoredSession();
-        if (stored) {
-          if (stored.user) setUser(stored.user);
-          if (stored.moodleSession) setMoodleSession(stored.moodleSession);
-          setLastSync(stored.user?.last_sync || null);
-        }
+        loadStoredSession().then(stored => {
+          if (stored) {
+            if (stored.user) setUser(stored.user);
+            if (stored.moodleSession) setMoodleSession(stored.moodleSession);
+            setLastSync(stored.user?.last_sync || null);
+          }
+          setIsLoading(false);
+        }).catch(() => setIsLoading(false));
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
