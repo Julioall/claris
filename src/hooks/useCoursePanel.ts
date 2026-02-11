@@ -77,19 +77,32 @@ export function useCoursePanel(courseId: string | undefined) {
       if (courseError) throw courseError;
       setCourse(courseData);
 
-      // Fetch students in this course
+      // Fetch students in this course (with enrollment status and course-specific last access)
       const { data: studentCoursesData, error: studentsError } = await supabase
         .from('student_courses')
         .select(`
           student_id,
+          enrollment_status,
+          last_access,
           students (*)
         `)
         .eq('course_id', courseId);
 
       if (studentsError) throw studentsError;
 
-      const studentsData = studentCoursesData
-        ?.map(sc => sc.students)
+      // Separate active and all students
+      const allStudentCourses = studentCoursesData || [];
+      const activeStudentCourses = allStudentCourses.filter(sc => sc.enrollment_status !== 'suspenso');
+      
+      const studentsData = activeStudentCourses
+        ?.map(sc => {
+          if (!sc.students) return null;
+          return {
+            ...(sc.students as any),
+            // Override last_access with course-specific last access if available
+            last_access: sc.last_access || (sc.students as any).last_access,
+          };
+        })
         .filter((s): s is NonNullable<typeof s> => s !== null) || [];
       
       setStudents(studentsData as Student[]);

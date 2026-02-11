@@ -51,9 +51,11 @@ interface MoodleEnrolledUser {
   email?: string;
   profileimageurl?: string;
   lastaccess?: number;
+  lastcourseaccess?: number; // Last access to this specific course
   roles?: { roleid: number; name: string; shortname: string }[];
   enrolledcourses?: { id: number; shortname: string; fullname: string; suspended?: boolean }[];
   suspended?: boolean; // User-level suspension
+  status?: number; // 0 = active, 1 = suspended (direct field from API)
   enrolments?: { 
     id: number; 
     courseid: number; 
@@ -547,9 +549,19 @@ Deno.serve(async (req) => {
         
         console.log(`Found ${students.length} students in course ${courseId}`);
         
-        // Log sample student data to see available fields
+        // Log sample student data to see available fields for debugging suspension detection
         if (students.length > 0) {
-          console.log('Sample student data:', JSON.stringify(students[0], null, 2));
+          const sample = students[0];
+          console.log('Sample student fields:', JSON.stringify({
+            id: sample.id,
+            suspended: sample.suspended,
+            status: (sample as any).status,
+            lastaccess: sample.lastaccess,
+            lastcourseaccess: (sample as any).lastcourseaccess,
+            enrolments: sample.enrolments,
+            enrolledcourses: sample.enrolledcourses,
+            allKeys: Object.keys(sample),
+          }, null, 2));
         }
 
         if (students.length === 0) {
@@ -565,8 +577,13 @@ Deno.serve(async (req) => {
           // Determine enrollment status from various possible sources
           let enrollmentStatus = 'ativo';
           
+          // Check direct status field (some Moodle versions return this)
+          if ((student as any).status === 1) {
+            enrollmentStatus = 'suspenso';
+          }
+          
           // Check if user is suspended at user level
-          if (student.suspended) {
+          if (student.suspended === true) {
             enrollmentStatus = 'suspenso';
           }
           
@@ -586,6 +603,11 @@ Deno.serve(async (req) => {
             }
           }
           
+          // Get course-specific last access if available
+          const lastCourseAccess = (student as any).lastcourseaccess 
+            ? new Date((student as any).lastcourseaccess * 1000).toISOString() 
+            : null;
+          
           return {
             moodle_user_id: String(student.id),
             full_name: student.fullname || `${student.firstname} ${student.lastname}`,
@@ -594,11 +616,16 @@ Deno.serve(async (req) => {
             last_access: student.lastaccess ? new Date(student.lastaccess * 1000).toISOString() : null,
             updated_at: now,
             _enrollment_status: enrollmentStatus, // Temporary field for linking
+            _last_course_access: lastCourseAccess, // Temporary field for course link
           };
         });
+        
+        // Log suspension detection results
+        const suspendedCount = studentsData.filter(s => s._enrollment_status === 'suspenso').length;
+        console.log(`Enrollment status detection: ${suspendedCount} suspended out of ${studentsData.length} students`);
 
         // Batch upsert students
-        const studentsForUpsert = studentsData.map(({ _enrollment_status, ...rest }) => rest);
+        const studentsForUpsert = studentsData.map(({ _enrollment_status, _last_course_access, ...rest }) => rest);
         const { data: syncedStudents, error: upsertError } = await supabase
           .from('students')
           .upsert(studentsForUpsert, { 
@@ -619,17 +646,21 @@ Deno.serve(async (req) => {
 
         // Batch upsert student-course links
         if (syncedStudents && syncedStudents.length > 0) {
-          // Map synced students to their enrollment status
-          const studentStatusMap = new Map(
-            studentsData.map(s => [s.moodle_user_id, s._enrollment_status])
+          // Map synced students to their enrollment status and course access
+          const studentDataMap = new Map(
+            studentsData.map(s => [s.moodle_user_id, { 
+              status: s._enrollment_status, 
+              lastCourseAccess: s._last_course_access 
+            }])
           );
           
           const studentCourseLinks = syncedStudents.map(student => {
-            const enrollmentStatus = studentStatusMap.get(student.moodle_user_id) || 'ativo';
+            const data = studentDataMap.get(student.moodle_user_id);
             return {
               student_id: student.id,
               course_id: dbCourse.id,
-              enrollment_status: enrollmentStatus,
+              enrollment_status: data?.status || 'ativo',
+              last_access: data?.lastCourseAccess || null,
               last_sync: now
             };
           });
