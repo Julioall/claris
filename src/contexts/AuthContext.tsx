@@ -3,11 +3,17 @@ import { User, AuthContextType, Course } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { SyncStep } from '@/components/sync/SyncProgressDialog';
+import { encryptSessionData, decryptSessionData } from '@/lib/session-crypto';
 
 interface MoodleSession {
   moodleToken: string;
   moodleUserId: number;
   moodleUrl: string;
+}
+
+interface StoredSession {
+  user: User;
+  moodleSession: MoodleSession;
 }
 
 interface SyncProgress {
@@ -47,6 +53,19 @@ const initialSteps: SyncStep[] = [
   { id: 'grades', label: 'Sincronizar notas', icon: 'grades', status: 'pending' },
 ];
 
+// Helper to load encrypted session from sessionStorage
+async function loadStoredSession(): Promise<StoredSession | null> {
+  try {
+    const stored = sessionStorage.getItem(STORAGE_KEY);
+    if (!stored) return null;
+    return await decryptSessionData<StoredSession>(stored);
+  } catch {
+    console.error('Error loading session');
+    sessionStorage.removeItem(STORAGE_KEY);
+    return null;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [moodleSession, setMoodleSession] = useState<MoodleSession | null>(null);
@@ -64,7 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Load session from Supabase Auth on mount
   useEffect(() => {
-    // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_OUT') {
         setUser(null);
@@ -77,35 +95,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (session?.user) {
-        // Load moodle session from sessionStorage
-        try {
-          const stored = sessionStorage.getItem(STORAGE_KEY);
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed.user) setUser(parsed.user);
-            if (parsed.moodleSession) setMoodleSession(parsed.moodleSession);
-            setLastSync(parsed.user?.last_sync || null);
-          }
-        } catch (err) {
-          console.error('Error loading moodle session:', err);
+        const stored = await loadStoredSession();
+        if (stored) {
+          if (stored.user) setUser(stored.user);
+          if (stored.moodleSession) setMoodleSession(stored.moodleSession);
+          setLastSync(stored.user?.last_sync || null);
         }
         setIsLoading(false);
       }
     });
 
-    // Then check existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        try {
-          const stored = sessionStorage.getItem(STORAGE_KEY);
-          if (stored) {
-            const parsed = JSON.parse(stored);
-            if (parsed.user) setUser(parsed.user);
-            if (parsed.moodleSession) setMoodleSession(parsed.moodleSession);
-            setLastSync(parsed.user?.last_sync || null);
-          }
-        } catch (err) {
-          console.error('Error loading session:', err);
+        const stored = await loadStoredSession();
+        if (stored) {
+          if (stored.user) setUser(stored.user);
+          if (stored.moodleSession) setMoodleSession(stored.moodleSession);
+          setLastSync(stored.user?.last_sync || null);
         }
       }
       setIsLoading(false);
@@ -114,13 +120,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Save moodle session data to sessionStorage (cleared when browser closes)
-  const saveSession = useCallback((newUser: User | null, newMoodleSession: MoodleSession | null) => {
+  // Save moodle session data encrypted to sessionStorage
+  const saveSession = useCallback(async (newUser: User | null, newMoodleSession: MoodleSession | null) => {
     if (newUser && newMoodleSession) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        user: newUser,
-        moodleSession: newMoodleSession,
-      }));
+      const encrypted = await encryptSessionData({ user: newUser, moodleSession: newMoodleSession });
+      sessionStorage.setItem(STORAGE_KEY, encrypted);
     } else {
       sessionStorage.removeItem(STORAGE_KEY);
     }
@@ -198,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(newUser);
       setMoodleSession(newSession);
       setLastSync(newUser.last_sync || null);
-      saveSession(newUser, newSession);
+      await saveSession(newUser, newSession);
       
       toast({
         title: "Login realizado com sucesso",
@@ -238,15 +242,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let userToUse = user;
     
     if (!sessionToUse || !userToUse) {
-      try {
-        const stored = sessionStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          sessionToUse = parsed.moodleSession;
-          userToUse = parsed.user;
-        }
-      } catch (e) {
-        console.error('Error recovering session:', e);
+      const stored = await loadStoredSession();
+      if (stored) {
+        sessionToUse = stored.moodleSession;
+        userToUse = stored.user;
       }
     }
     
@@ -289,7 +288,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setShowCourseSelector(true);
       return;
     }
-    // Fetch courses first, then show selector
     setIsLoading(true);
     try {
       const fetched = await fetchMoodleCourses();
@@ -309,20 +307,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [courses.length, fetchMoodleCourses]);
 
   const syncSelectedCourses = useCallback(async (courseIds: string[]) => {
-    // Try to get session from state or from localStorage as fallback
     let sessionToUse = moodleSession;
     let userToUse = user;
     
     if (!sessionToUse || !userToUse) {
-      try {
-        const stored = sessionStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          sessionToUse = parsed.moodleSession;
-          userToUse = parsed.user;
-        }
-      } catch (e) {
-        console.error('Error recovering session:', e);
+      const stored = await loadStoredSession();
+      if (stored) {
+        sessionToUse = stored.moodleSession;
+        userToUse = stored.user;
       }
     }
     
@@ -337,7 +329,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     setIsLoading(true);
     
-    // Reset and open sync progress dialog
     setSyncProgress({
       isOpen: true,
       steps: initialSteps.map(s => ({ ...s, status: 'pending' as const })),
@@ -350,7 +341,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let totalActivities = 0;
     let totalGrades = 0;
 
-    // Helper to invoke edge function with timeout
     const invokeWithTimeout = async (body: Record<string, unknown>, timeoutMs = 25000) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -371,10 +361,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      // ============ STEP 1: COURSES (link only selected to user_courses) ============
       syncedCourses = courses.filter(c => courseIds.includes(c.id));
       
-      // Call edge function to update user_courses with only selected courses
       await invokeWithTimeout({
         action: 'link_selected_courses',
         userId: sessionToUse.moodleUserId,
@@ -383,11 +371,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       updateStep('courses', { status: 'completed', count: syncedCourses.length });
 
-      // ============ STEP 2: SYNC STUDENTS ============
       updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
       
-      // Process in smaller batches with individual error handling
-      const STUDENT_BATCH_SIZE = 3; // Smaller batch to avoid timeout
+      const STUDENT_BATCH_SIZE = 3;
       let processedCoursesStudents = 0;
       let studentErrors = 0;
 
@@ -402,7 +388,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 moodleUrl: sessionToUse.moodleUrl,
                 token: sessionToUse.moodleToken,
                 courseId: parseInt(course.moodle_course_id, 10),
-              }, 20000); // 20s timeout per course
+              }, 20000);
               
               if (error) {
                 console.warn(`Student sync failed for course ${course.moodle_course_id}:`, error);
@@ -434,10 +420,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         errorMessage: studentErrors > 0 ? `${studentErrors} cursos com erro` : undefined
       });
 
-      // ============ STEP 3: SYNC ACTIVITIES ============
       updateStep('activities', { status: 'in_progress', count: 0, total: syncedCourses.length });
       
-      const ACTIVITY_BATCH_SIZE = 2; // Even smaller for activities (more data per course)
+      const ACTIVITY_BATCH_SIZE = 2;
       let processedCoursesActivities = 0;
       let activityErrors = 0;
 
@@ -452,7 +437,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 moodleUrl: sessionToUse.moodleUrl,
                 token: sessionToUse.moodleToken,
                 courseId: parseInt(course.moodle_course_id, 10),
-              }, 25000); // 25s timeout per course
+              }, 25000);
               
               if (error) {
                 console.warn(`Activity sync failed for course ${course.moodle_course_id}:`, error);
@@ -484,7 +469,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         errorMessage: activityErrors > 0 ? `${activityErrors} cursos com erro` : undefined
       });
 
-      // ============ STEP 4: SYNC GRADES ============
       updateStep('grades', { status: 'in_progress', count: 0, total: syncedCourses.length });
       
       const GRADE_BATCH_SIZE = 3;
@@ -533,14 +517,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         count: totalGrades,
         errorMessage: gradeErrors > 0 ? `${gradeErrors} cursos com erro` : undefined
       });
-      
-      // ============ FINALIZE ============
-      const newSyncTime = new Date().toISOString();
-      setLastSync(newSyncTime);
-      
-      const updatedUser = { ...userToUse, last_sync: newSyncTime };
-      setUser(updatedUser);
-      saveSession(updatedUser, sessionToUse);
+
+      const now = new Date().toISOString();
+      setLastSync(now);
       
       setSyncProgress(prev => ({
         ...prev,
@@ -553,42 +532,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       }));
 
+      toast({
+        title: "Sincronização concluída",
+        description: `${syncedCourses.length} cursos, ${totalStudents} alunos, ${totalActivities} atividades e ${totalGrades} notas sincronizados.`,
+      });
+
     } catch (err) {
       console.error('Sync error:', err);
-      setSyncProgress(prev => ({ ...prev, isComplete: true }));
       toast({
         title: "Erro na sincronização",
-        description: err instanceof Error ? err.message : "Não foi possível sincronizar com o Moodle.",
+        description: "Ocorreu um erro durante a sincronização. Tente novamente.",
         variant: "destructive",
       });
+      setSyncProgress(prev => ({ ...prev, isComplete: true }));
     } finally {
       setIsLoading(false);
     }
-  }, [user, moodleSession, courses, saveSession, updateStep]);
+  }, [moodleSession, user, courses, updateStep, toast]);
+
+  const value: ExtendedAuthContextType = {
+    user,
+    isLoading,
+    isAuthenticated: !!user && !!moodleSession,
+    login,
+    logout,
+    syncData,
+    lastSync,
+    moodleSession,
+    courses,
+    setCourses,
+    syncProgress,
+    closeSyncProgress,
+    syncSelectedCourses,
+    showCourseSelector,
+    setShowCourseSelector,
+    isEditMode,
+    setIsEditMode,
+  };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isLoading,
-        isAuthenticated: !!user && !!moodleSession,
-        login,
-        
-        logout,
-        syncData,
-        lastSync,
-        moodleSession,
-        courses,
-        setCourses,
-        syncProgress,
-        closeSyncProgress,
-        syncSelectedCourses,
-        showCourseSelector,
-        setShowCourseSelector,
-        isEditMode,
-        setIsEditMode,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
