@@ -192,6 +192,38 @@ async function getCourseEnrolledUsers(moodleUrl: string, token: string, courseId
   }
 }
 
+// --- Input Validation Helpers ---
+function validateMoodleUrl(url: unknown): url is string {
+  if (typeof url !== 'string' || url.length === 0 || url.length > 2048) return false;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function validatePositiveInteger(value: unknown): value is number {
+  if (value === undefined || value === null) return false;
+  const num = typeof value === 'number' ? value : parseInt(String(value), 10);
+  return !isNaN(num) && Number.isFinite(num) && num > 0 && num < Number.MAX_SAFE_INTEGER;
+}
+
+function validateString(value: unknown, maxLength = 1024): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= maxLength;
+}
+
+function validateStringArray(value: unknown, maxItems = 500): value is string[] {
+  return Array.isArray(value) && value.length <= maxItems && value.every(v => typeof v === 'string' && v.length > 0 && v.length <= 255);
+}
+
+function validationError(message: string) {
+  return new Response(
+    JSON.stringify({ error: message }),
+    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -202,6 +234,43 @@ Deno.serve(async (req) => {
     const { action, moodleUrl, username, password, token, userId, courseId, service, selectedCourseIds } = await req.json();
 
     console.log(`Moodle API action: ${action}`);
+
+    // Validate action
+    if (!validateString(action, 64)) {
+      return validationError('Invalid or missing action');
+    }
+
+    // Validate moodleUrl when provided
+    if (moodleUrl !== undefined && !validateMoodleUrl(moodleUrl)) {
+      return validationError('Invalid Moodle URL format. Must be a valid HTTP/HTTPS URL.');
+    }
+
+    // Validate numeric IDs when provided
+    if (userId !== undefined && !validatePositiveInteger(userId)) {
+      return validationError('Invalid userId. Must be a positive integer.');
+    }
+    if (courseId !== undefined && !validatePositiveInteger(courseId)) {
+      return validationError('Invalid courseId. Must be a positive integer.');
+    }
+
+    // Validate string params when provided
+    if (username !== undefined && !validateString(username, 255)) {
+      return validationError('Invalid username.');
+    }
+    if (password !== undefined && !validateString(password, 1024)) {
+      return validationError('Invalid password.');
+    }
+    if (token !== undefined && !validateString(token, 512)) {
+      return validationError('Invalid token.');
+    }
+    if (service !== undefined && !validateString(service, 128)) {
+      return validationError('Invalid service name.');
+    }
+
+    // Validate selectedCourseIds when provided
+    if (selectedCourseIds !== undefined && !validateStringArray(selectedCourseIds)) {
+      return validationError('Invalid selectedCourseIds. Must be an array of strings.');
+    }
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
