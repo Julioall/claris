@@ -105,14 +105,6 @@ export default function MyCourses() {
               : 'Adicione cursos a partir do catálogo de Escolas'
             }
           </p>
-          {!searchQuery && (
-            <Button asChild className="mt-4">
-              <Link to="/escolas">
-                <Building2 className="h-4 w-4 mr-2" />
-                Explorar Catálogo
-              </Link>
-            </Button>
-          )}
         </div>
       )}
     </div>
