@@ -1,30 +1,22 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Loader2, Eye, EyeOff, Settings, Key } from 'lucide-react';
+import { GraduationCap, Loader2, Eye, EyeOff, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, loginWithToken, isLoading } = useAuth();
+  const { login, isLoading } = useAuth();
   
-  // Credential login state
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [moodleUrl, setMoodleUrl] = useState('https://ead.fieg.com.br');
   const [serviceName, setServiceName] = useState('moodle_mobile_app');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  
-  // Token login state
-  const [tokenMoodleUrl, setTokenMoodleUrl] = useState('https://ead.fieg.com.br');
-  const [moodleToken, setMoodleToken] = useState('');
-  const [showToken, setShowToken] = useState(false);
-  
   const [error, setError] = useState('');
 
   const handleCredentialLogin = async (e: React.FormEvent) => {
@@ -42,20 +34,6 @@ export default function Login() {
     }
   };
 
-  const handleTokenLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (!moodleToken) {
-      setError('Informe o token de acesso');
-      return;
-    }
-
-    const success = await loginWithToken(moodleToken, tokenMoodleUrl);
-    if (success) {
-      navigate('/');
-    }
-  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
@@ -80,14 +58,6 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="credentials" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="credentials">Usuário/Senha</TabsTrigger>
-                <TabsTrigger value="token">Token</TabsTrigger>
-              </TabsList>
-              
-              {/* Credential Login Tab */}
-              <TabsContent value="credentials">
                 <form onSubmit={handleCredentialLogin} className="space-y-4">
                   {/* Moodle URL */}
                   <div className="space-y-2">
@@ -197,82 +167,6 @@ export default function Login() {
                     )}
                   </Button>
                 </form>
-              </TabsContent>
-              
-              {/* Token Login Tab */}
-              <TabsContent value="token">
-                <form onSubmit={handleTokenLogin} className="space-y-4">
-                  {/* Moodle URL */}
-                  <div className="space-y-2">
-                    <Label htmlFor="tokenMoodleUrl">URL do Moodle</Label>
-                    <Input
-                      id="tokenMoodleUrl"
-                      type="url"
-                      placeholder="https://moodle.exemplo.com"
-                      value={tokenMoodleUrl}
-                      onChange={(e) => setTokenMoodleUrl(e.target.value)}
-                      className="bg-muted/50"
-                    />
-                  </div>
-
-                  {/* Token */}
-                  <div className="space-y-2">
-                    <Label htmlFor="moodleToken">Token de Acesso</Label>
-                    <div className="relative">
-                      <Input
-                        id="moodleToken"
-                        type={showToken ? 'text' : 'password'}
-                        placeholder="Cole seu token aqui"
-                        value={moodleToken}
-                        onChange={(e) => setMoodleToken(e.target.value)}
-                        className="bg-muted/50 pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                        onClick={() => setShowToken(!showToken)}
-                      >
-                        {showToken ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Obtenha o token em: Moodle → Preferências → Chaves de segurança
-                    </p>
-                  </div>
-
-                  {/* Error message */}
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
-
-                  {/* Submit button */}
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    size="lg"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Validando...
-                      </>
-                    ) : (
-                      <>
-                        <Key className="mr-2 h-4 w-4" />
-                        Entrar com Token
-                      </>
-                    )}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
           </CardContent>
         </Card>
 
