@@ -64,21 +64,29 @@ export function useStudentsData(courseId?: string) {
       }
 
       // Deduplicate students (same student can be in multiple courses)
-      const uniqueStudentsMap = new Map<string, { student: any; enrollment_status: string | null }>();
+      // For enrollment status: if student is active in ANY course, show as active
+      // Only show as suspended if suspended in ALL courses
+      const uniqueStudentsMap = new Map<string, { student: any; statuses: Set<string> }>();
       studentCourses.forEach(sc => {
         if (sc.students) {
           const studentId = (sc.students as any).id;
-          // Keep the first (or most relevant) enrollment status
           if (!uniqueStudentsMap.has(studentId)) {
             uniqueStudentsMap.set(studentId, { 
               student: sc.students, 
-              enrollment_status: sc.enrollment_status 
+              statuses: new Set([sc.enrollment_status || 'ativo'])
             });
+          } else {
+            uniqueStudentsMap.get(studentId)!.statuses.add(sc.enrollment_status || 'ativo');
           }
         }
       });
 
-      const uniqueStudentEntries = Array.from(uniqueStudentsMap.values());
+      const uniqueStudentEntries = Array.from(uniqueStudentsMap.values()).map(entry => ({
+        student: entry.student,
+        enrollment_status: entry.statuses.has('ativo') ? 'ativo' : 
+                          entry.statuses.has('concluido') ? 'concluido' :
+                          entry.statuses.has('inativo') ? 'inativo' : 'suspenso',
+      }));
 
       // Get stats for each student
       const studentsWithStats: StudentWithStats[] = await Promise.all(

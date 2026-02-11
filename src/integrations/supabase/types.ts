@@ -514,6 +514,7 @@ export type Database = {
           created_at: string | null
           enrollment_status: string | null
           id: string
+          last_access: string | null
           last_sync: string | null
           student_id: string
         }
@@ -522,6 +523,7 @@ export type Database = {
           created_at?: string | null
           enrollment_status?: string | null
           id?: string
+          last_access?: string | null
           last_sync?: string | null
           student_id: string
         }
@@ -530,6 +532,7 @@ export type Database = {
           created_at?: string | null
           enrollment_status?: string | null
           id?: string
+          last_access?: string | null
           last_sync?: string | null
           student_id?: string
         }
