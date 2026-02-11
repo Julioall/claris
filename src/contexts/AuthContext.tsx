@@ -71,15 +71,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setMoodleSession(null);
         setLastSync(null);
         setCourses([]);
-        localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(STORAGE_KEY);
         setIsLoading(false);
         return;
       }
 
       if (session?.user) {
-        // Load moodle session from localStorage
+        // Load moodle session from sessionStorage
         try {
-          const stored = localStorage.getItem(STORAGE_KEY);
+          const stored = sessionStorage.getItem(STORAGE_KEY);
           if (stored) {
             const parsed = JSON.parse(stored);
             if (parsed.user) setUser(parsed.user);
@@ -97,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         try {
-          const stored = localStorage.getItem(STORAGE_KEY);
+          const stored = sessionStorage.getItem(STORAGE_KEY);
           if (stored) {
             const parsed = JSON.parse(stored);
             if (parsed.user) setUser(parsed.user);
@@ -114,15 +114,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Save moodle session data to localStorage (not auth - that's handled by Supabase)
+  // Save moodle session data to sessionStorage (cleared when browser closes)
   const saveSession = useCallback((newUser: User | null, newMoodleSession: MoodleSession | null) => {
     if (newUser && newMoodleSession) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         user: newUser,
         moodleSession: newMoodleSession,
       }));
     } else {
-      localStorage.removeItem(STORAGE_KEY);
+      sessionStorage.removeItem(STORAGE_KEY);
     }
   }, []);
 
@@ -226,7 +226,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setMoodleSession(null);
     setCourses([]);
     setLastSync(null);
-    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
     toast({
       title: "Logout realizado",
       description: "Você foi desconectado com sucesso.",
@@ -239,7 +239,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (!sessionToUse || !userToUse) {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = sessionStorage.getItem(STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
           sessionToUse = parsed.moodleSession;
@@ -315,7 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     
     if (!sessionToUse || !userToUse) {
       try {
-        const stored = localStorage.getItem(STORAGE_KEY);
+        const stored = sessionStorage.getItem(STORAGE_KEY);
         if (stored) {
           const parsed = JSON.parse(stored);
           sessionToUse = parsed.moodleSession;
