@@ -12,7 +12,7 @@ export function TopBar() {
   const {
     syncData,
     lastSync,
-    isLoading,
+    isSyncing,
     isEditMode,
     setIsEditMode
   } = useAuth();
@@ -45,8 +45,8 @@ export function TopBar() {
         </div>
 
         {/* Sync button */}
-        <Button variant="outline" size="sm" onClick={handleSync} disabled={isLoading} className="gap-2">
-          <RefreshCw className={cn("h-4 w-4", isLoading && "animate-spin")} />
+        <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="gap-2">
+          <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
           <span className="hidden sm:inline">Sincronizar</span>
         </Button>
 

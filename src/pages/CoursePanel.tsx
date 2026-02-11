@@ -2,7 +2,6 @@ import { useParams, Link } from 'react-router-dom';
 import { useState } from 'react';
 import { 
   ArrowLeft, 
-  RefreshCw, 
   Users, 
   ClipboardList, 
   AlertTriangle,
@@ -32,7 +31,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 
 export default function CoursePanel() {
   const { id } = useParams<{ id: string }>();
-  const { course, students, activities, stats, isLoading, error, syncCourse, isSyncing, refetch, toggleActivityVisibility } = useCoursePanel(id);
+  const { course, students, activities, stats, isLoading, error, toggleActivityVisibility } = useCoursePanel(id);
   const { isEditMode } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -97,10 +96,6 @@ export default function CoursePanel() {
             <span>Última sincronização:</span>
             <span className="font-medium ml-1">{formatDateTime(course.last_sync)}</span>
           </div>
-          <Button onClick={syncCourse} disabled={isSyncing}>
-            <RefreshCw className={cn("h-4 w-4 mr-2", isSyncing && "animate-spin")} />
-            {isSyncing ? 'Sincronizando...' : 'Sincronizar curso'}
-          </Button>
         </div>
       </div>
 
@@ -249,7 +244,7 @@ export default function CoursePanel() {
                 <div className="flex flex-col items-center justify-center py-12">
                   <Users className="h-12 w-12 text-muted-foreground/50 mb-4" />
                   <h3 className="text-lg font-medium">Nenhum aluno encontrado</h3>
-                  <p className="text-muted-foreground text-sm">Sincronize o curso para carregar os alunos.</p>
+                  <p className="text-muted-foreground text-sm">Use o botao de sincronizacao da barra superior para carregar os alunos.</p>
                 </div>
               ) : (
                 <div className="divide-y">
@@ -297,7 +292,7 @@ export default function CoursePanel() {
                 <div className="flex flex-col items-center justify-center py-12">
                   <ClipboardList className="h-12 w-12 text-muted-foreground/50 mb-4" />
                   <h3 className="text-lg font-medium">Nenhuma atividade encontrada</h3>
-                  <p className="text-muted-foreground text-sm">Sincronize o curso para carregar as atividades.</p>
+                  <p className="text-muted-foreground text-sm">Use o botao de sincronizacao da barra superior para carregar as atividades.</p>
                 </div>
               ) : (
                 <div className="divide-y">

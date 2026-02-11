@@ -1,10 +1,8 @@
 import { 
   Building2, 
   Search,
-  RefreshCw,
   Loader2
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAllCoursesData } from '@/hooks/useAllCoursesData';
 import { useState } from 'react';
@@ -14,7 +12,7 @@ import { SchoolHierarchy } from '@/components/schools/SchoolHierarchy';
 export default function Schools() {
   const [searchQuery, setSearchQuery] = useState('');
   const { courses, isLoading, error, toggleFollow, toggleIgnore, toggleIgnoreMultiple } = useAllCoursesData();
-  const { isLoading: isSyncing, setShowCourseSelector, isEditMode } = useAuth();
+  const { isEditMode } = useAuth();
 
   const filteredCourses = courses.filter(course =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -42,17 +40,6 @@ export default function Schools() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Sync button */}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setShowCourseSelector(true)}
-            disabled={isSyncing}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-            Sincronizar
-          </Button>
-
           {/* Search */}
           <div className="relative w-full md:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -87,15 +74,9 @@ export default function Schools() {
           <p className="text-muted-foreground text-sm mt-1">
             {searchQuery 
               ? 'Tente uma busca diferente'
-              : 'Sincronize com o Moodle para carregar os cursos'
+              : 'Use o botão de sincronização na barra superior para carregar os cursos'
             }
           </p>
-          {!searchQuery && (
-            <Button onClick={() => setShowCourseSelector(true)} className="mt-4" disabled={isSyncing}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-              Sincronizar agora
-            </Button>
-          )}
         </div>
       )}
     </div>

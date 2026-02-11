@@ -673,28 +673,43 @@ export type Database = {
       user_sync_preferences: {
         Row: {
           created_at: string
+          enabled_temperatures: Json
+          entity_last_sync: Json
+          entity_temperatures: Json
           id: string
           include_empty_courses: boolean
           include_finished: boolean
+          sync_interval_hours: Json
           selected_keys: string[]
+          sync_interval_days: Json
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
+          enabled_temperatures?: Json
+          entity_last_sync?: Json
+          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
+          sync_interval_hours?: Json
           selected_keys?: string[]
+          sync_interval_days?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
+          enabled_temperatures?: Json
+          entity_last_sync?: Json
+          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
+          sync_interval_hours?: Json
           selected_keys?: string[]
+          sync_interval_days?: Json
           updated_at?: string
           user_id?: string
         }

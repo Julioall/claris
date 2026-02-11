@@ -126,7 +126,7 @@ export interface ActivityFeedItem {
   event_type: string;
   title: string;
   description?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   created_at: string;
   // Relations
   student?: Student;
@@ -159,6 +159,7 @@ export interface PriorityItem {
 export interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  isSyncing: boolean;
   isAuthenticated: boolean;
   login: (username: string, password: string, moodleUrl: string, service?: string) => Promise<boolean>;
   logout: () => void;

@@ -8,7 +8,6 @@ import {
   Clock,
   ClipboardList,
   Loader2,
-  RefreshCw,
   UserCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -31,8 +30,6 @@ import {
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { useStudentsData } from '@/hooks/useStudentsData';
 import { useCoursesData } from '@/hooks/useCoursesData';
-import { useAuth } from '@/contexts/AuthContext';
-import { RiskLevel } from '@/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -63,11 +60,10 @@ export default function Students() {
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   
-  const { students, isLoading, error, refetch } = useStudentsData(
+  const { students, isLoading, error } = useStudentsData(
     courseFilter !== 'all' ? courseFilter : undefined
   );
   const { courses } = useCoursesData();
-  const { syncData, isLoading: isSyncing } = useAuth();
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -91,11 +87,6 @@ export default function Students() {
     return format(new Date(date), "dd/MM", { locale: ptBR });
   };
 
-  const handleSync = async () => {
-    await syncData();
-    refetch();
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -115,15 +106,6 @@ export default function Students() {
           </p>
         </div>
 
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={handleSync}
-          disabled={isSyncing}
-        >
-          <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-          Sincronizar
-        </Button>
       </div>
 
       {error && (
@@ -272,15 +254,9 @@ export default function Students() {
             <p className="text-muted-foreground text-sm mt-1">
               {searchQuery || riskFilter !== 'all' 
                 ? 'Tente ajustar os filtros de busca'
-                : 'Sincronize com o Moodle para carregar seus alunos'
+                : 'Use o botão de sincronização na barra superior para carregar seus alunos'
               }
             </p>
-            {!searchQuery && riskFilter === 'all' && (
-              <Button onClick={handleSync} className="mt-4" disabled={isSyncing}>
-                <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? 'animate-spin' : ''}`} />
-                Sincronizar agora
-              </Button>
-            )}
           </div>
         )}
       </div>
