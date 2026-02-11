@@ -319,7 +319,7 @@ export function CourseSelectorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <RefreshCw className="h-5 w-5" />
@@ -327,7 +327,7 @@ export function CourseSelectorDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-2 overflow-y-auto pr-1">
           {/* Stats */}
           <div className="flex items-start gap-2 p-3 rounded-lg bg-muted/50 text-sm">
             <AlertCircle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
@@ -478,10 +478,10 @@ export function CourseSelectorDialog({
           </ScrollArea>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <div className="flex items-center gap-2 mr-auto text-xs text-muted-foreground">
+        <DialogFooter className="gap-2 sm:gap-0 flex-wrap">
+          <div className="flex items-center gap-2 mr-auto text-xs text-muted-foreground min-w-0">
             {selectedCourseIds.length > 0 && (
-              <span>{selectedCourseIds.length} curso{selectedCourseIds.length !== 1 ? 's' : ''} selecionado{selectedCourseIds.length !== 1 ? 's' : ''}</span>
+              <span className="truncate">{selectedCourseIds.length} curso{selectedCourseIds.length !== 1 ? 's' : ''} selecionado{selectedCourseIds.length !== 1 ? 's' : ''}</span>
             )}
           </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

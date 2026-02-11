@@ -12,11 +12,63 @@ interface CourseWithStats extends Course {
   student_ids: string[];
 }
 
+type StudentCourseRiskRow = {
+  students: {
+    current_risk_level: string;
+  } | null;
+};
+
 export function useAllCoursesData() {
   const { user } = useAuth();
   const [courses, setCourses] = useState<CourseWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const setCourseAssociationRole = useCallback(async (courseId: string, role: 'tutor' | 'viewer') => {
+    if (!user) return;
+
+    const { error: deleteError } = await supabase
+      .from('user_courses')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('course_id', courseId);
+
+    if (deleteError) throw deleteError;
+
+    const { error: insertError } = await supabase
+      .from('user_courses')
+      .insert({
+        user_id: user.id,
+        course_id: courseId,
+        role,
+      });
+
+    if (insertError) throw insertError;
+  }, [user]);
+
+  const setCoursesAssociationRole = useCallback(async (courseIds: string[], role: 'tutor' | 'viewer') => {
+    if (!user || courseIds.length === 0) return;
+
+    const { error: deleteError } = await supabase
+      .from('user_courses')
+      .delete()
+      .eq('user_id', user.id)
+      .in('course_id', courseIds);
+
+    if (deleteError) throw deleteError;
+
+    const { error: insertError } = await supabase
+      .from('user_courses')
+      .insert(
+        courseIds.map(course_id => ({
+          user_id: user.id,
+          course_id,
+          role,
+        }))
+      );
+
+    if (insertError) throw insertError;
+  }, [user]);
 
   const fetchCourses = useCallback(async () => {
     if (!user) {
@@ -29,7 +81,7 @@ export function useAllCoursesData() {
     setError(null);
 
     try {
-      // Get courses where user is a tutor
+      // Get courses followed by the user (used only to mark is_following)
       const { data: userCourses, error: userCoursesError } = await supabase
         .from('user_courses')
         .select('course_id, role')
@@ -37,28 +89,16 @@ export function useAllCoursesData() {
 
       if (userCoursesError) throw userCoursesError;
 
-      if (!userCourses || userCourses.length === 0) {
-        setCourses([]);
-        setIsLoading(false);
-        return;
-      }
-
       // Get only the course IDs where user is tutor
-      const tutorCourseIds = userCourses
+      const tutorCourseIds = (userCourses || [])
         .filter(uc => uc.role === 'tutor')
         .map(uc => uc.course_id);
 
-      if (tutorCourseIds.length === 0) {
-        setCourses([]);
-        setIsLoading(false);
-        return;
-      }
-
-      // Get course details only for courses where user is tutor
+      // Catalog should always come from all synced courses,
+      // not only from followed courses.
       const { data: allCourses, error: coursesError } = await supabase
         .from('courses')
         .select('*')
-        .in('id', tutorCourseIds)
         .order('name');
 
       if (coursesError) throw coursesError;
@@ -100,7 +140,10 @@ export function useAllCoursesData() {
             .eq('course_id', course.id);
 
           const atRiskCount = atRiskData?.filter(
-            sc => sc.students && ['risco', 'critico'].includes((sc.students as any).current_risk_level)
+            sc => {
+              const row = sc as StudentCourseRiskRow;
+              return row.students && ['risco', 'critico'].includes(row.students.current_risk_level);
+            }
           ).length || 0;
 
           // Count pending tasks
@@ -139,21 +182,10 @@ export function useAllCoursesData() {
 
     try {
       if (course.is_following) {
-        // Remove from user_courses
-        await supabase
-          .from('user_courses')
-          .delete()
-          .eq('user_id', user.id)
-          .eq('course_id', courseId);
+        // RLS-safe role switch.
+        await setCourseAssociationRole(courseId, 'viewer');
       } else {
-        // Add to user_courses
-        await supabase
-          .from('user_courses')
-          .insert({
-            user_id: user.id,
-            course_id: courseId,
-            role: 'tutor'
-          });
+        await setCourseAssociationRole(courseId, 'tutor');
       }
 
       // Update local state
@@ -166,7 +198,7 @@ export function useAllCoursesData() {
       console.error('Error toggling follow:', err);
       throw err;
     }
-  }, [user, courses]);
+  }, [courses, setCourseAssociationRole, user]);
 
   const toggleIgnore = useCallback(async (courseId: string) => {
     if (!user) return;
@@ -251,11 +283,7 @@ export function useAllCoursesData() {
     if (!user || courseIds.length === 0) return;
 
     try {
-      await supabase
-        .from('user_courses')
-        .delete()
-        .eq('user_id', user.id)
-        .in('course_id', courseIds);
+      await setCoursesAssociationRole(courseIds, 'viewer');
 
       // Update local state
       setCourses(prev => prev.map(c => 
@@ -267,7 +295,7 @@ export function useAllCoursesData() {
       console.error('Error unfollowing multiple:', err);
       throw err;
     }
-  }, [user, courses]);
+  }, [setCoursesAssociationRole, user]);
 
   useEffect(() => {
     fetchCourses();
