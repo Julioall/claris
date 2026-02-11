@@ -1,4 +1,4 @@
-project_id = "untfmrzswzjandjloqgy"
+project_id = "local"
 
 [analytics]
 enabled = false
@@ -32,8 +32,13 @@ file_size_limit = "50MiB"
 
 [auth]
 enabled = true
-site_url = "http://127.0.0.1:3000"
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+site_url = "http://127.0.0.1:8080"
+additional_redirect_urls = [
+  "http://localhost:8080",
+  "http://127.0.0.1:8080",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+]
 jwt_expiry = 3600
 enable_signup = true
 

@@ -30,15 +30,16 @@
  
  **Guia Tutor** é uma aplicação web para tutores e monitores acompanharem alunos de cursos no Moodle. Os dados de cursos/alunos vêm do Moodle via API; todos os registros de acompanhamento (ações, notas, pendências, risco) são persistidos no Supabase.
  
- ### Como rodar local (5 comandos)
- 
- ```bash
- git clone <repo>
- cd <repo>
- npm install
- cp .env.example .env  # Ajustar variáveis se necessário
- npm run dev           # http://localhost:8080
- ```
+ ### Como rodar local (1 comando)
+
+```bash
+docker compose up --build -d
+```
+
+Endpoints:
+- Frontend: `http://localhost:8080`
+- Supabase API: `http://127.0.0.1:54321`
+- Supabase Studio: `http://127.0.0.1:54323`
  
  ### Onde ficam as coisas
  
@@ -121,26 +122,30 @@
  
  ## 2. Como Subir Localmente
  
- ### 2.1 Pré-requisitos
- 
- - **Node.js**: >= 18.x
- - **npm** ou **bun**: qualquer um
- - **Supabase CLI** (opcional): para rodar Edge Functions localmente
- - **Conta Supabase**: não necessária (projeto já conectado via Lovable Cloud)
- 
- ### 2.2 Variáveis de Ambiente
- 
- O arquivo `.env` é **gerado automaticamente** pelo Lovable e contém:
- 
- ```env
- VITE_SUPABASE_PROJECT_ID="untfmrzswzjandjloqgy"
- VITE_SUPABASE_PUBLISHABLE_KEY="eyJ..."
- VITE_SUPABASE_URL="https://untfmrzswzjandjloqgy.supabase.co"
- ```
- 
- **IMPORTANTE**: Nunca commitar `.env` com dados sensíveis. O projeto Lovable gerencia isso automaticamente.
- 
- ### 2.3 Setup do Frontend
+ ### 2.1 Pre-requisitos
+
+Fluxo recomendado (Docker-only):
+- **Docker Desktop** com Docker Compose
+
+Fluxo alternativo (sem Docker, apenas frontend):
+- **Node.js**: >= 18.x
+- **npm** ou **bun**
+
+**Supabase CLI** local nao e obrigatorio para o fluxo padrao.
+
+### 2.2 Variaveis de Ambiente
+
+O `.env` do Lovable pode permanecer no repositorio, mas **nao e usado pelo Docker Compose local**.
+
+No modo Docker, as variaveis necessarias ja estao no `docker-compose.yml`:
+
+```env
+VITE_SUPABASE_PROJECT_ID=local
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+VITE_SUPABASE_URL=http://127.0.0.1:54321
+```
+
+### 2.3 Setup do Frontend
  
  ```bash
  # 1. Instalar dependências
@@ -160,30 +165,22 @@
  **Alias `@/`**: Configurado em `vite.config.ts` linha 16-18 e `tsconfig.app.json`. Aponta para `./src/`.
  
  ### 2.4 Setup do Supabase (Local)
- 
- Para rodar Edge Functions localmente:
- 
- ```bash
- # 1. Instalar Supabase CLI
- npm install -g supabase
- 
- # 2. Login
- supabase login
- 
- # 3. Link ao projeto
- supabase link --project-ref untfmrzswzjandjloqgy
- 
- # 4. Rodar Edge Functions localmente
- supabase functions serve moodle-api --env-file .env.local
- ```
- 
- **Secrets locais**: Criar `.env.local` com:
- ```env
- SUPABASE_URL=https://untfmrzswzjandjloqgy.supabase.co
- SUPABASE_SERVICE_ROLE_KEY=<sua-service-role-key>
- ```
- 
- ### 2.5 Troubleshooting Comum
+
+O fluxo atual nao exige `supabase` CLI instalado na maquina.
+
+```bash
+docker compose up --build -d
+```
+
+O servico `supabase` do Compose executa `supabase start` internamente, aplica migrations em `supabase/migrations/` e sobe as Edge Functions em `supabase/functions/`.
+
+Para parar tudo:
+
+```bash
+docker compose down
+```
+
+### 2.5 Troubleshooting Comum
  
  | Problema | Causa | Solução |
  |----------|-------|---------|
@@ -830,7 +827,6 @@
  | Action | Payload | Retorno |
  |--------|---------|---------|
  | `login` | `{ moodleUrl, username, password, service? }` | `{ user, moodleToken, moodleUserId }` |
- | `login_with_token` | `{ moodleUrl, token }` | `{ user, moodleUserId }` |
  | `sync_courses` | `{ moodleUrl, token, userId }` | `{ courses: Course[] }` |
  | `sync_students` | `{ moodleUrl, token, courseId }` | `{ students: Student[] }` |
  | `sync_activities` | `{ moodleUrl, token, courseId }` | `{ activitiesCount }` |

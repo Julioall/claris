@@ -1,0 +1,18 @@
+FROM alpine:3.20
+
+ARG SUPABASE_CLI_VERSION=2.75.0
+
+RUN apk add --no-cache bash curl docker-cli tar
+
+RUN curl -fsSL "https://github.com/supabase/cli/releases/download/v${SUPABASE_CLI_VERSION}/supabase_linux_amd64.tar.gz" \
+  -o /tmp/supabase.tar.gz \
+  && tar -xzf /tmp/supabase.tar.gz -C /usr/local/bin supabase \
+  && chmod +x /usr/local/bin/supabase \
+  && rm -f /tmp/supabase.tar.gz
+
+WORKDIR /workspace
+
+COPY scripts/start-supabase.sh /usr/local/bin/start-supabase.sh
+RUN chmod +x /usr/local/bin/start-supabase.sh
+
+ENTRYPOINT ["/usr/local/bin/start-supabase.sh"]

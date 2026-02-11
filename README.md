@@ -1,73 +1,55 @@
-# Welcome to your Lovable project
+# Moodle Monitor
 
-## Project info
+Fluxo local padrao com Docker Compose para subir frontend + Supabase local.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Requisito
 
-## How can I edit this code?
+- Docker Desktop (com Docker Compose)
 
-There are several ways of editing your application.
+## Subir tudo
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```bash
+docker compose up --build -d
 ```
 
-**Edit a file directly in GitHub**
+Servicos esperados:
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+- Frontend: `http://127.0.0.1:8080`
+- Supabase API: `http://127.0.0.1:54321`
+- Supabase Studio: `http://127.0.0.1:54323`
+- Supabase Mailpit: `http://127.0.0.1:54324`
 
-**Use GitHub Codespaces**
+## O que acontece no boot
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+O container `supabase` executa automaticamente:
+- `supabase start` (stack local)
+- `supabase migration up --local --include-all` (migrations pendentes)
+- carregamento das Edge Functions locais em `supabase/functions/` (ex.: `moodle-api`)
 
-## What technologies are used for this project?
+## Validacao rapida
 
-This project is built with:
+1. Verificar status dos containers:
+```bash
+docker compose ps
+```
+2. Ver logs do runner Supabase:
+```bash
+docker compose logs -f supabase
+```
+3. Verificar function local (retorno esperado: HTTP 400 por falta de campos, provando que a function esta ativa):
+```bash
+curl -i -X POST http://127.0.0.1:54321/functions/v1/moodle-api \
+  -H "Content-Type: application/json" \
+  -d '{"action":"login"}'
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Parar tudo
 
-## How can I deploy this project?
+```bash
+docker compose down
+```
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+## Observacoes
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+- O `.env` do Lovable pode permanecer no repositorio; o Compose nao depende dele para subir local.
+- `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321`.

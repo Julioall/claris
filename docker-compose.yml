@@ -1,27 +1,43 @@
-version: '3.8'
-
 services:
+  supabase:
+    build:
+      context: .
+      dockerfile: Dockerfile.supabase-runner
+      args:
+        SUPABASE_CLI_VERSION: 2.75.0
+    container_name: moodle-monitor-supabase
+    network_mode: host
+    environment:
+      RUNNER_CONTAINER_NAME: moodle-monitor-supabase
+      SUPABASE_API_URL: http://127.0.0.1:54321
+    volumes:
+      - ./:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:54321/rest/v1/ > /dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
+    stop_grace_period: 2m
+    restart: unless-stopped
+
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     container_name: moodle-monitor-frontend
+    depends_on:
+      supabase:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
-      - VITE_SUPABASE_PROJECT_ID=${VITE_SUPABASE_PROJECT_ID:-local}
-      - VITE_SUPABASE_PUBLISHABLE_KEY=${VITE_SUPABASE_PUBLISHABLE_KEY:-sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH}
-      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-http://host.docker.internal:54321}
+      VITE_SUPABASE_PROJECT_ID: local
+      VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+      VITE_SUPABASE_URL: http://127.0.0.1:54321
     volumes:
       - ./src:/app/src:delegated
       - ./public:/app/public:delegated
       - ./index.html:/app/index.html:delegated
-      - /app/node_modules
-    networks:
-      - moodle-network
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-networks:
-  moodle-network:
-    driver: bridge
+    restart: unless-stopped
