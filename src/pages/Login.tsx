@@ -59,49 +59,6 @@ export default function Login() {
           </CardHeader>
           <CardContent>
                 <form onSubmit={handleCredentialLogin} className="space-y-4">
-                  {/* Moodle URL */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="moodleUrl">URL do Moodle</Label>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => setShowAdvanced(!showAdvanced)}
-                      >
-                        <Settings className="h-3 w-3 mr-1" />
-                        {showAdvanced ? 'Ocultar' : 'Avançado'}
-                      </Button>
-                    </div>
-                    <Input
-                      id="moodleUrl"
-                      type="url"
-                      placeholder="https://moodle.exemplo.com"
-                      value={moodleUrl}
-                      onChange={(e) => setMoodleUrl(e.target.value)}
-                      className="bg-muted/50"
-                    />
-                  </div>
-
-                  {/* Advanced: Service Name */}
-                  {showAdvanced && (
-                    <div className="space-y-2 animate-fade-in">
-                      <Label htmlFor="serviceName">Nome do Serviço Web</Label>
-                      <Input
-                        id="serviceName"
-                        type="text"
-                        placeholder="moodle_mobile_app"
-                        value={serviceName}
-                        onChange={(e) => setServiceName(e.target.value)}
-                        className="bg-muted/50"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Geralmente é "moodle_mobile_app". Consulte o administrador do Moodle se não funcionar.
-                      </p>
-                    </div>
-                  )}
-
                   {/* Username */}
                   <div className="space-y-2">
                     <Label htmlFor="username">Usuário</Label>
@@ -144,6 +101,53 @@ export default function Login() {
                       </Button>
                     </div>
                   </div>
+
+                  {/* Advanced settings toggle */}
+                  <div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      onClick={() => setShowAdvanced(!showAdvanced)}
+                    >
+                      <Settings className="h-3 w-3 mr-1" />
+                      {showAdvanced ? 'Ocultar configurações' : 'Configurações avançadas'}
+                    </Button>
+                  </div>
+
+                  {showAdvanced && (
+                    <div className="space-y-4 rounded-lg border border-border/50 bg-muted/30 p-3 animate-fade-in">
+                      {/* Moodle URL */}
+                      <div className="space-y-2">
+                        <Label htmlFor="moodleUrl">URL do Moodle</Label>
+                        <Input
+                          id="moodleUrl"
+                          type="url"
+                          placeholder="https://moodle.exemplo.com"
+                          value={moodleUrl}
+                          onChange={(e) => setMoodleUrl(e.target.value)}
+                          className="bg-background"
+                        />
+                      </div>
+
+                      {/* Service Name */}
+                      <div className="space-y-2">
+                        <Label htmlFor="serviceName">Nome do Serviço Web</Label>
+                        <Input
+                          id="serviceName"
+                          type="text"
+                          placeholder="moodle_mobile_app"
+                          value={serviceName}
+                          onChange={(e) => setServiceName(e.target.value)}
+                          className="bg-background"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Geralmente é "moodle_mobile_app". Consulte o administrador do Moodle se não funcionar.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Error message */}
                   {error && (
