@@ -51,9 +51,11 @@ interface MoodleEnrolledUser {
   email?: string;
   profileimageurl?: string;
   lastaccess?: number;
+  lastcourseaccess?: number; // Last access to this specific course
   roles?: { roleid: number; name: string; shortname: string }[];
   enrolledcourses?: { id: number; shortname: string; fullname: string; suspended?: boolean }[];
   suspended?: boolean; // User-level suspension
+  status?: number; // 0 = active, 1 = suspended (direct field from API)
   enrolments?: { 
     id: number; 
     courseid: number; 
@@ -192,6 +194,38 @@ async function getCourseEnrolledUsers(moodleUrl: string, token: string, courseId
   }
 }
 
+// --- Input Validation Helpers ---
+function validateMoodleUrl(url: unknown): url is string {
+  if (typeof url !== 'string' || url.length === 0 || url.length > 2048) return false;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+}
+
+function validatePositiveInteger(value: unknown): value is number {
+  if (value === undefined || value === null) return false;
+  const num = typeof value === 'number' ? value : parseInt(String(value), 10);
+  return !isNaN(num) && Number.isFinite(num) && num > 0 && num < Number.MAX_SAFE_INTEGER;
+}
+
+function validateString(value: unknown, maxLength = 1024): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= maxLength;
+}
+
+function validateStringArray(value: unknown, maxItems = 500): value is string[] {
+  return Array.isArray(value) && value.length <= maxItems && value.every(v => typeof v === 'string' && v.length > 0 && v.length <= 255);
+}
+
+function validationError(message: string) {
+  return new Response(
+    JSON.stringify({ error: message }),
+    { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -202,6 +236,43 @@ Deno.serve(async (req) => {
     const { action, moodleUrl, username, password, token, userId, courseId, service, selectedCourseIds } = await req.json();
 
     console.log(`Moodle API action: ${action}`);
+
+    // Validate action
+    if (!validateString(action, 64)) {
+      return validationError('Invalid or missing action');
+    }
+
+    // Validate moodleUrl when provided
+    if (moodleUrl !== undefined && !validateMoodleUrl(moodleUrl)) {
+      return validationError('Invalid Moodle URL format. Must be a valid HTTP/HTTPS URL.');
+    }
+
+    // Validate numeric IDs when provided
+    if (userId !== undefined && !validatePositiveInteger(userId)) {
+      return validationError('Invalid userId. Must be a positive integer.');
+    }
+    if (courseId !== undefined && !validatePositiveInteger(courseId)) {
+      return validationError('Invalid courseId. Must be a positive integer.');
+    }
+
+    // Validate string params when provided
+    if (username !== undefined && !validateString(username, 255)) {
+      return validationError('Invalid username.');
+    }
+    if (password !== undefined && !validateString(password, 1024)) {
+      return validationError('Invalid password.');
+    }
+    if (token !== undefined && !validateString(token, 512)) {
+      return validationError('Invalid token.');
+    }
+    if (service !== undefined && !validateString(service, 128)) {
+      return validationError('Invalid service name.');
+    }
+
+    // Validate selectedCourseIds when provided
+    if (selectedCourseIds !== undefined && !validateStringArray(selectedCourseIds)) {
+      return validationError('Invalid selectedCourseIds. Must be an array of strings.');
+    }
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -233,7 +304,11 @@ Deno.serve(async (req) => {
         // Get user info from Moodle
         const siteInfo = await getSiteInfo(moodleUrl, tokenResponse.token);
         
-        // Create or update user in Supabase
+        const authEmail = `moodle_${siteInfo.userid}@moodle.local`;
+        const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+        const anonClient = createClient(supabaseUrl, anonKey);
+
+        // Check if user exists in our users table
         const { data: existingUser } = await supabase
           .from('users')
           .select('*')
@@ -252,25 +327,84 @@ Deno.serve(async (req) => {
         };
 
         let user;
+        let session;
+
         if (existingUser) {
-          const { data, error } = await supabase
+          // Try to sign in to Supabase Auth
+          let signInResult = await anonClient.auth.signInWithPassword({
+            email: authEmail,
+            password: password,
+          });
+
+          if (signInResult.error) {
+            // Auth user might not exist yet (migrating existing user) or password changed
+            const createResult = await supabase.auth.admin.createUser({
+              id: existingUser.id,
+              email: authEmail,
+              password: password,
+              email_confirm: true,
+              user_metadata: { moodle_user_id: String(siteInfo.userid) }
+            });
+
+            if (createResult.error) {
+              // Auth user exists but password differs - update it
+              await supabase.auth.admin.updateUserById(existingUser.id, { password });
+            }
+
+            // Sign in again
+            signInResult = await anonClient.auth.signInWithPassword({
+              email: authEmail,
+              password: password,
+            });
+
+            if (signInResult.error) {
+              console.error('Failed to sign in after auth user setup:', signInResult.error);
+              throw new Error('Failed to create authentication session');
+            }
+          }
+
+          session = signInResult.data.session;
+
+          // Update user data
+          const { data: updatedUser, error: updateError } = await supabase
             .from('users')
             .update(userData)
             .eq('id', existingUser.id)
             .select()
             .single();
-          
-          if (error) throw error;
-          user = data;
+
+          if (updateError) throw updateError;
+          user = updatedUser;
         } else {
-          const { data, error } = await supabase
+          // Create new Supabase Auth user first
+          const { data: newAuthUser, error: createAuthError } = await supabase.auth.admin.createUser({
+            email: authEmail,
+            password: password,
+            email_confirm: true,
+            user_metadata: { moodle_user_id: String(siteInfo.userid) }
+          });
+
+          if (createAuthError) throw createAuthError;
+          const authUserId = newAuthUser.user.id;
+
+          // Create users record with the same ID as auth user
+          const { data: newUser, error: insertError } = await supabase
             .from('users')
-            .insert(userData)
+            .insert({ ...userData, id: authUserId })
             .select()
             .single();
-          
-          if (error) throw error;
-          user = data;
+
+          if (insertError) throw insertError;
+          user = newUser;
+
+          // Sign in to get session
+          const signInResult = await anonClient.auth.signInWithPassword({
+            email: authEmail,
+            password: password,
+          });
+
+          if (signInResult.error) throw signInResult.error;
+          session = signInResult.data.session;
         }
 
         return new Response(
@@ -278,87 +412,17 @@ Deno.serve(async (req) => {
             success: true, 
             user,
             moodleToken: tokenResponse.token,
-            moodleUserId: siteInfo.userid
+            moodleUserId: siteInfo.userid,
+            session: {
+              access_token: session.access_token,
+              refresh_token: session.refresh_token,
+            }
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      case 'login_with_token': {
-        if (!moodleUrl || !token) {
-          return new Response(
-            JSON.stringify({ error: 'Missing required fields: moodleUrl, token' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        try {
-          // Validate token by getting site info
-          const siteInfo = await getSiteInfo(moodleUrl, token);
-          
-          if (!siteInfo || !siteInfo.userid) {
-            return new Response(
-              JSON.stringify({ error: 'Token inválido ou expirado' }),
-              { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-
-          // Create or update user in Supabase
-          const { data: existingUser } = await supabase
-            .from('users')
-            .select('*')
-            .eq('moodle_user_id', String(siteInfo.userid))
-            .single();
-
-          const userData = {
-            moodle_user_id: String(siteInfo.userid),
-            moodle_username: siteInfo.username,
-            full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
-            email: siteInfo.email || null,
-            avatar_url: siteInfo.profileimageurl || null,
-            last_login: new Date().toISOString(),
-            last_sync: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-
-          let user;
-          if (existingUser) {
-            const { data, error } = await supabase
-              .from('users')
-              .update(userData)
-              .eq('id', existingUser.id)
-              .select()
-              .single();
-            
-            if (error) throw error;
-            user = data;
-          } else {
-            const { data, error } = await supabase
-              .from('users')
-              .insert(userData)
-              .select()
-              .single();
-            
-            if (error) throw error;
-            user = data;
-          }
-
-          return new Response(
-            JSON.stringify({ 
-              success: true, 
-              user,
-              moodleUserId: siteInfo.userid
-            }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        } catch (err) {
-          console.error('Token validation error:', err);
-          return new Response(
-            JSON.stringify({ error: err instanceof Error ? err.message : 'Token inválido ou expirado' }),
-            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      }
+      // login_with_token removed for security reasons
 
       case 'sync_courses': {
         if (!moodleUrl || !token || !userId) {
@@ -485,9 +549,19 @@ Deno.serve(async (req) => {
         
         console.log(`Found ${students.length} students in course ${courseId}`);
         
-        // Log sample student data to see available fields
+        // Log sample student data to see available fields for debugging suspension detection
         if (students.length > 0) {
-          console.log('Sample student data:', JSON.stringify(students[0], null, 2));
+          const sample = students[0];
+          console.log('Sample student fields:', JSON.stringify({
+            id: sample.id,
+            suspended: sample.suspended,
+            status: (sample as any).status,
+            lastaccess: sample.lastaccess,
+            lastcourseaccess: (sample as any).lastcourseaccess,
+            enrolments: sample.enrolments,
+            enrolledcourses: sample.enrolledcourses,
+            allKeys: Object.keys(sample),
+          }, null, 2));
         }
 
         if (students.length === 0) {
@@ -503,8 +577,13 @@ Deno.serve(async (req) => {
           // Determine enrollment status from various possible sources
           let enrollmentStatus = 'ativo';
           
+          // Check direct status field (some Moodle versions return this)
+          if ((student as any).status === 1) {
+            enrollmentStatus = 'suspenso';
+          }
+          
           // Check if user is suspended at user level
-          if (student.suspended) {
+          if (student.suspended === true) {
             enrollmentStatus = 'suspenso';
           }
           
@@ -524,6 +603,11 @@ Deno.serve(async (req) => {
             }
           }
           
+          // Get course-specific last access if available
+          const lastCourseAccess = (student as any).lastcourseaccess 
+            ? new Date((student as any).lastcourseaccess * 1000).toISOString() 
+            : null;
+          
           return {
             moodle_user_id: String(student.id),
             full_name: student.fullname || `${student.firstname} ${student.lastname}`,
@@ -532,11 +616,16 @@ Deno.serve(async (req) => {
             last_access: student.lastaccess ? new Date(student.lastaccess * 1000).toISOString() : null,
             updated_at: now,
             _enrollment_status: enrollmentStatus, // Temporary field for linking
+            _last_course_access: lastCourseAccess, // Temporary field for course link
           };
         });
+        
+        // Log suspension detection results
+        const suspendedCount = studentsData.filter(s => s._enrollment_status === 'suspenso').length;
+        console.log(`Enrollment status detection: ${suspendedCount} suspended out of ${studentsData.length} students`);
 
         // Batch upsert students
-        const studentsForUpsert = studentsData.map(({ _enrollment_status, ...rest }) => rest);
+        const studentsForUpsert = studentsData.map(({ _enrollment_status, _last_course_access, ...rest }) => rest);
         const { data: syncedStudents, error: upsertError } = await supabase
           .from('students')
           .upsert(studentsForUpsert, { 
@@ -557,17 +646,21 @@ Deno.serve(async (req) => {
 
         // Batch upsert student-course links
         if (syncedStudents && syncedStudents.length > 0) {
-          // Map synced students to their enrollment status
-          const studentStatusMap = new Map(
-            studentsData.map(s => [s.moodle_user_id, s._enrollment_status])
+          // Map synced students to their enrollment status and course access
+          const studentDataMap = new Map(
+            studentsData.map(s => [s.moodle_user_id, { 
+              status: s._enrollment_status, 
+              lastCourseAccess: s._last_course_access 
+            }])
           );
           
           const studentCourseLinks = syncedStudents.map(student => {
-            const enrollmentStatus = studentStatusMap.get(student.moodle_user_id) || 'ativo';
+            const data = studentDataMap.get(student.moodle_user_id);
             return {
               student_id: student.id,
               course_id: dbCourse.id,
-              enrollment_status: enrollmentStatus,
+              enrollment_status: data?.status || 'ativo',
+              last_access: data?.lastCourseAccess || null,
               last_sync: now
             };
           });

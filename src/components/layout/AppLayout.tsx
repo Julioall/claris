@@ -15,7 +15,7 @@ export function AppLayout() {
     syncSelectedCourses,
     showCourseSelector,
     setShowCourseSelector,
-    isLoading,
+    isSyncing,
   } = useAuth();
 
   if (!isAuthenticated) {
@@ -42,7 +42,7 @@ export function AppLayout() {
         onOpenChange={setShowCourseSelector}
         courses={courses}
         onSync={syncSelectedCourses}
-        isLoading={isLoading}
+        isLoading={isSyncing}
       />
       
       {/* Sync Progress Dialog */}

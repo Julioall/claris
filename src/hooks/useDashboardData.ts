@@ -58,11 +58,12 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         return;
       }
 
-      // Get students in courses
+      // Get students in courses (excluding suspended)
       const { data: studentCourses } = await supabase
         .from('student_courses')
-        .select('student_id')
-        .in('course_id', courseIds);
+        .select('student_id, enrollment_status')
+        .in('course_id', courseIds)
+        .neq('enrollment_status', 'suspenso');
 
       const studentIds = [...new Set(studentCourses?.map(sc => sc.student_id) || [])];
 
