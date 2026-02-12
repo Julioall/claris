@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function MyCourses() {
   const [searchQuery, setSearchQuery] = useState('');
   const { isEditMode } = useAuth();
-  const { courses, isLoading, error, toggleFollow, unfollowMultiple } = useAllCoursesData();
+  const { courses, isLoading, error, toggleFollow, unfollowMultiple, toggleAttendance, toggleAttendanceMultiple } = useAllCoursesData();
 
   // Filter only followed courses that are active (end_date is null or in the future)
   const followedCourses = useMemo(() => {
@@ -38,6 +38,14 @@ export default function MyCourses() {
 
   const handleUnfollowMultiple = (courseIds: string[]) => {
     unfollowMultiple(courseIds);
+  };
+
+  const handleToggleAttendance = (courseId: string) => {
+    toggleAttendance(courseId);
+  };
+
+  const handleToggleAttendanceMultiple = (courseIds: string[], shouldEnable: boolean) => {
+    toggleAttendanceMultiple(courseIds, shouldEnable);
   };
 
   if (isLoading) {
@@ -86,6 +94,8 @@ export default function MyCourses() {
           courses={filteredCourses}
           onUnfollow={isEditMode ? handleUnfollow : undefined}
           onUnfollowMultiple={isEditMode ? handleUnfollowMultiple : undefined}
+          onToggleAttendance={isEditMode ? handleToggleAttendance : undefined}
+          onToggleAttendanceMultiple={isEditMode ? handleToggleAttendanceMultiple : undefined}
         />
       ) : (
         <div className="text-center py-12">

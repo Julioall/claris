@@ -11,7 +11,7 @@ import { SchoolHierarchy } from '@/components/schools/SchoolHierarchy';
 
 export default function Schools() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { courses, isLoading, error, toggleFollow, toggleIgnore, toggleIgnoreMultiple } = useAllCoursesData();
+  const { courses, isLoading, error, toggleFollow, toggleIgnore, toggleIgnoreMultiple, toggleAttendance, toggleAttendanceMultiple } = useAllCoursesData();
   const { isEditMode } = useAuth();
 
   const filteredCourses = courses.filter(course =>
@@ -66,6 +66,8 @@ export default function Schools() {
           onToggleFollow={isEditMode ? toggleFollow : undefined}
           onToggleIgnore={isEditMode ? toggleIgnore : undefined}
           onToggleIgnoreMultiple={isEditMode ? toggleIgnoreMultiple : undefined}
+          onToggleAttendance={isEditMode ? toggleAttendance : undefined}
+          onToggleAttendanceMultiple={isEditMode ? toggleAttendanceMultiple : undefined}
         />
       ) : (
         <div className="text-center py-12">

@@ -9,6 +9,7 @@ interface CourseWithStats extends Course {
   pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
+  is_attendance_enabled: boolean;
   student_ids: string[];
 }
 
@@ -119,6 +120,15 @@ export function useAllCoursesData() {
 
       const ignoredCourseIds = new Set(ignoredCourses?.map(ic => ic.course_id) || []);
 
+      const { data: attendanceSettings, error: attendanceSettingsError } = await supabase
+        .from('attendance_course_settings')
+        .select('course_id')
+        .eq('user_id', user.id);
+
+      if (attendanceSettingsError) throw attendanceSettingsError;
+
+      const attendanceCourseIds = new Set((attendanceSettings || []).map((item) => item.course_id));
+
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
         allCourses.map(async (course) => {
@@ -161,6 +171,7 @@ export function useAllCoursesData() {
             pending_tasks_count: pendingTasksCount || 0,
             is_following: followedCourseIds.has(course.id),
             is_ignored: ignoredCourseIds.has(course.id),
+            is_attendance_enabled: attendanceCourseIds.has(course.id),
           } as CourseWithStats;
         })
       );
@@ -297,6 +308,80 @@ export function useAllCoursesData() {
     }
   }, [setCoursesAssociationRole, user]);
 
+  const toggleAttendance = useCallback(async (courseId: string) => {
+    if (!user) return;
+
+    const course = courses.find((c) => c.id === courseId);
+    if (!course) return;
+
+    try {
+      if (course.is_attendance_enabled) {
+        const { error } = await supabase
+          .from('attendance_course_settings')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('course_id', courseId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('attendance_course_settings')
+          .upsert(
+            {
+              user_id: user.id,
+              course_id: courseId,
+            },
+            { onConflict: 'user_id,course_id' },
+          );
+        if (error) throw error;
+      }
+
+      setCourses((prev) =>
+        prev.map((c) =>
+          c.id === courseId ? { ...c, is_attendance_enabled: !c.is_attendance_enabled } : c,
+        ),
+      );
+    } catch (err) {
+      console.error('Error toggling attendance:', err);
+      throw err;
+    }
+  }, [courses, user]);
+
+  const toggleAttendanceMultiple = useCallback(async (courseIds: string[], shouldEnable: boolean) => {
+    if (!user || courseIds.length === 0) return;
+
+    try {
+      if (shouldEnable) {
+        const payload = courseIds.map((course_id) => ({
+          user_id: user.id,
+          course_id,
+        }));
+
+        const { error } = await supabase
+          .from('attendance_course_settings')
+          .upsert(payload, { onConflict: 'user_id,course_id' });
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('attendance_course_settings')
+          .delete()
+          .eq('user_id', user.id)
+          .in('course_id', courseIds);
+
+        if (error) throw error;
+      }
+
+      setCourses((prev) =>
+        prev.map((c) =>
+          courseIds.includes(c.id) ? { ...c, is_attendance_enabled: shouldEnable } : c,
+        ),
+      );
+    } catch (err) {
+      console.error('Error toggling attendance multiple:', err);
+      throw err;
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchCourses();
   }, [fetchCourses]);
@@ -307,8 +392,10 @@ export function useAllCoursesData() {
     error, 
     refetch: fetchCourses, 
     toggleFollow, 
-    toggleIgnore, 
+    toggleIgnore,
     toggleIgnoreMultiple,
-    unfollowMultiple 
+    unfollowMultiple,
+    toggleAttendance,
+    toggleAttendanceMultiple,
   };
 }

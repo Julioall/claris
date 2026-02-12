@@ -5,7 +5,8 @@ import {
   ClipboardList, 
   Calendar,
   Clock,
-  StarOff
+  StarOff,
+  CalendarCheck2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,14 +26,16 @@ interface CourseWithStats {
   students_count: number;
   at_risk_count: number;
   pending_tasks_count: number;
+  is_attendance_enabled?: boolean;
 }
 
 interface MyCourseCardProps {
   course: CourseWithStats;
   onUnfollow?: (courseId: string) => void;
+  onToggleAttendance?: (courseId: string) => void;
 }
 
-export function MyCourseCard({ course, onUnfollow }: MyCourseCardProps) {
+export function MyCourseCard({ course, onUnfollow, onToggleAttendance }: MyCourseCardProps) {
   const formatDate = (date: string | undefined) => {
     if (!date) return '-';
     return format(new Date(date), "dd/MM/yyyy", { locale: ptBR });
@@ -49,6 +52,18 @@ export function MyCourseCard({ course, onUnfollow }: MyCourseCardProps) {
     if (onUnfollow) {
       onUnfollow(course.id);
       toast.success('Curso removido de Meus Cursos');
+    }
+  };
+
+  const handleToggleAttendance = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onToggleAttendance) return;
+    onToggleAttendance(course.id);
+    if (course.is_attendance_enabled) {
+      toast.success('Presenca desativada para o curso');
+    } else {
+      toast.success('Presenca ativada para o curso');
     }
   };
 
@@ -73,6 +88,17 @@ export function MyCourseCard({ course, onUnfollow }: MyCourseCardProps) {
                       title="Remover de Meus Cursos"
                     >
                       <StarOff className="h-4 w-4" />
+                    </Button>
+                  )}
+                  {onToggleAttendance && (
+                    <Button
+                      variant={course.is_attendance_enabled ? "default" : "ghost"}
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={handleToggleAttendance}
+                      title={course.is_attendance_enabled ? "Desativar presenca" : "Ativar presenca"}
+                    >
+                      <CalendarCheck2 className="h-4 w-4" />
                     </Button>
                   )}
                 </div>

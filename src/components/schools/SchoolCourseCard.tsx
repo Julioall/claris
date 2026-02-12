@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Users, AlertTriangle, ClipboardList, Star, StarOff, EyeOff, Eye } from 'lucide-react';
+import { Users, AlertTriangle, ClipboardList, Star, StarOff, EyeOff, Eye, CalendarCheck2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
@@ -19,15 +19,17 @@ interface CourseWithStats {
   pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
+  is_attendance_enabled: boolean;
 }
 
 interface SchoolCourseCardProps {
   course: CourseWithStats;
   onToggleFollow?: (courseId: string) => void;
   onToggleIgnore?: (courseId: string) => void;
+  onToggleAttendance?: (courseId: string) => void;
 }
 
-export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: SchoolCourseCardProps) {
+export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore, onToggleAttendance }: SchoolCourseCardProps) {
   const isExpired = course.end_date && new Date(course.end_date) < new Date();
 
   const handleToggleFollow = (e: React.MouseEvent) => {
@@ -54,7 +56,19 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
     }
   };
 
-  const isEditMode = !!onToggleFollow || !!onToggleIgnore;
+  const handleToggleAttendance = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!onToggleAttendance) return;
+    onToggleAttendance(course.id);
+    if (course.is_attendance_enabled) {
+      toast.success('Presenca desativada para este curso');
+    } else {
+      toast.success('Presenca ativada para este curso');
+    }
+  };
+
+  const isEditMode = !!onToggleFollow || !!onToggleIgnore || !!onToggleAttendance;
 
   return (
     <Card className={`hover:shadow-md transition-shadow ${isExpired ? 'opacity-60' : ''} ${course.is_ignored ? 'bg-muted/50' : ''}`}>
@@ -100,6 +114,17 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
                     )}
                   </Button>
                 )}
+                {onToggleAttendance && (
+                  <Button
+                    variant={course.is_attendance_enabled ? "default" : "outline"}
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={handleToggleAttendance}
+                    title={course.is_attendance_enabled ? "Desativar controle de presenca" : "Ativar controle de presenca"}
+                  >
+                    <CalendarCheck2 className="h-4 w-4" />
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -127,6 +152,12 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore }: Sch
             <span className="flex items-center gap-1 text-muted-foreground/70 ml-auto">
               <EyeOff className="h-3.5 w-3.5" />
               Ignorado
+            </span>
+          )}
+          {course.is_attendance_enabled && (
+            <span className="flex items-center gap-1 text-primary">
+              <CalendarCheck2 className="h-3.5 w-3.5" />
+              Presenca
             </span>
           )}
         </div>
