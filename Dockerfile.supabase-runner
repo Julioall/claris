@@ -13,6 +13,7 @@ RUN curl -fsSL "https://github.com/supabase/cli/releases/download/v${SUPABASE_CL
 WORKDIR /workspace
 
 COPY scripts/start-supabase.sh /usr/local/bin/start-supabase.sh
-RUN chmod +x /usr/local/bin/start-supabase.sh
+RUN sed -i 's/\r$//' /usr/local/bin/start-supabase.sh \
+  && chmod +x /usr/local/bin/start-supabase.sh
 
 ENTRYPOINT ["/usr/local/bin/start-supabase.sh"]

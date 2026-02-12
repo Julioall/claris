@@ -135,6 +135,29 @@ async function parseFunctionsError(err: unknown): Promise<{ status?: number; mes
   }
 }
 
+function stripHtml(value: string): string {
+  return value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function resolveLoginErrorMessage(rawError?: unknown, rawErrorCode?: unknown): string {
+  const error = typeof rawError === 'string' ? stripHtml(rawError) : '';
+  const errorCode = typeof rawErrorCode === 'string' ? rawErrorCode : '';
+
+  switch (errorCode) {
+    case 'invalidlogin':
+      return 'Usuario ou senha invalidos.';
+    case 'dbconnectionfailed':
+      return 'Moodle indisponivel: falha de conexao com o banco de dados do servidor Moodle.';
+    case 'service_unavailable':
+      return 'Servico web indisponivel neste Moodle. Verifique a configuracao do web service.';
+    default:
+      return error || (errorCode ? `Erro de autenticacao (${errorCode}).` : 'Nao foi possivel autenticar no Moodle.');
+  }
+}
+
 async function loadStoredSession(): Promise<StoredSession | null> {
   try {
     const stored = sessionStorage.getItem(STORAGE_KEY);
@@ -293,11 +316,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.error) {
+        const loginErrorMessage = resolveLoginErrorMessage(data.error, data.errorcode);
         toast({
           title: 'Erro de autenticacao',
-          description: data.error === 'invalidlogin'
-            ? 'Usuario ou senha invalidos'
-            : data.error,
+          description: loginErrorMessage,
           variant: 'destructive',
         });
         return false;
