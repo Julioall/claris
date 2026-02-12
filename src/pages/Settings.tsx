@@ -131,89 +131,93 @@ export default function Settings() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl">
+    <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Configuracoes</h1>
         <p className="text-muted-foreground">Gerencie sua conta e preferencias</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Perfil
-          </CardTitle>
-          <CardDescription>Informacoes da sua conta Moodle</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
-              {user?.full_name.charAt(0)}
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Perfil
+            </CardTitle>
+            <CardDescription>Informacoes da sua conta Moodle</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+                {user?.full_name.charAt(0)}
+              </div>
+              <div>
+                <p className="font-medium text-lg">{user?.full_name}</p>
+                <p className="text-muted-foreground">{user?.moodle_username}</p>
+                {user?.email && <p className="text-sm text-muted-foreground">{user.email}</p>}
+              </div>
             </div>
-            <div>
-              <p className="font-medium text-lg">{user?.full_name}</p>
-              <p className="text-muted-foreground">{user?.moodle_username}</p>
-              {user?.email && <p className="text-sm text-muted-foreground">{user.email}</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Sincronizacao
+            </CardTitle>
+            <CardDescription>Status atual e regras do botao de sincronizacao da barra superior</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Ultima sincronizacao:</span>
+                <span className="font-medium">{formatDate(lastSync)}</span>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <RefreshCw className="h-5 w-5" />
-            Sincronizacao
-          </CardTitle>
-          <CardDescription>Status atual e regras do botao de sincronizacao da barra superior</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Ultima sincronizacao:</span>
-              <span className="font-medium">{formatDate(lastSync)}</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">URL do Moodle:</span>
+                <span className="font-medium">https://ead.fieg.com.br</span>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">URL do Moodle:</span>
-              <span className="font-medium">https://ead.fieg.com.br</span>
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Intervalo minimo entre sincronizacoes (horas)</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {(['courses', 'students', 'activities', 'grades'] as SyncEntity[]).map(entity => (
+                  <div key={`interval-${entity}`} className="flex items-center justify-between rounded-md border p-3 gap-3">
+                    <Label className="text-sm">{ENTITY_LABELS[entity]}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={String(syncSettings.syncIntervalHours[entity])}
+                      onChange={(e) => updateSyncIntervalHours(entity, e.target.value)}
+                      disabled={isLoadingSyncSettings}
+                      className="w-[140px]"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <Separator />
+            <Button onClick={saveSyncSettings} variant="outline" className="w-full" disabled={isLoadingSyncSettings || isSavingSyncSettings}>
+              Salvar configuracoes de sincronizacao
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
-          <div className="space-y-3">
-            <div className="text-sm font-medium">Intervalo minimo entre sincronizacoes (horas)</div>
-            <div className="grid gap-3">
-              {(['courses', 'students', 'activities', 'grades'] as SyncEntity[]).map(entity => (
-                <div key={`interval-${entity}`} className="flex items-center justify-between rounded-md border p-3 gap-3">
-                  <Label className="text-sm">{ENTITY_LABELS[entity]}</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    value={String(syncSettings.syncIntervalHours[entity])}
-                    onChange={(e) => updateSyncIntervalHours(entity, e.target.value)}
-                    disabled={isLoadingSyncSettings}
-                    className="w-[140px]"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <Button onClick={saveSyncSettings} variant="outline" className="w-full" disabled={isLoadingSyncSettings || isSavingSyncSettings}>
-            Salvar configuracoes de sincronizacao
-          </Button>
-        </CardContent>
-      </Card>
-
-      <DataCleanupCard />
-      <ActionTypesCard />
+      <div className="space-y-6">
+        <DataCleanupCard />
+        <ActionTypesCard />
+      </div>
       <GradeDebugCard />
 
       <Card className="border-destructive/30">

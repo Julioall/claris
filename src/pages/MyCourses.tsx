@@ -60,14 +60,6 @@ export default function MyCourses() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Link to Schools catalog */}
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/escolas">
-              <Building2 className="h-4 w-4 mr-2" />
-              Explorar Catálogo
-            </Link>
-          </Button>
-
           {/* Search */}
           <div className="relative w-full md:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
