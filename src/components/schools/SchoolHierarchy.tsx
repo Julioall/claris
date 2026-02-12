@@ -280,7 +280,7 @@ export function SchoolHierarchy({
     <div className="space-y-4">
       <Accordion 
         type="multiple" 
-        defaultValue={hierarchy.sortedSchools}
+        defaultValue={[]}
         className="space-y-4"
       >
         {hierarchy.sortedSchools.map(schoolKey => {
@@ -323,7 +323,7 @@ export function SchoolHierarchy({
               <AccordionContent className="px-4 pb-4">
                 <Accordion 
                   type="multiple" 
-                  defaultValue={courseKeys}
+                  defaultValue={[]}
                   className="space-y-3 pt-2"
                 >
                   {courseKeys.map(courseKey => {
@@ -366,7 +366,7 @@ export function SchoolHierarchy({
                         <AccordionContent className="px-4 pb-3">
                           <Accordion 
                             type="multiple" 
-                            defaultValue={classKeys}
+                            defaultValue={[]}
                             className="space-y-2 pt-2"
                           >
                             {classKeys.map(classKey => {
@@ -433,7 +433,7 @@ export function SchoolHierarchy({
       </Accordion>
 
       {hierarchy.uncategorized.length > 0 && (
-        <Accordion type="multiple" defaultValue={['uncategorized']} className="space-y-4">
+        <Accordion type="multiple" defaultValue={[]} className="space-y-4">
           <AccordionItem 
             value="uncategorized"
             className="border rounded-lg bg-card overflow-hidden"

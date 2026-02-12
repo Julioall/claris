@@ -262,7 +262,7 @@ export function CategoryHierarchy({
       {/* Schools */}
       <Accordion 
         type="multiple" 
-        defaultValue={hierarchy.sortedSchools}
+        defaultValue={[]}
         className="space-y-4"
       >
         {hierarchy.sortedSchools.map(schoolKey => {
@@ -306,7 +306,7 @@ export function CategoryHierarchy({
                 {/* Courses within school */}
                 <Accordion 
                   type="multiple" 
-                  defaultValue={courseKeys}
+                  defaultValue={[]}
                   className="space-y-3 pt-2"
                 >
                   {courseKeys.map(courseKey => {
@@ -350,7 +350,7 @@ export function CategoryHierarchy({
                           {/* Classes within course */}
                           <Accordion 
                             type="multiple" 
-                            defaultValue={classKeys}
+                            defaultValue={[]}
                             className="space-y-2 pt-2"
                           >
                             {classKeys.map(classKey => {
@@ -418,7 +418,7 @@ export function CategoryHierarchy({
 
       {/* Uncategorized courses */}
       {hierarchy.uncategorized.length > 0 && (
-        <Accordion type="multiple" defaultValue={['uncategorized']} className="space-y-4">
+        <Accordion type="multiple" defaultValue={[]} className="space-y-4">
           <AccordionItem 
             value="uncategorized"
             className="border rounded-lg bg-card overflow-hidden"
