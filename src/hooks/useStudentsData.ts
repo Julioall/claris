@@ -92,11 +92,15 @@ export function useStudentsData(courseId?: string) {
       const studentsWithStats: StudentWithStats[] = await Promise.all(
         uniqueStudentEntries.map(async ({ student, enrollment_status }) => {
           // Count pending tasks
-          const { count: pendingTasksCount } = await supabase
+          const { count: pendingTasksCount, error: pendingTasksError } = await supabase
             .from('pending_tasks')
             .select('*', { count: 'exact', head: true })
             .eq('student_id', student.id)
             .neq('status', 'resolvida');
+
+          if (pendingTasksError) {
+            console.warn('Error counting pending tasks for student:', student.id, pendingTasksError);
+          }
 
           // Get last action date
           const { data: lastAction } = await supabase
@@ -105,7 +109,7 @@ export function useStudentsData(courseId?: string) {
             .eq('student_id', student.id)
             .order('created_at', { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           return {
             ...student,

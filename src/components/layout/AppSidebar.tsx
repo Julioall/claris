@@ -50,7 +50,7 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-accent/40 p-1 overflow-hidden">
             <img
-              src="/icon.png"
+              src="/icon-no-bg.png"
               alt="ACTiM"
               className="h-full w-full object-contain"
             />

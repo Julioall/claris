@@ -773,6 +773,7 @@ export type Database = {
           id: string
           include_empty_courses: boolean
           include_finished: boolean
+          risk_threshold_days: Json
           sync_interval_hours: Json
           selected_keys: string[]
           sync_interval_days: Json
@@ -787,6 +788,7 @@ export type Database = {
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
+          risk_threshold_days?: Json
           sync_interval_hours?: Json
           selected_keys?: string[]
           sync_interval_days?: Json
@@ -801,6 +803,7 @@ export type Database = {
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
+          risk_threshold_days?: Json
           sync_interval_hours?: Json
           selected_keys?: string[]
           sync_interval_days?: Json
