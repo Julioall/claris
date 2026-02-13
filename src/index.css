@@ -1,19 +1,32 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Guia Tutor Design System
+/* ACTiM Design System
    Professional educational monitoring app with clean, data-focused aesthetic
    Inspired by Linear, Notion - modern, functional, organized
 */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 @layer base {
   :root {
+    /* ACTiM brand palette */
+    --actim-blue: 212 100% 33%;        /* #005CA9 */
+    --actim-blue-dark: 212 100% 23%;   /* #003D74 */
+    --actim-blue-medium: 207 70% 41%;  /* #1F6FB2 */
+    --actim-orange: 16 88% 47%;        /* #E2480F */
+    --actim-orange-light: 21 100% 55%; /* #FF6A1A */
+    --actim-gray-dark: 0 0% 17%;       /* #2B2B2B */
+    --actim-gray-light: 216 33% 97%;   /* #F5F7FA */
+
+    /* Gradients */
+    --gradient-brand-strong: linear-gradient(90deg, #005ca9, #e2480f);
+    --gradient-brand-soft: linear-gradient(135deg, #1f6fb2, #ff6a1a);
+
     /* Core backgrounds */
-    --background: 210 20% 98%;
-    --foreground: 215 25% 15%;
+    --background: var(--actim-gray-light);
+    --foreground: var(--actim-gray-dark);
 
     /* Card surfaces */
     --card: 0 0% 100%;
@@ -23,30 +36,30 @@
     --popover: 0 0% 100%;
     --popover-foreground: 215 25% 15%;
 
-    /* Primary - Teal/Petrol professional */
-    --primary: 190 60% 35%;
+    /* Primary actions (CTA) */
+    --primary: var(--actim-orange);
     --primary-foreground: 0 0% 100%;
 
-    /* Secondary - Soft neutral */
-    --secondary: 210 15% 93%;
-    --secondary-foreground: 215 25% 25%;
+    /* Secondary - institutional blue */
+    --secondary: var(--actim-blue);
+    --secondary-foreground: 0 0% 100%;
 
     /* Muted - Subtle backgrounds */
-    --muted: 210 15% 95%;
-    --muted-foreground: 215 15% 50%;
+    --muted: 216 20% 94%;
+    --muted-foreground: 215 12% 40%;
 
-    /* Accent - Highlight */
-    --accent: 190 50% 92%;
-    --accent-foreground: 190 60% 25%;
+    /* Accent - blue medium highlights */
+    --accent: 207 45% 90%;
+    --accent-foreground: var(--actim-blue-dark);
 
     /* Destructive - Error/danger */
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     /* Borders and inputs */
-    --border: 210 15% 88%;
-    --input: 210 15% 88%;
-    --ring: 190 60% 35%;
+    --border: 216 22% 86%;
+    --input: 216 22% 86%;
+    --ring: var(--actim-orange-light);
 
     /* Radius */
     --radius: 0.5rem;
@@ -76,14 +89,14 @@
     --priority-urgente: 0 72% 51%;
 
     /* Sidebar */
-    --sidebar-background: 215 25% 12%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 190 60% 50%;
+    --sidebar-background: var(--actim-blue-dark);
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: var(--actim-orange-light);
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 25% 18%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 215 20% 20%;
-    --sidebar-ring: 190 60% 50%;
+    --sidebar-accent: 212 75% 30%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 212 85% 28%;
+    --sidebar-ring: var(--actim-orange-light);
 
     /* Custom shadows */
     --shadow-sm: 0 1px 2px 0 hsl(215 25% 15% / 0.05);
@@ -92,33 +105,33 @@
   }
 
   .dark {
-    --background: 215 25% 9%;
-    --foreground: 210 20% 95%;
+    --background: 212 48% 8%;
+    --foreground: 0 0% 96%;
 
-    --card: 215 25% 12%;
-    --card-foreground: 210 20% 95%;
+    --card: 212 40% 12%;
+    --card-foreground: 0 0% 96%;
 
-    --popover: 215 25% 12%;
-    --popover-foreground: 210 20% 95%;
+    --popover: 212 40% 12%;
+    --popover-foreground: 0 0% 96%;
 
-    --primary: 190 55% 50%;
-    --primary-foreground: 215 25% 9%;
+    --primary: 21 100% 55%;
+    --primary-foreground: 0 0% 8%;
 
-    --secondary: 215 25% 18%;
-    --secondary-foreground: 210 20% 90%;
+    --secondary: 212 80% 36%;
+    --secondary-foreground: 0 0% 96%;
 
-    --muted: 215 25% 15%;
-    --muted-foreground: 210 15% 55%;
+    --muted: 212 28% 16%;
+    --muted-foreground: 214 14% 72%;
 
-    --accent: 190 40% 20%;
-    --accent-foreground: 190 50% 70%;
+    --accent: 212 34% 20%;
+    --accent-foreground: 0 0% 96%;
 
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 215 20% 20%;
-    --input: 215 20% 20%;
-    --ring: 190 55% 50%;
+    --border: 212 28% 24%;
+    --input: 212 28% 24%;
+    --ring: 21 100% 55%;
 
     --risk-normal: 142 60% 50%;
     --risk-normal-bg: 142 40% 15%;
@@ -129,14 +142,14 @@
     --risk-critico: 0 65% 55%;
     --risk-critico-bg: 0 40% 15%;
 
-    --sidebar-background: 215 30% 8%;
-    --sidebar-foreground: 210 20% 90%;
-    --sidebar-primary: 190 55% 55%;
-    --sidebar-primary-foreground: 215 25% 9%;
-    --sidebar-accent: 215 25% 14%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 215 25% 14%;
-    --sidebar-ring: 190 55% 55%;
+    --sidebar-background: 212 58% 10%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 21 100% 55%;
+    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-accent: 212 44% 20%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 212 40% 22%;
+    --sidebar-ring: 21 100% 55%;
   }
 }
 

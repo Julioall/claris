@@ -48,12 +48,16 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground font-bold text-sm">
-            GT
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-accent/40 p-1 overflow-hidden">
+            <img
+              src="/icon.png"
+              alt="ACTiM"
+              className="h-full w-full object-contain"
+            />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
-              <span className="font-semibold text-sidebar-foreground">Guia Tutor</span>
+              <span className="font-semibold text-sidebar-foreground">ACTiM</span>
               <span className="text-xs text-sidebar-foreground/60">Central de Tutoria</span>
             </div>
           )}

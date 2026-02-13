@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GraduationCap, Loader2, Eye, EyeOff, Settings } from 'lucide-react';
+import { Loader2, Eye, EyeOff, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,13 +40,11 @@ export default function Login() {
       <div className="w-full max-w-md space-y-6 animate-fade-in">
         {/* Logo and title */}
         <div className="text-center space-y-2">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg">
-            <GraduationCap className="h-8 w-8" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">Guia Tutor</h1>
-          <p className="text-muted-foreground text-sm">
-            Central de Tutoria e Monitoria
-          </p>
+          <img
+            src="/logo.png"
+            alt="ACTiM"
+            className="mx-auto w-64 max-w-full h-auto"
+          />
         </div>
 
         {/* Login card */}

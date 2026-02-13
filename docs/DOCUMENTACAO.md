@@ -1,8 +1,8 @@
-# Guia Tutor - Documentação Completa
+# ACTiM - Documentação Completa
 
 ## Visão Geral
 
-O **Guia Tutor** é uma aplicação web desenvolvida para tutores e monitores acompanharem alunos e cursos do Moodle, com todos os registros de acompanhamento sendo persistidos no Supabase.
+O **ACTiM** é uma aplicação web desenvolvida para tutores e monitores acompanharem alunos e cursos do Moodle, com todos os registros de acompanhamento sendo persistidos no Supabase.
 
 ### Objetivo Principal
 

@@ -2,7 +2,7 @@
 
 ## 📚 Índice de Documentação
 
-Esta pasta contém documentação detalhada de features implementadas no projeto moodle-monitor.
+Esta pasta contém documentação detalhada de features implementadas no projeto ACTiM.
 
 ---
 
