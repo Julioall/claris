@@ -219,6 +219,19 @@ function validateStringArray(value: unknown, maxItems = 500): value is string[] 
   return Array.isArray(value) && value.length <= maxItems && value.every(v => typeof v === 'string' && v.length > 0 && v.length <= 255);
 }
 
+function parseNullableNumber(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  const parsed = typeof value === 'string' ? parseFloat(value) : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseNullablePercentage(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  const cleanPercentage = String(value).replace(/[%\s]/g, '').replace(',', '.');
+  const parsed = parseFloat(cleanPercentage);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function validationError(message: string) {
   return new Response(
     JSON.stringify({ error: message }),
@@ -854,9 +867,10 @@ Deno.serve(async (req) => {
 
         console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`);
 
-        // Fetch grades for all students using gradereport_user_get_grade_items
-        const gradeRecords: any[] = [];
+        // Fetch grade items for all students using gradereport_user_get_grade_items
+        const activityGradeRecords: any[] = [];
         const now = new Date().toISOString();
+        const enrolledStudentIds = enrolledStudents.map((enrollment: any) => enrollment.student_id);
 
         for (const enrollment of enrolledStudents) {
           const student = enrollment.students as any;
@@ -869,63 +883,48 @@ Deno.serve(async (req) => {
             });
 
             // Log raw response for debugging (first student only)
-            if (gradeRecords.length === 0 && gradesData.usergrades?.length > 0) {
+            if (activityGradeRecords.length === 0 && gradesData.usergrades?.length > 0) {
               console.log('Sample grade response:', JSON.stringify(gradesData.usergrades[0]?.gradeitems?.slice(0, 3)));
             }
 
-            // Find the course total grade (itemtype = 'course')
+            // Persist only activity-level grade items; course totals are recalculated
+            // from non-hidden activities stored in student_activities.
             if (gradesData.usergrades && gradesData.usergrades.length > 0) {
               const userGrade = gradesData.usergrades[0];
-              const courseGrade = userGrade.gradeitems?.find((item: any) => item.itemtype === 'course');
+              const gradeItems = userGrade.gradeitems || [];
 
-              if (courseGrade) {
-                // Parse graderaw - Moodle returns it as "graderaw" (not "grade_raw")
-                let gradeRaw: number | null = null;
-                if (courseGrade.graderaw !== undefined && courseGrade.graderaw !== null) {
-                  const parsed = typeof courseGrade.graderaw === 'string' 
-                    ? parseFloat(courseGrade.graderaw) 
-                    : courseGrade.graderaw;
-                  gradeRaw = isNaN(parsed) ? null : parsed;
+              // Also persist per-activity grades when Moodle returns the course module id (cmid).
+              // This updates student_activities so the UI can show activity grades separately.
+              for (const item of gradeItems) {
+                if (!item) continue;
+                if (item.itemtype === 'course' || item.itemtype === 'category') continue;
+
+                const cmid = item.cmid !== undefined && item.cmid !== null
+                  ? String(item.cmid)
+                  : null;
+                if (!cmid) continue;
+
+                const itemGradeRaw = parseNullableNumber(item.graderaw);
+                const itemGradeMax = parseNullableNumber(item.grademax);
+
+                let itemPercentage: number | null = null;
+                if (itemGradeRaw !== null && itemGradeMax && itemGradeMax > 0) {
+                  itemPercentage = (itemGradeRaw / itemGradeMax) * 100;
+                } else {
+                  itemPercentage = parseNullablePercentage(item.percentageformatted);
                 }
 
-                // Parse grademax - Moodle returns it as "grademax" (not "grade_max")
-                let gradeMax: number = 100;
-                if (courseGrade.grademax !== undefined && courseGrade.grademax !== null) {
-                  gradeMax = typeof courseGrade.grademax === 'string'
-                    ? parseFloat(courseGrade.grademax)
-                    : courseGrade.grademax;
-                  if (isNaN(gradeMax)) gradeMax = 100;
-                }
-
-                // Calculate percentage - Moodle may not return percentageformatted for course totals
-                let gradePercentage: number | null = null;
-                if (gradeRaw !== null && gradeMax > 0) {
-                  // Calculate percentage from raw values (most reliable method)
-                  gradePercentage = (gradeRaw / gradeMax) * 100;
-                } else if (courseGrade.percentageformatted) {
-                  // Fallback to percentageformatted if available
-                  const cleanPercentage = courseGrade.percentageformatted
-                    .replace(/[%\s]/g, '')
-                    .replace(',', '.');
-                  gradePercentage = parseFloat(cleanPercentage);
-                  if (isNaN(gradePercentage)) gradePercentage = null;
-                }
-
-                gradeRecords.push({
+                activityGradeRecords.push({
                   student_id: student.id,
                   course_id: gradesCourse.id,
-                  grade_raw: gradeRaw,
-                  grade_max: gradeMax,
-                  grade_percentage: gradePercentage,
-                  grade_formatted: courseGrade.gradeformatted ?? null,
-                  letter_grade: courseGrade.lettergradeformatted ?? null,
-                  last_sync: now,
-                  updated_at: now
+                  moodle_activity_id: cmid,
+                  activity_name: item.itemname || 'Atividade',
+                  activity_type: item.itemmodule || null,
+                  grade: itemGradeRaw,
+                  grade_max: itemGradeMax,
+                  percentage: itemPercentage,
+                  updated_at: now,
                 });
-              } else {
-                // Log when no course grade is found
-                console.log(`No course grade found for student ${moodleUserId}. Available itemtypes:`, 
-                  userGrade.gradeitems?.map((item: any) => item.itemtype).filter((v: any, i: number, a: any[]) => a.indexOf(v) === i));
               }
             }
           } catch (gradeErr) {
@@ -934,9 +933,84 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log(`Prepared ${gradeRecords.length} grade records for upsert`);
+        console.log(`Prepared ${activityGradeRecords.length} activity grade records for upsert`);
 
-        // Batch upsert grades
+        // Batch upsert activity grades into student_activities.
+        // Uses the same unique key as sync_activities and preserves existing rows.
+        let activityGradesCount = 0;
+        if (activityGradeRecords.length > 0) {
+          const BATCH_SIZE = 200;
+          for (let i = 0; i < activityGradeRecords.length; i += BATCH_SIZE) {
+            const batch = activityGradeRecords.slice(i, i + BATCH_SIZE);
+            const { error } = await supabase
+              .from('student_activities')
+              .upsert(batch, {
+                onConflict: 'student_id,course_id,moodle_activity_id',
+                ignoreDuplicates: false
+              });
+
+            if (error) {
+              console.error(`Error upserting activity grade batch ${i / BATCH_SIZE}:`, error);
+            } else {
+              activityGradesCount += batch.length;
+            }
+          }
+        }
+
+        console.log(`Upserted ${activityGradesCount} activity grade records`);
+
+        // Recalculate course totals from visible activities only (hidden = false).
+        // This keeps student_course_grades aligned with activity visibility rules.
+        const { data: visibleActivities, error: visibleActivitiesError } = await supabase
+          .from('student_activities')
+          .select('student_id, grade, grade_max')
+          .eq('course_id', gradesCourse.id)
+          .eq('hidden', false)
+          .in('student_id', enrolledStudentIds);
+
+        if (visibleActivitiesError) {
+          console.error('Error loading visible activities for grade aggregation:', visibleActivitiesError);
+        }
+
+        const totalsByStudent = new Map<string, { raw: number; max: number }>();
+        for (const studentId of enrolledStudentIds) {
+          totalsByStudent.set(studentId, { raw: 0, max: 0 });
+        }
+
+        for (const activity of visibleActivities || []) {
+          if (activity.grade === null || activity.grade_max === null || activity.grade_max <= 0) {
+            continue;
+          }
+          const current = totalsByStudent.get(activity.student_id) || { raw: 0, max: 0 };
+          current.raw += activity.grade;
+          current.max += activity.grade_max;
+          totalsByStudent.set(activity.student_id, current);
+        }
+
+        const gradeRecords = enrolledStudentIds.map((studentId: string) => {
+          const totals = totalsByStudent.get(studentId) || { raw: 0, max: 0 };
+          const hasGrade = totals.max > 0;
+          const normalizedGrade = hasGrade ? (totals.raw / totals.max) * 100 : null;
+          const gradeRaw = hasGrade ? normalizedGrade : null;
+          const gradeMax = hasGrade ? 100 : null;
+          const gradePercentage = hasGrade ? normalizedGrade : null;
+
+          return {
+            student_id: studentId,
+            course_id: gradesCourse.id,
+            grade_raw: gradeRaw,
+            grade_max: gradeMax,
+            grade_percentage: gradePercentage,
+            grade_formatted: hasGrade ? `${normalizedGrade!.toFixed(1)} / 100` : null,
+            letter_grade: null,
+            last_sync: now,
+            updated_at: now
+          };
+        });
+
+        console.log(`Prepared ${gradeRecords.length} recalculated grade records from visible activities`);
+
+        // Batch upsert recalculated course grades
         let gradesCount = 0;
         if (gradeRecords.length > 0) {
           const BATCH_SIZE = 100;
@@ -957,10 +1031,10 @@ Deno.serve(async (req) => {
           }
         }
 
-        console.log(`Upserted ${gradesCount} grade records`);
+        console.log(`Upserted ${gradesCount} recalculated grade records`);
 
         return new Response(
-          JSON.stringify({ success: true, gradesCount }),
+          JSON.stringify({ success: true, gradesCount, activityGradesCount }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
@@ -990,6 +1064,8 @@ Deno.serve(async (req) => {
               all_item_types: gradesData.usergrades?.[0]?.gradeitems?.map((item: any) => ({
                 itemtype: item.itemtype,
                 itemname: item.itemname,
+                cmid: item.cmid,
+                itemmodule: item.itemmodule,
                 graderaw: item.graderaw,
                 grademax: item.grademax,
                 gradeformatted: item.gradeformatted,
