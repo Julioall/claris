@@ -1,16 +1,14 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Search, 
   Filter,
-  ExternalLink,
   Clock,
   ClipboardList,
   Loader2,
   UserCheck
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Select,
@@ -55,6 +53,7 @@ function EnrollmentStatusBadge({ status }: { status: string }) {
 }
 
 export default function Students() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
@@ -183,12 +182,23 @@ export default function Students() {
               <TableHead className="hidden md:table-cell">Pendências</TableHead>
               <TableHead className="hidden lg:table-cell">Último Acesso</TableHead>
               <TableHead className="hidden lg:table-cell">Última Ação</TableHead>
-              <TableHead className="w-[100px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredStudents.map((student) => (
-              <TableRow key={student.id} className="group">
+              <TableRow
+                key={student.id}
+                className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/alunos/${student.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/alunos/${student.id}`);
+                  }
+                }}
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary shrink-0">
@@ -228,19 +238,6 @@ export default function Students() {
                   <span className="text-sm text-muted-foreground">
                     {formatLastAction(student.last_action_date)}
                   </span>
-                </TableCell>
-                <TableCell>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    asChild
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Link to={`/alunos/${student.id}`}>
-                      Ver
-                      <ExternalLink className="h-3 w-3 ml-1" />
-                    </Link>
-                  </Button>
                 </TableCell>
               </TableRow>
             ))}
