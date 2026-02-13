@@ -18,6 +18,11 @@ type SyncEntity = 'courses' | 'students' | 'activities' | 'grades';
 
 interface SyncSettings {
   syncIntervalHours: Record<SyncEntity, number>;
+  riskThresholdDays: {
+    atencao: number;
+    risco: number;
+    critico: number;
+  };
 }
 
 const asObject = (value: unknown): Record<string, unknown> =>
@@ -29,6 +34,11 @@ const DEFAULT_SYNC_SETTINGS: SyncSettings = {
     students: 12,
     activities: 2.4,
     grades: 2.4,
+  },
+  riskThresholdDays: {
+    atencao: 7,
+    risco: 14,
+    critico: 30,
   },
 };
 
@@ -53,7 +63,7 @@ export default function Settings() {
       try {
         const { data, error } = await supabase
           .from('user_sync_preferences')
-          .select('sync_interval_hours, sync_interval_days')
+          .select('sync_interval_hours, sync_interval_days, risk_threshold_days')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -65,6 +75,7 @@ export default function Settings() {
         if (data) {
           const syncIntervalHoursRaw = asObject(data.sync_interval_hours);
           const syncIntervalDaysRaw = asObject(data.sync_interval_days);
+          const riskThresholdDaysRaw = asObject(data.risk_threshold_days);
 
           setSyncSettings({
             syncIntervalHours: {
@@ -72,6 +83,11 @@ export default function Settings() {
               students: Number(syncIntervalHoursRaw.students ?? (Number(syncIntervalDaysRaw.students ?? 0.5) * 24)),
               activities: Number(syncIntervalHoursRaw.activities ?? (Number(syncIntervalDaysRaw.activities ?? 0.1) * 24)),
               grades: Number(syncIntervalHoursRaw.grades ?? (Number(syncIntervalDaysRaw.grades ?? 0.1) * 24)),
+            },
+            riskThresholdDays: {
+              atencao: Number(riskThresholdDaysRaw.atencao ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.atencao),
+              risco: Number(riskThresholdDaysRaw.risco ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.risco),
+              critico: Number(riskThresholdDaysRaw.critico ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.critico),
             },
           });
         }
@@ -103,6 +119,19 @@ export default function Settings() {
   const saveSyncSettings = async () => {
     if (!user) return;
 
+    const atencaoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.atencao));
+    const riscoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.risco));
+    const criticoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.critico));
+
+    if (!(atencaoDays < riscoDays && riscoDays < criticoDays)) {
+      toast({
+        title: 'Valores de risco invalidos',
+        description: 'Defina dias crescentes: atencao < risco < critico.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSavingSyncSettings(true);
     try {
       const { error } = await supabase
@@ -110,6 +139,11 @@ export default function Settings() {
         .upsert({
           user_id: user.id,
           sync_interval_hours: syncSettings.syncIntervalHours,
+          risk_threshold_days: {
+            atencao: atencaoDays,
+            risco: riscoDays,
+            critico: criticoDays,
+          },
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
@@ -128,6 +162,19 @@ export default function Settings() {
     } finally {
       setIsSavingSyncSettings(false);
     }
+  };
+
+  const updateRiskThresholdDays = (level: 'atencao' | 'risco' | 'critico', value: string) => {
+    const parsed = Number(value);
+    const safeValue = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+
+    setSyncSettings(prev => ({
+      ...prev,
+      riskThresholdDays: {
+        ...prev.riskThresholdDays,
+        [level]: safeValue,
+      },
+    }));
   };
 
   return (
@@ -207,8 +254,55 @@ export default function Settings() {
               </div>
             </div>
 
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Dias sem acesso para classificar risco</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                  <Label className="text-sm">Atencao</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={String(syncSettings.riskThresholdDays.atencao)}
+                    onChange={(e) => updateRiskThresholdDays('atencao', e.target.value)}
+                    disabled={isLoadingSyncSettings}
+                    className="w-[120px]"
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                  <Label className="text-sm">Risco</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={String(syncSettings.riskThresholdDays.risco)}
+                    onChange={(e) => updateRiskThresholdDays('risco', e.target.value)}
+                    disabled={isLoadingSyncSettings}
+                    className="w-[120px]"
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                  <Label className="text-sm">Critico</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={String(syncSettings.riskThresholdDays.critico)}
+                    onChange={(e) => updateRiskThresholdDays('critico', e.target.value)}
+                    disabled={isLoadingSyncSettings}
+                    className="w-[120px]"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Use valores crescentes: atencao menor que risco, e risco menor que critico.
+              </p>
+            </div>
+
             <Button onClick={saveSyncSettings} variant="outline" className="w-full" disabled={isLoadingSyncSettings || isSavingSyncSettings}>
-              Salvar configuracoes de sincronizacao
+              Salvar configuracoes
             </Button>
           </CardContent>
         </Card>
