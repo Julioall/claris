@@ -35,7 +35,7 @@ interface CourseWithStats {
   pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
-  is_attendance_enabled?: boolean;
+  is_attendance_enabled: boolean;
 }
 
 interface CategoryStats {

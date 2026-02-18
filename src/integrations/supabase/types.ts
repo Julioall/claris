@@ -160,100 +160,6 @@ export type Database = {
           },
         ]
       }
-      attendance_course_settings: {
-        Row: {
-          course_id: string
-          created_at: string
-          id: string
-          user_id: string
-        }
-        Insert: {
-          course_id: string
-          created_at?: string
-          id?: string
-          user_id: string
-        }
-        Update: {
-          course_id?: string
-          created_at?: string
-          id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attendance_course_settings_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_course_settings_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      attendance_records: {
-        Row: {
-          attendance_date: string
-          course_id: string
-          created_at: string
-          id: string
-          notes: string | null
-          status: string
-          student_id: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          attendance_date: string
-          course_id: string
-          created_at?: string
-          id?: string
-          notes?: string | null
-          status: string
-          student_id: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          attendance_date?: string
-          course_id?: string
-          created_at?: string
-          id?: string
-          notes?: string | null
-          status?: string
-          student_id?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attendance_records_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_records_student_id_fkey"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "students"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendance_records_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       courses: {
         Row: {
           category: string | null
@@ -767,46 +673,28 @@ export type Database = {
       user_sync_preferences: {
         Row: {
           created_at: string
-          enabled_temperatures: Json
-          entity_last_sync: Json
-          entity_temperatures: Json
           id: string
           include_empty_courses: boolean
           include_finished: boolean
-          risk_threshold_days: Json
-          sync_interval_hours: Json
           selected_keys: string[]
-          sync_interval_days: Json
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
-          enabled_temperatures?: Json
-          entity_last_sync?: Json
-          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          risk_threshold_days?: Json
-          sync_interval_hours?: Json
           selected_keys?: string[]
-          sync_interval_days?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
-          enabled_temperatures?: Json
-          entity_last_sync?: Json
-          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          risk_threshold_days?: Json
-          sync_interval_hours?: Json
           selected_keys?: string[]
-          sync_interval_days?: Json
           updated_at?: string
           user_id?: string
         }
