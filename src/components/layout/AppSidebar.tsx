@@ -6,7 +6,8 @@ import {
   Settings,
   LogOut,
   BookOpen,
-  Building2
+  Building2,
+  MessageSquare
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
@@ -33,6 +34,7 @@ const mainNavItems = [
   { title: 'Alunos', url: '/alunos', icon: Users },
   { title: 'Pendências', url: '/pendencias', icon: ClipboardList },
   { title: 'Ações', url: '/acoes', icon: CheckSquare },
+  { title: 'Mensagens', url: '/mensagens', icon: MessageSquare },
 ];
 
 const secondaryNavItems = [
