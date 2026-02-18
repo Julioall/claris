@@ -59,15 +59,8 @@ export default function CoursePanel() {
 
       setIsLoadingAttendanceFlag(true);
       try {
-        const { data, error: attendanceError } = await supabase
-          .from('attendance_course_settings')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('course_id', id)
-          .maybeSingle();
-
-        if (attendanceError) throw attendanceError;
-        setIsAttendanceEnabled(!!data);
+        // attendance_course_settings table doesn't exist yet — default to disabled
+        setIsAttendanceEnabled(false);
       } catch (err) {
         console.error('Error loading attendance flag:', err);
         setIsAttendanceEnabled(false);

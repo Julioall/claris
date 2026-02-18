@@ -63,7 +63,7 @@ export default function Settings() {
       try {
         const { data, error } = await supabase
           .from('user_sync_preferences')
-          .select('sync_interval_hours, sync_interval_days, risk_threshold_days')
+          .select('selected_keys, include_empty_courses, include_finished')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -73,23 +73,8 @@ export default function Settings() {
         }
 
         if (data) {
-          const syncIntervalHoursRaw = asObject(data.sync_interval_hours);
-          const syncIntervalDaysRaw = asObject(data.sync_interval_days);
-          const riskThresholdDaysRaw = asObject(data.risk_threshold_days);
-
-          setSyncSettings({
-            syncIntervalHours: {
-              courses: Number(syncIntervalHoursRaw.courses ?? (Number(syncIntervalDaysRaw.courses ?? 1) * 24)),
-              students: Number(syncIntervalHoursRaw.students ?? (Number(syncIntervalDaysRaw.students ?? 0.5) * 24)),
-              activities: Number(syncIntervalHoursRaw.activities ?? (Number(syncIntervalDaysRaw.activities ?? 0.1) * 24)),
-              grades: Number(syncIntervalHoursRaw.grades ?? (Number(syncIntervalDaysRaw.grades ?? 0.1) * 24)),
-            },
-            riskThresholdDays: {
-              atencao: Number(riskThresholdDaysRaw.atencao ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.atencao),
-              risco: Number(riskThresholdDaysRaw.risco ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.risco),
-              critico: Number(riskThresholdDaysRaw.critico ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.critico),
-            },
-          });
+          // These columns don't exist yet in the DB — use defaults
+          setSyncSettings(DEFAULT_SYNC_SETTINGS);
         }
       } finally {
         setIsLoadingSyncSettings(false);
