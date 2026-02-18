@@ -1159,6 +1159,141 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ============ MESSAGING ============
+
+      case 'send_message': {
+        const { moodle_user_id: targetMoodleUserId, message: messageText } = body;
+
+        if (!targetMoodleUserId || !messageText) {
+          return new Response(
+            JSON.stringify({ error: 'moodle_user_id and message are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Sending message to Moodle user ${targetMoodleUserId}`);
+
+        try {
+          const result = await callMoodleApi(moodleUrl, token, 'core_message_send_instant_messages', {
+            'messages[0][touserid]': Number(targetMoodleUserId),
+            'messages[0][text]': String(messageText),
+            'messages[0][textformat]': 0,
+          });
+
+          console.log('Send message result:', JSON.stringify(result));
+
+          // Moodle returns an array with the message result
+          const msgResult = Array.isArray(result) ? result[0] : result;
+
+          if (msgResult?.errormessage) {
+            return new Response(
+              JSON.stringify({ error: msgResult.errormessage }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+
+          return new Response(
+            JSON.stringify({ success: true, message_id: msgResult?.msgid }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (err) {
+          console.error('Error sending message:', err);
+          return new Response(
+            JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to send message. The messaging functions may not be enabled in Moodle.' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'get_conversations': {
+        console.log('Fetching conversations from Moodle');
+
+        try {
+          // Get site info to know the current user id
+          const siteInfo = await getSiteInfo(moodleUrl, token);
+
+          const result = await callMoodleApi(moodleUrl, token, 'core_message_get_conversations', {
+            userid: siteInfo.userid,
+            type: 1, // individual conversations only
+            limitnum: 50,
+          });
+
+          const conversations = (result?.conversations || []).map((conv: any) => ({
+            id: conv.id,
+            members: (conv.members || []).map((m: any) => ({
+              id: m.id,
+              fullname: m.fullname,
+              profileimageurl: m.profileimageurl,
+            })),
+            messages: (conv.messages || []).map((msg: any) => ({
+              id: msg.id,
+              text: msg.text,
+              timecreated: msg.timecreated,
+              useridfrom: msg.useridfrom,
+            })),
+            unreadcount: conv.unreadcount || 0,
+          }));
+
+          return new Response(
+            JSON.stringify({ conversations, current_user_id: siteInfo.userid }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (err) {
+          console.error('Error fetching conversations:', err);
+          return new Response(
+            JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to fetch conversations. The messaging functions may not be enabled in Moodle.' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      case 'get_messages': {
+        const { moodle_user_id: otherUserId, limit_num: limitNum } = body;
+
+        if (!otherUserId) {
+          return new Response(
+            JSON.stringify({ error: 'moodle_user_id is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Fetching messages with Moodle user ${otherUserId}`);
+
+        try {
+          const siteInfo = await getSiteInfo(moodleUrl, token);
+
+          // Get conversation between the two users
+          const convResult = await callMoodleApi(moodleUrl, token, 'core_message_get_conversation_between_users', {
+            userid: siteInfo.userid,
+            otheruserid: Number(otherUserId),
+            includecontactrequests: 0,
+            limitnum: Number(limitNum) || 50,
+          });
+
+          const messages = (convResult?.messages || []).map((msg: any) => ({
+            id: msg.id,
+            text: msg.text,
+            timecreated: msg.timecreated,
+            useridfrom: msg.useridfrom,
+          }));
+
+          return new Response(
+            JSON.stringify({ 
+              messages, 
+              current_user_id: siteInfo.userid,
+              conversation_id: convResult?.id,
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (err) {
+          console.error('Error fetching messages:', err);
+          return new Response(
+            JSON.stringify({ error: err instanceof Error ? err.message : 'Failed to fetch messages.' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid action' }),

@@ -16,6 +16,7 @@ import Students from "@/pages/Students";
 import StudentProfile from "@/pages/StudentProfile";
 import PendingTasks from "@/pages/PendingTasks";
 import Actions from "@/pages/Actions";
+import Messages from "@/pages/Messages";
 import Settings from "@/pages/Settings";
 import NotFound from "@/pages/NotFound";
 
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="/alunos/:id" element={<StudentProfile />} />
         <Route path="/pendencias" element={<PendingTasks />} />
         <Route path="/acoes" element={<Actions />} />
+        <Route path="/mensagens" element={<Messages />} />
         <Route path="/configuracoes" element={<Settings />} />
       </Route>
       <Route path="*" element={<NotFound />} />
