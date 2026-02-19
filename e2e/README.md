@@ -9,6 +9,8 @@ Este diretório contém os testes end-to-end (E2E) para o projeto ACTiM usando P
 - **ui-components.spec.ts** - Testes para componentes da interface
 - **accessibility.spec.ts** - Testes de acessibilidade
 - **performance.spec.ts** - Testes de performance
+- **error-handling.spec.ts** - Testes de tratamento de erros e validações
+- **form-interactions.spec.ts** - Testes de interações com formulários
 - **fixtures.ts** - Configurações e fixtures customizados
 
 ## Executando os Testes
