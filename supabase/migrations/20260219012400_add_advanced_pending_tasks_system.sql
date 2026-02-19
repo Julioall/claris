@@ -60,7 +60,7 @@ CREATE TABLE public.task_recurrence_configs (
   end_date TIMESTAMP WITH TIME ZONE,
   course_id UUID REFERENCES public.courses(id) ON DELETE CASCADE,
   student_id UUID REFERENCES public.students(id) ON DELETE CASCADE,
-  created_by_user_id UUID REFERENCES public.users(id) ON DELETE SET NULL NOT NULL,
+  created_by_user_id UUID REFERENCES public.users(id) ON DELETE CASCADE NOT NULL,
   task_type task_type DEFAULT 'interna',
   priority task_priority DEFAULT 'media',
   is_active BOOLEAN DEFAULT true,
@@ -233,7 +233,7 @@ BEGIN
       OLD.effectiveness,
       NEW.effectiveness,
       NEW.notes,
-      auth.uid()
+      COALESCE(auth.uid(), NEW.executed_by_user_id) -- Fallback to executed_by if auth.uid() is NULL
     );
   END IF;
 

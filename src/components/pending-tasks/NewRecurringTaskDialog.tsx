@@ -129,7 +129,7 @@ export function NewRecurringTaskDialog({
   const selectedCourseId = form.watch('course_id');
 
   // Fetch user's active courses
-  const fetchCourses = async () => {
+  const fetchCourses = useCallback(async () => {
     if (!user) return;
     
     setIsLoadingCourses(true);
@@ -164,10 +164,10 @@ export function NewRecurringTaskDialog({
     } finally {
       setIsLoadingCourses(false);
     }
-  };
+  }, [user]);
 
   // Fetch students for selected course
-  const fetchStudents = async (courseId: string) => {
+  const fetchStudents = useCallback(async (courseId: string) => {
     if (!courseId) {
       setStudents([]);
       return;
@@ -199,24 +199,24 @@ export function NewRecurringTaskDialog({
     } finally {
       setIsLoadingStudents(false);
     }
-  };
+  }, []);
 
   // Load courses when dialog opens
   useEffect(() => {
     if (open) {
       fetchCourses();
     }
-  }, [open, user]);
+  }, [open, fetchCourses]);
 
   // Load students when course changes
   useEffect(() => {
     if (selectedCourseId) {
       fetchStudents(selectedCourseId);
-      form.setValue('student_id', '');
+      form.setValue('student_id', undefined);
     } else {
       setStudents([]);
     }
-  }, [selectedCourseId]);
+  }, [selectedCourseId, fetchStudents, form]);
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
