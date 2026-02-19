@@ -1267,7 +1267,11 @@ Deno.serve(async (req) => {
           const convResult = await callMoodleApi(moodleUrl, token, 'core_message_get_conversation_between_users', {
             userid: siteInfo.userid,
             otheruserid: Number(otherUserId),
-            limitnum: Number(limitNum) || 50,
+            includecontactrequests: 0,
+            includeprivacyinfo: 0,
+            messagelimit: Number(limitNum) || 50,
+            messageoffset: 0,
+            newestmessagesfirst: 1,
           });
 
           const messages = (convResult?.messages || []).map((msg: any) => ({
