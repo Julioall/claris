@@ -1263,16 +1263,33 @@ Deno.serve(async (req) => {
         try {
           const siteInfo = await getSiteInfo(moodleUrl, token);
 
-          // Get conversation between the two users
-          const convResult = await callMoodleApi(moodleUrl, token, 'core_message_get_conversation_between_users', {
-            userid: siteInfo.userid,
-            otheruserid: Number(otherUserId),
-            includecontactrequests: 0,
-            includeprivacyinfo: 0,
-            messagelimit: Number(limitNum) || 50,
-            messageoffset: 0,
-            newestmessagesfirst: 1,
+          // Use POST for this API as per Moodle docs (REST parâmetros POST)
+          const apiUrl = `${moodleUrl}/webservice/rest/server.php`;
+          const formData = new URLSearchParams({
+            wstoken: token,
+            wsfunction: 'core_message_get_conversation_between_users',
+            moodlewsrestformat: 'json',
+            userid: String(siteInfo.userid),
+            otheruserid: String(Number(otherUserId)),
+            includecontactrequests: '0',
+            includeprivacyinfo: '0',
+            messagelimit: String(Number(limitNum) || 50),
+            messageoffset: '0',
+            newestmessagesfirst: '1',
           });
+
+          console.log(`Calling Moodle API via POST: core_message_get_conversation_between_users`);
+          const convResponse = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: formData.toString(),
+          });
+          const convResult = await convResponse.json();
+
+          if (convResult.exception) {
+            console.error(`Moodle API error: ${convResult.message}`);
+            throw new Error(convResult.message || 'Moodle API error');
+          }
 
           const messages = (convResult?.messages || []).map((msg: any) => ({
             id: msg.id,
