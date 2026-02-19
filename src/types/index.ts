@@ -7,6 +7,11 @@ export type TaskType = 'moodle' | 'interna';
 export type ActionStatus = 'planejada' | 'concluida';
 export type ActionType = 'contato' | 'orientacao' | 'cobranca' | 'suporte_tecnico' | 'reuniao' | 'outro';
 
+// Advanced pending tasks system types
+export type TaskAutomationType = 'manual' | 'auto_at_risk' | 'auto_missed_assignment' | 'auto_uncorrected_activity' | 'recurring';
+export type ActionEffectiveness = 'pendente' | 'eficaz' | 'nao_eficaz' | 'parcialmente_eficaz';
+export type RecurrencePattern = 'diario' | 'semanal' | 'quinzenal' | 'mensal' | 'bimestral' | 'trimestral';
+
 export interface User {
   id: string;
   moodle_user_id: string;
@@ -57,7 +62,7 @@ export interface Student {
 
 export interface PendingTask {
   id: string;
-  student_id: string;
+  student_id?: string; // Optional for class-level tasks
   course_id?: string;
   created_by_user_id?: string;
   assigned_to_user_id?: string;
@@ -69,11 +74,16 @@ export interface PendingTask {
   due_date?: string;
   completed_at?: string;
   moodle_activity_id?: string;
+  automation_type?: TaskAutomationType;
+  is_recurring?: boolean;
+  recurrence_id?: string;
+  parent_task_id?: string;
   created_at: string;
   updated_at: string;
   // Relations
   student?: Student;
   course?: Course;
+  actions?: TaskAction[];
 }
 
 export interface Action {
@@ -132,6 +142,63 @@ export interface ActivityFeedItem {
   student?: Student;
   course?: Course;
   user?: User;
+}
+
+// Task recurrence configuration
+export interface TaskRecurrenceConfig {
+  id: string;
+  title: string;
+  description?: string;
+  pattern: RecurrencePattern;
+  start_date: string;
+  end_date?: string;
+  course_id?: string;
+  student_id?: string;
+  created_by_user_id: string;
+  task_type: TaskType;
+  priority: TaskPriority;
+  is_active: boolean;
+  last_generated_at?: string;
+  next_generation_at?: string;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  course?: Course;
+  student?: Student;
+  created_by?: User;
+}
+
+// Task action (linked to pending task)
+export interface TaskAction {
+  id: string;
+  pending_task_id: string;
+  action_type: ActionType;
+  description: string;
+  effectiveness: ActionEffectiveness;
+  executed_by_user_id?: string;
+  executed_at?: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  // Relations
+  pending_task?: PendingTask;
+  executed_by?: User;
+  history?: TaskActionHistory[];
+}
+
+// Task action history
+export interface TaskActionHistory {
+  id: string;
+  task_action_id: string;
+  pending_task_id: string;
+  previous_effectiveness?: ActionEffectiveness;
+  new_effectiveness: ActionEffectiveness;
+  notes?: string;
+  changed_by_user_id?: string;
+  created_at: string;
+  // Relations
+  task_action?: TaskAction;
+  changed_by?: User;
 }
 
 // UI-specific types
