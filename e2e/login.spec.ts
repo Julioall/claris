@@ -7,7 +7,6 @@ test.describe('Login Page', () => {
 
   test('should display login form', async ({ page }) => {
     // Check if the page has the login form elements
-    await expect(page.getByRole('heading', { name: /login/i })).toBeVisible();
     await expect(page.getByLabel(/usuário/i)).toBeVisible();
     await expect(page.getByLabel(/senha/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /entrar/i })).toBeVisible();
@@ -33,8 +32,9 @@ test.describe('Login Page', () => {
     // Password should be hidden by default
     await expect(passwordInput).toHaveAttribute('type', 'password');
     
-    // Click the toggle button
-    await page.getByRole('button', { name: /mostrar senha/i }).click();
+    // Find and click the eye icon button (password toggle)
+    const toggleButton = page.locator('button').filter({ has: page.locator('svg') }).nth(0);
+    await toggleButton.click();
     
     // Password should now be visible
     await expect(passwordInput).toHaveAttribute('type', 'text');

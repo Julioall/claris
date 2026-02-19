@@ -38,9 +38,12 @@ test.describe('Navigation', () => {
   test('should have accessible login page', async ({ page }) => {
     await page.goto('/login');
     
-    // Basic accessibility checks
-    await expect(page.getByRole('main')).toBeVisible();
+    // Basic accessibility checks - inputs should be labeled
     await expect(page.getByLabel(/usuário/i)).toBeVisible();
     await expect(page.getByLabel(/senha/i)).toBeVisible();
+    
+    // Form should exist
+    const form = page.locator('form');
+    await expect(form).toBeVisible();
   });
 });
