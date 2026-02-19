@@ -53,3 +53,27 @@ docker compose down
 
 - O `.env` do Lovable pode permanecer no repositorio; o Compose nao depende dele para subir local.
 - `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321`.
+
+## Testes
+
+### Testes Unitários
+
+Execute os testes unitários com Vitest:
+
+```bash
+npm run test        # Executar testes uma vez
+npm run test:watch  # Executar testes em modo watch
+```
+
+### Testes End-to-End (E2E)
+
+Os testes E2E utilizam Playwright para testar a aplicação completa.
+
+```bash
+npm run test:e2e        # Executar todos os testes E2E
+npm run test:e2e:ui     # Executar com interface gráfica
+npm run test:e2e:headed # Executar com navegador visível
+npm run test:e2e:debug  # Executar em modo debug
+```
+
+Para mais informações sobre os testes E2E, consulte a [documentação dos testes](./e2e/README.md).
