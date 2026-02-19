@@ -503,12 +503,13 @@ export function CourseSelectorDialog({
               <span className="truncate">{selectedCourseIds.length} curso{selectedCourseIds.length !== 1 ? 's' : ''} selecionado{selectedCourseIds.length !== 1 ? 's' : ''}</span>
             )}
           </div>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
             Cancelar
           </Button>
           <Button
             onClick={handleSync}
             disabled={selectedCourseIds.length === 0 || isLoading}
+            className="w-full sm:w-auto"
           >
             <RefreshCw className="h-4 w-4 mr-2" />
             Sincronizar

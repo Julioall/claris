@@ -452,10 +452,10 @@ export function NewPendingTaskDialog({
             />
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => handleClose(false)}>
+              <Button type="button" variant="outline" onClick={() => handleClose(false)} className="w-full sm:w-auto">
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
+              <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Criar pendência
               </Button>
