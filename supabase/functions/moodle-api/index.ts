@@ -246,7 +246,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { action, moodleUrl, username, password, token, userId, courseId, service, selectedCourseIds } = await req.json();
+    const body = await req.json();
+    const { action, moodleUrl, username, password, token, userId, courseId, service, selectedCourseIds } = body;
 
     console.log(`Moodle API action: ${action}`);
 
