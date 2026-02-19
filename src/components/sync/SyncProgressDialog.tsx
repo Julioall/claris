@@ -173,7 +173,7 @@ export function SyncProgressDialog({
 
         {isComplete && (
           <div className="flex justify-end pt-2">
-            <Button onClick={onClose}>Fechar</Button>
+            <Button onClick={onClose} className="w-full sm:w-auto">Fechar</Button>
           </div>
         )}
       </DialogContent>

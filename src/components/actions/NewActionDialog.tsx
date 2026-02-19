@@ -851,10 +851,11 @@ export function NewActionDialog({
                 variant="outline"
                 onClick={() => handleClose(false)}
                 disabled={isSubmitting}
+                className="w-full sm:w-auto"
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting || isSendingMessages}>
+              <Button type="submit" disabled={isSubmitting || isSendingMessages} className="w-full sm:w-auto">
                 {(isSubmitting || isSendingMessages) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                  {isSendingMessages ? 'Enviando mensagens...' : isEditMode ? 'Atualizar ação' : 'Criar ação'}
               </Button>

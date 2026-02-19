@@ -367,10 +367,10 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
                 </div>
 
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto">
                     Cancelar
                   </Button>
-                  <Button onClick={saveAttendance} disabled={isSaving}>
+                  <Button onClick={saveAttendance} disabled={isSaving} className="w-full sm:w-auto">
                     {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
                     Salvar
                   </Button>
