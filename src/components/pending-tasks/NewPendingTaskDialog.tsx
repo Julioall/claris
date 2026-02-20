@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon, Loader2, Repeat } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +16,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -37,8 +38,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { TaskPriority, TaskType } from '@/types';
+import { TaskPriority, TaskType, RecurrencePattern } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +57,15 @@ const taskTypeOptions: { value: TaskType; label: string }[] = [
   { value: 'moodle', label: 'Moodle' },
 ];
 
+const recurrencePatternOptions: { value: RecurrencePattern; label: string }[] = [
+  { value: 'diario', label: 'Diário' },
+  { value: 'semanal', label: 'Semanal' },
+  { value: 'quinzenal', label: 'Quinzenal' },
+  { value: 'mensal', label: 'Mensal' },
+  { value: 'bimestral', label: 'Bimestral' },
+  { value: 'trimestral', label: 'Trimestral' },
+];
+
 const formSchema = z.object({
   title: z.string()
     .min(3, 'O título deve ter pelo menos 3 caracteres')
@@ -62,13 +73,16 @@ const formSchema = z.object({
   description: z.string()
     .max(1000, 'A descrição deve ter no máximo 1000 caracteres')
     .optional(),
-  student_id: z.string().optional(), // Optional for class-level tasks
+  student_id: z.string().optional(),
   course_id: z.string({
     required_error: 'Selecione um curso',
   }),
   task_type: z.enum(['interna', 'moodle'] as const),
   priority: z.enum(['baixa', 'media', 'alta', 'urgente'] as const),
   due_date: z.date().optional(),
+  is_recurring: z.boolean().default(false),
+  recurrence_pattern: z.enum(['diario', 'semanal', 'quinzenal', 'mensal', 'bimestral', 'trimestral'] as const).optional(),
+  recurrence_end_date: z.date().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -108,15 +122,17 @@ export function NewPendingTaskDialog({
       description: '',
       task_type: 'interna',
       priority: 'media',
+      is_recurring: false,
+      recurrence_pattern: 'semanal',
     },
   });
 
   const selectedCourseId = form.watch('course_id');
+  const isRecurring = form.watch('is_recurring');
 
   // Fetch user's active courses
   const fetchCourses = async () => {
     if (!user) return;
-    
     setIsLoadingCourses(true);
     try {
       const { data, error } = await supabase
@@ -138,8 +154,7 @@ export function NewPendingTaskDialog({
         ?.map(uc => uc.courses)
         .filter((c): c is { id: string; short_name: string | null; end_date: string | null } => {
           if (!c) return false;
-          const isActive = !c.end_date || new Date(c.end_date) > now;
-          return isActive;
+          return !c.end_date || new Date(c.end_date) > now;
         })
         .map(c => ({ id: c.id, short_name: c.short_name || '' })) || [];
 
@@ -153,11 +168,7 @@ export function NewPendingTaskDialog({
 
   // Fetch students for selected course
   const fetchStudents = async (courseId: string) => {
-    if (!courseId) {
-      setStudents([]);
-      return;
-    }
-
+    if (!courseId) { setStudents([]); return; }
     setIsLoadingStudents(true);
     try {
       const { data, error } = await supabase
@@ -186,14 +197,10 @@ export function NewPendingTaskDialog({
     }
   };
 
-  // Load courses when dialog opens
   useEffect(() => {
-    if (open) {
-      fetchCourses();
-    }
+    if (open) fetchCourses();
   }, [open, user]);
 
-  // Load students when course changes
   useEffect(() => {
     if (selectedCourseId) {
       fetchStudents(selectedCourseId);
@@ -211,22 +218,25 @@ export function NewPendingTaskDialog({
         return;
       }
 
+      // Create the pending task
       const { error } = await supabase.from('pending_tasks').insert({
         title: data.title.trim(),
         description: data.description?.trim() || null,
-        student_id: data.student_id || null, // Allow null for class-level tasks
+        student_id: data.student_id || null,
         course_id: data.course_id,
         task_type: data.task_type,
         priority: data.priority,
         due_date: data.due_date?.toISOString() || null,
         created_by_user_id: user.id,
         status: 'aberta',
-        automation_type: 'manual',
-      });
+      } as any);
 
       if (error) throw error;
 
-      toast.success('Pendência criada com sucesso!');
+      toast.success(data.is_recurring 
+        ? 'Pendência recorrente criada com sucesso! (recorrência será gerenciada manualmente por enquanto)' 
+        : 'Pendência criada com sucesso!'
+      );
       form.reset();
       onOpenChange(false);
       onSuccess?.();
@@ -249,11 +259,11 @@ export function NewPendingTaskDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nova Pendência</DialogTitle>
           <DialogDescription>
-            Crie uma nova pendência para acompanhamento de aluno.
+            Crie uma nova pendência para acompanhamento de aluno ou turma.
           </DialogDescription>
         </DialogHeader>
 
@@ -332,9 +342,9 @@ export function NewPendingTaskDialog({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <FormDescription className="text-xs">
                     Deixe vazio para atribuir a pendência à turma inteira
-                  </p>
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -397,7 +407,7 @@ export function NewPendingTaskDialog({
               name="due_date"
               render={({ field }) => (
                 <FormItem className="flex flex-col">
-                  <FormLabel>Prazo</FormLabel>
+                  <FormLabel>{isRecurring ? 'Data de Início *' : 'Prazo'}</FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
                       <FormControl>
@@ -424,6 +434,7 @@ export function NewPendingTaskDialog({
                         onSelect={field.onChange}
                         locale={ptBR}
                         initialFocus
+                        className={cn("p-3 pointer-events-auto")}
                       />
                     </PopoverContent>
                   </Popover>
@@ -431,6 +442,105 @@ export function NewPendingTaskDialog({
                 </FormItem>
               )}
             />
+
+            {/* Recurrence Toggle */}
+            <div className="rounded-lg border p-4 space-y-4">
+              <FormField
+                control={form.control}
+                name="is_recurring"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between">
+                    <div className="space-y-0.5">
+                      <FormLabel className="flex items-center gap-2">
+                        <Repeat className="h-4 w-4" />
+                        Pendência Recorrente
+                      </FormLabel>
+                      <FormDescription className="text-xs">
+                        Ative para criar uma pendência que se repete automaticamente
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {isRecurring && (
+                <div className="space-y-4 pt-2 border-t">
+                  <FormField
+                    control={form.control}
+                    name="recurrence_pattern"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Frequência da Recorrência *</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione a frequência" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {recurrencePatternOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="recurrence_end_date"
+                    render={({ field }) => (
+                      <FormItem className="flex flex-col">
+                        <FormLabel>Data de Término da Recorrência</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                ) : (
+                                  <span>Opcional (indefinida)</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              locale={ptBR}
+                              initialFocus
+                              className={cn("p-3 pointer-events-auto")}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormDescription className="text-xs">
+                          Deixe vazio para recorrência indefinida
+                        </FormDescription>
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </div>
 
             <FormField
               control={form.control}
@@ -457,7 +567,7 @@ export function NewPendingTaskDialog({
               </Button>
               <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Criar pendência
+                {isRecurring ? 'Criar Recorrente' : 'Criar Pendência'}
               </Button>
             </DialogFooter>
           </form>

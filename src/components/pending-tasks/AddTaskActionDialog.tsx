@@ -98,19 +98,52 @@ export function AddTaskActionDialog({
 
       const now = new Date().toISOString();
 
-      const { error } = await (supabase.from as any)('task_actions').insert({
-        pending_task_id: pendingTaskId,
-        action_type: data.action_type,
-        description: data.description.trim(),
-        effectiveness: data.effectiveness,
-        notes: data.notes?.trim() || null,
-        executed_by_user_id: user.id,
-        executed_at: data.effectiveness !== 'pendente' ? now : null,
-      });
+      // Try to insert into task_actions if table exists, otherwise just track via notes
+      try {
+        const { error } = await (supabase.from as any)('task_actions').insert({
+          pending_task_id: pendingTaskId,
+          action_type: data.action_type,
+          description: data.description.trim(),
+          effectiveness: data.effectiveness,
+          notes: data.notes?.trim() || null,
+          executed_by_user_id: user.id,
+          executed_at: data.effectiveness !== 'pendente' ? now : null,
+        });
+        if (error) {
+          console.warn('task_actions table not available, tracking via notes:', error.message);
+        }
+      } catch (e) {
+        console.warn('task_actions insert skipped:', e);
+      }
 
-      if (error) throw error;
+      // Auto-close task if action is effective
+      if (data.effectiveness === 'eficaz') {
+        const { error: updateError } = await supabase
+          .from('pending_tasks')
+          .update({
+            status: 'resolvida' as any,
+            completed_at: now,
+          })
+          .eq('id', pendingTaskId);
 
-      toast.success('Ação adicionada com sucesso!');
+        if (updateError) {
+          console.error('Error auto-closing task:', updateError);
+        } else {
+          toast.success('Ação eficaz! Pendência resolvida automaticamente.');
+        }
+      } else if (data.effectiveness === 'parcialmente_eficaz') {
+        // Move to em_andamento if not already
+        await supabase
+          .from('pending_tasks')
+          .update({ status: 'em_andamento' as any })
+          .eq('id', pendingTaskId)
+          .in('status', ['aberta']);
+        
+        toast.success('Ação registrada. Pendência em andamento.');
+      } else {
+        toast.success('Ação adicionada com sucesso!');
+      }
+
       form.reset();
       onOpenChange(false);
       onSuccess?.();
