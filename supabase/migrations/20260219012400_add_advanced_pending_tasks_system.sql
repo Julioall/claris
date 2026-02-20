@@ -249,19 +249,19 @@ CREATE TRIGGER trigger_update_task_status_from_action
 
 -- Create function to calculate next generation date for recurring tasks
 CREATE OR REPLACE FUNCTION public.calculate_next_recurrence_date(
-  current_date TIMESTAMP WITH TIME ZONE,
+  current_ts TIMESTAMP WITH TIME ZONE,
   pattern recurrence_pattern
 )
 RETURNS TIMESTAMP WITH TIME ZONE AS $$
 BEGIN
   RETURN CASE pattern
-    WHEN 'diario' THEN current_date + INTERVAL '1 day'
-    WHEN 'semanal' THEN current_date + INTERVAL '1 week'
-    WHEN 'quinzenal' THEN current_date + INTERVAL '2 weeks'
-    WHEN 'mensal' THEN current_date + INTERVAL '1 month'
-    WHEN 'bimestral' THEN current_date + INTERVAL '2 months'
-    WHEN 'trimestral' THEN current_date + INTERVAL '3 months'
-    ELSE current_date + INTERVAL '1 week'
+    WHEN 'diario' THEN current_ts + INTERVAL '1 day'
+    WHEN 'semanal' THEN current_ts + INTERVAL '1 week'
+    WHEN 'quinzenal' THEN current_ts + INTERVAL '2 weeks'
+    WHEN 'mensal' THEN current_ts + INTERVAL '1 month'
+    WHEN 'bimestral' THEN current_ts + INTERVAL '2 months'
+    WHEN 'trimestral' THEN current_ts + INTERVAL '3 months'
+    ELSE current_ts + INTERVAL '1 week'
   END;
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
