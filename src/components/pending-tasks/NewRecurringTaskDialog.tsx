@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -227,7 +227,7 @@ export function NewRecurringTaskDialog({
       }
 
       // Calculate next generation date based on pattern
-      const { data: nextDate, error: rpcError } = await supabase.rpc(
+      const { data: nextDate, error: rpcError } = await (supabase.rpc as any)(
         'calculate_next_recurrence_date',
         {
           current_date: data.start_date.toISOString(),
@@ -239,7 +239,7 @@ export function NewRecurringTaskDialog({
         console.error('RPC error:', rpcError);
       }
 
-      const { error } = await supabase.from('task_recurrence_configs').insert({
+      const { error } = await (supabase.from as any)('task_recurrence_configs').insert({
         title: data.title.trim(),
         description: data.description?.trim() || null,
         pattern: data.pattern,

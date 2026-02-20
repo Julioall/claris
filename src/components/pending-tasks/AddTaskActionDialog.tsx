@@ -98,7 +98,7 @@ export function AddTaskActionDialog({
 
       const now = new Date().toISOString();
 
-      const { error } = await supabase.from('task_actions').insert({
+      const { error } = await (supabase.from as any)('task_actions').insert({
         pending_task_id: pendingTaskId,
         action_type: data.action_type,
         description: data.description.trim(),
