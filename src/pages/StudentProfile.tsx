@@ -23,6 +23,7 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { StudentGradesTab } from '@/components/student/StudentGradesTab';
+import { ChatWindow } from '@/components/chat/ChatWindow';
  import { NewActionDialog, PreselectedStudent } from '@/components/actions/NewActionDialog';
 import { getRiskLevelLabel } from '@/lib/mock-data';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -256,6 +257,10 @@ export default function StudentProfile() {
             <History className="h-4 w-4" />
             Histórico
           </TabsTrigger>
+          <TabsTrigger value="chat" className="gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Chat
+          </TabsTrigger>
         </TabsList>
 
         {/* Pendências */}
@@ -396,6 +401,22 @@ export default function StudentProfile() {
             <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
             <p>Histórico em desenvolvimento</p>
           </div>
+        </TabsContent>
+
+        {/* Chat */}
+        <TabsContent value="chat" className="mt-4">
+          {student.moodle_user_id ? (
+            <ChatWindow
+              moodleUserId={student.moodle_user_id}
+              studentName={student.full_name}
+              className="h-[500px]"
+            />
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p>ID do Moodle não encontrado para este aluno</p>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

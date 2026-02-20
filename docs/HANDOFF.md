@@ -1,4 +1,4 @@
- # Guia Tutor - Documentação de Handoff para Desenvolvimento Externo
+ # ACTiM - Documentação de Handoff para Desenvolvimento Externo
  
  > Versão: 1.0  
  > Última atualização: 2026-02-05  
@@ -28,7 +28,7 @@
  
  ### O que é o projeto
  
- **Guia Tutor** é uma aplicação web para tutores e monitores acompanharem alunos de cursos no Moodle. Os dados de cursos/alunos vêm do Moodle via API; todos os registros de acompanhamento (ações, notas, pendências, risco) são persistidos no Supabase.
+ **ACTiM** é uma aplicação web para tutores e monitores acompanharem alunos de cursos no Moodle. Os dados de cursos/alunos vêm do Moodle via API; todos os registros de acompanhamento (ações, notas, pendências, risco) são persistidos no Supabase.
  
  ### Como rodar local (1 comando)
 

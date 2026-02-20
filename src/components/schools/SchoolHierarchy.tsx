@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { SchoolCourseCard } from './SchoolCourseCard';
 import { toast } from 'sonner';
+import { AttendanceBulkToggleButton } from '@/components/attendance/AttendanceBulkToggleButton';
 
 interface CourseWithStats {
   id: string;
@@ -34,6 +35,7 @@ interface CourseWithStats {
   pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
+  is_attendance_enabled: boolean;
 }
 
 interface CategoryStats {
@@ -70,6 +72,8 @@ interface SchoolHierarchyProps {
   onToggleFollow?: (courseId: string) => void;
   onToggleIgnore?: (courseId: string) => void;
   onToggleIgnoreMultiple?: (courseIds: string[], shouldIgnore: boolean) => void;
+  onToggleAttendance?: (courseId: string) => void;
+  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => void;
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
@@ -172,7 +176,14 @@ function IgnoreAllButton({
   );
 }
 
-export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onToggleIgnoreMultiple }: SchoolHierarchyProps) {
+export function SchoolHierarchy({
+  courses,
+  onToggleFollow,
+  onToggleIgnore,
+  onToggleIgnoreMultiple,
+  onToggleAttendance,
+  onToggleAttendanceMultiple,
+}: SchoolHierarchyProps) {
   const hierarchy = useMemo(() => {
     const tree: HierarchyTree = {};
     const uncategorized: CourseWithStats[] = [];
@@ -269,7 +280,7 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
     <div className="space-y-4">
       <Accordion 
         type="multiple" 
-        defaultValue={hierarchy.sortedSchools}
+        defaultValue={[]}
         className="space-y-4"
       >
         {hierarchy.sortedSchools.map(schoolKey => {
@@ -295,6 +306,11 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <AttendanceBulkToggleButton
+                      courses={schoolCourses}
+                      onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                      level="escola"
+                    />
                     <IgnoreAllButton 
                       courses={schoolCourses} 
                       onToggleIgnoreMultiple={onToggleIgnoreMultiple}
@@ -307,7 +323,7 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
               <AccordionContent className="px-4 pb-4">
                 <Accordion 
                   type="multiple" 
-                  defaultValue={courseKeys}
+                  defaultValue={[]}
                   className="space-y-3 pt-2"
                 >
                   {courseKeys.map(courseKey => {
@@ -333,6 +349,11 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              <AttendanceBulkToggleButton
+                                courses={courseCourses}
+                                onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                                level="curso"
+                              />
                               <IgnoreAllButton 
                                 courses={courseCourses} 
                                 onToggleIgnoreMultiple={onToggleIgnoreMultiple}
@@ -345,7 +366,7 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
                         <AccordionContent className="px-4 pb-3">
                           <Accordion 
                             type="multiple" 
-                            defaultValue={classKeys}
+                            defaultValue={[]}
                             className="space-y-2 pt-2"
                           >
                             {classKeys.map(classKey => {
@@ -369,6 +390,11 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-2">
+                                        <AttendanceBulkToggleButton
+                                          courses={classNode.courses}
+                                          onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                                          level="turma"
+                                        />
                                         <IgnoreAllButton 
                                           courses={classNode.courses} 
                                           onToggleIgnoreMultiple={onToggleIgnoreMultiple}
@@ -386,6 +412,7 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
                                           course={course} 
                                           onToggleFollow={onToggleFollow}
                                           onToggleIgnore={onToggleIgnore}
+                                          onToggleAttendance={onToggleAttendance}
                                         />
                                       ))}
                                     </div>
@@ -406,7 +433,7 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
       </Accordion>
 
       {hierarchy.uncategorized.length > 0 && (
-        <Accordion type="multiple" defaultValue={['uncategorized']} className="space-y-4">
+        <Accordion type="multiple" defaultValue={[]} className="space-y-4">
           <AccordionItem 
             value="uncategorized"
             className="border rounded-lg bg-card overflow-hidden"
@@ -423,6 +450,11 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <AttendanceBulkToggleButton
+                    courses={hierarchy.uncategorized}
+                    onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                    level="escola"
+                  />
                   <IgnoreAllButton 
                     courses={hierarchy.uncategorized} 
                     onToggleIgnoreMultiple={onToggleIgnoreMultiple}
@@ -440,6 +472,7 @@ export function SchoolHierarchy({ courses, onToggleFollow, onToggleIgnore, onTog
                     course={course} 
                     onToggleFollow={onToggleFollow}
                     onToggleIgnore={onToggleIgnore}
+                    onToggleAttendance={onToggleAttendance}
                   />
                 ))}
               </div>

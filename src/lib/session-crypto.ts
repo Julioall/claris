@@ -4,7 +4,7 @@
  * Falls back to base64 encoding if Web Crypto is unavailable.
  */
 
-const PASSPHRASE = 'guia-tutor-session-key';
+const PASSPHRASE = 'actim-session-key';
 const SALT = new Uint8Array([103, 116, 115, 101, 99, 114, 101, 116, 107, 101, 121, 49, 50, 51, 52, 53]);
 
 function isCryptoAvailable(): boolean {

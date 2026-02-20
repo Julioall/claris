@@ -9,7 +9,10 @@ import {
   Clock,
   ExternalLink,
   Loader2,
-  Trash2
+  Trash2,
+  Repeat,
+  Zap,
+  ListChecks
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,28 +40,57 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { usePendingTasksData } from '@/hooks/usePendingTasksData';
 import { NewPendingTaskDialog } from '@/components/pending-tasks/NewPendingTaskDialog';
+import { GenerateAutomatedTasksDialog } from '@/components/pending-tasks/GenerateAutomatedTasksDialog';
+import { AddTaskActionDialog } from '@/components/pending-tasks/AddTaskActionDialog';
 import { format, isPast, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function PendingTasks() {
+  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isAutoDialogOpen, setIsAutoDialogOpen] = useState(false);
+  const [selectedTaskForAction, setSelectedTaskForAction] = useState<string | null>(null);
 
   const { tasks, courses, isLoading, markAsResolved, deleteTask, refetch } = usePendingTasksData();
 
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.student?.full_name.toLowerCase().includes(searchQuery.toLowerCase());
+      task.student?.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (!task.student && task.course?.short_name.toLowerCase().includes(searchQuery.toLowerCase()));
     
     const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
     const matchesCourse = courseFilter === 'all' || task.course_id === courseFilter;
     
     return matchesSearch && matchesStatus && matchesCourse;
   });
+
+  const getAutomationTypeBadge = (automationType?: string) => {
+    if (!automationType || automationType === 'manual') return null;
+    
+    const badges: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
+      auto_at_risk: { label: 'Auto: Em Risco', variant: 'default' },
+      auto_missed_assignment: { label: 'Auto: Não Entregue', variant: 'secondary' },
+      auto_uncorrected_activity: { label: 'Auto: Não Corrigida', variant: 'outline' },
+      auto_no_access: { label: 'Auto: Sem Acesso', variant: 'secondary' },
+      auto_low_participation: { label: 'Auto: Baixa Participação', variant: 'outline' },
+      recurring: { label: 'Recorrente', variant: 'default' },
+    };
+
+    const badge = badges[automationType];
+    if (!badge) return null;
+
+    return (
+      <Badge variant={badge.variant} className="text-xs">
+        {badge.label}
+      </Badge>
+    );
+  };
 
   const formatDueDate = (date: string | undefined) => {
     if (!date) return null;
@@ -109,10 +141,20 @@ export default function PendingTasks() {
           </p>
         </div>
 
-        <Button onClick={() => setIsDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova pendência
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Pendência
+          </Button>
+
+          <Button 
+            onClick={() => setIsAutoDialogOpen(true)}
+            variant="secondary"
+          >
+            <Zap className="h-4 w-4 mr-2" />
+            Gerar Automáticas
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -176,15 +218,26 @@ export default function PendingTasks() {
                     <Badge variant="outline" className="text-xs">
                       {task.task_type === 'moodle' ? 'Moodle' : 'Interna'}
                     </Badge>
+                    {getAutomationTypeBadge(task.automation_type)}
+                    {task.is_recurring && (
+                      <Badge variant="secondary" className="text-xs">
+                        <Repeat className="h-3 w-3 mr-1" />
+                        Recorrente
+                      </Badge>
+                    )}
                   </div>
                   
-                  {task.student && (
+                  {task.student ? (
                     <Link 
                       to={`/alunos/${task.student_id}`}
                       className="text-sm text-primary hover:underline mt-1 inline-block"
                     >
                       {task.student.full_name}
                     </Link>
+                  ) : task.course && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      <span className="font-medium">Turma:</span> {task.course.short_name}
+                    </div>
                   )}
                   
                   {task.description && (
@@ -210,6 +263,14 @@ export default function PendingTasks() {
                 </div>
                 
                 <div className="flex items-center gap-1 shrink-0">
+                  <Button 
+                    size="sm" 
+                    variant="ghost" 
+                    title="Adicionar ação"
+                    onClick={() => setSelectedTaskForAction(task.id)}
+                  >
+                    <ListChecks className="h-4 w-4" />
+                  </Button>
                   {task.status !== 'resolvida' && (
                     <Button 
                       size="sm" 
@@ -220,11 +281,13 @@ export default function PendingTasks() {
                       <CheckCircle2 className="h-4 w-4" />
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost" asChild>
-                    <Link to={`/alunos/${task.student_id}`}>
-                      <ExternalLink className="h-4 w-4" />
-                    </Link>
-                  </Button>
+                  {task.student_id && (
+                    <Button size="sm" variant="ghost" asChild>
+                      <Link to={`/alunos/${task.student_id}`}>
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  )}
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button 
@@ -279,6 +342,21 @@ export default function PendingTasks() {
         onOpenChange={setIsDialogOpen}
         onSuccess={refetch}
       />
+
+      <GenerateAutomatedTasksDialog
+        open={isAutoDialogOpen}
+        onOpenChange={setIsAutoDialogOpen}
+        onSuccess={refetch}
+      />
+
+      {selectedTaskForAction && (
+        <AddTaskActionDialog 
+          open={!!selectedTaskForAction} 
+          onOpenChange={(open) => !open && setSelectedTaskForAction(null)}
+          pendingTaskId={selectedTaskForAction}
+          onSuccess={refetch}
+        />
+      )}
     </div>
   );
 }

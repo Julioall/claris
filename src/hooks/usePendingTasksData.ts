@@ -5,7 +5,7 @@ import { TaskStatus, TaskPriority, TaskType } from '@/types';
 
 interface PendingTaskWithRelations {
   id: string;
-  student_id: string;
+  student_id?: string;
   course_id?: string;
   created_by_user_id?: string;
   assigned_to_user_id?: string;
@@ -17,6 +17,10 @@ interface PendingTaskWithRelations {
   due_date?: string;
   completed_at?: string;
   moodle_activity_id?: string;
+  automation_type?: string;
+  is_recurring?: boolean;
+  recurrence_id?: string;
+  parent_task_id?: string;
   created_at: string;
   updated_at?: string;
   student?: {
@@ -68,7 +72,7 @@ export function usePendingTasksData() {
 
       const formattedTasks: PendingTaskWithRelations[] = (data || []).map(task => ({
         id: task.id,
-        student_id: task.student_id,
+        student_id: task.student_id || undefined,
         course_id: task.course_id || undefined,
         created_by_user_id: task.created_by_user_id || undefined,
         assigned_to_user_id: task.assigned_to_user_id || undefined,
@@ -80,6 +84,10 @@ export function usePendingTasksData() {
         due_date: task.due_date || undefined,
         completed_at: task.completed_at || undefined,
         moodle_activity_id: task.moodle_activity_id || undefined,
+        automation_type: (task as any).automation_type || 'manual',
+        is_recurring: (task as any).is_recurring || false,
+        recurrence_id: (task as any).recurrence_id || undefined,
+        parent_task_id: (task as any).parent_task_id || undefined,
         created_at: task.created_at || new Date().toISOString(),
         updated_at: task.updated_at || undefined,
         student: task.students ? {

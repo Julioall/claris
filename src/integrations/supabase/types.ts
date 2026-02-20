@@ -199,6 +199,86 @@ export type Database = {
         }
         Relationships: []
       }
+      moodle_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_message_at: string | null
+          last_message_text: string | null
+          moodle_conversation_id: string
+          student_id: string
+          unread_count: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_text?: string | null
+          moodle_conversation_id: string
+          student_id: string
+          unread_count?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          last_message_text?: string | null
+          moodle_conversation_id?: string
+          student_id?: string
+          unread_count?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      moodle_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          moodle_message_id: string
+          sender_name: string | null
+          sender_type: string
+          sent_at: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          moodle_message_id: string
+          sender_name?: string | null
+          sender_type: string
+          sent_at: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          moodle_message_id?: string
+          sender_name?: string | null
+          sender_type?: string
+          sent_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "moodle_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notes: {
         Row: {
           content: string
@@ -673,43 +753,28 @@ export type Database = {
       user_sync_preferences: {
         Row: {
           created_at: string
-          enabled_temperatures: Json
-          entity_last_sync: Json
-          entity_temperatures: Json
           id: string
           include_empty_courses: boolean
           include_finished: boolean
-          sync_interval_hours: Json
           selected_keys: string[]
-          sync_interval_days: Json
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
-          enabled_temperatures?: Json
-          entity_last_sync?: Json
-          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          sync_interval_hours?: Json
           selected_keys?: string[]
-          sync_interval_days?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
-          enabled_temperatures?: Json
-          entity_last_sync?: Json
-          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          sync_interval_hours?: Json
           selected_keys?: string[]
-          sync_interval_days?: Json
           updated_at?: string
           user_id?: string
         }

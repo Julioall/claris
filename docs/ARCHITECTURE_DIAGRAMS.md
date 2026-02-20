@@ -406,4 +406,4 @@ onSuccess callback dispara
 
 ---
 
-*Diagramas criados em 05/02/2026 - Moodle Monitor*
+*Diagramas criados em 05/02/2026 - ACTiM*

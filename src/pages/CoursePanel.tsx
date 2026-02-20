@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { 
   ArrowLeft, 
   Users, 
@@ -22,18 +22,22 @@ import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCoursePanel } from '@/hooks/useCoursePanel';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { CourseAttendanceTab } from '@/components/attendance/CourseAttendanceTab';
 
 export default function CoursePanel() {
   const { id } = useParams<{ id: string }>();
   const { course, students, activities, stats, isLoading, error, toggleActivityVisibility } = useCoursePanel(id);
-  const { isEditMode } = useAuth();
+  const { user, isEditMode } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
+  const [isAttendanceEnabled, setIsAttendanceEnabled] = useState(false);
+  const [isLoadingAttendanceFlag, setIsLoadingAttendanceFlag] = useState(true);
 
   const formatDate = (date: string | null | undefined) => {
     if (!date) return '-';
@@ -44,6 +48,29 @@ export default function CoursePanel() {
     if (!date) return '-';
     return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
   };
+
+  useEffect(() => {
+    const loadAttendanceFlag = async () => {
+      if (!user || !id) {
+        setIsAttendanceEnabled(false);
+        setIsLoadingAttendanceFlag(false);
+        return;
+      }
+
+      setIsLoadingAttendanceFlag(true);
+      try {
+        // attendance_course_settings table doesn't exist yet — default to disabled
+        setIsAttendanceEnabled(false);
+      } catch (err) {
+        console.error('Error loading attendance flag:', err);
+        setIsAttendanceEnabled(false);
+      } finally {
+        setIsLoadingAttendanceFlag(false);
+      }
+    };
+
+    loadAttendanceFlag();
+  }, [id, user]);
 
   if (isLoading) {
     return (
@@ -164,6 +191,9 @@ export default function CoursePanel() {
           <TabsTrigger value="overview">Visão Geral</TabsTrigger>
           <TabsTrigger value="students">Alunos ({stats.totalStudents})</TabsTrigger>
           <TabsTrigger value="activities">Atividades ({stats.totalActivities})</TabsTrigger>
+          {!isLoadingAttendanceFlag && isAttendanceEnabled && (
+            <TabsTrigger value="attendance">Presenças</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-4">
@@ -378,6 +408,12 @@ export default function CoursePanel() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {!isLoadingAttendanceFlag && isAttendanceEnabled && (
+          <TabsContent value="attendance" className="mt-4">
+            <CourseAttendanceTab courseId={course.id} />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

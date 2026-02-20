@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Repeat } from 'lucide-react';
+import { CalendarIcon, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -38,7 +38,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
-import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { TaskPriority, TaskType, RecurrencePattern } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
@@ -73,41 +72,42 @@ const formSchema = z.object({
   description: z.string()
     .max(1000, 'A descrição deve ter no máximo 1000 caracteres')
     .optional(),
-  student_id: z.string().optional(),
+  pattern: z.enum(['diario', 'semanal', 'quinzenal', 'mensal', 'bimestral', 'trimestral'] as const),
+  start_date: z.date({
+    required_error: 'Selecione uma data de início',
+  }),
+  end_date: z.date().optional(),
   course_id: z.string({
     required_error: 'Selecione um curso',
   }),
+  student_id: z.string().optional(),
   task_type: z.enum(['interna', 'moodle'] as const),
   priority: z.enum(['baixa', 'media', 'alta', 'urgente'] as const),
-  due_date: z.date().optional(),
-  is_recurring: z.boolean().default(false),
-  recurrence_pattern: z.enum(['diario', 'semanal', 'quinzenal', 'mensal', 'bimestral', 'trimestral'] as const).optional(),
-  recurrence_end_date: z.date().optional(),
 });
 
 type FormData = z.infer<typeof formSchema>;
-
-interface Student {
-  id: string;
-  full_name: string;
-}
 
 interface Course {
   id: string;
   short_name: string;
 }
 
-interface NewPendingTaskDialogProps {
+interface Student {
+  id: string;
+  full_name: string;
+}
+
+interface NewRecurringTaskDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
 }
 
-export function NewPendingTaskDialog({ 
+export function NewRecurringTaskDialog({ 
   open, 
   onOpenChange, 
   onSuccess 
-}: NewPendingTaskDialogProps) {
+}: NewRecurringTaskDialogProps) {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -122,17 +122,16 @@ export function NewPendingTaskDialog({
       description: '',
       task_type: 'interna',
       priority: 'media',
-      is_recurring: false,
-      recurrence_pattern: 'semanal',
+      pattern: 'semanal',
     },
   });
 
   const selectedCourseId = form.watch('course_id');
-  const isRecurring = form.watch('is_recurring');
 
   // Fetch user's active courses
-  const fetchCourses = async () => {
+  const fetchCourses = useCallback(async () => {
     if (!user) return;
+    
     setIsLoadingCourses(true);
     try {
       const { data, error } = await supabase
@@ -154,7 +153,8 @@ export function NewPendingTaskDialog({
         ?.map(uc => uc.courses)
         .filter((c): c is { id: string; short_name: string | null; end_date: string | null } => {
           if (!c) return false;
-          return !c.end_date || new Date(c.end_date) > now;
+          const isActive = !c.end_date || new Date(c.end_date) > now;
+          return isActive;
         })
         .map(c => ({ id: c.id, short_name: c.short_name || '' })) || [];
 
@@ -164,11 +164,15 @@ export function NewPendingTaskDialog({
     } finally {
       setIsLoadingCourses(false);
     }
-  };
+  }, [user]);
 
   // Fetch students for selected course
-  const fetchStudents = async (courseId: string) => {
-    if (!courseId) { setStudents([]); return; }
+  const fetchStudents = useCallback(async (courseId: string) => {
+    if (!courseId) {
+      setStudents([]);
+      return;
+    }
+
     setIsLoadingStudents(true);
     try {
       const { data, error } = await supabase
@@ -195,54 +199,70 @@ export function NewPendingTaskDialog({
     } finally {
       setIsLoadingStudents(false);
     }
-  };
+  }, []);
 
+  // Load courses when dialog opens
   useEffect(() => {
-    if (open) fetchCourses();
-  }, [open, user]);
+    if (open) {
+      fetchCourses();
+    }
+  }, [open, fetchCourses]);
 
+  // Load students when course changes
   useEffect(() => {
     if (selectedCourseId) {
       fetchStudents(selectedCourseId);
-      form.setValue('student_id', '');
+      form.setValue('student_id', undefined);
     } else {
       setStudents([]);
     }
-  }, [selectedCourseId]);
+  }, [selectedCourseId, fetchStudents, form]);
 
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
       if (!user) {
-        toast.error('Você precisa estar logado para criar uma pendência');
+        toast.error('Você precisa estar logado para criar uma recorrência');
         return;
       }
 
-      // Create the pending task
-      const { error } = await supabase.from('pending_tasks').insert({
+      // Calculate next generation date based on pattern
+      const { data: nextDate, error: rpcError } = await (supabase.rpc as any)(
+        'calculate_next_recurrence_date',
+        {
+          current_date: data.start_date.toISOString(),
+          pattern: data.pattern
+        }
+      );
+
+      if (rpcError) {
+        console.error('RPC error:', rpcError);
+      }
+
+      const { error } = await (supabase.from as any)('task_recurrence_configs').insert({
         title: data.title.trim(),
         description: data.description?.trim() || null,
-        student_id: data.student_id || null,
+        pattern: data.pattern,
+        start_date: data.start_date.toISOString(),
+        end_date: data.end_date?.toISOString() || null,
         course_id: data.course_id,
+        student_id: data.student_id || null,
         task_type: data.task_type,
         priority: data.priority,
-        due_date: data.due_date?.toISOString() || null,
         created_by_user_id: user.id,
-        status: 'aberta',
-      } as any);
+        is_active: true,
+        next_generation_at: nextDate || data.start_date.toISOString()
+      });
 
       if (error) throw error;
 
-      toast.success(data.is_recurring 
-        ? 'Pendência recorrente criada com sucesso! (recorrência será gerenciada manualmente por enquanto)' 
-        : 'Pendência criada com sucesso!'
-      );
+      toast.success('Recorrência criada com sucesso!');
       form.reset();
       onOpenChange(false);
       onSuccess?.();
     } catch (error) {
-      console.error('Error creating task:', error);
-      toast.error('Erro ao criar pendência. Tente novamente.');
+      console.error('Error creating recurrence:', error);
+      toast.error('Erro ao criar recorrência. Tente novamente.');
     } finally {
       setIsSubmitting(false);
     }
@@ -261,9 +281,9 @@ export function NewPendingTaskDialog({
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Nova Pendência</DialogTitle>
+          <DialogTitle>Nova Pendência Recorrente</DialogTitle>
           <DialogDescription>
-            Crie uma nova pendência para acompanhamento de aluno ou turma.
+            Configure uma pendência que será gerada automaticamente de forma recorrente.
           </DialogDescription>
         </DialogHeader>
 
@@ -276,12 +296,121 @@ export function NewPendingTaskDialog({
                 <FormItem>
                   <FormLabel>Título *</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Entrar em contato sobre atividade" {...field} />
+                    <Input placeholder="Ex: Verificar engajamento semanal" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="pattern"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Padrão de Recorrência *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {recurrencePatternOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="start_date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data de Início *</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                            ) : (
+                              <span>Selecione</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          locale={ptBR}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="end_date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Data de Término</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                            ) : (
+                              <span>Opcional</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          locale={ptBR}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormDescription className="text-xs">
+                      Deixe vazio para recorrência indefinida
+                    </FormDescription>
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}
@@ -343,9 +472,8 @@ export function NewPendingTaskDialog({
                     </SelectContent>
                   </Select>
                   <FormDescription className="text-xs">
-                    Deixe vazio para atribuir a pendência à turma inteira
+                    Deixe vazio para criar pendências para toda a turma
                   </FormDescription>
-                  <FormMessage />
                 </FormItem>
               )}
             />
@@ -404,153 +532,13 @@ export function NewPendingTaskDialog({
 
             <FormField
               control={form.control}
-              name="due_date"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>{isRecurring ? 'Data de Início *' : 'Prazo'}</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })
-                          ) : (
-                            <span>Selecione uma data</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        locale={ptBR}
-                        initialFocus
-                        className={cn("p-3 pointer-events-auto")}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Recurrence Toggle */}
-            <div className="rounded-lg border p-4 space-y-4">
-              <FormField
-                control={form.control}
-                name="is_recurring"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between">
-                    <div className="space-y-0.5">
-                      <FormLabel className="flex items-center gap-2">
-                        <Repeat className="h-4 w-4" />
-                        Pendência Recorrente
-                      </FormLabel>
-                      <FormDescription className="text-xs">
-                        Ative para criar uma pendência que se repete automaticamente
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              {isRecurring && (
-                <div className="space-y-4 pt-2 border-t">
-                  <FormField
-                    control={form.control}
-                    name="recurrence_pattern"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Frequência da Recorrência *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Selecione a frequência" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {recurrencePatternOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="recurrence_end_date"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-col">
-                        <FormLabel>Data de Término da Recorrência</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                                ) : (
-                                  <span>Opcional (indefinida)</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              locale={ptBR}
-                              initialFocus
-                              className={cn("p-3 pointer-events-auto")}
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormDescription className="text-xs">
-                          Deixe vazio para recorrência indefinida
-                        </FormDescription>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-              )}
-            </div>
-
-            <FormField
-              control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Descrição</FormLabel>
                   <FormControl>
                     <Textarea 
-                      placeholder="Detalhes sobre a pendência..."
+                      placeholder="Detalhes sobre a pendência recorrente..."
                       className="resize-none"
                       rows={3}
                       {...field} 
@@ -567,7 +555,7 @@ export function NewPendingTaskDialog({
               </Button>
               <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {isRecurring ? 'Criar Recorrente' : 'Criar Pendência'}
+                Criar Recorrência
               </Button>
             </DialogFooter>
           </form>

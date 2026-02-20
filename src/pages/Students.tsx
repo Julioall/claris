@@ -1,17 +1,17 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Search, 
   Filter,
-  ExternalLink,
   Clock,
   ClipboardList,
   Loader2,
-  UserCheck
+  UserCheck,
+  RefreshCw
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { 
   Select,
   SelectContent,
@@ -32,6 +32,8 @@ import { useStudentsData } from '@/hooks/useStudentsData';
 import { useCoursesData } from '@/hooks/useCoursesData';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 // Enrollment status config
 const enrollmentStatusConfig: Record<string, { label: string; className: string }> = {
@@ -55,12 +57,14 @@ function EnrollmentStatusBadge({ status }: { status: string }) {
 }
 
 export default function Students() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [isUpdatingRisk, setIsUpdatingRisk] = useState(false);
   
-  const { students, isLoading, error } = useStudentsData(
+  const { students, isLoading, error, refetch } = useStudentsData(
     courseFilter !== 'all' ? courseFilter : undefined
   );
   const { courses } = useCoursesData();
@@ -87,6 +91,152 @@ export default function Students() {
     return format(new Date(date), "dd/MM", { locale: ptBR });
   };
 
+  const handleUpdateRisk = async () => {
+    if (students.length === 0 || isUpdatingRisk) return;
+
+    setIsUpdatingRisk(true);
+    try {
+      const uniqueStudentIds = Array.from(new Set(students.map(student => student.id)));
+      const scopedCourseIds = courseFilter !== 'all'
+        ? [courseFilter]
+        : Array.from(new Set(courses.map(course => course.id)));
+
+      const isMissingRpcError = (error: { code?: string | null; message?: string } | null) =>
+        Boolean(error) && (
+          error?.code === 'PGRST202' ||
+          error?.message?.toLowerCase().includes('could not find the function') === true
+        );
+
+      const runCourseUpdate = async () => {
+        if (scopedCourseIds.length === 0) {
+          return { failedCount: 0, successCount: 0, updatedCount: 0, missingRpc: false };
+        }
+
+        const firstCourseId = scopedCourseIds[0];
+        const probeCourse = await supabase.rpc('update_course_students_risk', { p_course_id: firstCourseId });
+        if (isMissingRpcError(probeCourse.error)) {
+          return { failedCount: 0, successCount: 0, updatedCount: 0, missingRpc: true };
+        }
+
+        if (probeCourse.error) {
+          return { failedCount: 1, successCount: 0, updatedCount: 0, missingRpc: false };
+        }
+
+        if (scopedCourseIds.length === 1) {
+          return {
+            failedCount: 0,
+            successCount: 1,
+            updatedCount: probeCourse.data ?? 0,
+            missingRpc: false,
+          };
+        }
+
+        const results = await Promise.all(
+          scopedCourseIds.slice(1).map(courseId =>
+            supabase.rpc('update_course_students_risk', { p_course_id: courseId })
+          )
+        );
+
+        const errors = results
+          .map(result => result.error)
+          .filter((error): error is NonNullable<typeof error> => Boolean(error));
+        const failedCount = errors.length;
+        const successCount = scopedCourseIds.length - failedCount;
+        const updatedCount = (probeCourse.data ?? 0) + results.reduce((acc, result) => acc + (result.data ?? 0), 0);
+
+        return {
+          failedCount,
+          successCount,
+          updatedCount,
+          missingRpc: errors.some(isMissingRpcError),
+        };
+      };
+
+      const runStudentUpdate = async () => {
+        const firstStudentId = uniqueStudentIds[0];
+        const probeStudent = await supabase.rpc('update_student_risk', { p_student_id: firstStudentId });
+        if (isMissingRpcError(probeStudent.error)) {
+          return { failedCount: 0, successCount: 0, updatedCount: 0, missingRpc: true };
+        }
+
+        if (probeStudent.error) {
+          return { failedCount: 1, successCount: 0, updatedCount: 0, missingRpc: false };
+        }
+
+        if (uniqueStudentIds.length === 1) {
+          return {
+            failedCount: 0,
+            successCount: 1,
+            updatedCount: 1,
+            missingRpc: false,
+          };
+        }
+
+        const results = await Promise.all(
+          uniqueStudentIds.slice(1).map(studentId =>
+            supabase.rpc('update_student_risk', { p_student_id: studentId })
+          )
+        );
+
+        const errors = results
+          .map(result => result.error)
+          .filter((error): error is NonNullable<typeof error> => Boolean(error));
+        const failedCount = errors.length;
+        const successCount = uniqueStudentIds.length - failedCount;
+
+        return {
+          failedCount,
+          successCount,
+          updatedCount: successCount,
+          missingRpc: errors.some(isMissingRpcError),
+        };
+      };
+
+      let updateResult = await runCourseUpdate();
+      let usedFallback = false;
+
+      if (updateResult.missingRpc) {
+        updateResult = await runStudentUpdate();
+        usedFallback = true;
+      }
+
+      if (updateResult.missingRpc) {
+        toast({
+          title: 'Funcao de risco indisponivel',
+          description: 'As funcoes de atualizacao de risco nao existem no banco local. Crie/aplique as migracoes.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      if (updateResult.failedCount > 0) {
+        toast({
+          title: 'Atualizacao parcial de risco',
+          description: `${updateResult.updatedCount} atualizados e ${updateResult.failedCount} com erro.`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'Risco atualizado',
+          description: usedFallback
+            ? `${updateResult.updatedCount} alunos recalculados via fallback por aluno.`
+            : `${updateResult.updatedCount} alunos recalculados com sucesso.`,
+        });
+      }
+
+      await refetch();
+    } catch (err) {
+      console.error('Error updating student risk:', err);
+      toast({
+        title: 'Erro ao atualizar risco',
+        description: 'Nao foi possivel recalcular o risco dos alunos.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsUpdatingRisk(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -105,7 +255,24 @@ export default function Students() {
             {students.length} alunos em seus cursos
           </p>
         </div>
-
+        <Button
+          type="button"
+          variant="outline"
+          onClick={handleUpdateRisk}
+          disabled={isLoading || isUpdatingRisk || students.length === 0}
+        >
+          {isUpdatingRisk ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Atualizando risco...
+            </>
+          ) : (
+            <>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Atualizar risco
+            </>
+          )}
+        </Button>
       </div>
 
       {error && (
@@ -183,12 +350,23 @@ export default function Students() {
               <TableHead className="hidden md:table-cell">Pendências</TableHead>
               <TableHead className="hidden lg:table-cell">Último Acesso</TableHead>
               <TableHead className="hidden lg:table-cell">Última Ação</TableHead>
-              <TableHead className="w-[100px]"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredStudents.map((student) => (
-              <TableRow key={student.id} className="group">
+              <TableRow
+                key={student.id}
+                className="cursor-pointer"
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/alunos/${student.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    navigate(`/alunos/${student.id}`);
+                  }
+                }}
+              >
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary shrink-0">
@@ -228,19 +406,6 @@ export default function Students() {
                   <span className="text-sm text-muted-foreground">
                     {formatLastAction(student.last_action_date)}
                   </span>
-                </TableCell>
-                <TableCell>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    asChild
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <Link to={`/alunos/${student.id}`}>
-                      Ver
-                      <ExternalLink className="h-3 w-3 ml-1" />
-                    </Link>
-                  </Button>
                 </TableCell>
               </TableRow>
             ))}

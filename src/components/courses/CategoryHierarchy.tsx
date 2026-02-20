@@ -18,6 +18,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { MyCourseCard } from './MyCourseCard';
 import { toast } from 'sonner';
+import { AttendanceBulkToggleButton } from '@/components/attendance/AttendanceBulkToggleButton';
 
 interface CourseWithStats {
   id: string;
@@ -31,6 +32,7 @@ interface CourseWithStats {
   at_risk_count: number;
   pending_tasks_count: number;
   student_ids?: string[];
+  is_attendance_enabled?: boolean;
 }
 
 interface CategoryStats {
@@ -66,6 +68,8 @@ interface CategoryHierarchyProps {
   courses: CourseWithStats[];
   onUnfollow?: (courseId: string) => void;
   onUnfollowMultiple?: (courseIds: string[]) => void;
+  onToggleAttendance?: (courseId: string) => void;
+  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => void;
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
@@ -144,7 +148,13 @@ function RemoveAllButton({
   );
 }
 
-export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: CategoryHierarchyProps) {
+export function CategoryHierarchy({
+  courses,
+  onUnfollow,
+  onUnfollowMultiple,
+  onToggleAttendance,
+  onToggleAttendanceMultiple,
+}: CategoryHierarchyProps) {
   const hierarchy = useMemo(() => {
     const tree: HierarchyTree = {};
     const uncategorized: CourseWithStats[] = [];
@@ -252,7 +262,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
       {/* Schools */}
       <Accordion 
         type="multiple" 
-        defaultValue={hierarchy.sortedSchools}
+        defaultValue={[]}
         className="space-y-4"
       >
         {hierarchy.sortedSchools.map(schoolKey => {
@@ -278,6 +288,11 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <AttendanceBulkToggleButton
+                      courses={schoolCourses}
+                      onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                      level="escola"
+                    />
                     <RemoveAllButton 
                       courses={schoolCourses} 
                       onUnfollowMultiple={onUnfollowMultiple}
@@ -291,7 +306,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                 {/* Courses within school */}
                 <Accordion 
                   type="multiple" 
-                  defaultValue={courseKeys}
+                  defaultValue={[]}
                   className="space-y-3 pt-2"
                 >
                   {courseKeys.map(courseKey => {
@@ -317,6 +332,11 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              <AttendanceBulkToggleButton
+                                courses={courseCourses}
+                                onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                                level="curso"
+                              />
                               <RemoveAllButton 
                                 courses={courseCourses} 
                                 onUnfollowMultiple={onUnfollowMultiple}
@@ -330,7 +350,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                           {/* Classes within course */}
                           <Accordion 
                             type="multiple" 
-                            defaultValue={classKeys}
+                            defaultValue={[]}
                             className="space-y-2 pt-2"
                           >
                             {classKeys.map(classKey => {
@@ -354,6 +374,11 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-2">
+                                        <AttendanceBulkToggleButton
+                                          courses={classNode.courses}
+                                          onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                                          level="turma"
+                                        />
                                         <RemoveAllButton 
                                           courses={classNode.courses} 
                                           onUnfollowMultiple={onUnfollowMultiple}
@@ -371,6 +396,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                                           key={course.id} 
                                           course={course}
                                           onUnfollow={onUnfollow}
+                                          onToggleAttendance={onToggleAttendance}
                                         />
                                       ))}
                                     </div>
@@ -392,7 +418,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
 
       {/* Uncategorized courses */}
       {hierarchy.uncategorized.length > 0 && (
-        <Accordion type="multiple" defaultValue={['uncategorized']} className="space-y-4">
+        <Accordion type="multiple" defaultValue={[]} className="space-y-4">
           <AccordionItem 
             value="uncategorized"
             className="border rounded-lg bg-card overflow-hidden"
@@ -409,6 +435,11 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <AttendanceBulkToggleButton
+                    courses={hierarchy.uncategorized}
+                    onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                    level="escola"
+                  />
                   <RemoveAllButton 
                     courses={hierarchy.uncategorized} 
                     onUnfollowMultiple={onUnfollowMultiple}
@@ -425,6 +456,7 @@ export function CategoryHierarchy({ courses, onUnfollow, onUnfollowMultiple }: C
                     key={course.id} 
                     course={course}
                     onUnfollow={onUnfollow}
+                    onToggleAttendance={onToggleAttendance}
                   />
                 ))}
               </div>

@@ -9,6 +9,7 @@ interface CourseWithStats extends Course {
   pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
+  is_attendance_enabled: boolean;
   student_ids: string[];
 }
 
@@ -119,6 +120,9 @@ export function useAllCoursesData() {
 
       const ignoredCourseIds = new Set(ignoredCourses?.map(ic => ic.course_id) || []);
 
+      // attendance_course_settings not yet implemented — default to disabled
+      const attendanceCourseIds = new Set<string>();
+
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
         allCourses.map(async (course) => {
@@ -161,6 +165,7 @@ export function useAllCoursesData() {
             pending_tasks_count: pendingTasksCount || 0,
             is_following: followedCourseIds.has(course.id),
             is_ignored: ignoredCourseIds.has(course.id),
+            is_attendance_enabled: attendanceCourseIds.has(course.id),
           } as CourseWithStats;
         })
       );
@@ -297,6 +302,15 @@ export function useAllCoursesData() {
     }
   }, [setCoursesAssociationRole, user]);
 
+  // attendance toggle stubs — table not yet created
+  const toggleAttendance = useCallback(async (_courseId: string) => {
+    console.warn('attendance_course_settings table not yet created');
+  }, []);
+
+  const toggleAttendanceMultiple = useCallback(async (_courseIds: string[], _shouldEnable: boolean) => {
+    console.warn('attendance_course_settings table not yet created');
+  }, []);
+
   useEffect(() => {
     fetchCourses();
   }, [fetchCourses]);
@@ -307,8 +321,10 @@ export function useAllCoursesData() {
     error, 
     refetch: fetchCourses, 
     toggleFollow, 
-    toggleIgnore, 
+    toggleIgnore,
     toggleIgnoreMultiple,
-    unfollowMultiple 
+    unfollowMultiple,
+    toggleAttendance,
+    toggleAttendanceMultiple,
   };
 }

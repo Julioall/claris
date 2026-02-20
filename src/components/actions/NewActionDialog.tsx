@@ -5,7 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Loader2, Search, Check, ChevronsUpDown } from 'lucide-react';
+import { CalendarIcon, Loader2, Search, Check, ChevronsUpDown, MessageSquare } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ActionType } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -96,6 +97,16 @@ const formSchema = z.object({
     required_error: 'Selecione um curso',
   }),
   scheduled_date: z.date().optional(),
+  send_message: z.boolean().optional().default(false),
+  message_text: z.string().optional(),
+}).refine((data) => {
+  if (data.send_message && (!data.message_text || data.message_text.trim().length < 3)) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'A mensagem deve ter pelo menos 3 caracteres',
+  path: ['message_text'],
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -125,8 +136,9 @@ export function NewActionDialog({
    preselectedStudent,
   onSuccess 
  }: NewActionDialogProps) {
-  const { user } = useAuth();
+  const { user, moodleSession } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSendingMessages, setIsSendingMessages] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
@@ -144,6 +156,8 @@ export function NewActionDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       description: '',
+      send_message: false,
+      message_text: '',
     },
   });
 
@@ -353,6 +367,47 @@ export function NewActionDialog({
     setStudentSearch('');
   }, [selectedCourseId]);
 
+  // Send Moodle message to a list of student IDs
+  const sendMoodleMessages = async (studentIds: string[], messageText: string) => {
+    if (!moodleSession) {
+      toast.error('Sessão Moodle não disponível. Faça login novamente.');
+      return 0;
+    }
+
+    // Fetch moodle_user_id for all students
+    const { data: studentsData, error: studentsErr } = await supabase
+      .from('students')
+      .select('id, moodle_user_id')
+      .in('id', studentIds);
+
+    if (studentsErr || !studentsData) {
+      console.error('Error fetching student moodle IDs:', studentsErr);
+      return 0;
+    }
+
+    let sentCount = 0;
+    for (const student of studentsData) {
+      try {
+        const { data, error: fnError } = await supabase.functions.invoke('moodle-api', {
+          body: {
+            action: 'send_message',
+            moodleUrl: moodleSession.moodleUrl,
+            token: moodleSession.moodleToken,
+            moodle_user_id: Number(student.moodle_user_id),
+            message: messageText.trim(),
+          },
+        });
+
+        if (fnError) throw new Error(fnError.message);
+        if (data?.error) throw new Error(data.error);
+        sentCount++;
+      } catch (err) {
+        console.error(`Error sending message to student ${student.id}:`, err);
+      }
+    }
+    return sentCount;
+  };
+
   const onSubmit = async (data: FormData) => {
     setIsSubmitting(true);
     try {
@@ -376,7 +431,9 @@ export function NewActionDialog({
          if (error) throw error;
          toast.success('Ação atualizada com sucesso!');
        } else {
-         // Create new action(s)
+         // Collect target student IDs
+         let targetStudentIds: string[] = [];
+
          if (!data.student_id) {
            const { data: courseStudents, error: studentsError } = await supabase
              .from('student_courses')
@@ -389,11 +446,13 @@ export function NewActionDialog({
              toast.error('Nenhum aluno encontrado neste curso');
              return;
            }
+
+           targetStudentIds = courseStudents.map(sc => sc.student_id);
  
-           const actions = courseStudents.map(sc => ({
+           const actions = targetStudentIds.map(sid => ({
              action_type: data.action_type as ActionType,
              description: data.description.trim(),
-             student_id: sc.student_id,
+             student_id: sid,
              course_id: data.course_id,
              user_id: user.id,
              scheduled_date: data.scheduled_date?.toISOString() || null,
@@ -405,18 +464,32 @@ export function NewActionDialog({
  
            toast.success(`${actions.length} ações criadas com sucesso!`);
          } else {
+           targetStudentIds = [data.student_id];
+
            const { error } = await supabase.from('actions').insert({
              action_type: data.action_type as ActionType,
-          description: data.description.trim(),
+             description: data.description.trim(),
              student_id: data.student_id,
-          course_id: data.course_id,
-          user_id: user.id,
-          scheduled_date: data.scheduled_date?.toISOString() || null,
+             course_id: data.course_id,
+             user_id: user.id,
+             scheduled_date: data.scheduled_date?.toISOString() || null,
              status: 'planejada',
            });
  
            if (error) throw error;
            toast.success('Ação criada com sucesso!');
+         }
+
+         // Send Moodle messages if enabled
+         if (data.send_message && data.message_text?.trim()) {
+           setIsSendingMessages(true);
+           const sentCount = await sendMoodleMessages(targetStudentIds, data.message_text);
+           setIsSendingMessages(false);
+           if (sentCount > 0) {
+             toast.success(`Mensagem enviada para ${sentCount} aluno(s) via Moodle`);
+           } else {
+             toast.error('Não foi possível enviar as mensagens via Moodle');
+           }
          }
       }
 
@@ -671,6 +744,63 @@ export function NewActionDialog({
               )}
             />
 
+            {/* Send message toggle - only for new actions */}
+            {!isEditMode && (
+              <div className="space-y-3 rounded-lg border border-border p-4">
+                <FormField
+                  control={form.control}
+                  name="send_message"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          disabled={!moodleSession}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="flex items-center gap-1.5 cursor-pointer">
+                          <MessageSquare className="h-4 w-4" />
+                          Enviar mensagem via Moodle
+                        </FormLabel>
+                        <FormDescription>
+                          {moodleSession 
+                            ? 'A mensagem será enviada para o(s) aluno(s) selecionados'
+                            : 'Sessão Moodle indisponível'
+                          }
+                        </FormDescription>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+
+                {form.watch('send_message') && (
+                  <FormField
+                    control={form.control}
+                    name="message_text"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Mensagem *</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Digite a mensagem a ser enviada..."
+                            className="resize-none"
+                            rows={3}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Esta mensagem será enviada pelo chat do Moodle
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+              </div>
+            )}
+
             <FormField
               control={form.control}
               name="scheduled_date"
@@ -721,12 +851,13 @@ export function NewActionDialog({
                 variant="outline"
                 onClick={() => handleClose(false)}
                 disabled={isSubmitting}
+                className="w-full sm:w-auto"
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                 {isEditMode ? 'Atualizar ação' : 'Criar ação'}
+              <Button type="submit" disabled={isSubmitting || isSendingMessages} className="w-full sm:w-auto">
+                {(isSubmitting || isSendingMessages) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                 {isSendingMessages ? 'Enviando mensagens...' : isEditMode ? 'Atualizar ação' : 'Criar ação'}
               </Button>
             </DialogFooter>
           </form>

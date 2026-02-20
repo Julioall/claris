@@ -51,7 +51,7 @@ interface ExtendedAuthContextType extends AuthContextType {
 
 const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'guia_tutor_session';
+const STORAGE_KEY = 'actim_session';
 
 const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   syncIntervalHours: {
@@ -88,21 +88,23 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const sanitizeSyncSettings = (raw?: Partial<SyncSettings> | null): SyncSettings => {
   const settings = raw || {};
-  const syncIntervalHours = settings.syncIntervalHours || {};
-  const entityLastSync = settings.entityLastSync || {};
+  const syncIntervalHours = (settings as Record<string, unknown>).syncIntervalHours as Record<string, unknown> | undefined;
+  const entityLastSync = (settings as Record<string, unknown>).entityLastSync as Record<string, unknown> | undefined;
+  const sih = syncIntervalHours || {};
+  const els = entityLastSync || {};
 
   return {
     syncIntervalHours: {
-      courses: Number(syncIntervalHours.courses ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.courses),
-      students: Number(syncIntervalHours.students ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.students),
-      activities: Number(syncIntervalHours.activities ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.activities),
-      grades: Number(syncIntervalHours.grades ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.grades),
+      courses: Number(sih.courses ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.courses),
+      students: Number(sih.students ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.students),
+      activities: Number(sih.activities ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.activities),
+      grades: Number(sih.grades ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.grades),
     },
     entityLastSync: {
-      courses: typeof entityLastSync.courses === 'string' ? entityLastSync.courses : undefined,
-      students: typeof entityLastSync.students === 'string' ? entityLastSync.students : undefined,
-      activities: typeof entityLastSync.activities === 'string' ? entityLastSync.activities : undefined,
-      grades: typeof entityLastSync.grades === 'string' ? entityLastSync.grades : undefined,
+      courses: typeof els.courses === 'string' ? els.courses : undefined,
+      students: typeof els.students === 'string' ? els.students : undefined,
+      activities: typeof els.activities === 'string' ? els.activities : undefined,
+      grades: typeof els.grades === 'string' ? els.grades : undefined,
     },
   };
 };
@@ -443,7 +445,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('user_sync_preferences')
-        .select('sync_interval_hours, sync_interval_days, entity_last_sync')
+        .select('selected_keys, include_empty_courses, include_finished')
         .eq('user_id', userId)
         .maybeSingle();
 
@@ -452,21 +454,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return DEFAULT_SYNC_SETTINGS;
       }
 
-      const syncIntervalHoursRaw = (data?.sync_interval_hours as Record<SyncEntity, number> | undefined);
-      const syncIntervalDaysRaw = (data?.sync_interval_days as Record<SyncEntity, number> | undefined);
-      const syncIntervalHoursFallback = syncIntervalDaysRaw
-        ? {
-            courses: Number(syncIntervalDaysRaw.courses || 0) * 24,
-            students: Number(syncIntervalDaysRaw.students || 0) * 24,
-            activities: Number(syncIntervalDaysRaw.activities || 0) * 24,
-            grades: Number(syncIntervalDaysRaw.grades || 0) * 24,
-          }
-        : undefined;
-
-      return sanitizeSyncSettings({
-        syncIntervalHours: syncIntervalHoursRaw || syncIntervalHoursFallback,
-        entityLastSync: data?.entity_last_sync as Partial<Record<SyncEntity, string>> | undefined,
-      });
+      // These columns don't exist yet in the DB — use defaults
+      return DEFAULT_SYNC_SETTINGS;
     } catch (err) {
       console.error('Error loading sync settings:', err);
       return DEFAULT_SYNC_SETTINGS;

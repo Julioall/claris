@@ -15,7 +15,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function MyCourses() {
   const [searchQuery, setSearchQuery] = useState('');
   const { isEditMode } = useAuth();
-  const { courses, isLoading, error, toggleFollow, unfollowMultiple } = useAllCoursesData();
+  const { courses, isLoading, error, toggleFollow, unfollowMultiple, toggleAttendance, toggleAttendanceMultiple } = useAllCoursesData();
 
   // Filter only followed courses that are active (end_date is null or in the future)
   const followedCourses = useMemo(() => {
@@ -40,6 +40,14 @@ export default function MyCourses() {
     unfollowMultiple(courseIds);
   };
 
+  const handleToggleAttendance = (courseId: string) => {
+    toggleAttendance(courseId);
+  };
+
+  const handleToggleAttendanceMultiple = (courseIds: string[], shouldEnable: boolean) => {
+    toggleAttendanceMultiple(courseIds, shouldEnable);
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -60,14 +68,6 @@ export default function MyCourses() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Link to Schools catalog */}
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/escolas">
-              <Building2 className="h-4 w-4 mr-2" />
-              Explorar Catálogo
-            </Link>
-          </Button>
-
           {/* Search */}
           <div className="relative w-full md:w-72">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -94,6 +94,8 @@ export default function MyCourses() {
           courses={filteredCourses}
           onUnfollow={isEditMode ? handleUnfollow : undefined}
           onUnfollowMultiple={isEditMode ? handleUnfollowMultiple : undefined}
+          onToggleAttendance={isEditMode ? handleToggleAttendance : undefined}
+          onToggleAttendanceMultiple={isEditMode ? handleToggleAttendanceMultiple : undefined}
         />
       ) : (
         <div className="text-center py-12">

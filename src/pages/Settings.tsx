@@ -18,6 +18,11 @@ type SyncEntity = 'courses' | 'students' | 'activities' | 'grades';
 
 interface SyncSettings {
   syncIntervalHours: Record<SyncEntity, number>;
+  riskThresholdDays: {
+    atencao: number;
+    risco: number;
+    critico: number;
+  };
 }
 
 const asObject = (value: unknown): Record<string, unknown> =>
@@ -29,6 +34,11 @@ const DEFAULT_SYNC_SETTINGS: SyncSettings = {
     students: 12,
     activities: 2.4,
     grades: 2.4,
+  },
+  riskThresholdDays: {
+    atencao: 7,
+    risco: 14,
+    critico: 30,
   },
 };
 
@@ -53,7 +63,7 @@ export default function Settings() {
       try {
         const { data, error } = await supabase
           .from('user_sync_preferences')
-          .select('sync_interval_hours, sync_interval_days')
+          .select('selected_keys, include_empty_courses, include_finished')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -63,17 +73,8 @@ export default function Settings() {
         }
 
         if (data) {
-          const syncIntervalHoursRaw = asObject(data.sync_interval_hours);
-          const syncIntervalDaysRaw = asObject(data.sync_interval_days);
-
-          setSyncSettings({
-            syncIntervalHours: {
-              courses: Number(syncIntervalHoursRaw.courses ?? (Number(syncIntervalDaysRaw.courses ?? 1) * 24)),
-              students: Number(syncIntervalHoursRaw.students ?? (Number(syncIntervalDaysRaw.students ?? 0.5) * 24)),
-              activities: Number(syncIntervalHoursRaw.activities ?? (Number(syncIntervalDaysRaw.activities ?? 0.1) * 24)),
-              grades: Number(syncIntervalHoursRaw.grades ?? (Number(syncIntervalDaysRaw.grades ?? 0.1) * 24)),
-            },
-          });
+          // These columns don't exist yet in the DB — use defaults
+          setSyncSettings(DEFAULT_SYNC_SETTINGS);
         }
       } finally {
         setIsLoadingSyncSettings(false);
@@ -103,6 +104,19 @@ export default function Settings() {
   const saveSyncSettings = async () => {
     if (!user) return;
 
+    const atencaoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.atencao));
+    const riscoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.risco));
+    const criticoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.critico));
+
+    if (!(atencaoDays < riscoDays && riscoDays < criticoDays)) {
+      toast({
+        title: 'Valores de risco invalidos',
+        description: 'Defina dias crescentes: atencao < risco < critico.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsSavingSyncSettings(true);
     try {
       const { error } = await supabase
@@ -110,6 +124,11 @@ export default function Settings() {
         .upsert({
           user_id: user.id,
           sync_interval_hours: syncSettings.syncIntervalHours,
+          risk_threshold_days: {
+            atencao: atencaoDays,
+            risco: riscoDays,
+            critico: criticoDays,
+          },
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
@@ -130,90 +149,154 @@ export default function Settings() {
     }
   };
 
+  const updateRiskThresholdDays = (level: 'atencao' | 'risco' | 'critico', value: string) => {
+    const parsed = Number(value);
+    const safeValue = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+
+    setSyncSettings(prev => ({
+      ...prev,
+      riskThresholdDays: {
+        ...prev.riskThresholdDays,
+        [level]: safeValue,
+      },
+    }));
+  };
+
   return (
-    <div className="space-y-6 animate-fade-in max-w-2xl">
+    <div className="space-y-6 animate-fade-in">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Configuracoes</h1>
         <p className="text-muted-foreground">Gerencie sua conta e preferencias</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Perfil
-          </CardTitle>
-          <CardDescription>Informacoes da sua conta Moodle</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
-              {user?.full_name.charAt(0)}
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <User className="h-5 w-5" />
+              Perfil
+            </CardTitle>
+            <CardDescription>Informacoes da sua conta Moodle</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold text-primary">
+                {user?.full_name.charAt(0)}
+              </div>
+              <div>
+                <p className="font-medium text-lg">{user?.full_name}</p>
+                <p className="text-muted-foreground">{user?.moodle_username}</p>
+                {user?.email && <p className="text-sm text-muted-foreground">{user.email}</p>}
+              </div>
             </div>
-            <div>
-              <p className="font-medium text-lg">{user?.full_name}</p>
-              <p className="text-muted-foreground">{user?.moodle_username}</p>
-              {user?.email && <p className="text-sm text-muted-foreground">{user.email}</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Sincronizacao
+            </CardTitle>
+            <CardDescription>Status atual e regras do botao de sincronizacao da barra superior</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">Ultima sincronizacao:</span>
+                <span className="font-medium">{formatDate(lastSync)}</span>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <RefreshCw className="h-5 w-5" />
-            Sincronizacao
-          </CardTitle>
-          <CardDescription>Status atual e regras do botao de sincronizacao da barra superior</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">Ultima sincronizacao:</span>
-              <span className="font-medium">{formatDate(lastSync)}</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-sm">
+                <Globe className="h-4 w-4 text-muted-foreground" />
+                <span className="text-muted-foreground">URL do Moodle:</span>
+                <span className="font-medium">https://ead.fieg.com.br</span>
+              </div>
             </div>
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              <Globe className="h-4 w-4 text-muted-foreground" />
-              <span className="text-muted-foreground">URL do Moodle:</span>
-              <span className="font-medium">https://ead.fieg.com.br</span>
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Intervalo minimo entre sincronizacoes (horas)</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {(['courses', 'students', 'activities', 'grades'] as SyncEntity[]).map(entity => (
+                  <div key={`interval-${entity}`} className="flex items-center justify-between rounded-md border p-3 gap-3">
+                    <Label className="text-sm">{ENTITY_LABELS[entity]}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={String(syncSettings.syncIntervalHours[entity])}
+                      onChange={(e) => updateSyncIntervalHours(entity, e.target.value)}
+                      disabled={isLoadingSyncSettings}
+                      className="w-[140px]"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
 
-          <Separator />
+            <Separator />
 
-          <div className="space-y-3">
-            <div className="text-sm font-medium">Intervalo minimo entre sincronizacoes (horas)</div>
-            <div className="grid gap-3">
-              {(['courses', 'students', 'activities', 'grades'] as SyncEntity[]).map(entity => (
-                <div key={`interval-${entity}`} className="flex items-center justify-between rounded-md border p-3 gap-3">
-                  <Label className="text-sm">{ENTITY_LABELS[entity]}</Label>
+            <div className="space-y-3">
+              <div className="text-sm font-medium">Dias sem acesso para classificar risco</div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                  <Label className="text-sm">Atencao</Label>
                   <Input
                     type="number"
-                    min={0}
-                    step={0.5}
-                    value={String(syncSettings.syncIntervalHours[entity])}
-                    onChange={(e) => updateSyncIntervalHours(entity, e.target.value)}
+                    min={1}
+                    step={1}
+                    value={String(syncSettings.riskThresholdDays.atencao)}
+                    onChange={(e) => updateRiskThresholdDays('atencao', e.target.value)}
                     disabled={isLoadingSyncSettings}
-                    className="w-[140px]"
+                    className="w-[120px]"
                   />
                 </div>
-              ))}
+                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                  <Label className="text-sm">Risco</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={String(syncSettings.riskThresholdDays.risco)}
+                    onChange={(e) => updateRiskThresholdDays('risco', e.target.value)}
+                    disabled={isLoadingSyncSettings}
+                    className="w-[120px]"
+                  />
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                  <Label className="text-sm">Critico</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={String(syncSettings.riskThresholdDays.critico)}
+                    onChange={(e) => updateRiskThresholdDays('critico', e.target.value)}
+                    disabled={isLoadingSyncSettings}
+                    className="w-[120px]"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Use valores crescentes: atencao menor que risco, e risco menor que critico.
+              </p>
             </div>
-          </div>
 
-          <Button onClick={saveSyncSettings} variant="outline" className="w-full" disabled={isLoadingSyncSettings || isSavingSyncSettings}>
-            Salvar configuracoes de sincronizacao
-          </Button>
-        </CardContent>
-      </Card>
+            <Button onClick={saveSyncSettings} variant="outline" className="w-full" disabled={isLoadingSyncSettings || isSavingSyncSettings}>
+              Salvar configuracoes
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
 
-      <DataCleanupCard />
-      <ActionTypesCard />
+      <div className="space-y-6">
+        <DataCleanupCard />
+        <ActionTypesCard />
+      </div>
       <GradeDebugCard />
 
       <Card className="border-destructive/30">
