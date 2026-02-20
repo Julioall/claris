@@ -23,14 +23,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -48,13 +40,12 @@ import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { usePendingTasksData } from '@/hooks/usePendingTasksData';
 import { NewPendingTaskDialog } from '@/components/pending-tasks/NewPendingTaskDialog';
-import { NewRecurringTaskDialog } from '@/components/pending-tasks/NewRecurringTaskDialog';
+import { GenerateAutomatedTasksDialog } from '@/components/pending-tasks/GenerateAutomatedTasksDialog';
 import { AddTaskActionDialog } from '@/components/pending-tasks/AddTaskActionDialog';
 import { format, isPast, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function PendingTasks() {
@@ -63,9 +54,8 @@ export default function PendingTasks() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isRecurringDialogOpen, setIsRecurringDialogOpen] = useState(false);
+  const [isAutoDialogOpen, setIsAutoDialogOpen] = useState(false);
   const [selectedTaskForAction, setSelectedTaskForAction] = useState<string | null>(null);
-  const [isGeneratingAuto, setIsGeneratingAuto] = useState(false);
 
   const { tasks, courses, isLoading, markAsResolved, deleteTask, refetch } = usePendingTasksData();
 
@@ -80,33 +70,6 @@ export default function PendingTasks() {
     return matchesSearch && matchesStatus && matchesCourse;
   });
 
-  const handleGenerateAutomatedTasks = async () => {
-    if (!user) return;
-    
-    setIsGeneratingAuto(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('generate-automated-tasks', {
-        body: { automation_types: null } // null means all types
-      });
-
-      if (error) throw error;
-
-      const totalCreated = data?.results?.reduce((sum: number, r: any) => sum + r.tasks_created, 0) || 0;
-      
-      if (totalCreated > 0) {
-        toast.success(`${totalCreated} pendências automáticas criadas com sucesso!`);
-        refetch();
-      } else {
-        toast.info('Nenhuma nova pendência automática foi criada');
-      }
-    } catch (error) {
-      console.error('Error generating automated tasks:', error);
-      toast.error('Erro ao gerar pendências automáticas');
-    } finally {
-      setIsGeneratingAuto(false);
-    }
-  };
-
   const getAutomationTypeBadge = (automationType?: string) => {
     if (!automationType || automationType === 'manual') return null;
     
@@ -114,6 +77,8 @@ export default function PendingTasks() {
       auto_at_risk: { label: 'Auto: Em Risco', variant: 'default' },
       auto_missed_assignment: { label: 'Auto: Não Entregue', variant: 'secondary' },
       auto_uncorrected_activity: { label: 'Auto: Não Corrigida', variant: 'outline' },
+      auto_no_access: { label: 'Auto: Sem Acesso', variant: 'secondary' },
+      auto_low_participation: { label: 'Auto: Baixa Participação', variant: 'outline' },
       recurring: { label: 'Recorrente', variant: 'default' },
     };
 
@@ -177,37 +142,16 @@ export default function PendingTasks() {
         </div>
 
         <div className="flex gap-2">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline">
-                <Plus className="h-4 w-4 mr-2" />
-                Criar Pendência
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Tipo de Pendência</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsDialogOpen(true)}>
-                <ClipboardList className="h-4 w-4 mr-2" />
-                Pendência Manual
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsRecurringDialogOpen(true)}>
-                <Repeat className="h-4 w-4 mr-2" />
-                Pendência Recorrente
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Pendência
+          </Button>
 
           <Button 
-            onClick={handleGenerateAutomatedTasks}
-            disabled={isGeneratingAuto}
+            onClick={() => setIsAutoDialogOpen(true)}
             variant="secondary"
           >
-            {isGeneratingAuto ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Zap className="h-4 w-4 mr-2" />
-            )}
+            <Zap className="h-4 w-4 mr-2" />
             Gerar Automáticas
           </Button>
         </div>
@@ -399,9 +343,9 @@ export default function PendingTasks() {
         onSuccess={refetch}
       />
 
-      <NewRecurringTaskDialog 
-        open={isRecurringDialogOpen} 
-        onOpenChange={setIsRecurringDialogOpen}
+      <GenerateAutomatedTasksDialog
+        open={isAutoDialogOpen}
+        onOpenChange={setIsAutoDialogOpen}
         onSuccess={refetch}
       />
 
