@@ -47,6 +47,7 @@ interface ExtendedAuthContextType extends AuthContextType {
   setShowCourseSelector: (show: boolean) => void;
   isEditMode: boolean;
   setIsEditMode: (mode: boolean) => void;
+  isOfflineMode: boolean;
 }
 
 const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
@@ -734,6 +735,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isLoading,
     isSyncing,
     isAuthenticated: !!user,
+    isOfflineMode: !!user && !moodleSession,
     login,
     logout,
     syncData,
