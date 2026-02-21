@@ -338,20 +338,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const newUser: User = data.user;
-      const newSession: MoodleSession = {
+      const newSession: MoodleSession | null = data.moodleToken ? {
         moodleToken: data.moodleToken,
         moodleUserId: data.moodleUserId,
         moodleUrl: cleanUrl,
-      };
+      } : null;
 
       setUser(newUser);
       setMoodleSession(newSession);
       setLastSync(newUser.last_sync || null);
-      await saveSession(newUser, newSession);
+      if (newSession) {
+        await saveSession(newUser, newSession);
+      }
 
+      const offlineNote = data.offlineMode ? ' (modo offline)' : '';
       toast({
         title: 'Login realizado com sucesso',
-        description: `Bem-vindo, ${newUser.full_name}!`,
+        description: `Bem-vindo, ${newUser.full_name}!${offlineNote}`,
       });
 
       return true;
