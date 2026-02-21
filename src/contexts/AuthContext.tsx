@@ -733,7 +733,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isLoading,
     isSyncing,
-    isAuthenticated: !!user && !!moodleSession,
+    isAuthenticated: !!user,
     login,
     logout,
     syncData,
