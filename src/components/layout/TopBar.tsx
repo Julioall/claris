@@ -1,4 +1,4 @@
-import { RefreshCw, Search, Bell, Pencil } from 'lucide-react';
+import { RefreshCw, Search, Bell, Pencil, WifiOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,13 +8,15 @@ import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 export function TopBar() {
   const {
     syncData,
     lastSync,
     isSyncing,
     isEditMode,
-    setIsEditMode
+    setIsEditMode,
+    isOfflineMode
   } = useAuth();
   const handleSync = () => {
     syncData();
@@ -45,10 +47,22 @@ export function TopBar() {
         </div>
 
         {/* Sync button */}
-        <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="gap-2">
-          <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
-          <span className="hidden sm:inline">Sincronizar</span>
-        </Button>
+        {isOfflineMode ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-2.5 py-1.5">
+                <WifiOff className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Modo Offline</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Moodle indisponível. Sincronização e mensagens desabilitadas.</TooltipContent>
+          </Tooltip>
+        ) : (
+          <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="gap-2">
+            <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
+            <span className="hidden sm:inline">Sincronizar</span>
+          </Button>
+        )}
 
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">
