@@ -47,6 +47,7 @@ interface ExtendedAuthContextType extends AuthContextType {
   setShowCourseSelector: (show: boolean) => void;
   isEditMode: boolean;
   setIsEditMode: (mode: boolean) => void;
+  isOfflineMode: boolean;
 }
 
 const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
@@ -338,20 +339,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const newUser: User = data.user;
-      const newSession: MoodleSession = {
+      const newSession: MoodleSession | null = data.moodleToken ? {
         moodleToken: data.moodleToken,
         moodleUserId: data.moodleUserId,
         moodleUrl: cleanUrl,
-      };
+      } : null;
 
       setUser(newUser);
       setMoodleSession(newSession);
       setLastSync(newUser.last_sync || null);
-      await saveSession(newUser, newSession);
+      if (newSession) {
+        await saveSession(newUser, newSession);
+      }
 
+      const offlineNote = data.offlineMode ? ' (modo offline)' : '';
       toast({
         title: 'Login realizado com sucesso',
-        description: `Bem-vindo, ${newUser.full_name}!`,
+        description: `Bem-vindo, ${newUser.full_name}!${offlineNote}`,
       });
 
       return true;
@@ -730,7 +734,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     isLoading,
     isSyncing,
-    isAuthenticated: !!user && !!moodleSession,
+    isAuthenticated: !!user,
+    isOfflineMode: !!user && !moodleSession,
     login,
     logout,
     syncData,

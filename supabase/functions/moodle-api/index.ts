@@ -305,6 +305,68 @@ Deno.serve(async (req) => {
         // Get token from Moodle
         const tokenResponse = await getMoodleToken(moodleUrl, username, password, service || 'moodle_mobile_app');
         
+        const moodleUnavailable = tokenResponse.error && 
+          ['service_unavailable', 'network_error', 'parse_error'].includes(tokenResponse.errorcode || '');
+
+        if (moodleUnavailable) {
+          // Fallback: try to sign in existing user directly via Supabase Auth
+          console.log('Moodle unavailable, attempting fallback login for existing user...');
+          
+          // Find user by moodle_username
+          const { data: fallbackUser } = await supabase
+            .from('users')
+            .select('*')
+            .eq('moodle_username', username)
+            .single();
+
+          if (fallbackUser) {
+            const fallbackEmail = `moodle_${fallbackUser.moodle_user_id}@moodle.local`;
+            const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+            const fallbackAnonClient = createClient(supabaseUrl, anonKey);
+
+            const { data: signInData, error: signInError } = await fallbackAnonClient.auth.signInWithPassword({
+              email: fallbackEmail,
+              password: password,
+            });
+
+            if (!signInError && signInData.session) {
+              // Update last_login
+              await supabase
+                .from('users')
+                .update({ last_login: new Date().toISOString(), updated_at: new Date().toISOString() })
+                .eq('id', fallbackUser.id);
+
+              console.log('Fallback login successful for user:', fallbackUser.full_name);
+
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  user: fallbackUser,
+                  moodleToken: null,
+                  moodleUserId: parseInt(fallbackUser.moodle_user_id, 10),
+                  offlineMode: true,
+                  session: {
+                    access_token: signInData.session.access_token,
+                    refresh_token: signInData.session.refresh_token,
+                  },
+                }),
+                { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+              );
+            }
+            
+            console.log('Fallback sign-in failed:', signInError?.message);
+          }
+
+          // No existing user or sign-in failed - return original Moodle error
+          return new Response(
+            JSON.stringify({ 
+              error: tokenResponse.error || 'Authentication failed',
+              errorcode: tokenResponse.errorcode 
+            }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         if (tokenResponse.error || !tokenResponse.token) {
           return new Response(
             JSON.stringify({ 
