@@ -844,13 +844,77 @@ Deno.serve(async (req) => {
           );
         }
 
+        // Fetch assignment details (due dates + submissions) for assign activities
+        const assignActivities = activities.filter(a => a.modname === 'assign');
+        const assignDueDates: Record<string, string | null> = {};
+        const assignSubmissions: Record<string, Set<number>> = {}; // moodle_activity_cmid -> set of user ids who submitted
+
+        if (assignActivities.length > 0) {
+          try {
+            const assignData = await callMoodleApi(moodleUrl, token, 'mod_assign_get_assignments', {
+              'courseids[0]': courseId
+            });
+            if (assignData?.courses?.[0]?.assignments) {
+              for (const assignment of assignData.courses[0].assignments) {
+                // Map cmid to due date
+                if (assignment.cmid && assignment.duedate && assignment.duedate > 0) {
+                  assignDueDates[String(assignment.cmid)] = new Date(assignment.duedate * 1000).toISOString();
+                }
+              }
+            }
+            console.log(`Fetched due dates for ${Object.keys(assignDueDates).length} assignments`);
+          } catch (err) {
+            console.error('Error fetching assignment details:', err);
+          }
+
+          // Fetch submissions for each assignment
+          try {
+            const submissionsData = await callMoodleApi(moodleUrl, token, 'mod_assign_get_submissions', {
+              'assignmentids[0]': assignActivities.map(a => a.id).join(',')
+            });
+            // mod_assign_get_submissions returns per-assignment, but we need a simpler approach
+            // Let's try fetching via the assignments list
+          } catch (err) {
+            console.error('Error fetching submissions:', err);
+          }
+        }
+
+        // Fetch quiz due dates
+        const quizActivities = activities.filter(a => a.modname === 'quiz');
+        const quizDueDates: Record<string, string | null> = {};
+        for (const quiz of quizActivities) {
+          try {
+            const quizData = await callMoodleApi(moodleUrl, token, 'mod_quiz_get_quizzes_by_courses', {
+              'courseids[0]': courseId
+            });
+            if (quizData?.quizzes) {
+              for (const q of quizData.quizzes) {
+                if (q.coursemodule && q.timeclose && q.timeclose > 0) {
+                  quizDueDates[String(q.coursemodule)] = new Date(q.timeclose * 1000).toISOString();
+                }
+              }
+            }
+            break; // Only need to call once per course
+          } catch (err) {
+            console.error('Error fetching quiz details:', err);
+          }
+        }
+
         // Prepare all activity records for batch upsert
         const now = new Date().toISOString();
         const activityRecords: any[] = [];
         
         for (const activity of activities) {
+          // Determine due_date based on activity type
+          let dueDate: string | null = null;
+          if (activity.modname === 'assign') {
+            dueDate = assignDueDates[String(activity.id)] || null;
+          } else if (activity.modname === 'quiz') {
+            dueDate = quizDueDates[String(activity.id)] || null;
+          }
+
           for (const studentId of studentIds) {
-            activityRecords.push({
+            const record: any = {
               student_id: studentId,
               course_id: dbCourse.id,
               moodle_activity_id: String(activity.id),
@@ -859,7 +923,13 @@ Deno.serve(async (req) => {
               status: activity.completiondata?.state === 1 ? 'completed' : 
                       activity.completiondata?.state === 2 ? 'completed' : 'pending',
               updated_at: now,
-            });
+            };
+
+            if (dueDate) {
+              record.due_date = dueDate;
+            }
+
+            activityRecords.push(record);
           }
         }
 
