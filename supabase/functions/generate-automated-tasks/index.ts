@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
         .not('due_date', 'is', null)
         .lt('due_date', now.toISOString())
         .is('submitted_at', null)
-        .eq('is_hidden', false)
+        .eq('hidden', false)
 
       if (!activitiesError && missedActivities) {
         for (const activity of missedActivities) {
@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
         .not('due_date', 'is', null)
         .lt('due_date', now.toISOString())
         .is('graded_at', null)
-        .eq('is_hidden', false)
+        .eq('hidden', false)
         .not('submitted_at', 'is', null) // Only submitted activities need grading
 
       if (!activitiesError && uncorrectedActivities) {
