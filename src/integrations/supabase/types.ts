@@ -334,6 +334,7 @@ export type Database = {
       pending_tasks: {
         Row: {
           assigned_to_user_id: string | null
+          automation_type: string | null
           completed_at: string | null
           course_id: string | null
           created_at: string | null
@@ -351,6 +352,7 @@ export type Database = {
         }
         Insert: {
           assigned_to_user_id?: string | null
+          automation_type?: string | null
           completed_at?: string | null
           course_id?: string | null
           created_at?: string | null
@@ -368,6 +370,7 @@ export type Database = {
         }
         Update: {
           assigned_to_user_id?: string | null
+          automation_type?: string | null
           completed_at?: string | null
           course_id?: string | null
           created_at?: string | null
@@ -472,12 +475,14 @@ export type Database = {
           due_date: string | null
           grade: number | null
           grade_max: number | null
+          graded_at: string | null
           hidden: boolean
           id: string
           moodle_activity_id: string
           percentage: number | null
           status: string | null
           student_id: string
+          submitted_at: string | null
           updated_at: string
         }
         Insert: {
@@ -489,12 +494,14 @@ export type Database = {
           due_date?: string | null
           grade?: number | null
           grade_max?: number | null
+          graded_at?: string | null
           hidden?: boolean
           id?: string
           moodle_activity_id: string
           percentage?: number | null
           status?: string | null
           student_id: string
+          submitted_at?: string | null
           updated_at?: string
         }
         Update: {
@@ -506,12 +513,14 @@ export type Database = {
           due_date?: string | null
           grade?: number | null
           grade_max?: number | null
+          graded_at?: string | null
           hidden?: boolean
           id?: string
           moodle_activity_id?: string
           percentage?: number | null
           status?: string | null
           student_id?: string
+          submitted_at?: string | null
           updated_at?: string
         }
         Relationships: [
