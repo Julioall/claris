@@ -11,7 +11,7 @@ describe("integrations/supabase/client", () => {
     const mod = await import("@/integrations/supabase/client");
 
     expect(createClientMock).toHaveBeenCalledTimes(1);
-    const [url, key, options] = createClientMock.mock.calls[0];
+    const [url, key, options] = createClientMock.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
 
     expect(url).toBe(import.meta.env.VITE_SUPABASE_URL);
     expect(key).toBe(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);

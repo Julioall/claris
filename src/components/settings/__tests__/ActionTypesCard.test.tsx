@@ -159,7 +159,7 @@ describe("ActionTypesCard", () => {
       badgeLabel.closest("[class*='group']") ?? badgeLabel.parentElement;
     if (!badge) throw new Error("Could not find badge for Mentoria");
 
-    await user.click(within(badge).getAllByRole("button")[0]);
+    await user.click(within(badge as HTMLElement).getAllByRole("button")[0]);
 
     const editInput = screen.getByDisplayValue("Mentoria");
     await user.clear(editInput);
@@ -188,7 +188,7 @@ describe("ActionTypesCard", () => {
       badgeLabel.closest("[class*='group']") ?? badgeLabel.parentElement;
     if (!badge) throw new Error("Could not find badge for Mentoria");
 
-    await user.click(within(badge).getAllByRole("button")[1]);
+    await user.click(within(badge as HTMLElement).getAllByRole("button")[1]);
 
     await waitFor(() => {
       expect(actionsUsageEqMock).toHaveBeenCalledWith("action_type", "mentoria");

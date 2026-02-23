@@ -28,7 +28,7 @@ describe("ui/input-otp", () => {
   it("renders OTP input root and group/separator", () => {
     render(
       <div>
-        <InputOTP maxLength={6} />
+        <InputOTP maxLength={6}><InputOTPGroup><InputOTPSlot index={0} /></InputOTPGroup></InputOTP>
         <InputOTPGroup data-testid="otp-group">grupo</InputOTPGroup>
         <InputOTPSeparator />
       </div>,
