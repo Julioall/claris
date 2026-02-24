@@ -78,6 +78,10 @@ vi.mock("@/pages/Settings", () => ({
   default: () => <div>Settings Page</div>,
 }));
 
+vi.mock("@/pages/Reports", () => ({
+  default: () => <div>Reports Page</div>,
+}));
+
 vi.mock("@/pages/NotFound", () => ({
   default: () => <div>NotFound Page</div>,
 }));
@@ -138,6 +142,19 @@ describe("App routing", () => {
     render(<App />);
 
     expect(screen.getByText("Messages Page")).toBeInTheDocument();
+    expect(screen.getByText("App Layout")).toBeInTheDocument();
+  });
+
+  it("renders reports page for authenticated users", () => {
+    setPath("/relatorios");
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(<App />);
+
+    expect(screen.getByText("Reports Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 

@@ -3,6 +3,7 @@ import {
   Users, 
   ClipboardList, 
   CheckSquare,
+  FileSpreadsheet,
   Settings,
   LogOut,
   BookOpen,
@@ -35,6 +36,7 @@ const mainNavItems = [
   { title: 'Pendências', url: '/pendencias', icon: ClipboardList },
   { title: 'Ações', url: '/acoes', icon: CheckSquare },
   { title: 'Mensagens', url: '/mensagens', icon: MessageSquare },
+  { title: 'Relatórios', url: '/relatorios', icon: FileSpreadsheet },
 ];
 
 const secondaryNavItems = [

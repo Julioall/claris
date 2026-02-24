@@ -18,6 +18,7 @@ import PendingTasks from "@/pages/PendingTasks";
 import Actions from "@/pages/Actions";
 import Messages from "@/pages/Messages";
 import Settings from "@/pages/Settings";
+import Reports from "@/pages/Reports";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -50,6 +51,7 @@ function AppRoutes() {
         <Route path="/pendencias" element={<PendingTasks />} />
         <Route path="/acoes" element={<Actions />} />
         <Route path="/mensagens" element={<Messages />} />
+        <Route path="/relatorios" element={<Reports />} />
         <Route path="/configuracoes" element={<Settings />} />
       </Route>
       <Route path="*" element={<NotFound />} />
