@@ -40,6 +40,50 @@ interface ActivityGradeRow {
 
 const SEM_CATEGORIA = 'Sem categoria';
 
+const simplifyUnitName = (unitName: string) => {
+  const trimmedName = unitName.trim();
+
+  const trailingCodePattern = trimmedName.match(/^(.*?)\s*\(\s*\d+\s*-\s*.*\)\s*$/);
+  if (trailingCodePattern?.[1]?.trim()) {
+    return trailingCodePattern[1].trim();
+  }
+
+  const leadingCodePattern = trimmedName.match(/^\d+\s*-\s*(.+)$/);
+  if (leadingCodePattern?.[1]?.trim()) {
+    return leadingCodePattern[1].trim();
+  }
+
+  return trimmedName;
+};
+
+const getGradeCellStyle = (grade: number) => {
+  if (grade >= 60) {
+    return {
+      fill: {
+        fgColor: { rgb: 'FFC6EFCE' },
+      },
+    };
+  }
+
+  if (grade > 40 && grade < 60) {
+    return {
+      fill: {
+        fgColor: { rgb: 'FFFFEB9C' },
+      },
+    };
+  }
+
+  if (grade < 40) {
+    return {
+      fill: {
+        fgColor: { rgb: 'FFFFC7CE' },
+      },
+    };
+  }
+
+  return null;
+};
+
 export default function Reports() {
   const { user } = useAuth();
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
@@ -183,7 +227,7 @@ export default function Reports() {
       const enrollments = (enrollmentsResponse.data || []) as EnrollmentRow[];
       const activities = (activitiesResponse.data || []) as ActivityGradeRow[];
 
-      const totalsByStudentAndCourse = new Map<string, string>();
+      const totalsByStudentAndCourse = new Map<string, number | null>();
 
       const groupedByKey = activities.reduce<Record<string, ActivityGradeRow[]>>((acc, row) => {
         const key = `${row.student_id}::${row.course_id}`;
@@ -200,7 +244,7 @@ export default function Reports() {
         );
 
         if (visibleWithGrade.length === 0) {
-          totalsByStudentAndCourse.set(key, 'Sem nota');
+          totalsByStudentAndCourse.set(key, null);
           return;
         }
 
@@ -208,30 +252,56 @@ export default function Reports() {
         const totalMax = visibleWithGrade.reduce((sum, row) => sum + (row.grade_max || 0), 0);
 
         if (totalMax <= 0) {
-          totalsByStudentAndCourse.set(key, 'Sem nota');
+          totalsByStudentAndCourse.set(key, null);
           return;
         }
 
         const normalized = (totalRaw / totalMax) * 100;
-        totalsByStudentAndCourse.set(key, normalized.toFixed(1));
+        totalsByStudentAndCourse.set(key, Math.round(normalized * 10) / 10);
       });
 
-      const selectedUnitsById = new Map(availableUnits.map(unit => [unit.id, unit]));
+      const selectedUnits = availableUnits.filter(unit => selectedUnitIds.includes(unit.id));
+      const usedHeaders = new Set<string>();
+      const selectedUnitsWithHeader = selectedUnits.map(unit => {
+        const simplifiedName = simplifyUnitName(unit.name);
+        let headerName = simplifiedName;
+        let counter = 2;
 
-      const rows = enrollments
-        .map(enrollment => {
-          const key = `${enrollment.student_id}::${enrollment.course_id}`;
-          return {
-            Aluno: enrollment.students?.full_name || 'Aluno sem nome',
-            'Unidade Curricular': selectedUnitsById.get(enrollment.course_id)?.name || 'Unidade não encontrada',
-            'Nota Total': totalsByStudentAndCourse.get(key) || 'Sem nota',
+        while (usedHeaders.has(headerName)) {
+          headerName = `${simplifiedName} (${counter})`;
+          counter += 1;
+        }
+
+        usedHeaders.add(headerName);
+
+        return {
+          ...unit,
+          headerName,
+        };
+      });
+
+      const studentsById = new Map<string, string>();
+      enrollments.forEach(enrollment => {
+        if (!studentsById.has(enrollment.student_id)) {
+          studentsById.set(enrollment.student_id, enrollment.students?.full_name || 'Aluno sem nome');
+        }
+      });
+
+      const rows = Array.from(studentsById.entries())
+        .map(([studentId, studentName]) => {
+          const row: Record<string, string | number> = {
+            Aluno: studentName,
           };
+
+          selectedUnitsWithHeader.forEach(unit => {
+            const key = `${studentId}::${unit.id}`;
+            const grade = totalsByStudentAndCourse.get(key);
+            row[unit.headerName] = grade === null || grade === undefined ? 'Sem nota' : grade;
+          });
+
+          return row;
         })
-        .sort((a, b) => {
-          const byAluno = a.Aluno.localeCompare(b.Aluno, 'pt-BR');
-          if (byAluno !== 0) return byAluno;
-          return a['Unidade Curricular'].localeCompare(b['Unidade Curricular'], 'pt-BR');
-        });
+        .sort((a, b) => String(a.Aluno).localeCompare(String(b.Aluno), 'pt-BR'));
 
       if (rows.length === 0) {
         toast.error('Nenhum dado encontrado para as unidades selecionadas');
@@ -239,6 +309,24 @@ export default function Reports() {
       }
 
       const worksheet = XLSX.utils.json_to_sheet(rows);
+
+      for (let rowIndex = 1; rowIndex <= rows.length; rowIndex += 1) {
+        for (let colIndex = 1; colIndex <= selectedUnitsWithHeader.length; colIndex += 1) {
+          const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+          const cell = worksheet[cellAddress] as (XLSX.CellObject & { s?: Record<string, unknown> }) | undefined;
+
+          if (!cell || typeof cell.v !== 'number') continue;
+
+          const style = getGradeCellStyle(cell.v);
+          if (!style) continue;
+
+          cell.s = {
+            ...(cell.s || {}),
+            ...style,
+          };
+        }
+      }
+
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Relatorio de Notas');
 
