@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { FileSpreadsheet, Loader2 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -36,9 +36,37 @@ interface ActivityGradeRow {
   grade: number | null;
   grade_max: number | null;
   hidden: boolean;
+  is_recovery: boolean;
 }
 
 const SEM_CATEGORIA = 'Sem categoria';
+
+type ExcelStyle = Record<string, unknown>;
+
+const BORDER_STYLE: ExcelStyle = {
+  top: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
+  bottom: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
+  left: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
+  right: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
+};
+
+const HEADER_CELL_STYLE: ExcelStyle = {
+  font: { bold: true, color: { rgb: 'FF1F2937' } },
+  fill: { patternType: 'solid', fgColor: { rgb: 'FFE5E7EB' } },
+  alignment: { vertical: 'center', horizontal: 'center', wrapText: true },
+  border: BORDER_STYLE,
+};
+
+const BODY_CELL_STYLE: ExcelStyle = {
+  fill: { patternType: 'solid', fgColor: { rgb: 'FFF9FAFB' } },
+  alignment: { vertical: 'center', horizontal: 'center' },
+  border: BORDER_STYLE,
+};
+
+const STUDENT_CELL_STYLE: ExcelStyle = {
+  ...BODY_CELL_STYLE,
+  alignment: { vertical: 'center', horizontal: 'left' },
+};
 
 const simplifyUnitName = (unitName: string) => {
   const trimmedName = unitName.trim();
@@ -60,14 +88,16 @@ const getGradeCellStyle = (grade: number) => {
   if (grade >= 60) {
     return {
       fill: {
+        patternType: 'solid',
         fgColor: { rgb: 'FFC6EFCE' },
       },
     };
   }
 
-  if (grade > 40 && grade < 60) {
+  if (grade >= 40 && grade < 60) {
     return {
       fill: {
+        patternType: 'solid',
         fgColor: { rgb: 'FFFFEB9C' },
       },
     };
@@ -76,6 +106,7 @@ const getGradeCellStyle = (grade: number) => {
   if (grade < 40) {
     return {
       fill: {
+        patternType: 'solid',
         fgColor: { rgb: 'FFFFC7CE' },
       },
     };
@@ -216,9 +247,11 @@ export default function Reports() {
             course_id,
             grade,
             grade_max,
-            hidden
+            hidden,
+            is_recovery
           `)
-          .in('course_id', selectedUnitIds),
+          .in('course_id', selectedUnitIds)
+          .neq('activity_type', 'scorm'),
       ]);
 
       if (enrollmentsResponse.error) throw enrollmentsResponse.error;
@@ -239,25 +272,25 @@ export default function Reports() {
       }, {});
 
       Object.entries(groupedByKey).forEach(([key, rows]) => {
-        const visibleWithGrade = rows.filter(
-          row => !row.hidden && row.grade !== null && row.grade_max !== null && row.grade_max > 0,
+        const visibleActivities = rows.filter(row => !row.hidden);
+
+        if (visibleActivities.length === 0) {
+          totalsByStudentAndCourse.set(key, null);
+          return;
+        }
+
+        // Verifica se o aluno fez recuperação (tem nota em atividade de recuperação)
+        const hasRecoveryWithGrade = visibleActivities.some(
+          row => row.is_recovery && row.grade !== null && row.grade > 0
         );
+        
+        // Soma todas as atividades (incluindo recuperação)
+        const totalRaw = visibleActivities.reduce((sum, row) => sum + (row.grade || 0), 0);
+        
+        // Se o aluno fez recuperação (tem nota), divide por 2
+        const finalGrade = hasRecoveryWithGrade ? totalRaw / 2 : totalRaw;
 
-        if (visibleWithGrade.length === 0) {
-          totalsByStudentAndCourse.set(key, null);
-          return;
-        }
-
-        const totalRaw = visibleWithGrade.reduce((sum, row) => sum + (row.grade || 0), 0);
-        const totalMax = visibleWithGrade.reduce((sum, row) => sum + (row.grade_max || 0), 0);
-
-        if (totalMax <= 0) {
-          totalsByStudentAndCourse.set(key, null);
-          return;
-        }
-
-        const normalized = (totalRaw / totalMax) * 100;
-        totalsByStudentAndCourse.set(key, Math.round(normalized * 10) / 10);
+        totalsByStudentAndCourse.set(key, Math.round(finalGrade * 10) / 10);
       });
 
       const selectedUnits = availableUnits.filter(unit => selectedUnitIds.includes(unit.id));
@@ -308,22 +341,52 @@ export default function Reports() {
         return;
       }
 
-      const worksheet = XLSX.utils.json_to_sheet(rows);
+      const worksheet = XLSX.utils.json_to_sheet(rows) as XLSX.WorkSheet & {
+        '!cols'?: Array<{ wch: number }>;
+      };
 
-      for (let rowIndex = 1; rowIndex <= rows.length; rowIndex += 1) {
-        for (let colIndex = 1; colIndex <= selectedUnitsWithHeader.length; colIndex += 1) {
-          const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-          const cell = worksheet[cellAddress] as (XLSX.CellObject & { s?: Record<string, unknown> }) | undefined;
+      worksheet['!cols'] = [
+        { wch: 32 },
+        ...selectedUnitsWithHeader.map(unit => ({ wch: Math.max(18, Math.min(42, unit.headerName.length + 4)) })),
+      ];
 
-          if (!cell || typeof cell.v !== 'number') continue;
+      const worksheetRange = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
 
-          const style = getGradeCellStyle(cell.v);
-          if (!style) continue;
+      if (worksheetRange) {
+        for (let rowIndex = worksheetRange.s.r; rowIndex <= worksheetRange.e.r; rowIndex += 1) {
+          for (let colIndex = worksheetRange.s.c; colIndex <= worksheetRange.e.c; colIndex += 1) {
+            const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
+            const cell = worksheet[cellAddress] as (XLSX.CellObject & { s?: ExcelStyle }) | undefined;
 
-          cell.s = {
-            ...(cell.s || {}),
-            ...style,
-          };
+            if (!cell) continue;
+
+            if (rowIndex === 0) {
+              cell.s = {
+                ...(cell.s || {}),
+                ...HEADER_CELL_STYLE,
+              };
+              continue;
+            }
+
+            const isStudentColumn = colIndex === 0;
+            const baseBodyStyle = isStudentColumn ? STUDENT_CELL_STYLE : BODY_CELL_STYLE;
+
+            cell.s = {
+              ...(cell.s || {}),
+              ...baseBodyStyle,
+            };
+
+            if (!isStudentColumn && typeof cell.v === 'number') {
+              const gradeStyle = getGradeCellStyle(cell.v);
+              if (gradeStyle) {
+                cell.s = {
+                  ...(cell.s || {}),
+                  ...gradeStyle,
+                };
+              }
+              cell.z = '0.0';
+            }
+          }
         }
       }
 

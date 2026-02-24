@@ -478,6 +478,7 @@ export type Database = {
           graded_at: string | null
           hidden: boolean
           id: string
+          is_recovery: boolean
           moodle_activity_id: string
           percentage: number | null
           status: string | null
@@ -497,6 +498,7 @@ export type Database = {
           graded_at?: string | null
           hidden?: boolean
           id?: string
+          is_recovery?: boolean
           moodle_activity_id: string
           percentage?: number | null
           status?: string | null
@@ -516,6 +518,7 @@ export type Database = {
           graded_at?: string | null
           hidden?: boolean
           id?: string
+          is_recovery?: boolean
           moodle_activity_id?: string
           percentage?: number | null
           status?: string | null

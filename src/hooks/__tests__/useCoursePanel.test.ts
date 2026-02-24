@@ -14,11 +14,13 @@ const studentCoursesEqMock = vi.fn();
 
 const activitiesSelectMock = vi.fn();
 const activitiesEqMock = vi.fn();
+const activitiesNeqMock = vi.fn();
 const activitiesOrderMock = vi.fn();
 
 const activitiesUpdateMock = vi.fn();
 const activitiesUpdateEqCourseMock = vi.fn();
 const activitiesUpdateEqActivityMock = vi.fn();
+const activitiesUpdateNeqMock = vi.fn();
 
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -122,7 +124,8 @@ describe("useCoursePanel", () => {
     });
 
     activitiesSelectMock.mockReturnValue({ eq: activitiesEqMock });
-    activitiesEqMock.mockReturnValue({ order: activitiesOrderMock });
+    activitiesEqMock.mockReturnValue({ neq: activitiesNeqMock });
+    activitiesNeqMock.mockReturnValue({ order: activitiesOrderMock });
     activitiesOrderMock.mockResolvedValue({
       data: [
         {
@@ -191,7 +194,8 @@ describe("useCoursePanel", () => {
 
     activitiesUpdateMock.mockReturnValue({ eq: activitiesUpdateEqCourseMock });
     activitiesUpdateEqCourseMock.mockReturnValue({ eq: activitiesUpdateEqActivityMock });
-    activitiesUpdateEqActivityMock.mockResolvedValue({ error: null });
+    activitiesUpdateEqActivityMock.mockReturnValue({ neq: activitiesUpdateNeqMock });
+    activitiesUpdateNeqMock.mockResolvedValue({ error: null });
   });
 
   afterAll(() => {

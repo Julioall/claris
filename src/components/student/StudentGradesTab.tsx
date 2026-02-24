@@ -30,6 +30,7 @@ interface StudentActivityGrade {
   status: string | null;
   due_date: string | null;
   hidden: boolean;
+  is_recovery: boolean;
 }
 
 interface StudentGradesTabProps {
@@ -72,9 +73,11 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
             percentage,
             status,
             due_date,
-            hidden
+            hidden,
+            is_recovery
           `)
           .eq('student_id', studentId)
+          .neq('activity_type', 'scorm')
           .order('activity_name'),
       ]);
 
@@ -142,26 +145,27 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
   };
 
   const getVisibleCourseTotal = (courseId: string) => {
-    const gradedVisibleActivities = getVisibleActivities(courseId).filter(
-      (activity) => activity.grade !== null && activity.grade_max !== null && activity.grade_max > 0,
+    const visibleActivities = getVisibleActivities(courseId);
+
+    if (visibleActivities.length === 0) {
+      return null;
+    }
+
+    // Verifica se há atividades de recuperação COM nota (aluno fez a recuperação)
+    const hasRecoveryWithGrade = visibleActivities.some(
+      activity => activity.is_recovery && activity.grade !== null && activity.grade > 0
     );
+    
+    // Soma todas as atividades (incluindo recuperação)
+    const totalRaw = visibleActivities.reduce((sum, activity) => sum + (activity.grade || 0), 0);
 
-    if (gradedVisibleActivities.length === 0) {
-      return null;
-    }
+    // Se o aluno fez recuperação (tem nota), divide por 2
+    const finalGrade = hasRecoveryWithGrade ? totalRaw / 2 : totalRaw;
 
-    const totalRaw = gradedVisibleActivities.reduce((sum, activity) => sum + (activity.grade || 0), 0);
-    const totalMax = gradedVisibleActivities.reduce((sum, activity) => sum + (activity.grade_max || 0), 0);
-
-    if (totalMax <= 0) {
-      return null;
-    }
-
-    const normalized = (totalRaw / totalMax) * 100;
     return {
-      gradeRaw: normalized,
-      gradeMax: 100,
-      gradePercentage: normalized,
+      gradeRaw: finalGrade,
+      gradeMax: null,
+      gradePercentage: null,
     };
   };
 
@@ -193,9 +197,9 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
         {grades.map(grade => {
           const visibleActivities = getVisibleActivities(grade.course_id);
           const visibleCourseTotal = getVisibleCourseTotal(grade.course_id);
-          const displayedPercentage = visibleCourseTotal?.gradePercentage ?? null;
+          const displayedPercentage = null;
           const displayedGradeText = visibleCourseTotal
-            ? `${visibleCourseTotal.gradeRaw.toFixed(1)} / ${visibleCourseTotal.gradeMax}`
+            ? `${visibleCourseTotal.gradeRaw.toFixed(1)}`
             : null;
 
           return (
@@ -221,10 +225,10 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
                       </p>
                     </div>
                     <div className="text-right shrink-0">
-                      {displayedPercentage !== null ? (
+                      {displayedGradeText !== null ? (
                         <div className="flex flex-col items-end gap-1">
-                          <span className={`text-xl font-bold ${getGradeColor(displayedPercentage)}`}>
-                            {displayedPercentage.toFixed(1)}
+                          <span className="text-xl font-bold">
+                            {displayedGradeText}
                           </span>
                           {grade.letter_grade && visibleCourseTotal && (
                             <Badge variant="outline" className="text-xs">
@@ -238,10 +242,10 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
                     </div>
                   </div>
 
-                  {displayedPercentage !== null && (
+                  {displayedGradeText !== null && (
                     <div>
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>{displayedGradeText}</span>
+                        <span>Soma das atividades visíveis</span>
                         <span>
                           Nota total
                         </span>

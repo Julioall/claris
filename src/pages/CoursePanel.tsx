@@ -13,7 +13,8 @@ import {
   Loader2,
   GraduationCap,
   Eye,
-  EyeOff
+  EyeOff,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,7 +34,7 @@ import { CourseAttendanceTab } from '@/components/attendance/CourseAttendanceTab
 
 export default function CoursePanel() {
   const { id } = useParams<{ id: string }>();
-  const { course, students, activities, stats, isLoading, error, toggleActivityVisibility } = useCoursePanel(id);
+  const { course, students, activities, stats, isLoading, error, toggleActivityVisibility, toggleActivityRecovery } = useCoursePanel(id);
   const { user, isEditMode } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isAttendanceEnabled, setIsAttendanceEnabled] = useState(false);
@@ -346,6 +347,12 @@ export default function CoursePanel() {
                                 Oculta
                               </Badge>
                             )}
+                            {activity.is_recovery && (
+                              <Badge variant="default" className="text-xs bg-blue-500">
+                                <RefreshCw className="h-3 w-3 mr-1" />
+                                Recuperação
+                              </Badge>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             {activity.activity_type && (
@@ -360,30 +367,54 @@ export default function CoursePanel() {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          {/* Edit mode: visibility toggle */}
+                          {/* Edit mode: visibility and recovery toggles */}
                           {isEditMode && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <div className="flex items-center gap-2">
-                                    <Switch
-                                      checked={!activity.hidden}
-                                      onCheckedChange={(checked) => 
-                                        toggleActivityVisibility(activity.moodle_activity_id, !checked)
-                                      }
-                                    />
-                                    {activity.hidden ? (
-                                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                                    ) : (
-                                      <Eye className="h-4 w-4 text-primary" />
-                                    )}
-                                  </div>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{activity.hidden ? 'Exibir atividade nas métricas' : 'Ocultar atividade das métricas'}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
+                            <div className="flex items-center gap-4">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2">
+                                      <Switch
+                                        checked={!activity.hidden}
+                                        onCheckedChange={(checked) => 
+                                          toggleActivityVisibility(activity.moodle_activity_id, !checked)
+                                        }
+                                      />
+                                      {activity.hidden ? (
+                                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                      ) : (
+                                        <Eye className="h-4 w-4 text-primary" />
+                                      )}
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{activity.hidden ? 'Exibir atividade nas métricas' : 'Ocultar atividade das métricas'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-2">
+                                      <Switch
+                                        checked={activity.is_recovery}
+                                        onCheckedChange={(checked) => 
+                                          toggleActivityRecovery(activity.moodle_activity_id, checked)
+                                        }
+                                      />
+                                      <RefreshCw className={cn(
+                                        "h-4 w-4",
+                                        activity.is_recovery ? "text-blue-500" : "text-muted-foreground"
+                                      )} />
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{activity.is_recovery ? 'Atividade de recuperação (nota ÷ 2)' : 'Marcar como recuperação'}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
                           )}
 
                           {/* Grade/Status display */}

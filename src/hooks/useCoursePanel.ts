@@ -17,6 +17,7 @@ interface StudentActivity {
   completed_at: string | null;
   due_date: string | null;
   hidden: boolean;
+  is_recovery: boolean;
 }
 
 interface CourseStats {
@@ -105,6 +106,7 @@ export function useCoursePanel(courseId: string | undefined) {
         .from('student_activities')
         .select('*')
         .eq('course_id', courseId)
+        .neq('activity_type', 'scorm')
         .order('activity_name');
 
       if (activitiesError) throw activitiesError;
@@ -161,7 +163,8 @@ export function useCoursePanel(courseId: string | undefined) {
         .from('student_activities')
         .update({ hidden })
         .eq('course_id', courseId)
-        .eq('moodle_activity_id', moodleActivityId);
+        .eq('moodle_activity_id', moodleActivityId)
+        .neq('activity_type', 'scorm');
 
       if (updateError) throw updateError;
 
@@ -191,6 +194,45 @@ export function useCoursePanel(courseId: string | undefined) {
     }
   }, [courseId, fetchCourseData]);
 
+  const toggleActivityRecovery = useCallback(async (moodleActivityId: string, isRecovery: boolean) => {
+    if (!courseId) return;
+
+    try {
+      const { error: updateError } = await supabase
+        .from('student_activities')
+        .update({ is_recovery: isRecovery })
+        .eq('course_id', courseId)
+        .eq('moodle_activity_id', moodleActivityId)
+        .neq('activity_type', 'scorm');
+
+      if (updateError) throw updateError;
+
+      setActivities(prev =>
+        prev.map(a =>
+          a.moodle_activity_id === moodleActivityId
+            ? { ...a, is_recovery: isRecovery }
+            : a
+        )
+      );
+
+      toast({
+        title: isRecovery ? 'Atividade de recuperação' : 'Atividade normal',
+        description: isRecovery
+          ? 'Esta atividade será considerada recuperação (nota dividida por 2).'
+          : 'Esta atividade será considerada normal.',
+      });
+
+      await fetchCourseData();
+    } catch (err) {
+      console.error('Error toggling activity recovery:', err);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível alterar o tipo da atividade.',
+        variant: 'destructive',
+      });
+    }
+  }, [courseId, fetchCourseData]);
+
   useEffect(() => {
     fetchCourseData();
   }, [fetchCourseData]);
@@ -204,5 +246,6 @@ export function useCoursePanel(courseId: string | undefined) {
     error,
     refetch: fetchCourseData,
     toggleActivityVisibility,
+    toggleActivityRecovery,
   };
 }

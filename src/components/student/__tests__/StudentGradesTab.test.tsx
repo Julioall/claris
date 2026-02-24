@@ -6,6 +6,7 @@ import { StudentGradesTab } from "@/components/student/StudentGradesTab";
 const fromMock = vi.fn();
 const gradesEqMock = vi.fn();
 const activitiesEqMock = vi.fn();
+const activitiesNeqMock = vi.fn();
 const activitiesOrderMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -20,7 +21,8 @@ describe("StudentGradesTab", () => {
 
     gradesEqMock.mockResolvedValue({ data: [], error: null });
     activitiesOrderMock.mockResolvedValue({ data: [], error: null });
-    activitiesEqMock.mockReturnValue({ order: activitiesOrderMock });
+    activitiesNeqMock.mockReturnValue({ order: activitiesOrderMock });
+    activitiesEqMock.mockReturnValue({ neq: activitiesNeqMock });
 
     fromMock.mockImplementation((table: string) => {
       if (table === "student_course_grades") {
@@ -50,7 +52,7 @@ describe("StudentGradesTab", () => {
     expect(screen.getByText(/após a sincronização dos cursos/i)).toBeInTheDocument();
   });
 
-  it("renders normalized course total using visible activities only", async () => {
+  it("renders absolute course total using visible activities only", async () => {
     const user = userEvent.setup();
 
     gradesEqMock.mockResolvedValueOnce({
@@ -118,8 +120,7 @@ describe("StudentGradesTab", () => {
       expect(screen.getByText("Matematica")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("75.0")).toBeInTheDocument();
-    expect(screen.getByText("75.0 / 100")).toBeInTheDocument();
+    expect(screen.getByText("15.0")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
 
