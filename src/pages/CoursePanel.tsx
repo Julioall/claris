@@ -85,7 +85,7 @@ export default function CoursePanel() {
     return (
       <div className="space-y-4">
         <Button variant="ghost" asChild>
-          <Link to="/cursos">
+          <Link to="/meus-cursos">
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar aos cursos
           </Link>
@@ -106,7 +106,7 @@ export default function CoursePanel() {
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="icon" asChild className="h-8 w-8">
-              <Link to="/cursos">
+              <Link to="/meus-cursos">
                 <ArrowLeft className="h-4 w-4" />
               </Link>
             </Button>
