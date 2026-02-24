@@ -84,7 +84,7 @@ describe("useChat", () => {
       await result.current.fetchConversations();
     });
 
-    expect(invokeMock).toHaveBeenCalledWith("moodle-api", {
+    expect(invokeMock).toHaveBeenCalledWith("moodle-messaging", {
       body: {
         action: "get_conversations",
         moodleUrl: "https://moodle.example.com",
@@ -121,7 +121,7 @@ describe("useChat", () => {
       await result.current.fetchMessages(20, 10);
     });
 
-    expect(invokeMock).toHaveBeenCalledWith("moodle-api", {
+    expect(invokeMock).toHaveBeenCalledWith("moodle-messaging", {
       body: {
         action: "get_messages",
         moodleUrl: "https://moodle.example.com",
@@ -176,7 +176,7 @@ describe("useChat", () => {
     });
 
     expect(ok).toBe(true);
-    expect(invokeMock).toHaveBeenLastCalledWith("moodle-api", {
+    expect(invokeMock).toHaveBeenLastCalledWith("moodle-messaging", {
       body: {
         action: "send_message",
         moodleUrl: "https://moodle.example.com",

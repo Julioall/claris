@@ -143,7 +143,7 @@ describe("GradeDebugCard", () => {
     await user.click(screen.getByRole("button", { name: /Buscar Notas/i }));
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("moodle-api", {
+      expect(invokeMock).toHaveBeenCalledWith("moodle-sync-grades", {
         body: {
           action: "debug_grades",
           moodleUrl: "https://moodle.example.com",

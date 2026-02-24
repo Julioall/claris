@@ -45,9 +45,8 @@ describe("useMoodleApi", () => {
       loginResult = await result.current.login("julio", "secret", "https://moodle.local/");
     });
 
-    expect(invokeMock).toHaveBeenCalledWith("moodle-api", {
+    expect(invokeMock).toHaveBeenCalledWith("moodle-auth", {
       body: {
-        action: "login",
         moodleUrl: "https://moodle.local",
         username: "julio",
         password: "secret",
@@ -119,9 +118,8 @@ describe("useMoodleApi", () => {
       syncResult = await result.current.syncStudents(session, "42");
     });
 
-    expect(invokeMock).toHaveBeenCalledWith("moodle-api", {
+    expect(invokeMock).toHaveBeenCalledWith("moodle-sync-students", {
       body: {
-        action: "sync_students",
         moodleUrl: "https://moodle.example.com",
         token: "token-123",
         courseId: 42,

@@ -38,10 +38,9 @@ export function useMoodleApi() {
   ): Promise<LoginResult> => {
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('moodle-api', {
+      const { data, error } = await supabase.functions.invoke('moodle-auth', {
         body: {
-          action: 'login',
-          moodleUrl: moodleUrl.replace(/\/$/, ''), // Remove trailing slash
+          moodleUrl: moodleUrl.replace(/\/$/, ''),
           username,
           password,
         },
@@ -83,9 +82,8 @@ export function useMoodleApi() {
     setSyncProgress('Sincronizando cursos...');
     
     try {
-      const { data, error } = await supabase.functions.invoke('moodle-api', {
+      const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
         body: {
-          action: 'sync_courses',
           moodleUrl: session.moodleUrl,
           token: session.moodleToken,
           userId: session.moodleUserId,
@@ -125,9 +123,8 @@ export function useMoodleApi() {
     setSyncProgress(`Sincronizando alunos do curso...`);
     
     try {
-      const { data, error } = await supabase.functions.invoke('moodle-api', {
+      const { data, error } = await supabase.functions.invoke('moodle-sync-students', {
         body: {
-          action: 'sync_students',
           moodleUrl: session.moodleUrl,
           token: session.moodleToken,
           courseId: parseInt(courseId, 10),

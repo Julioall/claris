@@ -104,9 +104,8 @@ describe("AuthContext", () => {
 
     expect(loginResult).toBe(true);
     expect(setSessionMock).toHaveBeenCalledWith({ access_token: "access", refresh_token: "refresh" });
-    expect(invokeMock).toHaveBeenCalledWith("moodle-api", {
+    expect(invokeMock).toHaveBeenCalledWith("moodle-auth", {
       body: {
-        action: "login",
         moodleUrl: "https://moodle.local",
         username: "julio",
         password: "secret",
