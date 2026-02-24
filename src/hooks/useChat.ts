@@ -41,7 +41,7 @@ export function useChat() {
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('moodle-api', {
+      const { data, error: fnError } = await supabase.functions.invoke('moodle-messaging', {
         body: {
           action: 'get_conversations',
           moodleUrl: session.moodleUrl,
@@ -98,7 +98,7 @@ export function useChat() {
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('moodle-api', {
+      const { data, error: fnError } = await supabase.functions.invoke('moodle-messaging', {
         body: {
           action: 'get_messages',
           moodleUrl: session.moodleUrl,
@@ -141,7 +141,7 @@ export function useChat() {
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('moodle-api', {
+      const { data, error: fnError } = await supabase.functions.invoke('moodle-messaging', {
         body: {
           action: 'send_message',
           moodleUrl: session.moodleUrl,

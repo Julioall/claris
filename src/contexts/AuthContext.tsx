@@ -73,10 +73,10 @@ const initialSteps: SyncStep[] = [
 
 const BATCH_DELAY_MS = 450;
 
-const STEP_ACTIONS: Record<Exclude<SyncEntity, 'courses'>, 'sync_students' | 'sync_activities' | 'sync_grades'> = {
-  students: 'sync_students',
-  activities: 'sync_activities',
-  grades: 'sync_grades',
+const STEP_FUNCTION_MAP: Record<Exclude<SyncEntity, 'courses'>, string> = {
+  students: 'moodle-sync-students',
+  activities: 'moodle-sync-activities',
+  grades: 'moodle-sync-grades',
 };
 
 const STEP_BATCH_CONFIG: Record<Exclude<SyncEntity, 'courses'>, { batchSize: number; timeoutMs: number }> = {
@@ -275,12 +275,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { user: userToUse, session: sessionToUse };
   }, [moodleSession, user]);
 
-  const invokeMoodleWithTimeout = useCallback(async (body: Record<string, unknown>, timeoutMs = 25000) => {
+  const invokeMoodleWithTimeout = useCallback(async (functionName: string, body: Record<string, unknown>, timeoutMs = 25000) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const { data, error } = await supabase.functions.invoke('moodle-api', { body });
+      const { data, error } = await supabase.functions.invoke(functionName, { body });
       clearTimeout(timeoutId);
       return { data, error };
     } catch (err) {
@@ -298,9 +298,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const cleanUrl = moodleUrl.replace(/\/$/, '');
 
-      const { data, error } = await supabase.functions.invoke('moodle-api', {
+      const { data, error } = await supabase.functions.invoke('moodle-auth', {
         body: {
-          action: 'login',
           moodleUrl: cleanUrl,
           username,
           password,
@@ -401,9 +400,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const moodleUserId = userIdOverride ?? sessionToUse.moodleUserId;
 
     try {
-      const { data, error } = await supabase.functions.invoke('moodle-api', {
+      const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
         body: {
-          action: 'sync_courses',
           moodleUrl: sessionToUse.moodleUrl,
           token: sessionToUse.moodleToken,
           userId: moodleUserId,
@@ -535,7 +533,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       selectedCourses: Course[],
     ): Promise<{ totalCount: number; succeeded: boolean }> => {
       const { batchSize, timeoutMs } = STEP_BATCH_CONFIG[entity];
-      const action = STEP_ACTIONS[entity];
+      const functionName = STEP_FUNCTION_MAP[entity];
       let totalCount = 0;
       let errorCount = 0;
       let processedCourses = 0;
@@ -548,8 +546,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const results = await Promise.allSettled(
           batch.map(async (course: Course) => {
             try {
-              const { data, error } = await invokeMoodleWithTimeout({
-                action,
+              const { data, error } = await invokeMoodleWithTimeout(functionName, {
                 moodleUrl: sessionToUse.moodleUrl,
                 token: sessionToUse.moodleToken,
                 courseId: parseInt(course.moodle_course_id, 10),
@@ -633,7 +630,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     try {
-      await invokeMoodleWithTimeout({
+      await invokeMoodleWithTimeout('moodle-sync-courses', {
         action: 'link_selected_courses',
         userId: sessionToUse.moodleUserId,
         selectedCourseIds: courseIds,
@@ -641,8 +638,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (entitiesToSync.includes('courses')) {
         updateStep('courses', { status: 'in_progress', count: 0, total: 1 });
-        const { data, error } = await invokeMoodleWithTimeout({
-          action: 'sync_courses',
+        const { data, error } = await invokeMoodleWithTimeout('moodle-sync-courses', {
           moodleUrl: sessionToUse.moodleUrl,
           token: sessionToUse.moodleToken,
           userId: sessionToUse.moodleUserId,

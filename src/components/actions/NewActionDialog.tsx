@@ -388,7 +388,7 @@ export function NewActionDialog({
     let sentCount = 0;
     for (const student of studentsData) {
       try {
-        const { data, error: fnError } = await supabase.functions.invoke('moodle-api', {
+        const { data, error: fnError } = await supabase.functions.invoke('moodle-messaging', {
           body: {
             action: 'send_message',
             moodleUrl: moodleSession.moodleUrl,

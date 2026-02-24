@@ -42,5 +42,20 @@ additional_redirect_urls = [
 jwt_expiry = 3600
 enable_signup = true
 
-[functions.moodle-api]
+[functions.moodle-auth]
+verify_jwt = false
+
+[functions.moodle-sync-courses]
+verify_jwt = false
+
+[functions.moodle-sync-students]
+verify_jwt = false
+
+[functions.moodle-sync-activities]
+verify_jwt = false
+
+[functions.moodle-sync-grades]
+verify_jwt = false
+
+[functions.moodle-messaging]
 verify_jwt = false

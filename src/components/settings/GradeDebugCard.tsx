@@ -88,7 +88,7 @@ export function GradeDebugCard() {
       const student = students.find(s => s.id === selectedStudent);
       if (!student) throw new Error('Aluno não encontrado');
 
-      const { data, error: invokeError } = await supabase.functions.invoke('moodle-api', {
+      const { data, error: invokeError } = await supabase.functions.invoke('moodle-sync-grades', {
         body: {
           action: 'debug_grades',
           moodleUrl: moodleSession.moodleUrl,
