@@ -106,11 +106,11 @@ async function handleLinkSelectedCourses(supabase: any, body: any): Promise<Resp
     .select('course_id')
     .eq('user_id', linkUser.id)
 
-  const existingCourseIds = new Set(existingLinks?.map((l: any) => l.course_id) || [])
+  const existingCourseIds = new Set<string>(existingLinks?.map((l: any) => l.course_id as string) || [])
   const selectedSet = new Set(selectedCourseIds as string[])
 
   // Remove unselected
-  const toRemove = [...existingCourseIds].filter((id) => !selectedSet.has(id))
+  const toRemove = [...existingCourseIds].filter((id: string) => !selectedSet.has(id))
   if (toRemove.length > 0) {
     await supabase.from('user_courses').delete().eq('user_id', linkUser.id).in('course_id', toRemove)
   }

@@ -75,7 +75,7 @@ describe("GenerateAutomatedTasksDialog", () => {
     expect(screen.getByRole("button", { name: /gerar/i })).toHaveTextContent(
       "(3 tipos)",
     );
-    expect(screen.getAllByRole("checkbox")).toHaveLength(5);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
   });
 
   it("calls onOpenChange(false) when clicking cancel", async () => {

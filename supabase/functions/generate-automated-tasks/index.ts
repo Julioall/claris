@@ -30,13 +30,13 @@ Deno.serve(async (req) => {
 
     if (coursesError) throw coursesError
 
-    const courseIds = userCourses?.map((uc) => uc.course_id) || []
+    const courseIds = userCourses?.map((uc: { course_id: string }) => uc.course_id) || []
 
     if (courseIds.length === 0) {
       return jsonResponse({ message: 'No courses found for user', results: [] })
     }
 
-    // 1. Generate tasks for at-risk students
+    // 1. Generate tasks for at-risk students (per student, not per course)
     if (!automation_types || automation_types.includes('auto_at_risk')) {
       const count = await generateAtRiskTasks(supabase, user.id, courseIds)
       results.push({ type: 'auto_at_risk', tasks_created: count })
@@ -66,7 +66,7 @@ Deno.serve(async (req) => {
   }
 })
 
-// ─── At-Risk Students ─────────────────────────────────────────────
+// ─── At-Risk Students (one task per student, regardless of courses) ───
 
 async function generateAtRiskTasks(
   supabase: any,
@@ -75,38 +75,51 @@ async function generateAtRiskTasks(
 ): Promise<number> {
   let count = 0
 
-  const { data: atRiskStudents, error } = await supabase
+  // Get distinct at-risk students across all user's courses
+  const { data: enrollments, error } = await supabase
     .from('student_courses')
     .select(`
       student_id,
-      course_id,
       students!inner (id, full_name, current_risk_level)
     `)
     .in('course_id', courseIds)
     .in('students.current_risk_level', ['risco', 'critico'])
 
-  if (error || !atRiskStudents) return 0
+  if (error || !enrollments) return 0
 
-  for (const enrollment of atRiskStudents) {
-    const student = enrollment.students as any
+  // Deduplicate by student_id — one task per student
+  const seenStudents = new Set<string>()
+  const uniqueStudents: Array<{ student_id: string; student: any }> = []
 
-    // Check if task already exists
+  for (const enrollment of enrollments) {
+    if (!seenStudents.has(enrollment.student_id)) {
+      seenStudents.add(enrollment.student_id)
+      uniqueStudents.push({
+        student_id: enrollment.student_id,
+        student: enrollment.students,
+      })
+    }
+  }
+
+  for (const { student_id, student } of uniqueStudents) {
+    // Check if a general (no course) at-risk task already exists for this student
     const { data: existing } = await supabase
       .from('pending_tasks')
       .select('id')
-      .eq('student_id', enrollment.student_id)
-      .eq('course_id', enrollment.course_id)
+      .eq('student_id', student_id)
       .eq('automation_type', 'auto_at_risk')
       .in('status', ['aberta', 'em_andamento'])
       .single()
 
     if (existing) continue
 
+    const riskLabel = student.current_risk_level === 'critico' ? 'crítico' : 'risco'
+
     const { error: insertError } = await supabase.from('pending_tasks').insert({
-      title: `Acompanhar aluno em ${student.current_risk_level}`,
-      description: `Aluno identificado como em ${student.current_risk_level}. Realizar contato e verificar necessidades.`,
-      student_id: enrollment.student_id,
-      course_id: enrollment.course_id,
+      title: `Acompanhar aluno em ${riskLabel}`,
+      description: `${student.full_name} está com nível de risco "${riskLabel}". Realizar contato e verificar necessidades.`,
+      student_id,
+      course_id: null,
       created_by_user_id: userId,
       task_type: 'interna',
       priority: student.current_risk_level === 'critico' ? 'urgente' : 'alta',
