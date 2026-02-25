@@ -3,10 +3,8 @@ import {
   AlertTriangle, 
   FileX, 
   ClipboardX, 
-  UserX,
   Loader2,
   Zap,
-  BookOpen
 } from 'lucide-react';
 import {
   Dialog,
@@ -35,9 +33,9 @@ const automationTypes: AutomationType[] = [
   {
     id: 'auto_at_risk',
     label: 'Alunos em Risco',
-    description: 'Criar pendências para acompanhar alunos identificados como em risco ou crítico.',
+    description: 'Criar uma pendência por aluno com nível de risco "Risco" ou "Crítico" (métrica geral, independente de curso).',
     icon: <AlertTriangle className="h-5 w-5 text-yellow-500" />,
-    source: 'Baseado no nível de risco calculado',
+    source: 'Baseado no nível de risco geral do aluno',
   },
   {
     id: 'auto_missed_assignment',
@@ -52,20 +50,6 @@ const automationTypes: AutomationType[] = [
     description: 'Criar pendências para atividades submetidas que ainda não foram corrigidas pelo tutor.',
     icon: <ClipboardX className="h-5 w-5 text-orange-500" />,
     source: 'Atividades entregues aguardando correção',
-  },
-  {
-    id: 'auto_no_access',
-    label: 'Sem Acesso Recente',
-    description: 'Criar pendências para alunos que não acessam o AVA há mais de 7 dias.',
-    icon: <UserX className="h-5 w-5 text-purple-500" />,
-    source: 'Relatório de acessos do Moodle',
-  },
-  {
-    id: 'auto_low_participation',
-    label: 'Baixa Participação em Fóruns',
-    description: 'Criar pendências para alunos sem participação nos fóruns de discussão.',
-    icon: <BookOpen className="h-5 w-5 text-blue-500" />,
-    source: 'Guia do Tutor - Acompanhamento de fóruns',
   },
 ];
 
