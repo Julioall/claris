@@ -1,4 +1,4 @@
-import type { MoodleTokenResponse, MoodleCourse, MoodleCategory, MoodleEnrolledUser, MoodleSiteInfo } from './moodle-types.ts'
+import type { MoodleTokenResponse, MoodleCourse, MoodleCategory, MoodleEnrolledUser, MoodleSiteInfo } from './types.ts'
 
 /**
  * Get Moodle token using username/password.
@@ -52,7 +52,7 @@ export async function getMoodleToken(
 }
 
 /**
- * Call a Moodle Web Service API function.
+ * Call a Moodle Web Service API function (GET-style via query params).
  */
 export async function callMoodleApi(
   moodleUrl: string,
@@ -71,6 +71,40 @@ export async function callMoodleApi(
   console.log(`Calling Moodle API: ${wsfunction}`)
 
   const response = await fetch(`${apiUrl}?${queryParams.toString()}`)
+  const data = await response.json()
+
+  if (data.exception) {
+    console.error(`Moodle API error: ${data.message}`)
+    throw new Error(data.message || 'Moodle API error')
+  }
+
+  return data
+}
+
+/**
+ * Call a Moodle Web Service API function via POST (required for some endpoints).
+ */
+export async function callMoodleApiPost(
+  moodleUrl: string,
+  token: string,
+  wsfunction: string,
+  params: Record<string, string | number>
+): Promise<any> {
+  const apiUrl = `${moodleUrl}/webservice/rest/server.php`
+  const formData = new URLSearchParams({
+    wstoken: token,
+    wsfunction,
+    moodlewsrestformat: 'json',
+    ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
+  })
+
+  console.log(`Calling Moodle API (POST): ${wsfunction}`)
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: formData.toString(),
+  })
   const data = await response.json()
 
   if (data.exception) {

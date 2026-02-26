@@ -27,18 +27,3 @@ export function validateStringArray(value: unknown, maxItems = 500): value is st
     value.every((v) => typeof v === 'string' && v.length > 0 && v.length <= 255)
   )
 }
-
-// --- Parsing Helpers ---
-
-export function parseNullableNumber(value: unknown): number | null {
-  if (value === undefined || value === null) return null
-  const parsed = typeof value === 'string' ? parseFloat(value) : Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-export function parseNullablePercentage(value: unknown): number | null {
-  if (value === undefined || value === null) return null
-  const cleanPercentage = String(value).replace(/[%\s]/g, '').replace(',', '.')
-  const parsed = parseFloat(cleanPercentage)
-  return Number.isFinite(parsed) ? parsed : null
-}

@@ -30,7 +30,6 @@ interface StudentActivityGrade {
   status: string | null;
   due_date: string | null;
   hidden: boolean;
-  is_recovery: boolean;
 }
 
 interface StudentGradesTabProps {
@@ -73,8 +72,7 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
             percentage,
             status,
             due_date,
-            hidden,
-            is_recovery
+            hidden
           `)
           .eq('student_id', studentId)
           .neq('activity_type', 'scorm')
@@ -151,19 +149,10 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
       return null;
     }
 
-    // Verifica se há atividades de recuperação COM nota (aluno fez a recuperação)
-    const hasRecoveryWithGrade = visibleActivities.some(
-      activity => activity.is_recovery && activity.grade !== null && activity.grade > 0
-    );
-    
-    // Soma todas as atividades (incluindo recuperação)
     const totalRaw = visibleActivities.reduce((sum, activity) => sum + (activity.grade || 0), 0);
 
-    // Se o aluno fez recuperação (tem nota), divide por 2
-    const finalGrade = hasRecoveryWithGrade ? totalRaw / 2 : totalRaw;
-
     return {
-      gradeRaw: finalGrade,
+      gradeRaw: totalRaw,
       gradeMax: null,
       gradePercentage: null,
     };
