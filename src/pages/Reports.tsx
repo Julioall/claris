@@ -36,7 +36,6 @@ interface ActivityGradeRow {
   grade: number | null;
   grade_max: number | null;
   hidden: boolean;
-  is_recovery: boolean;
 }
 
 const SEM_CATEGORIA = 'Sem categoria';
@@ -247,8 +246,7 @@ export default function Reports() {
             course_id,
             grade,
             grade_max,
-            hidden,
-            is_recovery
+            hidden
           `)
           .in('course_id', selectedUnitIds)
           .neq('activity_type', 'scorm'),
@@ -279,18 +277,8 @@ export default function Reports() {
           return;
         }
 
-        // Verifica se o aluno fez recuperação (tem nota em atividade de recuperação)
-        const hasRecoveryWithGrade = visibleActivities.some(
-          row => row.is_recovery && row.grade !== null && row.grade > 0
-        );
-        
-        // Soma todas as atividades (incluindo recuperação)
         const totalRaw = visibleActivities.reduce((sum, row) => sum + (row.grade || 0), 0);
-        
-        // Se o aluno fez recuperação (tem nota), divide por 2
-        const finalGrade = hasRecoveryWithGrade ? totalRaw / 2 : totalRaw;
-
-        totalsByStudentAndCourse.set(key, Math.round(finalGrade * 10) / 10);
+        totalsByStudentAndCourse.set(key, Math.round(totalRaw * 10) / 10);
       });
 
       const selectedUnits = availableUnits.filter(unit => selectedUnitIds.includes(unit.id));
