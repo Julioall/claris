@@ -1,5 +1,26 @@
 import type { MoodleTokenResponse, MoodleCourse, MoodleCategory, MoodleEnrolledUser, MoodleSiteInfo } from './types.ts'
 
+const INVALID_PARAMETER_MESSAGE = 'valor inválido de parâmetro'
+
+function isInvalidParameterError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  return message.includes(INVALID_PARAMETER_MESSAGE)
+}
+
+async function callGetEnrolledUsers(
+  moodleUrl: string,
+  token: string,
+  courseId: number,
+  extraParams: Record<string, string | number> = {}
+): Promise<any[]> {
+  const result = await callMoodleApi(moodleUrl, token, 'core_enrol_get_enrolled_users', {
+    courseid: courseId,
+    ...extraParams,
+  })
+
+  return Array.isArray(result) ? result : []
+}
+
 /**
  * Get Moodle token using username/password.
  */
@@ -176,11 +197,122 @@ export async function getCourseEnrolledUsers(
   courseId: number
 ): Promise<MoodleEnrolledUser[]> {
   try {
-    return await callMoodleApi(moodleUrl, token, 'core_enrol_get_enrolled_users', {
-      courseid: courseId,
-    })
+    return await callGetEnrolledUsers(moodleUrl, token, courseId, { onlyactive: 0 })
   } catch (error) {
+    if (isInvalidParameterError(error)) {
+      console.warn(
+        `Moodle for course ${courseId} does not accept onlyactive=0. Retrying with options[onlyactive]=0.`
+      )
+      try {
+        return await callGetEnrolledUsers(moodleUrl, token, courseId, {
+          'options[0][name]': 'onlyactive',
+          'options[0][value]': 0,
+        })
+      } catch {
+        console.warn(
+          `Moodle for course ${courseId} also rejected options[onlyactive]. Retrying without filter options.`
+        )
+        try {
+          return await callGetEnrolledUsers(moodleUrl, token, courseId)
+        } catch (fallbackError) {
+          console.error(`Fallback failed fetching enrolled users for course ${courseId}:`, fallbackError)
+          return []
+        }
+      }
+    }
+
     console.error(`Error fetching enrolled users for course ${courseId}:`, error)
     return []
+  }
+}
+
+/**
+ * Get suspended user IDs in a course.
+ */
+export async function getCourseSuspendedUserIds(
+  moodleUrl: string,
+  token: string,
+  courseId: number
+): Promise<Set<number>> {
+  try {
+    const users = await callGetEnrolledUsers(moodleUrl, token, courseId, { onlysuspended: 1 })
+
+    return new Set<number>(
+      users
+        .map((user: { id?: number }) => user.id)
+        .filter((id): id is number => typeof id === 'number')
+    )
+  } catch (error) {
+    if (isInvalidParameterError(error)) {
+      console.warn(
+        `Moodle for course ${courseId} does not accept onlysuspended=1. Retrying with options[onlysuspended]=1.`
+      )
+
+      try {
+        const suspendedViaOptions = await callGetEnrolledUsers(moodleUrl, token, courseId, {
+          'options[0][name]': 'onlysuspended',
+          'options[0][value]': 1,
+        })
+
+        if (suspendedViaOptions.length > 0) {
+          const suspendedIds = new Set<number>(
+            suspendedViaOptions
+              .map((user: { id?: number }) => user.id)
+              .filter((id): id is number => typeof id === 'number')
+          )
+          console.log(
+            `Fetched suspended users via options for course ${courseId}: suspended=${suspendedIds.size}`
+          )
+          return suspendedIds
+        }
+
+        console.warn(
+          `Moodle for course ${courseId} returned non-array for options[onlysuspended]. Falling back to inference.`
+        )
+
+        const allEnrolledUsers = await getCourseEnrolledUsers(moodleUrl, token, courseId)
+
+        let activeUsers: any[] = []
+        try {
+          activeUsers = await callGetEnrolledUsers(moodleUrl, token, courseId, { onlyactive: 1 })
+        } catch {
+          activeUsers = await callGetEnrolledUsers(moodleUrl, token, courseId, {
+            'options[0][name]': 'onlyactive',
+            'options[0][value]': 1,
+          })
+        }
+
+        const allIds = new Set<number>(
+          allEnrolledUsers
+            .map((user) => user.id)
+            .filter((id): id is number => typeof id === 'number')
+        )
+
+        const activeIds = new Set<number>(
+          activeUsers
+            .map((user: { id?: number }) => user.id)
+            .filter((id): id is number => typeof id === 'number')
+        )
+
+        const inferredSuspendedIds = new Set<number>()
+        for (const userId of allIds) {
+          if (!activeIds.has(userId)) {
+            inferredSuspendedIds.add(userId)
+          }
+        }
+
+        console.log(
+          `Inferred suspended users for course ${courseId}: total=${allIds.size}, active=${activeIds.size}, suspended=${inferredSuspendedIds.size}`
+        )
+
+        return inferredSuspendedIds
+      } catch (fallbackError) {
+        console.error(`Fallback failed inferring suspended users for course ${courseId}:`, fallbackError)
+        return new Set<number>()
+      }
+    }
+
+    console.error(`Error fetching suspended users for course ${courseId}:`, error)
+    return new Set<number>()
   }
 }

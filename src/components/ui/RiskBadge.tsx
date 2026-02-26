@@ -33,6 +33,7 @@ export function RiskBadge({ level, size = 'md', showDot = true, className }: Ris
             level === 'atencao' && 'bg-risk-atencao',
             level === 'risco' && 'bg-risk-risco',
             level === 'critico' && 'bg-risk-critico animate-pulse-soft',
+            level === 'inativo' && 'bg-muted-foreground',
           )}
         />
       )}

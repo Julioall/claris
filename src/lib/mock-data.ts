@@ -352,6 +352,7 @@ export const getRiskLevelLabel = (level: RiskLevel): string => {
     atencao: 'Atenção',
     risco: 'Risco',
     critico: 'Crítico',
+    inativo: 'Inativo',
   };
   return labels[level];
 };

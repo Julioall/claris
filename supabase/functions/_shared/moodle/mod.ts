@@ -10,6 +10,7 @@ export {
   getCategories,
   buildCategoryPath,
   getCourseEnrolledUsers,
+  getCourseSuspendedUserIds,
 } from './client.ts'
 
 export type {

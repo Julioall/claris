@@ -193,6 +193,9 @@
   .risk-critico {
     @apply bg-[hsl(var(--risk-critico-bg))] text-[hsl(var(--risk-critico))] border-[hsl(var(--risk-critico)/0.3)];
   }
+  .risk-inativo {
+    @apply bg-muted text-muted-foreground border-border;
+  }
 
   /* Priority badges */
   .priority-baixa {

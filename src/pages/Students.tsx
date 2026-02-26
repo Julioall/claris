@@ -305,6 +305,7 @@ export default function Students() {
               <SelectItem value="critico">Crítico</SelectItem>
               <SelectItem value="risco">Risco</SelectItem>
               <SelectItem value="atencao">Atenção</SelectItem>
+              <SelectItem value="inativo">Inativo</SelectItem>
               <SelectItem value="normal">Normal</SelectItem>
             </SelectContent>
           </Select>

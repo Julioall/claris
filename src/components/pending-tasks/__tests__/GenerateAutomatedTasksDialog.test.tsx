@@ -126,6 +126,7 @@ describe("GenerateAutomatedTasksDialog", () => {
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("generate-automated-tasks", {
         body: {
+          user_id: "user-1",
           automation_types: [
             "auto_at_risk",
             "auto_missed_assignment",

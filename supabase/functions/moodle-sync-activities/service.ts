@@ -16,12 +16,14 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   if (!dbCourse) return errorResponse('Course not found in database', 404)
 
   let courseContents: any[] = []
+  let activitiesFromFallback: any[] | null = null
   try {
     courseContents = await callMoodleApi(moodleUrl, token, 'core_course_get_contents', { courseid: courseId })
     console.log(`Found ${courseContents?.length || 0} sections in course ${courseId}`)
   } catch (err) {
     console.error(`Error fetching course contents for ${courseId}:`, err)
-    return jsonResponse({ success: true, activitiesCount: 0 })
+    activitiesFromFallback = await fetchActivitiesFallback(moodleUrl, token, courseId)
+    console.log(`Fallback found ${activitiesFromFallback.length} activities in course ${courseId}`)
   }
 
   const { data: studentCourses } = await supabase
@@ -33,7 +35,7 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   if (studentIds.length === 0) return jsonResponse({ success: true, activitiesCount: 0 })
 
   // Extract activities
-  const activities = extractActivities(courseContents)
+  const activities = activitiesFromFallback ?? extractActivities(courseContents)
   console.log(`Found ${activities.length} activities (quiz/assign/forum) in course ${courseId}`)
   if (activities.length === 0) return jsonResponse({ success: true, activitiesCount: 0 })
 
@@ -64,6 +66,72 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
 }
 
 // --- Helper functions ---
+
+async function fetchActivitiesFallback(
+  moodleUrl: string,
+  token: string,
+  courseId: number
+): Promise<any[]> {
+  const activities: any[] = []
+
+  try {
+    const assignData = await callMoodleApi(moodleUrl, token, 'mod_assign_get_assignments', { 'courseids[0]': courseId })
+    const assignments = assignData?.courses?.[0]?.assignments || []
+    for (const assign of assignments) {
+      const activityId = assign.cmid || assign.coursemodule || assign.id
+      if (!activityId) continue
+      activities.push({
+        id: activityId,
+        name: assign.name || `Assignment ${activityId}`,
+        modname: 'assign',
+        completiondata: null,
+      })
+    }
+  } catch (err) {
+    console.error(`Fallback assign fetch failed for course ${courseId}:`, err)
+  }
+
+  try {
+    const quizData = await callMoodleApi(moodleUrl, token, 'mod_quiz_get_quizzes_by_courses', { 'courseids[0]': courseId })
+    const quizzes = quizData?.quizzes || []
+    for (const quiz of quizzes) {
+      const activityId = quiz.coursemodule || quiz.cmid || quiz.id
+      if (!activityId) continue
+      activities.push({
+        id: activityId,
+        name: quiz.name || `Quiz ${activityId}`,
+        modname: 'quiz',
+        completiondata: null,
+      })
+    }
+  } catch (err) {
+    console.error(`Fallback quiz fetch failed for course ${courseId}:`, err)
+  }
+
+  try {
+    const forumData = await callMoodleApi(moodleUrl, token, 'mod_forum_get_forums_by_courses', { 'courseids[0]': courseId })
+    const forums = forumData?.forums || []
+    for (const forum of forums) {
+      const activityId = forum.cmid || forum.coursemodule || forum.id
+      if (!activityId) continue
+      activities.push({
+        id: activityId,
+        name: forum.name || `Forum ${activityId}`,
+        modname: 'forum',
+        completiondata: null,
+      })
+    }
+  } catch (err) {
+    console.error(`Fallback forum fetch failed for course ${courseId}:`, err)
+  }
+
+  const uniqueById = new Map<string, any>()
+  for (const activity of activities) {
+    uniqueById.set(String(activity.id), activity)
+  }
+
+  return Array.from(uniqueById.values())
+}
 
 function extractActivities(courseContents: any[]): any[] {
   const activities: any[] = []

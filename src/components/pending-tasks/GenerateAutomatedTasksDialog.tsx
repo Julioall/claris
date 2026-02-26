@@ -86,7 +86,10 @@ export function GenerateAutomatedTasksDialog({
     setIsGenerating(true);
     try {
       const { data, error } = await supabase.functions.invoke('generate-automated-tasks', {
-        body: { automation_types: selectedTypes },
+        body: {
+          user_id: user.id,
+          automation_types: selectedTypes,
+        },
       });
 
       if (error) throw error;

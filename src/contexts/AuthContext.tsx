@@ -86,6 +86,8 @@ const STEP_BATCH_CONFIG: Record<Exclude<SyncEntity, 'courses'>, { batchSize: num
 };
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const SUPABASE_FUNCTIONS_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL as string}/functions/v1`;
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 const sanitizeSyncSettings = (raw?: Partial<SyncSettings> | null): SyncSettings => {
   const settings = raw || {};
@@ -280,7 +282,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      const { data, error } = await supabase.functions.invoke(functionName, { body });
+      const response = await fetch(`${SUPABASE_FUNCTIONS_BASE_URL}/${functionName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      let payload: any = null;
+      try {
+        payload = await response.json();
+      } catch {
+        payload = null;
+      }
+
+      const error = response.ok
+        ? null
+        : {
+            message:
+              payload?.error ||
+              payload?.msg ||
+              `Request failed with status ${response.status}`,
+          };
+
+      const data = response.ok ? payload : null;
+
       clearTimeout(timeoutId);
       return { data, error };
     } catch (err) {

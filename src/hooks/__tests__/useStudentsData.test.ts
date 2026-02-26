@@ -94,6 +94,9 @@ describe("useStudentsData", () => {
         {
           student_id: "s-1",
           enrollment_status: "ativo",
+          courses: {
+            start_date: "2026-01-01T00:00:00.000Z",
+          },
           students: {
             id: "s-1",
             moodle_user_id: "10",
@@ -106,6 +109,9 @@ describe("useStudentsData", () => {
         {
           student_id: "s-1",
           enrollment_status: "suspenso",
+          courses: {
+            start_date: "2026-01-01T00:00:00.000Z",
+          },
           students: {
             id: "s-1",
             moodle_user_id: "10",
@@ -118,6 +124,9 @@ describe("useStudentsData", () => {
         {
           student_id: "s-2",
           enrollment_status: "suspenso",
+          courses: {
+            start_date: "2026-01-01T00:00:00.000Z",
+          },
           students: {
             id: "s-2",
             moodle_user_id: "11",
@@ -130,6 +139,9 @@ describe("useStudentsData", () => {
         {
           student_id: "s-3",
           enrollment_status: "concluido",
+          courses: {
+            start_date: "2026-01-01T00:00:00.000Z",
+          },
           students: {
             id: "s-3",
             moodle_user_id: "12",
@@ -201,7 +213,7 @@ describe("useStudentsData", () => {
     expect(result.current.students[1]).toMatchObject({
       id: "s-1",
       current_risk_level: "atencao",
-      enrollment_status: "ativo",
+      enrollment_status: "suspenso",
       pending_tasks_count: 2,
       last_action_date: "2026-02-20T10:00:00.000Z",
     });

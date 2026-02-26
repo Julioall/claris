@@ -1,6 +1,6 @@
 // Core types for ACTiM application
 
-export type RiskLevel = 'normal' | 'atencao' | 'risco' | 'critico';
+export type RiskLevel = 'normal' | 'atencao' | 'risco' | 'critico' | 'inativo';
 export type TaskStatus = 'aberta' | 'em_andamento' | 'resolvida';
 export type TaskPriority = 'baixa' | 'media' | 'alta' | 'urgente';
 export type TaskType = 'moodle' | 'interna';

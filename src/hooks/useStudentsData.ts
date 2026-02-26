@@ -51,6 +51,7 @@ export function useStudentsData(courseId?: string) {
         .select(`
           student_id,
           enrollment_status,
+          courses (start_date),
           students (*)
         `)
         .in('course_id', courseIds);
@@ -63,29 +64,51 @@ export function useStudentsData(courseId?: string) {
         return;
       }
 
+      const now = new Date();
+
       // Deduplicate students (same student can be in multiple courses)
-      // For enrollment status: if student is active in ANY course, show as active
-      // Only show as suspended if suspended in ALL courses
-      const uniqueStudentsMap = new Map<string, { student: any; statuses: Set<string> }>();
+      // Status final por precedência em UCs válidas: suspenso > concluido > ativo > inativo
+      const uniqueStudentsMap = new Map<string, { student: any; validStatuses: Set<string>; allStatuses: Set<string> }>();
       studentCourses.forEach(sc => {
         if (sc.students) {
           const studentId = (sc.students as any).id;
+          const startDate = (sc.courses as { start_date?: string | null } | null)?.start_date;
+          const isValidCourse = !startDate || new Date(startDate) <= now;
+          const status = (sc.enrollment_status || 'ativo').toLowerCase();
+
           if (!uniqueStudentsMap.has(studentId)) {
             uniqueStudentsMap.set(studentId, { 
               student: sc.students, 
-              statuses: new Set([sc.enrollment_status || 'ativo'])
+              validStatuses: isValidCourse ? new Set([status]) : new Set<string>(),
+              allStatuses: new Set([status]),
             });
           } else {
-            uniqueStudentsMap.get(studentId)!.statuses.add(sc.enrollment_status || 'ativo');
+            uniqueStudentsMap.get(studentId)!.allStatuses.add(status);
+            if (isValidCourse) {
+              uniqueStudentsMap.get(studentId)!.validStatuses.add(status);
+            }
           }
         }
       });
 
       const uniqueStudentEntries = Array.from(uniqueStudentsMap.values()).map(entry => ({
         student: entry.student,
-        enrollment_status: entry.statuses.has('ativo') ? 'ativo' : 
-                          entry.statuses.has('concluido') ? 'concluido' :
-                          entry.statuses.has('inativo') ? 'inativo' : 'suspenso',
+        enrollment_status:
+          entry.validStatuses.size > 0
+            ? entry.validStatuses.has('suspenso')
+              ? 'suspenso'
+              : entry.validStatuses.has('concluido')
+                ? 'concluido'
+                : entry.validStatuses.has('ativo')
+                  ? 'ativo'
+                  : 'inativo'
+            : entry.allStatuses.has('concluido')
+              ? 'concluido'
+              : entry.allStatuses.has('ativo')
+                ? 'ativo'
+                : entry.allStatuses.has('suspenso')
+                  ? 'suspenso'
+                  : 'inativo',
       }));
 
       // Get stats for each student
@@ -122,7 +145,7 @@ export function useStudentsData(courseId?: string) {
       );
 
       // Sort by risk level (critical first)
-      const riskOrder = { critico: 0, risco: 1, atencao: 2, normal: 3 };
+      const riskOrder: Record<RiskLevel, number> = { critico: 0, risco: 1, atencao: 2, normal: 3, inativo: 4 };
       studentsWithStats.sort((a, b) => 
         riskOrder[a.current_risk_level] - riskOrder[b.current_risk_level]
       );
