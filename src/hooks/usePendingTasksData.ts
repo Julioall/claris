@@ -157,13 +157,15 @@ export function usePendingTasksData() {
   }, [fetchTasks]);
 
   const createTask = useCallback(async (taskData: {
-    student_id: string;
+    student_id?: string;
     course_id?: string;
     title: string;
     description?: string;
     task_type: TaskType;
     priority: TaskPriority;
     due_date?: string;
+    category_name?: string;
+    template_id?: string;
   }) => {
     if (!user) return false;
 
@@ -172,9 +174,10 @@ export function usePendingTasksData() {
         .from('pending_tasks')
         .insert({
           ...taskData,
+          student_id: taskData.student_id || null,
           created_by_user_id: user.id,
           status: 'aberta',
-        });
+        } as any);
 
       if (insertError) throw insertError;
 
