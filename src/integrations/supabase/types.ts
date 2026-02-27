@@ -765,9 +765,7 @@ export type Database = {
           id: string
           include_empty_courses: boolean
           include_finished: boolean
-          risk_threshold_days: Json
           selected_keys: string[]
-          sync_interval_hours: Json
           updated_at: string
           user_id: string
         }
@@ -776,9 +774,7 @@ export type Database = {
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          risk_threshold_days?: Json
           selected_keys?: string[]
-          sync_interval_hours?: Json
           updated_at?: string
           user_id: string
         }
@@ -787,9 +783,7 @@ export type Database = {
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          risk_threshold_days?: Json
           selected_keys?: string[]
-          sync_interval_hours?: Json
           updated_at?: string
           user_id?: string
         }
@@ -872,7 +866,7 @@ export type Database = {
         | "suporte_tecnico"
         | "reuniao"
         | "outro"
-      risk_level: "normal" | "atencao" | "risco" | "critico" | "inativo"
+      risk_level: "normal" | "atencao" | "risco" | "critico"
       task_priority: "baixa" | "media" | "alta" | "urgente"
       task_status: "aberta" | "em_andamento" | "resolvida"
       task_type: "moodle" | "interna"
