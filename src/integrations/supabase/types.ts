@@ -335,6 +335,7 @@ export type Database = {
         Row: {
           assigned_to_user_id: string | null
           automation_type: string | null
+          category_name: string | null
           completed_at: string | null
           course_id: string | null
           created_at: string | null
@@ -345,14 +346,16 @@ export type Database = {
           moodle_activity_id: string | null
           priority: Database["public"]["Enums"]["task_priority"] | null
           status: Database["public"]["Enums"]["task_status"] | null
-          student_id: string
+          student_id: string | null
           task_type: Database["public"]["Enums"]["task_type"] | null
+          template_id: string | null
           title: string
           updated_at: string | null
         }
         Insert: {
           assigned_to_user_id?: string | null
           automation_type?: string | null
+          category_name?: string | null
           completed_at?: string | null
           course_id?: string | null
           created_at?: string | null
@@ -363,14 +366,16 @@ export type Database = {
           moodle_activity_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"] | null
           status?: Database["public"]["Enums"]["task_status"] | null
-          student_id: string
+          student_id?: string | null
           task_type?: Database["public"]["Enums"]["task_type"] | null
+          template_id?: string | null
           title: string
           updated_at?: string | null
         }
         Update: {
           assigned_to_user_id?: string | null
           automation_type?: string | null
+          category_name?: string | null
           completed_at?: string | null
           course_id?: string | null
           created_at?: string | null
@@ -381,8 +386,9 @@ export type Database = {
           moodle_activity_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"] | null
           status?: Database["public"]["Enums"]["task_status"] | null
-          student_id?: string
+          student_id?: string | null
           task_type?: Database["public"]["Enums"]["task_type"] | null
+          template_id?: string | null
           title?: string
           updated_at?: string | null
         }
@@ -413,6 +419,13 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_tasks_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "task_templates"
             referencedColumns: ["id"]
           },
         ]
@@ -684,6 +697,86 @@ export type Database = {
         }
         Relationships: []
       }
+      task_action_logs: {
+        Row: {
+          action_type: string
+          created_at: string
+          description: string
+          effectiveness: string | null
+          id: string
+          pending_task_id: string
+          user_id: string
+        }
+        Insert: {
+          action_type?: string
+          created_at?: string
+          description: string
+          effectiveness?: string | null
+          id?: string
+          pending_task_id: string
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          created_at?: string
+          description?: string
+          effectiveness?: string | null
+          id?: string
+          pending_task_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_action_logs_pending_task_id_fkey"
+            columns: ["pending_task_id"]
+            isOneToOne: false
+            referencedRelation: "pending_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_templates: {
+        Row: {
+          auto_close_on_action: boolean | null
+          auto_message_template: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean | null
+          priority: Database["public"]["Enums"]["task_priority"] | null
+          task_type: Database["public"]["Enums"]["task_type"] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          auto_close_on_action?: boolean | null
+          auto_message_template?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: Database["public"]["Enums"]["task_priority"] | null
+          task_type?: Database["public"]["Enums"]["task_type"] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          auto_close_on_action?: boolean | null
+          auto_message_template?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          priority?: Database["public"]["Enums"]["task_priority"] | null
+          task_type?: Database["public"]["Enums"]["task_type"] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_courses: {
         Row: {
           course_id: string
@@ -765,7 +858,9 @@ export type Database = {
           id: string
           include_empty_courses: boolean
           include_finished: boolean
+          risk_threshold_days: Json | null
           selected_keys: string[]
+          sync_interval_hours: Json | null
           updated_at: string
           user_id: string
         }
@@ -774,7 +869,9 @@ export type Database = {
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
+          risk_threshold_days?: Json | null
           selected_keys?: string[]
+          sync_interval_hours?: Json | null
           updated_at?: string
           user_id: string
         }
@@ -783,7 +880,9 @@ export type Database = {
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
+          risk_threshold_days?: Json | null
           selected_keys?: string[]
+          sync_interval_hours?: Json | null
           updated_at?: string
           user_id?: string
         }

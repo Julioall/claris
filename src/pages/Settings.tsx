@@ -278,9 +278,9 @@ export default function Settings() {
         .from('user_sync_preferences')
         .upsert({
           user_id: user.id,
-          sync_interval_hours: syncSettings.syncIntervalHours,
-          risk_threshold_days: normalizedRiskThresholdDays,
-        }, { onConflict: 'user_id' });
+          sync_interval_hours: syncSettings.syncIntervalHours as any,
+          risk_threshold_days: normalizedRiskThresholdDays as any,
+        } as any, { onConflict: 'user_id' });
 
       if (error) throw error;
 
