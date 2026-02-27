@@ -15,14 +15,17 @@ import { Input } from '@/components/ui/input';
 import { toast } from '@/hooks/use-toast';
 
 type SyncEntity = 'courses' | 'students' | 'activities' | 'grades';
+type RiskLevelThreshold = 'atencao' | 'risco' | 'critico';
+
+interface RiskThresholdDays {
+  atencao: number;
+  risco: number;
+  critico: number;
+}
 
 interface SyncSettings {
   syncIntervalHours: Record<SyncEntity, number>;
-  riskThresholdDays: {
-    atencao: number;
-    risco: number;
-    critico: number;
-  };
+  riskThresholdDays: RiskThresholdDays;
 }
 
 const asObject = (value: unknown): Record<string, unknown> =>
@@ -42,6 +45,12 @@ const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   },
 };
 
+const normalizeRiskThresholdDays = (value: RiskThresholdDays): RiskThresholdDays => ({
+  atencao: Math.max(1, Math.floor(value.atencao)),
+  risco: Math.max(1, Math.floor(value.risco)),
+  critico: Math.max(1, Math.floor(value.critico)),
+});
+
 const ENTITY_LABELS: Record<SyncEntity, string> = {
   courses: 'Cursos e escolas',
   students: 'Dados cadastrais de alunos',
@@ -52,8 +61,128 @@ const ENTITY_LABELS: Record<SyncEntity, string> = {
 export default function Settings() {
   const { user, logout, lastSync } = useAuth();
   const [syncSettings, setSyncSettings] = useState<SyncSettings>(DEFAULT_SYNC_SETTINGS);
+  const [lastSavedRiskThresholdDays, setLastSavedRiskThresholdDays] = useState<RiskThresholdDays>(DEFAULT_SYNC_SETTINGS.riskThresholdDays);
   const [isLoadingSyncSettings, setIsLoadingSyncSettings] = useState(false);
   const [isSavingSyncSettings, setIsSavingSyncSettings] = useState(false);
+
+  const recalculateAllStudentsRisk = async () => {
+    const isMissingRpcError = (error: { code?: string | null; message?: string } | null) =>
+      Boolean(error) && (
+        error?.code === 'PGRST202' ||
+        error?.message?.toLowerCase().includes('could not find the function') === true
+      );
+
+    const runCourseUpdate = async () => {
+      const { data: courseRows, error: coursesError } = await supabase
+        .from('student_courses')
+        .select('course_id');
+
+      if (coursesError) {
+        return { failedCount: 1, updatedCount: 0, missingRpc: false };
+      }
+
+      const uniqueCourseIds = Array.from(new Set((courseRows || []).map(row => row.course_id)));
+      if (uniqueCourseIds.length === 0) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: false };
+      }
+
+      const firstCourse = await supabase.rpc('update_course_students_risk', {
+        p_course_id: uniqueCourseIds[0],
+      });
+
+      if (isMissingRpcError(firstCourse.error)) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: true };
+      }
+
+      if (firstCourse.error) {
+        return { failedCount: 1, updatedCount: 0, missingRpc: false };
+      }
+
+      if (uniqueCourseIds.length === 1) {
+        return {
+          failedCount: 0,
+          updatedCount: firstCourse.data ?? 0,
+          missingRpc: false,
+        };
+      }
+
+      const results = await Promise.all(
+        uniqueCourseIds.slice(1).map(courseId =>
+          supabase.rpc('update_course_students_risk', { p_course_id: courseId }),
+        ),
+      );
+
+      const errors = results
+        .map(result => result.error)
+        .filter((error): error is NonNullable<typeof error> => Boolean(error));
+
+      return {
+        failedCount: errors.length,
+        updatedCount: (firstCourse.data ?? 0) + results.reduce((acc, result) => acc + (result.data ?? 0), 0),
+        missingRpc: errors.some(isMissingRpcError),
+      };
+    };
+
+    const runStudentFallback = async () => {
+      const { data: studentsRows, error: studentsError } = await supabase
+        .from('students')
+        .select('id');
+
+      if (studentsError) {
+        return { failedCount: 1, updatedCount: 0, missingRpc: false };
+      }
+
+      const studentIds = (studentsRows || []).map(row => row.id);
+      if (studentIds.length === 0) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: false };
+      }
+
+      const firstStudent = await supabase.rpc('update_student_risk', {
+        p_student_id: studentIds[0],
+      });
+
+      if (isMissingRpcError(firstStudent.error)) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: true };
+      }
+
+      if (firstStudent.error) {
+        return { failedCount: 1, updatedCount: 0, missingRpc: false };
+      }
+
+      if (studentIds.length === 1) {
+        return { failedCount: 0, updatedCount: 1, missingRpc: false };
+      }
+
+      const results = await Promise.all(
+        studentIds.slice(1).map(studentId =>
+          supabase.rpc('update_student_risk', { p_student_id: studentId }),
+        ),
+      );
+
+      const errors = results
+        .map(result => result.error)
+        .filter((error): error is NonNullable<typeof error> => Boolean(error));
+
+      return {
+        failedCount: errors.length,
+        updatedCount: studentIds.length - errors.length,
+        missingRpc: errors.some(isMissingRpcError),
+      };
+    };
+
+    let result = await runCourseUpdate();
+    let usedFallback = false;
+
+    if (result.missingRpc) {
+      usedFallback = true;
+      result = await runStudentFallback();
+    }
+
+    return {
+      ...result,
+      usedFallback,
+    };
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -63,7 +192,7 @@ export default function Settings() {
       try {
         const { data, error } = await supabase
           .from('user_sync_preferences')
-          .select('selected_keys, include_empty_courses, include_finished')
+          .select('selected_keys, include_empty_courses, include_finished, sync_interval_hours, risk_threshold_days')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -73,8 +202,28 @@ export default function Settings() {
         }
 
         if (data) {
-          // These columns don't exist yet in the DB — use defaults
+          const rawSyncInterval = asObject(data.sync_interval_hours);
+          const rawRiskThreshold = asObject(data.risk_threshold_days);
+
+          const loadedSettings: SyncSettings = {
+            syncIntervalHours: {
+              courses: Number(rawSyncInterval.courses ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.courses),
+              students: Number(rawSyncInterval.students ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.students),
+              activities: Number(rawSyncInterval.activities ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.activities),
+              grades: Number(rawSyncInterval.grades ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.grades),
+            },
+            riskThresholdDays: normalizeRiskThresholdDays({
+              atencao: Number(rawRiskThreshold.atencao ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.atencao),
+              risco: Number(rawRiskThreshold.risco ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.risco),
+              critico: Number(rawRiskThreshold.critico ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.critico),
+            }),
+          };
+
+          setSyncSettings(loadedSettings);
+          setLastSavedRiskThresholdDays(loadedSettings.riskThresholdDays);
+        } else {
           setSyncSettings(DEFAULT_SYNC_SETTINGS);
+          setLastSavedRiskThresholdDays(DEFAULT_SYNC_SETTINGS.riskThresholdDays);
         }
       } finally {
         setIsLoadingSyncSettings(false);
@@ -104,9 +253,10 @@ export default function Settings() {
   const saveSyncSettings = async () => {
     if (!user) return;
 
-    const atencaoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.atencao));
-    const riscoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.risco));
-    const criticoDays = Math.max(1, Math.floor(syncSettings.riskThresholdDays.critico));
+    const normalizedRiskThresholdDays = normalizeRiskThresholdDays(syncSettings.riskThresholdDays);
+    const atencaoDays = normalizedRiskThresholdDays.atencao;
+    const riscoDays = normalizedRiskThresholdDays.risco;
+    const criticoDays = normalizedRiskThresholdDays.critico;
 
     if (!(atencaoDays < riscoDays && riscoDays < criticoDays)) {
       toast({
@@ -119,23 +269,49 @@ export default function Settings() {
 
     setIsSavingSyncSettings(true);
     try {
+      const hasRiskThresholdChanged =
+        lastSavedRiskThresholdDays.atencao !== atencaoDays ||
+        lastSavedRiskThresholdDays.risco !== riscoDays ||
+        lastSavedRiskThresholdDays.critico !== criticoDays;
+
       const { error } = await supabase
         .from('user_sync_preferences')
         .upsert({
           user_id: user.id,
           sync_interval_hours: syncSettings.syncIntervalHours,
-          risk_threshold_days: {
-            atencao: atencaoDays,
-            risco: riscoDays,
-            critico: criticoDays,
-          },
+          risk_threshold_days: normalizedRiskThresholdDays,
         }, { onConflict: 'user_id' });
 
       if (error) throw error;
 
+      setLastSavedRiskThresholdDays(normalizedRiskThresholdDays);
+      setSyncSettings(prev => ({ ...prev, riskThresholdDays: normalizedRiskThresholdDays }));
+
+      let recalculationSummary = '';
+      if (hasRiskThresholdChanged) {
+        const riskResult = await recalculateAllStudentsRisk();
+        if (riskResult.missingRpc) {
+          toast({
+            title: 'Funcao de risco indisponivel',
+            description: 'As funcoes de atualizacao de risco nao existem no banco local. Crie/aplique as migracoes.',
+            variant: 'destructive',
+          });
+        } else if (riskResult.failedCount > 0) {
+          toast({
+            title: 'Atualizacao parcial de risco',
+            description: riskResult.usedFallback
+              ? `${riskResult.updatedCount} alunos recalculados via fallback e ${riskResult.failedCount} com erro.`
+              : `${riskResult.updatedCount} alunos recalculados e ${riskResult.failedCount} com erro.`,
+            variant: 'destructive',
+          });
+        } else {
+          recalculationSummary = ` Risco recalculado automaticamente para ${riskResult.updatedCount} alunos.`;
+        }
+      }
+
       toast({
         title: 'Configuracoes salvas',
-        description: 'Intervalos de sincronizacao atualizados com sucesso.',
+        description: `Intervalos de sincronizacao atualizados com sucesso.${recalculationSummary}`,
       });
     } catch (err) {
       console.error('Error saving sync settings:', err);
@@ -149,7 +325,7 @@ export default function Settings() {
     }
   };
 
-  const updateRiskThresholdDays = (level: 'atencao' | 'risco' | 'critico', value: string) => {
+  const updateRiskThresholdDays = (level: RiskLevelThreshold, value: string) => {
     const parsed = Number(value);
     const safeValue = Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 

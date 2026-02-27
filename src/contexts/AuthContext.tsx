@@ -322,6 +322,121 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const recalculateRiskForCourses = useCallback(async (selectedCourseIds: string[]) => {
+    const isMissingRpcError = (error: { code?: string | null; message?: string } | null) =>
+      Boolean(error) && (
+        error?.code === 'PGRST202' ||
+        error?.message?.toLowerCase().includes('could not find the function') === true
+      );
+
+    const runCourseUpdate = async () => {
+      if (selectedCourseIds.length === 0) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: false };
+      }
+
+      const firstCourse = await supabase.rpc('update_course_students_risk', {
+        p_course_id: selectedCourseIds[0],
+      });
+
+      if (isMissingRpcError(firstCourse.error)) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: true };
+      }
+
+      if (firstCourse.error) {
+        return { failedCount: 1, updatedCount: 0, missingRpc: false };
+      }
+
+      if (selectedCourseIds.length === 1) {
+        return {
+          failedCount: 0,
+          updatedCount: firstCourse.data ?? 0,
+          missingRpc: false,
+        };
+      }
+
+      const results = await Promise.all(
+        selectedCourseIds.slice(1).map(courseId =>
+          supabase.rpc('update_course_students_risk', { p_course_id: courseId }),
+        ),
+      );
+
+      const errors = results
+        .map(result => result.error)
+        .filter((error): error is NonNullable<typeof error> => Boolean(error));
+
+      return {
+        failedCount: errors.length,
+        updatedCount: (firstCourse.data ?? 0) + results.reduce((acc, result) => acc + (result.data ?? 0), 0),
+        missingRpc: errors.some(isMissingRpcError),
+      };
+    };
+
+    const runStudentFallback = async () => {
+      if (selectedCourseIds.length === 0) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: false };
+      }
+
+      const { data: studentCourseRows, error: studentCourseError } = await supabase
+        .from('student_courses')
+        .select('student_id')
+        .in('course_id', selectedCourseIds);
+
+      if (studentCourseError) {
+        return { failedCount: 1, updatedCount: 0, missingRpc: false };
+      }
+
+      const uniqueStudentIds = Array.from(new Set((studentCourseRows || []).map(row => row.student_id)));
+      if (uniqueStudentIds.length === 0) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: false };
+      }
+
+      const firstStudent = await supabase.rpc('update_student_risk', {
+        p_student_id: uniqueStudentIds[0],
+      });
+
+      if (isMissingRpcError(firstStudent.error)) {
+        return { failedCount: 0, updatedCount: 0, missingRpc: true };
+      }
+
+      if (firstStudent.error) {
+        return { failedCount: 1, updatedCount: 0, missingRpc: false };
+      }
+
+      if (uniqueStudentIds.length === 1) {
+        return { failedCount: 0, updatedCount: 1, missingRpc: false };
+      }
+
+      const results = await Promise.all(
+        uniqueStudentIds.slice(1).map(studentId =>
+          supabase.rpc('update_student_risk', { p_student_id: studentId }),
+        ),
+      );
+
+      const errors = results
+        .map(result => result.error)
+        .filter((error): error is NonNullable<typeof error> => Boolean(error));
+
+      return {
+        failedCount: errors.length,
+        updatedCount: uniqueStudentIds.length - errors.length,
+        missingRpc: errors.some(isMissingRpcError),
+      };
+    };
+
+    let updateResult = await runCourseUpdate();
+    let usedFallback = false;
+
+    if (updateResult.missingRpc) {
+      usedFallback = true;
+      updateResult = await runStudentFallback();
+    }
+
+    return {
+      ...updateResult,
+      usedFallback,
+    };
+  }, []);
+
   const login = useCallback(async (username: string, password: string, moodleUrl: string, service: string = 'moodle_mobile_app'): Promise<boolean> => {
     setIsLoading(true);
 
@@ -655,6 +770,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let totalStudents = 0;
     let totalActivities = 0;
     let totalGrades = 0;
+    let riskUpdateResult: {
+      failedCount: number;
+      updatedCount: number;
+      missingRpc: boolean;
+      usedFallback: boolean;
+    } | null = null;
     const nextEntityLastSync: Partial<Record<SyncEntity, string>> = {
       ...syncSettings.entityLastSync,
     };
@@ -716,6 +837,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      if ((entitiesToSync.includes('courses') || entitiesToSync.includes('students')) && courseIds.length > 0) {
+        riskUpdateResult = await recalculateRiskForCourses(courseIds);
+      }
+
       await supabase
         .from('user_sync_preferences')
         .upsert(
@@ -741,8 +866,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       toast({
         title: 'Sincronizacao concluida',
-        description: `${syncedCourses.length} cursos, ${totalStudents} alunos, ${totalActivities} atividades e ${totalGrades} notas sincronizados.`,
+        description: `${syncedCourses.length} cursos, ${totalStudents} alunos, ${totalActivities} atividades e ${totalGrades} notas sincronizados.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
       });
+
+      if (riskUpdateResult?.missingRpc) {
+        toast({
+          title: 'Funcao de risco indisponivel',
+          description: 'As funcoes de atualizacao de risco nao existem no banco local. Crie/aplique as migracoes.',
+          variant: 'destructive',
+        });
+      } else if (riskUpdateResult && riskUpdateResult.failedCount > 0) {
+        toast({
+          title: 'Atualizacao parcial de risco',
+          description: riskUpdateResult.usedFallback
+            ? `${riskUpdateResult.updatedCount} alunos recalculados via fallback e ${riskUpdateResult.failedCount} com erro.`
+            : `${riskUpdateResult.updatedCount} alunos recalculados e ${riskUpdateResult.failedCount} com erro.`,
+          variant: 'destructive',
+        });
+      }
     } catch (err) {
       console.error('Sync error:', err);
       toast({
@@ -754,7 +895,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [courses, invokeMoodleWithTimeout, loadSyncSettings, resolveSessionContext, updateStep]);
+  }, [courses, invokeMoodleWithTimeout, loadSyncSettings, recalculateRiskForCourses, resolveSessionContext, updateStep]);
 
   const value: ExtendedAuthContextType = {
     user,
