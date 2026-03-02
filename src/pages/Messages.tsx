@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Search, Loader2, RefreshCw, AlertCircle } from 'lucide-react';
+import { MessageSquare, Search, Loader2, AlertCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -73,6 +73,13 @@ export default function Messages() {
     fetchConversations();
   }, [fetchConversations]);
 
+  // Auto-select first conversation when loaded
+  useEffect(() => {
+    if (!selectedConversation && conversations.length > 0) {
+      setSelectedConversation(conversations[0]);
+    }
+  }, [conversations, selectedConversation]);
+
   const filteredConversations = conversations.filter((c) =>
     c.member.fullname.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -80,18 +87,11 @@ export default function Messages() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Mensagens</h1>
-          <p className="text-muted-foreground">
-            Converse com seus alunos via Moodle
-          </p>
-        </div>
-
-        <Button variant="outline" size="sm" onClick={fetchConversations} disabled={isLoading}>
-          <RefreshCw className={cn('h-4 w-4 mr-2', isLoading && 'animate-spin')} />
-          Atualizar
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Mensagens</h1>
+        <p className="text-muted-foreground">
+          Converse com seus alunos via Moodle
+        </p>
       </div>
 
       {error && (
@@ -111,10 +111,10 @@ export default function Messages() {
         </Card>
       )}
 
-      {/* Chat layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ minHeight: '500px' }}>
+      {/* Chat layout - full height */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ height: 'calc(100vh - 180px)' }}>
         {/* Conversation list */}
-        <Card className="lg:col-span-1 flex flex-col">
+        <Card className="lg:col-span-1 flex flex-col overflow-hidden">
           <div className="p-3 border-b">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -128,7 +128,7 @@ export default function Messages() {
             </div>
           </div>
 
-          <ScrollArea className="flex-1" style={{ maxHeight: '460px' }}>
+          <ScrollArea className="flex-1">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -171,7 +171,7 @@ export default function Messages() {
               <ChatWindow
                 moodleUserId={selectedConversation.member.id}
                 studentName={selectedConversation.member.fullname}
-                className="h-[500px]"
+                className="h-full"
               />
             </div>
           ) : (
