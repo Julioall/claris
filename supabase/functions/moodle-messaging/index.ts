@@ -15,4 +15,4 @@ Deno.serve(createHandler(async ({ body }) => {
     default:
       return errorResponse('Invalid messaging action')
   }
-}))
+}, { requireAuth: true }))

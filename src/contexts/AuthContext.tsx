@@ -282,12 +282,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
+      // Get the current session token for authenticated edge function calls
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const accessToken = currentSession?.access_token || SUPABASE_PUBLISHABLE_KEY;
+
       const response = await fetch(`${SUPABASE_FUNCTIONS_BASE_URL}/${functionName}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           apikey: SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify(body),
         signal: controller.signal,

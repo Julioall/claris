@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Send, Loader2, AlertCircle, MessageSquare } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,7 +32,10 @@ function MessageBubble({ message, isOwn }: { message: ChatMessage; isOwn: boolea
       >
         <div
           className="whitespace-pre-wrap break-words [&_a]:underline"
-          dangerouslySetInnerHTML={{ __html: message.text }}
+          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(message.text, {
+            ALLOWED_TAGS: ['b', 'i', 'u', 'a', 'br', 'p', 'strong', 'em', 'span'],
+            ALLOWED_ATTR: ['href', 'target', 'rel'],
+          }) }}
         />
         <p className={cn('text-[10px] mt-1', isOwn ? 'text-primary-foreground/60' : 'text-muted-foreground')}>
           {date} {time}

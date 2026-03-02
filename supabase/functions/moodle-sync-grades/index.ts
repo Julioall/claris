@@ -17,4 +17,4 @@ Deno.serve(createHandler(async ({ body }) => {
     return errorResponse('Missing required fields: moodleUrl, token, courseId')
   }
   return await syncGrades(String(moodleUrl), String(token), Number(courseId))
-}))
+}, { requireAuth: true }))
