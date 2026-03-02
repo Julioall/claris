@@ -37,7 +37,7 @@ function ConversationItem({
     <button
       onClick={onClick}
       className={cn(
-        'w-full text-left p-3 rounded-lg transition-colors hover:bg-muted/50',
+        'w-full text-left p-3 rounded-lg transition-colors hover:bg-muted/50 overflow-hidden',
         isSelected && 'bg-muted'
       )}
     >
