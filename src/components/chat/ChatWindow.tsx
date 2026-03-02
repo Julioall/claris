@@ -14,6 +14,7 @@ interface ChatWindowProps {
   moodleUserId: string | number;
   studentName: string;
   className?: string;
+  hideHeader?: boolean;
 }
 
 function MessageBubble({ message, isOwn }: { message: ChatMessage; isOwn: boolean }) {
@@ -45,7 +46,7 @@ function MessageBubble({ message, isOwn }: { message: ChatMessage; isOwn: boolea
   );
 }
 
-export function ChatWindow({ moodleUserId, studentName, className }: ChatWindowProps) {
+export function ChatWindow({ moodleUserId, studentName, className, hideHeader }: ChatWindowProps) {
   const { messages, isLoading, isSending, error, fetchMessages, sendMessage } = useChat();
   const [newMessage, setNewMessage] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -83,12 +84,14 @@ export function ChatWindow({ moodleUserId, studentName, className }: ChatWindowP
 
   return (
     <Card className={cn('flex flex-col h-full', className)}>
-      <CardHeader className="pb-3 border-b">
-        <CardTitle className="text-base flex items-center gap-2">
-          <MessageSquare className="h-4 w-4" />
-          Chat com {studentName}
-        </CardTitle>
-      </CardHeader>
+      {!hideHeader && (
+        <CardHeader className="pb-3 border-b shrink-0">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MessageSquare className="h-4 w-4" />
+            Chat com {studentName}
+          </CardTitle>
+        </CardHeader>
+      )}
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0 overflow-hidden">
         {/* Messages area */}

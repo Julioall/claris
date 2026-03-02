@@ -85,9 +85,9 @@ export default function Messages() {
   );
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="flex flex-col animate-fade-in h-[calc(100vh-6rem)]">
       {/* Header */}
-      <div>
+      <div className="mb-4 shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Mensagens</h1>
         <p className="text-muted-foreground">
           Converse com seus alunos via Moodle
@@ -95,7 +95,7 @@ export default function Messages() {
       </div>
 
       {error && (
-        <Card className="border-destructive/50">
+        <Card className="border-destructive/50 mb-4 shrink-0">
           <CardContent className="pt-4">
             <div className="flex items-start gap-3">
               <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
@@ -111,11 +111,11 @@ export default function Messages() {
         </Card>
       )}
 
-      {/* Chat layout - full height */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4" style={{ height: 'calc(100vh - 180px)' }}>
+      {/* Chat layout - fills remaining space */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 lg:gap-0 flex-1 min-h-0 border rounded-lg overflow-hidden">
         {/* Conversation list */}
-        <Card className="lg:col-span-1 flex flex-col overflow-hidden">
-          <div className="p-3 border-b">
+        <div className="lg:col-span-1 flex flex-col border-r bg-card min-h-0">
+          <div className="p-3 border-b shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -128,7 +128,7 @@ export default function Messages() {
             </div>
           </div>
 
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -153,34 +153,43 @@ export default function Messages() {
               </div>
             )}
           </ScrollArea>
-        </Card>
+        </div>
 
-        {/* Chat area */}
-        <div className="lg:col-span-2">
+        {/* Chat area - fills remaining space */}
+        <div className="lg:col-span-2 flex flex-col min-h-0 bg-card">
           {selectedConversation ? (
-            <div className="space-y-2">
-              {selectedConversation.studentId && (
-                <div className="flex justify-end">
+            <>
+              {/* Chat header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
+                    {selectedConversation.member.fullname.charAt(0)}
+                  </div>
+                  <span className="font-medium text-sm">{selectedConversation.member.fullname}</span>
+                </div>
+                {selectedConversation.studentId && (
                   <Button variant="ghost" size="sm" asChild>
                     <Link to={`/alunos/${selectedConversation.studentId}`}>
-                      Ver perfil do aluno
+                      Ver perfil
                     </Link>
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
+              {/* Chat body */}
               <ChatWindow
                 moodleUserId={selectedConversation.member.id}
                 studentName={selectedConversation.member.fullname}
-                className="h-full"
+                className="flex-1 min-h-0 border-0 rounded-none shadow-none"
+                hideHeader
               />
-            </div>
+            </>
           ) : (
-            <Card className="h-full flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
                 <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
                 <p className="text-muted-foreground">Selecione uma conversa para começar</p>
               </div>
-            </Card>
+            </div>
           )}
         </div>
       </div>
