@@ -92,7 +92,7 @@ export function ChatWindow({ moodleUserId, studentName, className }: ChatWindowP
 
       <CardContent className="flex-1 flex flex-col p-0 min-h-0">
         {/* Messages area */}
-        <ScrollArea ref={scrollRef} className="flex-1 p-4" style={{ maxHeight: '400px' }}>
+        <ScrollArea ref={scrollRef} className="flex-1 p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
