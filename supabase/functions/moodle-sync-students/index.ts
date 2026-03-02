@@ -10,4 +10,4 @@ Deno.serve(createHandler(async ({ body }) => {
   }
 
   return await syncStudents(String(moodleUrl), String(token), Number(courseId))
-}))
+}, { requireAuth: true }))

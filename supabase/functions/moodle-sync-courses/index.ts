@@ -2,15 +2,15 @@ import { createHandler } from '../_shared/http/mod.ts'
 import { errorResponse } from '../_shared/http/mod.ts'
 import { syncCourses, linkSelectedCourses } from './service.ts'
 
-Deno.serve(createHandler(async ({ body }) => {
+Deno.serve(createHandler(async ({ body, user }) => {
   const { action } = body as { action?: string }
 
   if (action === 'link_selected_courses') {
-    const { userId, selectedCourseIds } = body as { userId?: string; selectedCourseIds?: string[] }
-    if (!userId || !selectedCourseIds || !Array.isArray(selectedCourseIds)) {
-      return errorResponse('Missing required fields: userId, selectedCourseIds')
+    const { selectedCourseIds } = body as { selectedCourseIds?: string[] }
+    if (!selectedCourseIds || !Array.isArray(selectedCourseIds)) {
+      return errorResponse('Missing required fields: selectedCourseIds')
     }
-    return await linkSelectedCourses(String(userId), selectedCourseIds)
+    return await linkSelectedCourses(user.id, selectedCourseIds)
   }
 
   // Default: sync_courses
@@ -19,4 +19,4 @@ Deno.serve(createHandler(async ({ body }) => {
     return errorResponse('Missing required fields: moodleUrl, token, userId')
   }
   return await syncCourses(moodleUrl, token, userId)
-}))
+}, { requireAuth: true }))
