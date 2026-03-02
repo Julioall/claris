@@ -82,7 +82,7 @@ export function ChatWindow({ moodleUserId, studentName, className }: ChatWindowP
   };
 
   return (
-    <Card className={cn('flex flex-col', className)}>
+    <Card className={cn('flex flex-col h-full', className)}>
       <CardHeader className="pb-3 border-b">
         <CardTitle className="text-base flex items-center gap-2">
           <MessageSquare className="h-4 w-4" />
@@ -90,7 +90,7 @@ export function ChatWindow({ moodleUserId, studentName, className }: ChatWindowP
         </CardTitle>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col p-0 min-h-0">
+      <CardContent className="flex-1 flex flex-col p-0 min-h-0 overflow-hidden">
         {/* Messages area */}
         <ScrollArea ref={scrollRef} className="flex-1 p-4">
           {isLoading ? (
