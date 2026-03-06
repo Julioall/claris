@@ -62,7 +62,7 @@ export async function linkSelectedCourses(userId: string, selectedCourseIds: str
   const { data: linkUser } = await supabase
     .from('users')
     .select('id')
-    .eq('moodle_user_id', userId)
+    .eq('id', userId)
     .maybeSingle()
 
   if (!linkUser) return errorResponse('User not found', 404)
