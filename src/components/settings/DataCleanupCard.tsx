@@ -186,6 +186,8 @@ export function DataCleanupCard() {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showFullCleanupDialog, setShowFullCleanupDialog] = useState(false);
+  const [isFullCleanupLoading, setIsFullCleanupLoading] = useState(false);
 
   const toggleOption = (optionId: string) => {
     setSelectedOptions(prev =>
@@ -308,6 +310,50 @@ export function DataCleanupCard() {
     }
   };
 
+  const executeFullCleanup = async () => {
+    setIsFullCleanupLoading(true);
+    setShowFullCleanupDialog(false);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('data-cleanup', {
+        body: { mode: 'full_cleanup' },
+      });
+
+      if (error) {
+        toast({
+          title: "Erro na limpeza completa",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setCourses([]);
+
+      if (data?.errors?.length > 0) {
+        toast({
+          title: "Limpeza parcialmente concluída",
+          description: `${data.cleaned.length} tabelas limpas. ${data.errors.length} erro(s).`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Base completamente limpa",
+          description: "Todos os dados foram removidos. Faça uma nova sincronização.",
+        });
+      }
+    } catch (err) {
+      console.error('Full cleanup error:', err);
+      toast({
+        title: "Erro na limpeza",
+        description: "Ocorreu um erro ao limpar a base completa.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFullCleanupLoading(false);
+    }
+  };
+
   return (
     <>
       <Card className="border-destructive/30">
@@ -377,24 +423,38 @@ export function DataCleanupCard() {
             </div>
           </div>
 
-          <Button
-            onClick={handleCleanup}
-            variant="destructive"
-            className="w-full"
-            disabled={isLoading || selectedOptions.length === 0}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Limpando...
-              </>
-            ) : (
-              <>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Limpar dados selecionados ({selectedOptions.length})
-              </>
-            )}
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleCleanup}
+              variant="destructive"
+              className="flex-1"
+              disabled={isLoading || isFullCleanupLoading || selectedOptions.length === 0}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Limpando...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Limpar selecionados ({selectedOptions.length})
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={() => setShowFullCleanupDialog(true)}
+              variant="outline"
+              className="border-destructive/50 text-destructive hover:bg-destructive/10"
+              disabled={isLoading || isFullCleanupLoading}
+            >
+              {isFullCleanupLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                'Limpar tudo'
+              )}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -425,6 +485,41 @@ export function DataCleanupCard() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Sim, limpar dados
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={showFullCleanupDialog} onOpenChange={setShowFullCleanupDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Limpar TODA a base de dados
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <p>
+                Esta ação vai remover <strong>todos os dados</strong> do sistema, incluindo dados que podem ter sido criados por outras sincronizações ou que não estão mais vinculados à sua conta:
+              </p>
+              <ul className="list-disc list-inside space-y-1 text-sm">
+                <li>Todos os cursos, alunos e matrículas</li>
+                <li>Todas as atividades, notas e pendências</li>
+                <li>Todas as ações, anotações e mensagens</li>
+                <li>Todo o histórico de risco e feed de atividades</li>
+                <li>Todas as preferências e modelos</li>
+              </ul>
+              <p className="font-medium text-destructive">
+                Esta ação é irreversível! Sua conta de usuário será preservada.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeFullCleanup}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Sim, limpar toda a base
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
