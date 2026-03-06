@@ -217,6 +217,7 @@ function buildActivityRecords(
   courseDbId: string,
   assignDueDates: Record<string, string | null>,
   quizDueDates: Record<string, string | null>,
+  completionByStudent: Map<string, Map<string, { state: number; timecompleted: number | null }>>,
   now: string
 ): any[] {
   const records: any[] = []
@@ -227,13 +228,30 @@ function buildActivityRecords(
     else if (activity.modname === 'quiz') dueDate = quizDueDates[String(activity.id)] || null
 
     for (const studentId of studentIds) {
+      const studentCompletion = completionByStudent.get(studentId)
+      const actCompletion = studentCompletion?.get(String(activity.id))
+
+      let status = 'pending'
+      let completedAt: string | null = null
+
+      if (actCompletion) {
+        // Moodle completion states: 0=incomplete, 1=complete, 2=complete_pass, 3=complete_fail
+        if (actCompletion.state >= 1) {
+          status = actCompletion.state === 3 ? 'complete_fail' : 'completed'
+          if (actCompletion.timecompleted && actCompletion.timecompleted > 0) {
+            completedAt = new Date(actCompletion.timecompleted * 1000).toISOString()
+          }
+        }
+      }
+
       const record: any = {
         student_id: studentId,
         course_id: courseDbId,
         moodle_activity_id: String(activity.id),
         activity_name: activity.name,
         activity_type: activity.modname,
-        status: activity.completiondata?.state === 1 || activity.completiondata?.state === 2 ? 'completed' : 'pending',
+        status,
+        completed_at: completedAt,
         updated_at: now,
       }
       if (dueDate) record.due_date = dueDate
@@ -242,4 +260,56 @@ function buildActivityRecords(
   }
 
   return records
+}
+
+/**
+ * Fetch per-student completion statuses for all activities in a course.
+ * Uses core_completion_get_activities_completion_status when available.
+ */
+async function fetchCompletionStatuses(
+  moodleUrl: string,
+  token: string,
+  courseId: number,
+  studentIds: string[],
+  courseDbId: string,
+  supabase: any
+): Promise<Map<string, Map<string, { state: number; timecompleted: number | null }>>> {
+  const result = new Map<string, Map<string, { state: number; timecompleted: number | null }>>()
+
+  // Get moodle_user_id for each student
+  const { data: students } = await supabase
+    .from('students')
+    .select('id, moodle_user_id')
+    .in('id', studentIds)
+
+  if (!students?.length) return result
+
+  for (const student of students) {
+    const moodleUserId = parseInt(student.moodle_user_id, 10)
+    if (isNaN(moodleUserId)) continue
+
+    try {
+      const completionData = await callMoodleApi(
+        moodleUrl, token, 
+        'core_completion_get_activities_completion_status',
+        { courseid: courseId, userid: moodleUserId }
+      )
+
+      const activityMap = new Map<string, { state: number; timecompleted: number | null }>()
+      if (completionData?.statuses) {
+        for (const s of completionData.statuses) {
+          activityMap.set(String(s.cmid), {
+            state: s.state ?? 0,
+            timecompleted: s.timecompleted ?? null,
+          })
+        }
+      }
+      result.set(student.id, activityMap)
+    } catch (err) {
+      console.warn(`Completion API failed for student ${moodleUserId} in course ${courseId}:`, err)
+      // Fallback: no completion data for this student
+    }
+  }
+
+  return result
 }
