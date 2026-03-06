@@ -60,15 +60,22 @@ export async function login(params: LoginParams): Promise<Response> {
     let signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
 
     if (signInResult.error) {
-      const createResult = await supabase.auth.admin.createUser({
-        id: existingUser.id,
-        email: authEmail,
-        password,
-        email_confirm: true,
-        user_metadata: { moodle_user_id: String(siteInfo.userid) },
-      })
+      // Auth user might exist with different password, or not exist at all
+      try {
+        const createResult = await supabase.auth.admin.createUser({
+          id: existingUser.id,
+          email: authEmail,
+          password,
+          email_confirm: true,
+          user_metadata: { moodle_user_id: String(siteInfo.userid) },
+        })
 
-      if (createResult.error) {
+        if (createResult.error) {
+          // User exists in auth but password changed - update it
+          await supabase.auth.admin.updateUserById(existingUser.id, { password })
+        }
+      } catch (_createErr) {
+        // createUser threw (email_exists) - just update the password
         await supabase.auth.admin.updateUserById(existingUser.id, { password })
       }
 
