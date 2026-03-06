@@ -310,6 +310,50 @@ export function DataCleanupCard() {
     }
   };
 
+  const executeFullCleanup = async () => {
+    setIsFullCleanupLoading(true);
+    setShowFullCleanupDialog(false);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('data-cleanup', {
+        body: { mode: 'full_cleanup' },
+      });
+
+      if (error) {
+        toast({
+          title: "Erro na limpeza completa",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setCourses([]);
+
+      if (data?.errors?.length > 0) {
+        toast({
+          title: "Limpeza parcialmente concluída",
+          description: `${data.cleaned.length} tabelas limpas. ${data.errors.length} erro(s).`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Base completamente limpa",
+          description: "Todos os dados foram removidos. Faça uma nova sincronização.",
+        });
+      }
+    } catch (err) {
+      console.error('Full cleanup error:', err);
+      toast({
+        title: "Erro na limpeza",
+        description: "Ocorreu um erro ao limpar a base completa.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFullCleanupLoading(false);
+    }
+  };
+
   return (
     <>
       <Card className="border-destructive/30">
