@@ -186,6 +186,8 @@ export function DataCleanupCard() {
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showFullCleanupDialog, setShowFullCleanupDialog] = useState(false);
+  const [isFullCleanupLoading, setIsFullCleanupLoading] = useState(false);
 
   const toggleOption = (optionId: string) => {
     setSelectedOptions(prev =>
