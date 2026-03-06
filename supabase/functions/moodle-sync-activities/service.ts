@@ -43,9 +43,12 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   const assignDueDates = await fetchAssignDueDates(moodleUrl, token, courseId, activities)
   const quizDueDates = await fetchQuizDueDates(moodleUrl, token, courseId, activities)
 
+  // Fetch per-student completion status
+  const completionByStudent = await fetchCompletionStatuses(moodleUrl, token, courseId, studentIds, dbCourse.id, supabase)
+
   // Build and upsert records
   const now = new Date().toISOString()
-  const activityRecords = buildActivityRecords(activities, studentIds, dbCourse.id, assignDueDates, quizDueDates, now)
+  const activityRecords = buildActivityRecords(activities, studentIds, dbCourse.id, assignDueDates, quizDueDates, completionByStudent, now)
 
   console.log(`Preparing to upsert ${activityRecords.length} activity records`)
 

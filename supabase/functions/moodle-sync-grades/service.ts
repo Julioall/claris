@@ -54,6 +54,20 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             itemPercentage = parseNullablePercentage(item.percentageformatted)
           }
 
+          // Derive timestamps from gradebook
+          const gradedAtRaw = item.gradedategraded
+          const submittedAtRaw = item.gradedatesubmitted
+          const gradedAt = gradedAtRaw && gradedAtRaw > 0 ? new Date(gradedAtRaw * 1000).toISOString() : null
+          const submittedAt = submittedAtRaw && submittedAtRaw > 0 ? new Date(submittedAtRaw * 1000).toISOString() : null
+
+          // Derive status from available data
+          let activityStatus = 'pending'
+          if (itemGradeRaw !== null && gradedAt) {
+            activityStatus = 'graded'
+          } else if (submittedAt) {
+            activityStatus = 'submitted'
+          }
+
           activityGradeRecords.push({
             student_id: student.id,
             course_id: gradesCourse.id,
@@ -63,6 +77,10 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             grade: itemGradeRaw,
             grade_max: itemGradeMax,
             percentage: itemPercentage,
+            status: activityStatus,
+            graded_at: gradedAt,
+            submitted_at: submittedAt,
+            completed_at: gradedAt || submittedAt,
             updated_at: now,
           })
         }
