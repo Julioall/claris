@@ -257,6 +257,12 @@ export function CategoryHierarchy({
         let courseCourses: CourseWithStats[] = [];
         
         Object.values(courseNode.classes).forEach(classNode => {
+      // Sort courses within each class by start_date
+          classNode.courses.sort((a, b) => {
+            const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
+            const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
+            return dateA - dateB;
+          });
           classNode.stats = calculateStats(classNode.courses);
           courseCourses = [...courseCourses, ...classNode.courses];
         });
