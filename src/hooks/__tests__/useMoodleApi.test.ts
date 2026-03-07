@@ -159,7 +159,7 @@ describe("useMoodleApi", () => {
     });
 
     const syncStudentCalls = invokeMock.mock.calls.filter(
-      (call) => call[1]?.body?.action === "sync_students",
+      (call) => call[0] === "moodle-sync-students",
     );
     expect(syncStudentCalls).toHaveLength(2);
     expect(syncStudentCalls[0][1].body.courseId).toBe(10);

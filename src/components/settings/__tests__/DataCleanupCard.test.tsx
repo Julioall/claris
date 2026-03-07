@@ -52,7 +52,7 @@ describe("DataCleanupCard", () => {
     render(<DataCleanupCard />);
 
     const cleanupButton = screen.getByRole("button", {
-      name: /Limpar dados selecionados/i,
+      name: /Limpar selecionados/i,
     });
     expect(cleanupButton).toHaveTextContent("(0)");
     expect(cleanupButton).toBeDisabled();
@@ -75,7 +75,7 @@ describe("DataCleanupCard", () => {
 
     await user.click(screen.getByLabelText(/^Cursos$/i));
     await user.click(
-      screen.getByRole("button", { name: /Limpar dados selecionados/i }),
+      screen.getByRole("button", { name: /Limpar selecionados/i }),
     );
     await user.click(screen.getByRole("button", { name: /Sim, limpar dados/i }));
 
@@ -104,7 +104,7 @@ describe("DataCleanupCard", () => {
 
     await user.click(screen.getByLabelText(/^Meus cursos$/i));
     await user.click(
-      screen.getByRole("button", { name: /Limpar dados selecionados/i }),
+      screen.getByRole("button", { name: /Limpar selecionados/i }),
     );
     await user.click(screen.getByRole("button", { name: /Sim, limpar dados/i }));
 

@@ -1,5 +1,5 @@
 import { act } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 
@@ -8,9 +8,11 @@ const getSessionMock = vi.fn();
 const setSessionMock = vi.fn();
 const signOutMock = vi.fn();
 const invokeMock = vi.fn();
+const rpcMock = vi.fn();
 const toastMock = vi.fn();
 const encryptSessionDataMock = vi.fn();
 const decryptSessionDataMock = vi.fn();
+const fetchMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -23,6 +25,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: {
       invoke: (...args: unknown[]) => invokeMock(...args),
     },
+    rpc: (...args: unknown[]) => rpcMock(...args),
     from: vi.fn(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })),
@@ -53,6 +56,7 @@ describe("AuthContext", () => {
     vi.clearAllMocks();
     authRef = null;
     sessionStorage.clear();
+    vi.stubGlobal("fetch", fetchMock);
 
     onAuthStateChangeMock.mockImplementation(() => ({
       data: { subscription: { unsubscribe: vi.fn() } },
@@ -60,8 +64,13 @@ describe("AuthContext", () => {
     getSessionMock.mockResolvedValue({ data: { session: null } });
     setSessionMock.mockResolvedValue({ error: null });
     signOutMock.mockResolvedValue({ error: null });
+    rpcMock.mockResolvedValue({ data: 2, error: null });
     encryptSessionDataMock.mockResolvedValue("encrypted-session");
     decryptSessionDataMock.mockResolvedValue(null);
+  });
+
+  afterAll(() => {
+    vi.unstubAllGlobals();
   });
 
   it("throws when useAuth is used outside provider", () => {
@@ -259,63 +268,87 @@ describe("AuthContext", () => {
   });
 
   it("runs syncSelectedCourses end-to-end and fills sync summary", async () => {
-    invokeMock.mockImplementation((_fn: string, params: { body: Record<string, unknown> }) => {
-      const action = params.body.action;
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: "u-1",
+          full_name: "Julio Tutor",
+          moodle_user_id: "10",
+          moodle_username: "julio",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
+        moodleToken: "token-1",
+        moodleUserId: 10,
+        session: { access_token: "access", refresh_token: "refresh" },
+      },
+      error: null,
+    });
 
-      if (action === "login") {
-        return Promise.resolve({
-          data: {
-            user: {
-              id: "u-1",
-              full_name: "Julio Tutor",
-              moodle_user_id: "10",
-              moodle_username: "julio",
-              created_at: "2026-01-01T00:00:00.000Z",
-              updated_at: "2026-01-01T00:00:00.000Z",
+    fetchMock.mockImplementation((input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+
+      if (url.endsWith("/moodle-sync-courses") && body.action === "link_selected_courses") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
+      }
+
+      if (url.endsWith("/moodle-sync-courses")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              courses: [
+                {
+                  id: "c-1",
+                  moodle_course_id: "101",
+                  name: "Matematica",
+                  short_name: "MAT",
+                  created_at: "2026-01-01T00:00:00.000Z",
+                  updated_at: "2026-01-01T00:00:00.000Z",
+                },
+              ],
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
             },
-            moodleToken: "token-1",
-            moodleUserId: 10,
-            session: { access_token: "access", refresh_token: "refresh" },
-          },
-          error: null,
-        });
+          ),
+        );
       }
 
-      if (action === "link_selected_courses") {
-        return Promise.resolve({ data: { ok: true }, error: null });
+      if (url.endsWith("/moodle-sync-students")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ students: [{ id: 1 }, { id: 2 }] }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
       }
 
-      if (action === "sync_courses") {
-        return Promise.resolve({
-          data: {
-            courses: [
-              {
-                id: "c-1",
-                moodle_course_id: "101",
-                name: "Matematica",
-                short_name: "MAT",
-                created_at: "2026-01-01T00:00:00.000Z",
-                updated_at: "2026-01-01T00:00:00.000Z",
-              },
-            ],
-          },
-          error: null,
-        });
+      if (url.endsWith("/moodle-sync-activities")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ activitiesCount: 3 }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
       }
 
-      if (action === "sync_students") {
-        return Promise.resolve({ data: { students: [{ id: 1 }, { id: 2 }] }, error: null });
+      if (url.endsWith("/moodle-sync-grades")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ gradesCount: 4 }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }),
+        );
       }
 
-      if (action === "sync_activities") {
-        return Promise.resolve({ data: { activitiesCount: 3 }, error: null });
-      }
-
-      if (action === "sync_grades") {
-        return Promise.resolve({ data: { gradesCount: 4 }, error: null });
-      }
-
-      return Promise.resolve({ data: {}, error: null });
+      throw new Error(`Unexpected fetch call: ${url}`);
     });
 
     render(
@@ -359,6 +392,7 @@ describe("AuthContext", () => {
       activities: 3,
       grades: 4,
     });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: expect.stringMatching(/sincronizacao concluida/i) }),
     );

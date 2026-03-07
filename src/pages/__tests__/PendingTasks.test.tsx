@@ -49,6 +49,18 @@ vi.mock("@/components/pending-tasks/AddTaskActionDialog", () => ({
   }) => <div data-testid="add-task-action-dialog">{open ? pendingTaskId : "closed"}</div>,
 }));
 
+vi.mock("@/components/pending-tasks/TaskTemplatesDialog", () => ({
+  TaskTemplatesDialog: ({ open }: { open: boolean }) => (
+    <div data-testid="task-templates-dialog">open:{String(open)}</div>
+  ),
+}));
+
+vi.mock("@/components/pending-tasks/BatchGenerateDialog", () => ({
+  BatchGenerateDialog: ({ open }: { open: boolean }) => (
+    <div data-testid="batch-generate-dialog">open:{String(open)}</div>
+  ),
+}));
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -110,8 +122,9 @@ describe("PendingTasks page", () => {
     expect(screen.getByTestId("new-task-dialog")).toHaveTextContent("open:false");
     expect(screen.getByTestId("auto-task-dialog")).toHaveTextContent("open:false");
 
-    await user.click(screen.getByRole("button", { name: /nova pend/i }));
-    await user.click(screen.getByRole("button", { name: /gerar autom/i }));
+    await user.click(screen.getByRole("button", { name: /^nova$/i }));
+    await user.click(screen.getByRole("button", { name: /automa/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /gerar autom/i }));
 
     expect(screen.getByTestId("new-task-dialog")).toHaveTextContent("open:true");
     expect(screen.getByTestId("auto-task-dialog")).toHaveTextContent("open:true");

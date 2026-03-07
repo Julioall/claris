@@ -6,8 +6,6 @@ import Students from "@/pages/Students";
 const useStudentsDataMock = vi.fn();
 const useCoursesDataMock = vi.fn();
 const navigateMock = vi.fn();
-const toastMock = vi.fn();
-const rpcMock = vi.fn();
 const refetchMock = vi.fn();
 
 vi.mock("@/hooks/useStudentsData", () => ({
@@ -16,16 +14,6 @@ vi.mock("@/hooks/useStudentsData", () => ({
 
 vi.mock("@/hooks/useCoursesData", () => ({
   useCoursesData: () => useCoursesDataMock(),
-}));
-
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    rpc: (...args: unknown[]) => rpcMock(...args),
-  },
-}));
-
-vi.mock("@/hooks/use-toast", () => ({
-  toast: (...args: unknown[]) => toastMock(...args),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -42,7 +30,6 @@ describe("Students page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     refetchMock.mockResolvedValue(undefined);
-    rpcMock.mockResolvedValue({ data: 3, error: null });
 
     useStudentsDataMock.mockReturnValue({
       students: [
@@ -88,23 +75,44 @@ describe("Students page", () => {
     expect(navigateMock).toHaveBeenCalledWith("/alunos/s-1");
   });
 
-  it("recalculates risk successfully and refetches students", async () => {
+  it("filters students by enrollment status", async () => {
     const user = userEvent.setup();
+    useStudentsDataMock.mockReturnValue({
+      students: [
+        {
+          id: "s-1",
+          full_name: "Ana Silva",
+          email: "ana@example.com",
+          current_risk_level: "risco",
+          enrollment_status: "ativo",
+          pending_tasks_count: 2,
+          last_access: "2026-02-20T00:00:00.000Z",
+          last_action_date: "2026-02-19T00:00:00.000Z",
+        },
+        {
+          id: "s-2",
+          full_name: "Bruno Souza",
+          email: "bruno@example.com",
+          current_risk_level: "normal",
+          enrollment_status: "suspenso",
+          pending_tasks_count: 0,
+          last_access: "2026-02-18T00:00:00.000Z",
+          last_action_date: "2026-02-17T00:00:00.000Z",
+        },
+      ],
+      isLoading: false,
+      error: null,
+      refetch: refetchMock,
+    });
     render(<Students />);
 
-    await user.click(screen.getByRole("button", { name: /atualizar risco/i }));
+    await user.click(screen.getAllByRole("combobox")[1]);
+    await user.click(await screen.findByRole("option", { name: /suspenso/i }));
 
     await waitFor(() => {
-      expect(rpcMock).toHaveBeenCalledWith("update_course_students_risk", {
-        p_course_id: "c-1",
-      });
+      expect(screen.getByText("Bruno Souza")).toBeInTheDocument();
     });
-    expect(refetchMock).toHaveBeenCalledTimes(1);
-    expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: expect.stringMatching(/risco atualizado/i),
-      }),
-    );
+    expect(screen.queryByText("Ana Silva")).not.toBeInTheDocument();
   });
 
   it("shows empty state when no students match search", async () => {

@@ -96,23 +96,23 @@ describe("Messages page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    expect(screen.getByText("Ana Silva")).toBeInTheDocument();
+    expect(screen.getAllByText("Ana Silva").length).toBeGreaterThan(0);
     expect(screen.getByText("Bruno Souza")).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(/buscar conversa/i), "ana");
 
-    expect(screen.getByText("Ana Silva")).toBeInTheDocument();
+    expect(screen.getAllByText("Ana Silva").length).toBeGreaterThan(0);
     expect(screen.queryByText("Bruno Souza")).not.toBeInTheDocument();
   });
 
-  it("opens chat window after selecting a conversation", async () => {
+  it("shows the selected conversation and profile link", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await user.click(screen.getByRole("button", { name: /ana silva/i }));
 
     expect(screen.getByTestId("chat-window")).toHaveTextContent("Ana Silva:11");
-    expect(screen.getByRole("link", { name: /ver perfil do aluno/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /ver perfil/i })).toHaveAttribute(
       "href",
       "/alunos/s-1",
     );

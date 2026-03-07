@@ -88,6 +88,7 @@ const courses = [
 describe("CategoryHierarchy", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
   });
 
   it("returns null when there are no categorized or uncategorized courses", () => {
@@ -160,9 +161,9 @@ describe("CategoryHierarchy", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /escola a/i }));
-    fireEvent.click(screen.getByRole("button", { name: /curso x/i }));
-    fireEvent.click(screen.getByRole("button", { name: /turma 1/i }));
+    await user.click(screen.getByRole("button", { name: /escola a/i }));
+    await user.click(screen.getByRole("button", { name: /curso x/i }));
+    await user.click(screen.getByRole("button", { name: /turma 1/i }));
 
     await user.click(screen.getByRole("button", { name: "unfollow-d1" }));
     await user.click(screen.getByRole("button", { name: "toggle-d1" }));

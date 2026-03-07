@@ -9,22 +9,22 @@ describe("session-crypto", () => {
     vi.unstubAllGlobals();
   });
 
-  it("encrypts and decrypts payload using crypto when available", async () => {
+  it("stores payload with the v2 prefix and round-trips it", async () => {
     const payload = { userId: "u-1", token: "secret-token" };
 
     const encrypted = await encryptSessionData(payload);
-    expect(encrypted.startsWith("enc:")).toBe(true);
+    expect(encrypted.startsWith("v2:")).toBe(true);
 
     const decrypted = await decryptSessionData<typeof payload>(encrypted);
     expect(decrypted).toEqual(payload);
   });
 
-  it("falls back to base64 format when crypto is unavailable", async () => {
+  it("keeps the v2 format even when crypto is unavailable", async () => {
     const payload = { key: "value" };
     vi.stubGlobal("crypto", undefined);
 
     const encrypted = await encryptSessionData(payload);
-    expect(encrypted.startsWith("enc:")).toBe(false);
+    expect(encrypted.startsWith("v2:")).toBe(true);
 
     const decrypted = await decryptSessionData<typeof payload>(encrypted);
     expect(decrypted).toEqual(payload);

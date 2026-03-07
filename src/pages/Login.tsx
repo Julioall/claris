@@ -10,7 +10,7 @@ import { useAuth } from '@/contexts/AuthContext';
 export default function Login() {
   const navigate = useNavigate();
   const { login, isLoading } = useAuth();
-  
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [moodleUrl, setMoodleUrl] = useState('https://ead.fieg.com.br');
@@ -34,11 +34,9 @@ export default function Login() {
     }
   };
 
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
       <div className="w-full max-w-md space-y-6 animate-fade-in">
-        {/* Logo and title */}
         <div className="text-center space-y-2">
           <img
             src="/logo.png"
@@ -47,7 +45,6 @@ export default function Login() {
           />
         </div>
 
-        {/* Login card */}
         <Card className="border-0 shadow-lg">
           <CardHeader className="space-y-1 pb-4">
             <CardTitle className="text-xl">Entrar</CardTitle>
@@ -56,123 +53,115 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-                <form onSubmit={handleCredentialLogin} className="space-y-4">
-                  {/* Username */}
+            <form onSubmit={handleCredentialLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username">Usuario</Label>
+                <Input
+                  id="username"
+                  type="text"
+                  placeholder="seu.usuario"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  autoComplete="username"
+                  className="bg-muted/50"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">Senha</Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="********"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    className="bg-muted/50 pr-10"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <Eye className="h-4 w-4 text-muted-foreground" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                >
+                  <Settings className="h-3 w-3 mr-1" />
+                      {showAdvanced ? 'Ocultar configurações' : 'Configurações avançadas'}
+                </Button>
+              </div>
+
+              {showAdvanced && (
+                <div className="space-y-4 rounded-lg border border-border/50 bg-muted/30 p-3 animate-fade-in">
                   <div className="space-y-2">
-                    <Label htmlFor="username">Usuário</Label>
+                    <Label htmlFor="moodleUrl">URL do Moodle</Label>
                     <Input
-                      id="username"
-                      type="text"
-                      placeholder="seu.usuario"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      autoComplete="username"
-                      className="bg-muted/50"
+                      id="moodleUrl"
+                      type="url"
+                      placeholder="https://moodle.exemplo.com"
+                      value={moodleUrl}
+                      onChange={(e) => setMoodleUrl(e.target.value)}
+                      className="bg-background"
                     />
                   </div>
 
-                  {/* Password */}
                   <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
-                    <div className="relative">
-                      <Input
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="••••••••"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        autoComplete="current-password"
-                        className="bg-muted/50 pr-10"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="absolute right-0 top-0 h-full px-3 hover:bg-transparent"
-                        onClick={() => setShowPassword(!showPassword)}
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-4 w-4 text-muted-foreground" />
-                        ) : (
-                          <Eye className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* Advanced settings toggle */}
-                  <div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                      onClick={() => setShowAdvanced(!showAdvanced)}
-                    >
-                      <Settings className="h-3 w-3 mr-1" />
-                      {showAdvanced ? 'Ocultar configurações' : 'Configurações avançadas'}
-                    </Button>
-                  </div>
-
-                  {showAdvanced && (
-                    <div className="space-y-4 rounded-lg border border-border/50 bg-muted/30 p-3 animate-fade-in">
-                      {/* Moodle URL */}
-                      <div className="space-y-2">
-                        <Label htmlFor="moodleUrl">URL do Moodle</Label>
-                        <Input
-                          id="moodleUrl"
-                          type="url"
-                          placeholder="https://moodle.exemplo.com"
-                          value={moodleUrl}
-                          onChange={(e) => setMoodleUrl(e.target.value)}
-                          className="bg-background"
-                        />
-                      </div>
-
-                      {/* Service Name */}
-                      <div className="space-y-2">
                         <Label htmlFor="serviceName">Nome do Serviço Web</Label>
-                        <Input
-                          id="serviceName"
-                          type="text"
-                          placeholder="moodle_mobile_app"
-                          value={serviceName}
-                          onChange={(e) => setServiceName(e.target.value)}
-                          className="bg-background"
-                        />
-                        <p className="text-xs text-muted-foreground">
+                    <Input
+                      id="serviceName"
+                      type="text"
+                      placeholder="moodle_mobile_app"
+                      value={serviceName}
+                      onChange={(e) => setServiceName(e.target.value)}
+                      className="bg-background"
+                    />
+                    <p className="text-xs text-muted-foreground">
                           Geralmente é "moodle_mobile_app". Consulte o administrador do Moodle se não funcionar.
-                        </p>
-                      </div>
-                    </div>
-                  )}
+                    </p>
+                  </div>
+                </div>
+              )}
 
-                  {/* Error message */}
-                  {error && (
-                    <p className="text-sm text-destructive">{error}</p>
-                  )}
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
 
-                  {/* Submit button */}
-                  <Button 
-                    type="submit" 
-                    className="w-full" 
-                    size="lg"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Entrando...
-                      </>
-                    ) : (
-                      'Entrar'
-                    )}
-                  </Button>
-                </form>
+              <Button
+                type="submit"
+                className="w-full"
+                size="lg"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Entrando...
+                  </>
+                ) : (
+                  'Entrar'
+                )}
+              </Button>
+            </form>
           </CardContent>
         </Card>
 
-        {/* Footer */}
         <p className="text-center text-xs text-muted-foreground">
           Ao entrar, seus dados são sincronizados do Moodle e salvos de forma segura.
         </p>
