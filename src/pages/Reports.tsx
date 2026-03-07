@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
 import { FileSpreadsheet, Loader2 } from 'lucide-react';
-import * as XLSX from 'xlsx-js-style';
+import type * as XLSXType from 'xlsx-js-style';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,14 @@ interface ActivityGradeRow {
 const SEM_CATEGORIA = 'Sem categoria';
 
 type ExcelStyle = Record<string, unknown>;
+type ExcelWorksheet = XLSXType.WorkSheet & {
+  '!cols'?: Array<{ wch: number }>;
+  '!ref'?: string;
+};
+type ExcelCell = XLSXType.CellObject & {
+  s?: ExcelStyle;
+  z?: string;
+};
 
 const BORDER_STYLE: ExcelStyle = {
   top: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
@@ -230,6 +238,8 @@ export default function Reports() {
 
     setIsGenerating(true);
     try {
+      const XLSX = await import('xlsx-js-style');
+
       const [enrollmentsResponse, activitiesResponse] = await Promise.all([
         supabase
           .from('student_courses')
@@ -329,9 +339,7 @@ export default function Reports() {
         return;
       }
 
-      const worksheet = XLSX.utils.json_to_sheet(rows) as XLSX.WorkSheet & {
-        '!cols'?: Array<{ wch: number }>;
-      };
+      const worksheet = XLSX.utils.json_to_sheet(rows) as ExcelWorksheet;
 
       worksheet['!cols'] = [
         { wch: 32 },
@@ -344,7 +352,7 @@ export default function Reports() {
         for (let rowIndex = worksheetRange.s.r; rowIndex <= worksheetRange.e.r; rowIndex += 1) {
           for (let colIndex = worksheetRange.s.c; colIndex <= worksheetRange.e.c; colIndex += 1) {
             const cellAddress = XLSX.utils.encode_cell({ r: rowIndex, c: colIndex });
-            const cell = worksheet[cellAddress] as (XLSX.CellObject & { s?: ExcelStyle }) | undefined;
+            const cell = worksheet[cellAddress] as ExcelCell | undefined;
 
             if (!cell) continue;
 
