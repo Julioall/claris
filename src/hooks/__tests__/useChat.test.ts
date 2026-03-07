@@ -148,6 +148,28 @@ describe("useChat", () => {
     ]);
   });
 
+  it("treats missing conversation as empty chat instead of surfacing a function error", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: null,
+      error: {
+        message: "Edge Function returned a non-2xx status code",
+        context: new Response(JSON.stringify({ error: "Conversa não existe" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }),
+      },
+    });
+
+    const { result } = renderHook(() => useChat());
+
+    await act(async () => {
+      await result.current.fetchMessages(20);
+    });
+
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.error).toBeNull();
+  });
+
   it("sends message and appends optimistic item", async () => {
     invokeMock.mockResolvedValueOnce({
       data: {

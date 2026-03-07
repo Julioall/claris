@@ -25,6 +25,36 @@ export interface Conversation {
   studentId?: string; // mapped from our DB
 }
 
+function normalizeChatErrorMessage(message: string): string {
+  return message
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
+function isMissingConversationMessage(message?: string | null): boolean {
+  if (!message) return false
+
+  const normalized = normalizeChatErrorMessage(message)
+  return normalized.includes('conversa nao existe') ||
+    normalized.includes('conversation does not exist') ||
+    normalized.includes('conversation not found')
+}
+
+async function extractFunctionErrorMessage(error: unknown): Promise<string | null> {
+  if (!error || typeof error !== 'object') return null
+
+  const context = (error as { context?: Response }).context
+  if (!context) return null
+
+  try {
+    const payload = await context.clone().json()
+    return typeof payload?.error === 'string' ? payload.error : null
+  } catch {
+    return null
+  }
+}
+
 export function useChat() {
   const { moodleSession: session } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
@@ -108,8 +138,24 @@ export function useChat() {
         },
       });
 
-      if (fnError) throw new Error(fnError.message);
-      if (data?.error) throw new Error(data.error);
+      if (fnError) {
+        const detailedMessage = await extractFunctionErrorMessage(fnError);
+        if (isMissingConversationMessage(detailedMessage) || isMissingConversationMessage(fnError.message)) {
+          setMessages([]);
+          return;
+        }
+
+        throw new Error(detailedMessage || fnError.message);
+      }
+
+      if (data?.error) {
+        if (isMissingConversationMessage(data.error)) {
+          setMessages([]);
+          return;
+        }
+
+        throw new Error(data.error);
+      }
 
       const currentUserId = data.current_user_id;
       setCurrentMoodleUserId(currentUserId);
@@ -127,6 +173,12 @@ export function useChat() {
 
       setMessages(mapped);
     } catch (err) {
+      if (err instanceof Error && isMissingConversationMessage(err.message)) {
+        setMessages([]);
+        setError(null);
+        return;
+      }
+
       console.error('Error fetching messages:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar mensagens');
     } finally {

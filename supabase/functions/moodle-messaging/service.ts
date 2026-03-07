@@ -1,6 +1,19 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { callMoodleApi, callMoodleApiPost, getSiteInfo } from '../_shared/moodle/mod.ts'
 
+function isConversationMissingError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+
+  const normalized = error.message
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+
+  return normalized.includes('conversa nao existe') ||
+    normalized.includes('conversation does not exist') ||
+    normalized.includes('conversation not found')
+}
+
 export async function sendMessage(body: Record<string, unknown>): Promise<Response> {
   const { moodleUrl, token, moodle_user_id: targetMoodleUserId, message: messageText } = body
   if (!targetMoodleUserId || !messageText) {
@@ -58,16 +71,35 @@ export async function getMessages(body: Record<string, unknown>): Promise<Respon
   console.log(`Fetching messages with Moodle user ${otherUserId}`)
 
   const siteInfo = await getSiteInfo(String(moodleUrl), String(token))
+  let convResult: any
 
-  const convResult = await callMoodleApiPost(String(moodleUrl), String(token), 'core_message_get_conversation_between_users', {
-    userid: siteInfo.userid,
-    otheruserid: Number(otherUserId),
-    includecontactrequests: 0,
-    includeprivacyinfo: 0,
-    messagelimit: Number(limitNum) || 50,
-    messageoffset: 0,
-    newestmessagesfirst: 1,
-  })
+  try {
+    convResult = await callMoodleApiPost(
+      String(moodleUrl),
+      String(token),
+      'core_message_get_conversation_between_users',
+      {
+        userid: siteInfo.userid,
+        otheruserid: Number(otherUserId),
+        includecontactrequests: 0,
+        includeprivacyinfo: 0,
+        messagelimit: Number(limitNum) || 50,
+        messageoffset: 0,
+        newestmessagesfirst: 1,
+      },
+    )
+  } catch (error) {
+    if (isConversationMissingError(error)) {
+      console.log(`No existing conversation with Moodle user ${otherUserId}`)
+      return jsonResponse({
+        messages: [],
+        current_user_id: siteInfo.userid,
+        conversation_id: null,
+      })
+    }
+
+    throw error
+  }
 
   const messages = (convResult?.messages || []).map((msg: any) => ({
     id: msg.id,
