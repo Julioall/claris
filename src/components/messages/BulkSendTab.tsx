@@ -285,7 +285,7 @@ export function BulkSendTab() {
 
   // Send bulk
   const handleSend = async () => {
-    if (!user || selectedStudentIds.size === 0 || !messageContent.trim()) return;
+    if (!user || !moodleSession || selectedStudentIds.size === 0 || !messageContent.trim()) return;
     setIsSending(true);
     try {
       // Create job
