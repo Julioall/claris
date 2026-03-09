@@ -27,6 +27,12 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+// Access moodleSession from auth context
+function useMoodleSession() {
+  const auth = useAuth() as any;
+  return auth.moodleSession as { moodleToken: string; moodleUrl: string } | null;
+}
+
 interface StudentOption {
   id: string;
   full_name: string;
