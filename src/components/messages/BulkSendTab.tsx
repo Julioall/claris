@@ -334,8 +334,10 @@ export function BulkSendTab() {
       const { error: recipErr } = await supabase.from('bulk_message_recipients').insert(recipients);
       if (recipErr) throw recipErr;
 
-      // Trigger processing
-      await supabase.functions.invoke('bulk-message-send', { body: { job_id: job.id } });
+      // Trigger processing with moodle credentials
+      await supabase.functions.invoke('bulk-message-send', {
+        body: { job_id: job.id, moodleUrl: moodleSession.moodleUrl, token: moodleSession.moodleToken },
+      });
 
       toast.success(`Envio em massa iniciado para ${selectedStudentIds.size} alunos`);
       setSelectedStudentIds(new Set());
