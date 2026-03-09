@@ -160,6 +160,109 @@ export type Database = {
           },
         ]
       }
+      bulk_message_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          failed_count: number
+          id: string
+          message_content: string
+          sent_count: number
+          started_at: string | null
+          status: Database["public"]["Enums"]["bulk_message_status"]
+          template_id: string | null
+          total_recipients: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          failed_count?: number
+          id?: string
+          message_content: string
+          sent_count?: number
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["bulk_message_status"]
+          template_id?: string | null
+          total_recipients?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          failed_count?: number
+          id?: string
+          message_content?: string
+          sent_count?: number
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["bulk_message_status"]
+          template_id?: string | null
+          total_recipients?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_message_jobs_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bulk_message_recipients: {
+        Row: {
+          created_at: string
+          error_message: string | null
+          id: string
+          job_id: string
+          moodle_user_id: string
+          personalized_message: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["bulk_recipient_status"]
+          student_id: string
+          student_name: string
+        }
+        Insert: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_id: string
+          moodle_user_id: string
+          personalized_message?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["bulk_recipient_status"]
+          student_id: string
+          student_name: string
+        }
+        Update: {
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_id?: string
+          moodle_user_id?: string
+          personalized_message?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["bulk_recipient_status"]
+          student_id?: string
+          student_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bulk_message_recipients_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_message_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           category: string | null
@@ -196,6 +299,39 @@ export type Database = {
           short_name?: string | null
           start_date?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      message_templates: {
+        Row: {
+          category: string | null
+          content: string
+          created_at: string
+          id: string
+          is_favorite: boolean | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          is_favorite?: boolean | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          is_favorite?: boolean | null
+          title?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -965,6 +1101,13 @@ export type Database = {
         | "suporte_tecnico"
         | "reuniao"
         | "outro"
+      bulk_message_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed"
+        | "cancelled"
+      bulk_recipient_status: "pending" | "sent" | "failed"
       risk_level: "normal" | "atencao" | "risco" | "critico"
       task_priority: "baixa" | "media" | "alta" | "urgente"
       task_status: "aberta" | "em_andamento" | "resolvida"
@@ -1105,6 +1248,14 @@ export const Constants = {
         "reuniao",
         "outro",
       ],
+      bulk_message_status: [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "cancelled",
+      ],
+      bulk_recipient_status: ["pending", "sent", "failed"],
       risk_level: ["normal", "atencao", "risco", "critico"],
       task_priority: ["baixa", "media", "alta", "urgente"],
       task_status: ["aberta", "em_andamento", "resolvida"],
