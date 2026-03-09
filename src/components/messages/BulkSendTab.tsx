@@ -73,6 +73,7 @@ function parseCategoryPath(category?: string) {
 
 export function BulkSendTab() {
   const { user } = useAuth();
+  const moodleSession = useMoodleSession();
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
