@@ -26,6 +26,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { buildCourseCategoryFilterOptions, parseCourseCategoryPath } from '@/lib/course-category';
 
 // Access moodleSession from auth context
 function useMoodleSession() {
@@ -57,18 +58,6 @@ interface BulkJob {
   failed_count: number;
   status: string;
   created_at: string;
-}
-
-// Parse "Escola / Curso / Turma / UC" category
-function parseCategoryPath(category?: string) {
-  if (!category) return { school: '', course: '', className: '', uc: '' };
-  const parts = category.split(' / ').map(p => p.trim());
-  return {
-    school: parts[0] || '',
-    course: parts[1] || '',
-    className: parts[2] || '',
-    uc: parts[3] || '',
-  };
 }
 
 export function BulkSendTab() {
@@ -189,30 +178,49 @@ export function BulkSendTab() {
     return () => { supabase.removeChannel(channel); };
   }, [fetchRecentJobs]);
 
+  const categorySources = useMemo(
+    () => students.flatMap(student => student.courses.map(course => ({
+      category: course.category,
+      courseName: course.course_name,
+    }))),
+    [students],
+  );
+
   // Extract unique filter options from students' courses
   const filterOptions = useMemo(() => {
-    const schools = new Set<string>();
-    const courses = new Set<string>();
-    const classes = new Set<string>();
-    const ucs = new Set<string>();
-
-    students.forEach(s => {
-      s.courses.forEach(c => {
-        const parsed = parseCategoryPath(c.category);
-        if (parsed.school) schools.add(parsed.school);
-        if (parsed.course) courses.add(parsed.course);
-        if (parsed.className) classes.add(parsed.className);
-        if (parsed.uc || c.course_name) ucs.add(parsed.uc || c.course_name);
-      });
+    return buildCourseCategoryFilterOptions(categorySources, {
+      school: filterSchool,
+      course: filterCourse,
+      className: filterClass,
     });
+  }, [categorySources, filterSchool, filterCourse, filterClass]);
 
-    return {
-      schools: Array.from(schools).sort(),
-      courses: Array.from(courses).sort(),
-      classes: Array.from(classes).sort(),
-      ucs: Array.from(ucs).sort(),
-    };
-  }, [students]);
+  useEffect(() => {
+    if (filterSchool !== 'todos' && !filterOptions.schools.includes(filterSchool)) {
+      setFilterSchool('todos');
+      setFilterCourse('todos');
+      setFilterClass('todos');
+      setFilterUC('todos');
+      return;
+    }
+
+    if (filterCourse !== 'todos' && !filterOptions.courses.includes(filterCourse)) {
+      setFilterCourse('todos');
+      setFilterClass('todos');
+      setFilterUC('todos');
+      return;
+    }
+
+    if (filterClass !== 'todos' && !filterOptions.classes.includes(filterClass)) {
+      setFilterClass('todos');
+      setFilterUC('todos');
+      return;
+    }
+
+    if (filterUC !== 'todos' && !filterOptions.ucs.includes(filterUC)) {
+      setFilterUC('todos');
+    }
+  }, [filterSchool, filterCourse, filterClass, filterUC, filterOptions]);
 
   // Filtered students
   const filteredStudents = useMemo(() => {
@@ -224,7 +232,7 @@ export function BulkSendTab() {
       // Category filters
       if (filterSchool !== 'todos' || filterCourse !== 'todos' || filterClass !== 'todos' || filterUC !== 'todos') {
         const matchesCourse = s.courses.some(c => {
-          const parsed = parseCategoryPath(c.category);
+          const parsed = parseCourseCategoryPath(c.category);
           if (filterSchool !== 'todos' && parsed.school !== filterSchool) return false;
           if (filterCourse !== 'todos' && parsed.course !== filterCourse) return false;
           if (filterClass !== 'todos' && parsed.className !== filterClass) return false;
@@ -252,7 +260,25 @@ export function BulkSendTab() {
 
   const clearAll = () => setSelectedStudentIds(new Set());
 
-  const useTemplate = (t: TemplateOption) => {
+  const handleSchoolChange = (value: string) => {
+    setFilterSchool(value);
+    setFilterCourse('todos');
+    setFilterClass('todos');
+    setFilterUC('todos');
+  };
+
+  const handleCourseChange = (value: string) => {
+    setFilterCourse(value);
+    setFilterClass('todos');
+    setFilterUC('todos');
+  };
+
+  const handleClassChange = (value: string) => {
+    setFilterClass(value);
+    setFilterUC('todos');
+  };
+
+  const applyTemplate = (t: TemplateOption) => {
     setMessageContent(t.content);
     setTemplateDialogOpen(false);
     toast.success(`Modelo "${t.title}" aplicado`);
@@ -267,7 +293,7 @@ export function BulkSendTab() {
   const previewMessage = useMemo(() => {
     if (!previewStudent || !messageContent) return '';
     const course = previewStudent.courses[0];
-    const parsed = parseCategoryPath(course?.category);
+    const parsed = parseCourseCategoryPath(course?.category);
     return resolveVariables(messageContent, {
       nome_aluno: previewStudent.full_name,
       email_aluno: previewStudent.email,
@@ -306,7 +332,7 @@ export function BulkSendTab() {
       const selectedStudents = students.filter(s => selectedStudentIds.has(s.id));
       const recipients = selectedStudents.map(s => {
         const course = s.courses[0];
-        const parsed = parseCategoryPath(course?.category);
+        const parsed = parseCourseCategoryPath(course?.category);
         const personalized = resolveVariables(messageContent, {
           nome_aluno: s.full_name,
           email_aluno: s.email,
@@ -392,7 +418,7 @@ export function BulkSendTab() {
           <CardContent className="flex-1 flex flex-col gap-3 min-h-0 pt-0">
             {/* Filters */}
             <div className="grid grid-cols-2 gap-2 shrink-0">
-              <Select value={filterSchool} onValueChange={setFilterSchool}>
+              <Select value={filterSchool} onValueChange={handleSchoolChange}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Escola" />
                 </SelectTrigger>
@@ -401,7 +427,7 @@ export function BulkSendTab() {
                   {filterOptions.schools.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <Select value={filterCourse} onValueChange={setFilterCourse}>
+              <Select value={filterCourse} onValueChange={handleCourseChange}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Curso" />
                 </SelectTrigger>
@@ -410,7 +436,7 @@ export function BulkSendTab() {
                   {filterOptions.courses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <Select value={filterClass} onValueChange={setFilterClass}>
+              <Select value={filterClass} onValueChange={handleClassChange}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Turma" />
                 </SelectTrigger>
@@ -595,7 +621,7 @@ export function BulkSendTab() {
                   <button
                     key={t.id}
                     className="w-full text-left p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                    onClick={() => useTemplate(t)}
+                    onClick={() => applyTemplate(t)}
                   >
                     <p className="font-medium text-sm">{t.title}</p>
                     <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.content}</p>
