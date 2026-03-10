@@ -49,6 +49,9 @@ interface DynamicVariableInputProps {
   rows?: number;
   className?: string;
   disabled?: boolean;
+  availableVariableKeys?: string[];
+  variableRestrictions?: Record<string, string>;
+  showInlinePreview?: boolean;
 }
 
 export function DynamicVariableInput({
@@ -58,6 +61,9 @@ export function DynamicVariableInput({
   rows = 6,
   className,
   disabled,
+  availableVariableKeys,
+  variableRestrictions,
+  showInlinePreview = true,
 }: DynamicVariableInputProps) {
   const [showMenu, setShowMenu] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -66,14 +72,23 @@ export function DynamicVariableInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const slashPosRef = useRef<number>(-1);
+  const availableKeySet = useMemo(
+    () => new Set(availableVariableKeys ?? DYNAMIC_VARIABLES.map(variable => variable.key)),
+    [availableVariableKeys],
+  );
 
   const filtered = useMemo(() => (
-    DYNAMIC_VARIABLES.filter(variable =>
-      filter === '' ||
-      variable.label.toLowerCase().includes(filter.toLowerCase()) ||
-      variable.key.toLowerCase().includes(filter.toLowerCase())
-    )
-  ), [filter]);
+    DYNAMIC_VARIABLES.filter(variable => {
+      if (!availableKeySet.has(variable.key)) return false;
+      if (filter === '') return true;
+
+      const normalizedFilter = filter.toLowerCase();
+      return (
+        variable.label.toLowerCase().includes(normalizedFilter) ||
+        variable.key.toLowerCase().includes(normalizedFilter)
+      );
+    })
+  ), [availableKeySet, filter]);
 
   const grouped = useMemo(() => (
     filtered.reduce<Record<string, DynamicVariable[]>>((acc, variable) => {
@@ -241,14 +256,30 @@ export function DynamicVariableInput({
 
                     <div className="space-y-2">
                       {variables.map(variable => (
-                        <div key={variable.key} className="rounded-lg border bg-background/80 p-3">
+                        <div
+                          key={variable.key}
+                          className={cn(
+                            'rounded-lg border bg-background/80 p-3',
+                            !availableKeySet.has(variable.key) && 'border-dashed opacity-70',
+                          )}
+                        >
                           <div className="flex flex-wrap items-center gap-2">
                             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-primary">
                               {`{${variable.key}}`}
                             </code>
                             <span className="text-sm font-medium">{variable.label}</span>
+                            {!availableKeySet.has(variable.key) && variableRestrictions?.[variable.key] && (
+                              <Badge variant="outline" className="text-[10px] text-amber-700">
+                                Indisponivel neste contexto
+                              </Badge>
+                            )}
                           </div>
                           <p className="mt-1 text-xs text-muted-foreground">{variable.description}</p>
+                          {!availableKeySet.has(variable.key) && variableRestrictions?.[variable.key] && (
+                            <p className="mt-2 text-[11px] text-amber-700">
+                              {variableRestrictions[variable.key]}
+                            </p>
+                          )}
                           <p className="mt-2 text-[11px] text-muted-foreground">
                             Exemplo: <span className="font-medium text-foreground">{variable.example}</span>
                           </p>
@@ -295,7 +326,7 @@ export function DynamicVariableInput({
           <Command shouldFilter={false} className="rounded-lg border-0">
             <div className="flex items-center justify-between border-b px-3 py-2">
               <p className="text-xs font-medium text-foreground">Variaveis dinamicas</p>
-              <span className="text-[10px] text-muted-foreground">↑↓ navegar | Enter inserir</span>
+              <span className="text-[10px] text-muted-foreground">Setas navegar | Enter inserir</span>
             </div>
 
             <CommandList ref={menuRef} className="max-h-64 p-1">
@@ -336,7 +367,7 @@ export function DynamicVariableInput({
         </PopoverContent>
       </Popover>
 
-      {value && value.includes('{') && (
+      {showInlinePreview && value && value.includes('{') && (
         <div className="rounded-md border bg-muted/30 p-3">
           <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Pre-visualizacao

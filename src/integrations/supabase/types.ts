@@ -307,7 +307,9 @@ export type Database = {
           category: string | null
           content: string
           created_at: string
+          default_key: string | null
           id: string
+          is_default: boolean
           is_favorite: boolean | null
           title: string
           updated_at: string
@@ -317,7 +319,9 @@ export type Database = {
           category?: string | null
           content: string
           created_at?: string
+          default_key?: string | null
           id?: string
+          is_default?: boolean
           is_favorite?: boolean | null
           title: string
           updated_at?: string
@@ -327,7 +331,9 @@ export type Database = {
           category?: string | null
           content?: string
           created_at?: string
+          default_key?: string | null
           id?: string
+          is_default?: boolean
           is_favorite?: boolean | null
           title?: string
           updated_at?: string
@@ -1033,6 +1039,7 @@ export type Database = {
           id: string
           last_login: string | null
           last_sync: string | null
+          message_templates_seeded_at: string | null
           moodle_user_id: string
           moodle_username: string
           updated_at: string | null
@@ -1045,6 +1052,7 @@ export type Database = {
           id?: string
           last_login?: string | null
           last_sync?: string | null
+          message_templates_seeded_at?: string | null
           moodle_user_id: string
           moodle_username: string
           updated_at?: string | null
@@ -1057,6 +1065,7 @@ export type Database = {
           id?: string
           last_login?: string | null
           last_sync?: string | null
+          message_templates_seeded_at?: string | null
           moodle_user_id?: string
           moodle_username?: string
           updated_at?: string | null

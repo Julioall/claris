@@ -5,7 +5,8 @@ import { callMoodleApi } from '../_shared/moodle/mod.ts'
 const BATCH_SIZE = 5
 const DELAY_BETWEEN_BATCHES_MS = 1000
 
-Deno.serve(createHandler(async ({ body, userId }) => {
+Deno.serve(createHandler(async ({ body, user }) => {
+  const userId = user.id
   const { job_id } = body as { job_id?: string }
   if (!job_id) return errorResponse('job_id is required')
 

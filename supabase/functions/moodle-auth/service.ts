@@ -11,6 +11,25 @@ interface LoginParams {
   onMoodleUnavailable: (tokenResponse: MoodleTokenResponse) => Promise<Response>
 }
 
+async function findAuthUserByEmail(supabase: ReturnType<typeof createServiceClient>, email: string) {
+  let page = 1
+
+  while (true) {
+    const { data, error } = await supabase.auth.admin.listUsers({
+      page,
+      perPage: 200,
+    })
+
+    if (error) throw error
+
+    const match = data.users.find((user) => user.email === email)
+    if (match) return match
+    if (data.users.length < 200) return null
+
+    page += 1
+  }
+}
+
 export async function login(params: LoginParams): Promise<Response> {
   const { moodleUrl, username, password, service, onMoodleUnavailable } = params
   const supabase = createServiceClient()
@@ -32,103 +51,204 @@ export async function login(params: LoginParams): Promise<Response> {
     )
   }
 
-  const siteInfo = await getSiteInfo(moodleUrl, tokenResponse.token)
-  const authEmail = `moodle_${siteInfo.userid}@moodle.local`
-  const anonClient = createAnonClient()
+  try {
+    const siteInfo = await getSiteInfo(moodleUrl, tokenResponse.token)
+    const authEmail = `moodle_${siteInfo.userid}@moodle.local`
+    const anonClient = createAnonClient()
 
-  const { data: existingUser } = await supabase
-    .from('users')
-    .select('*')
-    .eq('moodle_user_id', String(siteInfo.userid))
-    .single()
+    const { data: existingUser, error: existingUserError } = await supabase
+      .from('users')
+      .select('*')
+      .eq('moodle_user_id', String(siteInfo.userid))
+      .maybeSingle()
 
-  const userData = {
-    moodle_user_id: String(siteInfo.userid),
-    moodle_username: siteInfo.username,
-    full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
-    email: siteInfo.email || null,
-    avatar_url: siteInfo.profileimageurl || null,
-    last_login: new Date().toISOString(),
-    last_sync: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  }
+    if (existingUserError) {
+      console.error('Failed to query local user profile:', existingUserError)
+      return jsonResponse(
+        {
+          error: 'Nao foi possivel consultar o perfil local deste usuario.',
+          errorcode: 'local_user_lookup_failed',
+        },
+        200
+      )
+    }
 
-  let user
-  let session
+    const userData = {
+      moodle_user_id: String(siteInfo.userid),
+      moodle_username: siteInfo.username,
+      full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
+      email: siteInfo.email || null,
+      avatar_url: siteInfo.profileimageurl || null,
+      last_login: new Date().toISOString(),
+      last_sync: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
 
-  if (existingUser) {
-    let signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
+    let user
+    let session
 
-    if (signInResult.error) {
-      // Auth user might exist with different password, or not exist at all
-      try {
-        const createResult = await supabase.auth.admin.createUser({
-          id: existingUser.id,
-          email: authEmail,
+    if (existingUser) {
+      let signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
+
+      if (signInResult.error) {
+        try {
+          const createResult = await supabase.auth.admin.createUser({
+            id: existingUser.id,
+            email: authEmail,
+            password,
+            email_confirm: true,
+            user_metadata: { moodle_user_id: String(siteInfo.userid) },
+          })
+
+          if (createResult.error) {
+            const updateResult = await supabase.auth.admin.updateUserById(existingUser.id, { password })
+            if (updateResult.error) throw updateResult.error
+          }
+        } catch (createError) {
+          console.warn('Auth user setup fallback failed, trying password update:', createError)
+          const updateResult = await supabase.auth.admin.updateUserById(existingUser.id, { password })
+          if (updateResult.error) {
+            console.error('Failed to update auth user password:', updateResult.error)
+            return jsonResponse(
+              {
+                error: 'Nao foi possivel sincronizar a conta de autenticacao local.',
+                errorcode: 'auth_user_sync_failed',
+              },
+              200
+            )
+          }
+        }
+
+        signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
+
+        if (signInResult.error) {
+          console.error('Failed to sign in after auth user setup:', signInResult.error)
+          return jsonResponse(
+            {
+              error: 'Nao foi possivel criar a sessao local deste usuario.',
+              errorcode: 'session_setup_failed',
+            },
+            200
+          )
+        }
+      }
+
+      session = signInResult.data.session
+
+      const { data: updatedUser, error: updateError } = await supabase
+        .from('users')
+        .update(userData)
+        .eq('id', existingUser.id)
+        .select()
+        .single()
+
+      if (updateError) {
+        console.error('Failed to update local user profile:', updateError)
+        return jsonResponse(
+          {
+            error: 'Nao foi possivel atualizar o perfil local deste usuario.',
+            errorcode: 'local_user_update_failed',
+          },
+          200
+        )
+      }
+
+      user = updatedUser
+    } else {
+      let authUserId: string | null = null
+
+      const { data: newAuthUser, error: createAuthError } = await supabase.auth.admin.createUser({
+        email: authEmail,
+        password,
+        email_confirm: true,
+        user_metadata: { moodle_user_id: String(siteInfo.userid) },
+      })
+
+      if (createAuthError) {
+        console.warn('Failed to create auth user, trying to recover existing auth account:', createAuthError)
+        const recoveredAuthUser = await findAuthUserByEmail(supabase, authEmail)
+
+        if (!recoveredAuthUser) {
+          return jsonResponse(
+            {
+              error: 'Ja existe uma conta de autenticacao local para este Moodle, mas ela nao pode ser reconciliada automaticamente.',
+              errorcode: 'auth_user_recovery_failed',
+            },
+            200
+          )
+        }
+
+        authUserId = recoveredAuthUser.id
+
+        const updateRecoveredUser = await supabase.auth.admin.updateUserById(recoveredAuthUser.id, {
           password,
-          email_confirm: true,
           user_metadata: { moodle_user_id: String(siteInfo.userid) },
         })
 
-        if (createResult.error) {
-          // User exists in auth but password changed - update it
-          await supabase.auth.admin.updateUserById(existingUser.id, { password })
+        if (updateRecoveredUser.error) {
+          console.error('Failed to update recovered auth user:', updateRecoveredUser.error)
+          return jsonResponse(
+            {
+              error: 'Nao foi possivel sincronizar a conta de autenticacao recuperada.',
+              errorcode: 'auth_user_update_failed',
+            },
+            200
+          )
         }
-      } catch (_createErr) {
-        // createUser threw (email_exists) - just update the password
-        await supabase.auth.admin.updateUserById(existingUser.id, { password })
+      } else {
+        authUserId = newAuthUser.user.id
       }
 
-      signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
+      const { data: newUser, error: insertError } = await supabase
+        .from('users')
+        .insert({ ...userData, id: authUserId })
+        .select()
+        .single()
 
+      if (insertError) {
+        console.error('Failed to insert local user profile:', insertError)
+        return jsonResponse(
+          {
+            error: 'Nao foi possivel criar o perfil local deste usuario.',
+            errorcode: 'local_user_insert_failed',
+          },
+          200
+        )
+      }
+
+      user = newUser
+
+      const signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
       if (signInResult.error) {
-        console.error('Failed to sign in after auth user setup:', signInResult.error)
-        throw new Error('Failed to create authentication session')
+        console.error('Failed to sign in after creating local user:', signInResult.error)
+        return jsonResponse(
+          {
+            error: 'Nao foi possivel criar a sessao local deste usuario.',
+            errorcode: 'session_setup_failed',
+          },
+          200
+        )
       }
+      session = signInResult.data.session
     }
 
-    session = signInResult.data.session
-
-    const { data: updatedUser, error: updateError } = await supabase
-      .from('users')
-      .update(userData)
-      .eq('id', existingUser.id)
-      .select()
-      .single()
-
-    if (updateError) throw updateError
-    user = updatedUser
-  } else {
-    const { data: newAuthUser, error: createAuthError } = await supabase.auth.admin.createUser({
-      email: authEmail,
-      password,
-      email_confirm: true,
-      user_metadata: { moodle_user_id: String(siteInfo.userid) },
+    return jsonResponse({
+      success: true,
+      user,
+      moodleToken: tokenResponse.token,
+      moodleUserId: siteInfo.userid,
+      session: { access_token: session.access_token, refresh_token: session.refresh_token },
     })
-
-    if (createAuthError) throw createAuthError
-
-    const { data: newUser, error: insertError } = await supabase
-      .from('users')
-      .insert({ ...userData, id: newAuthUser.user.id })
-      .select()
-      .single()
-
-    if (insertError) throw insertError
-    user = newUser
-
-    const signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
-    if (signInResult.error) throw signInResult.error
-    session = signInResult.data.session
+  } catch (error) {
+    console.error('Unexpected moodle-auth login flow error:', error)
+    return jsonResponse(
+      {
+        error: error instanceof Error ? error.message : 'Erro inesperado durante a autenticacao.',
+        errorcode: 'login_flow_failed',
+      },
+      200
+    )
   }
-
-  return jsonResponse({
-    success: true,
-    user,
-    moodleToken: tokenResponse.token,
-    moodleUserId: siteInfo.userid,
-    session: { access_token: session.access_token, refresh_token: session.refresh_token },
-  })
 }
 
 export async function fallbackLogin(
@@ -143,7 +263,7 @@ export async function fallbackLogin(
     .from('users')
     .select('*')
     .eq('moodle_username', username)
-    .single()
+    .maybeSingle()
 
   if (fallbackUser) {
     const fallbackEmail = `moodle_${fallbackUser.moodle_user_id}@moodle.local`

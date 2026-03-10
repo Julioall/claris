@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Star, StarOff, Copy, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Star, StarOff, Copy, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -34,26 +35,19 @@ import { DynamicVariableInput, DYNAMIC_VARIABLES } from './DynamicVariableInput'
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { MESSAGE_TEMPLATE_CATEGORIES } from '@/lib/message-template-defaults';
+import { ensureDefaultMessageTemplates } from '@/lib/message-template-seeding';
 
 interface MessageTemplate {
   id: string;
   title: string;
   content: string;
-  category: string;
+  category: string | null;
+  is_default: boolean;
   is_favorite: boolean;
   created_at: string;
   updated_at: string;
 }
-
-const TEMPLATE_CATEGORIES = [
-  { value: 'geral', label: 'Geral' },
-  { value: 'boas_vindas', label: 'Boas-vindas' },
-  { value: 'cobranca', label: 'Cobrança' },
-  { value: 'orientacao', label: 'Orientação' },
-  { value: 'acompanhamento', label: 'Acompanhamento' },
-  { value: 'aviso', label: 'Aviso' },
-];
 
 export function MessageTemplatesTab() {
   const { user } = useAuth();
@@ -72,14 +66,17 @@ export function MessageTemplatesTab() {
     if (!user) return;
     setIsLoading(true);
     try {
+      await ensureDefaultMessageTemplates(user.id);
+
       const { data, error } = await supabase
         .from('message_templates')
         .select('*')
+        .eq('user_id', user.id)
         .order('is_favorite', { ascending: false })
         .order('updated_at', { ascending: false });
       if (error) throw error;
       setTemplates((data || []) as MessageTemplate[]);
-    } catch (err) {
+    } catch {
       toast.error('Erro ao carregar modelos');
     } finally {
       setIsLoading(false);
@@ -100,7 +97,7 @@ export function MessageTemplatesTab() {
     setEditingTemplate(t);
     setFormTitle(t.title);
     setFormContent(t.content);
-    setFormCategory(t.category);
+    setFormCategory(t.category || 'geral');
     setEditDialogOpen(true);
   };
 
@@ -112,7 +109,8 @@ export function MessageTemplatesTab() {
         const { error } = await supabase
           .from('message_templates')
           .update({ title: formTitle.trim(), content: formContent.trim(), category: formCategory, updated_at: new Date().toISOString() })
-          .eq('id', editingTemplate.id);
+          .eq('id', editingTemplate.id)
+          .eq('user_id', user.id);
         if (error) throw error;
         toast.success('Modelo atualizado');
       } else {
@@ -124,7 +122,7 @@ export function MessageTemplatesTab() {
       }
       setEditDialogOpen(false);
       fetchTemplates();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao salvar modelo');
     } finally {
       setIsSaving(false);
@@ -132,9 +130,13 @@ export function MessageTemplatesTab() {
   };
 
   const handleDelete = async () => {
-    if (!editingTemplate) return;
+    if (!editingTemplate || !user) return;
     try {
-      const { error } = await supabase.from('message_templates').delete().eq('id', editingTemplate.id);
+      const { error } = await supabase
+        .from('message_templates')
+        .delete()
+        .eq('id', editingTemplate.id)
+        .eq('user_id', user.id);
       if (error) throw error;
       toast.success('Modelo excluído');
       setDeleteDialogOpen(false);
@@ -146,11 +148,13 @@ export function MessageTemplatesTab() {
   };
 
   const toggleFavorite = async (t: MessageTemplate) => {
+    if (!user) return;
     try {
       const { error } = await supabase
         .from('message_templates')
         .update({ is_favorite: !t.is_favorite })
-        .eq('id', t.id);
+        .eq('id', t.id)
+        .eq('user_id', user.id);
       if (error) throw error;
       fetchTemplates();
     } catch {
@@ -167,8 +171,8 @@ export function MessageTemplatesTab() {
     ? templates
     : templates.filter(t => t.category === filterCategory);
 
-  const getCategoryLabel = (value: string) =>
-    TEMPLATE_CATEGORIES.find(c => c.value === value)?.label || value;
+  const getCategoryLabel = (value: string | null) =>
+    MESSAGE_TEMPLATE_CATEGORIES.find(c => c.value === value)?.label || value || 'Geral';
 
   // Count variables in template
   const countVariables = (content: string) => {
@@ -186,7 +190,7 @@ export function MessageTemplatesTab() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todas categorias</SelectItem>
-            {TEMPLATE_CATEGORIES.map(c => (
+            {MESSAGE_TEMPLATE_CATEGORIES.map(c => (
               <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
             ))}
           </SelectContent>
@@ -223,6 +227,9 @@ export function MessageTemplatesTab() {
                       <p className="font-medium text-sm truncate">{t.title}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="outline" className="text-[10px]">{getCategoryLabel(t.category)}</Badge>
+                        {t.is_default && (
+                          <Badge variant="secondary" className="text-[10px]">Padrao</Badge>
+                        )}
                         {countVariables(t.content) > 0 && (
                           <span className="text-[10px] text-muted-foreground">
                             {countVariables(t.content)} variáveis
@@ -273,6 +280,9 @@ export function MessageTemplatesTab() {
             <DialogTitle>
               {editingTemplate ? 'Editar Modelo' : 'Novo Modelo de Mensagem'}
             </DialogTitle>
+            <DialogDescription>
+              Os modelos sao salvos por usuario. Edicoes e exclusoes afetam apenas a sua conta.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -291,7 +301,7 @@ export function MessageTemplatesTab() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TEMPLATE_CATEGORIES.map(c => (
+                    {MESSAGE_TEMPLATE_CATEGORIES.map(c => (
                       <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
                     ))}
                   </SelectContent>

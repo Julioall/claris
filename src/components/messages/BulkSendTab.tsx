@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Send, Search, X, Users, Loader2, ChevronRight, FileText, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Send, Search, X, Users, Loader2, FileText, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -10,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -27,27 +27,44 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { buildCourseCategoryFilterOptions, parseCourseCategoryPath } from '@/lib/course-category';
+import {
+  buildBulkMessageVariableAvailability,
+  getAvailableVariableKeys,
+  getUnavailableTemplateVariables,
+  resolveStudentCourseContext,
+  type DynamicVariableKey,
+} from '@/lib/message-template-context';
+import { MESSAGE_TEMPLATE_CATEGORIES } from '@/lib/message-template-defaults';
+import { ensureDefaultMessageTemplates } from '@/lib/message-template-seeding';
 
-// Access moodleSession from auth context
 function useMoodleSession() {
-  const auth = useAuth() as any;
-  return auth.moodleSession as { moodleToken: string; moodleUrl: string } | null;
+  const auth = useAuth() as { moodleSession?: { moodleToken: string; moodleUrl: string } | null };
+  return auth.moodleSession || null;
+}
+
+interface StudentCourseOption {
+  course_id: string;
+  course_name: string;
+  category?: string;
+  last_access?: string | null;
 }
 
 interface StudentOption {
   id: string;
   full_name: string;
-  email?: string;
+  email?: string | null;
   moodle_user_id: string;
-  current_risk_level?: string;
-  courses: Array<{ course_id: string; course_name: string; category?: string }>;
+  current_risk_level?: string | null;
+  last_access?: string | null;
+  courses: StudentCourseOption[];
 }
 
 interface TemplateOption {
   id: string;
   title: string;
   content: string;
-  category: string;
+  category: string | null;
+  is_default: boolean;
 }
 
 interface BulkJob {
@@ -60,10 +77,75 @@ interface BulkJob {
   created_at: string;
 }
 
+interface GradeLookupValue {
+  gradeFormatted?: string | null;
+  gradePercentage?: number | null;
+}
+
+const variableLabels = new Map(DYNAMIC_VARIABLES.map(variable => [variable.key, variable.label]));
+const categoryLabels = new Map(MESSAGE_TEMPLATE_CATEGORIES.map(category => [category.value, category.label]));
+const riskLevelLabels: Record<string, string> = {
+  normal: 'Normal',
+  atencao: 'Atencao',
+  risco: 'Risco',
+  critico: 'Critico',
+  inativo: 'Inativo',
+};
+
+const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
+
+function buildStudentCourseKey(studentId: string, courseId: string) {
+  return `${studentId}:${courseId}`;
+}
+
+function getVariableLabel(key: DynamicVariableKey) {
+  return variableLabels.get(key) || key;
+}
+
+function getCategoryLabel(value?: string | null) {
+  if (!value) return 'Geral';
+  return categoryLabels.get(value) || value;
+}
+
+function formatDateLabel(value?: string | null) {
+  if (!value) return 'Sem registro';
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) return 'Sem registro';
+
+  return dateFormatter.format(parsedDate);
+}
+
+function formatRiskLevel(value?: string | null) {
+  if (!value) return 'Sem classificacao';
+  return riskLevelLabels[value] || value;
+}
+
+function formatGradeLabel(grade?: GradeLookupValue) {
+  if (grade?.gradeFormatted) return grade.gradeFormatted;
+  if (grade?.gradePercentage != null) return `${Number(grade.gradePercentage).toFixed(1)}%`;
+  return 'Sem nota';
+}
+
+function buildUnavailableVariablesText(unavailableVariables: Array<{ key: DynamicVariableKey; reason?: string }>) {
+  const labels = unavailableVariables.map(item => getVariableLabel(item.key)).join(', ');
+  const reasons = Array.from(
+    new Set(
+      unavailableVariables
+        .map(item => item.reason)
+        .filter((reason): reason is string => Boolean(reason)),
+    ),
+  );
+
+  return reasons.length > 0 ? `${labels}. ${reasons.join(' ')}` : labels;
+}
+
 export function BulkSendTab() {
   const { user } = useAuth();
   const moodleSession = useMoodleSession();
   const [students, setStudents] = useState<StudentOption[]>([]);
+  const [gradeLookup, setGradeLookup] = useState<Record<string, GradeLookupValue>>({});
+  const [pendingLookup, setPendingLookup] = useState<Record<string, number>>({});
   const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
@@ -74,109 +156,197 @@ export function BulkSendTab() {
   const [isSending, setIsSending] = useState(false);
   const [recentJobs, setRecentJobs] = useState<BulkJob[]>([]);
 
-  // Filters
   const [filterSchool, setFilterSchool] = useState<string>('todos');
   const [filterCourse, setFilterCourse] = useState<string>('todos');
   const [filterClass, setFilterClass] = useState<string>('todos');
   const [filterUC, setFilterUC] = useState<string>('todos');
 
-  // Fetch students with their courses
+  const currentFilters = useMemo(() => ({
+    school: filterSchool,
+    course: filterCourse,
+    className: filterClass,
+    uc: filterUC,
+  }), [filterSchool, filterCourse, filterClass, filterUC]);
+
   const fetchStudents = useCallback(async () => {
     if (!user) return;
+
     setIsLoadingStudents(true);
+
     try {
-      const { data: userCourses } = await supabase
+      const { data: userCourses, error: userCoursesError } = await supabase
         .from('user_courses')
         .select('course_id, courses(id, name, category)')
         .eq('user_id', user.id)
         .eq('role', 'tutor');
 
-      if (!userCourses?.length) { setStudents([]); setIsLoadingStudents(false); return; }
+      if (userCoursesError) throw userCoursesError;
+
+      if (!userCourses?.length) {
+        setStudents([]);
+        setGradeLookup({});
+        setPendingLookup({});
+        return;
+      }
 
       const courseMap = new Map<string, { id: string; name: string; category?: string }>();
-      userCourses.forEach(uc => {
-        const c = uc.courses as any;
-        if (c) courseMap.set(c.id, { id: c.id, name: c.name, category: c.category });
+      userCourses.forEach(userCourse => {
+        const course = userCourse.courses as { id: string; name: string; category?: string } | null;
+        if (course) {
+          courseMap.set(course.id, { id: course.id, name: course.name, category: course.category });
+        }
       });
 
       const courseIds = Array.from(courseMap.keys());
 
-      const { data: studentCourses } = await supabase
+      const { data: studentCourses, error: studentCoursesError } = await supabase
         .from('student_courses')
-        .select('student_id, course_id, students(id, full_name, email, moodle_user_id, current_risk_level)')
+        .select('student_id, course_id, last_access, students(id, full_name, email, moodle_user_id, current_risk_level, last_access)')
         .in('course_id', courseIds)
         .neq('enrollment_status', 'suspenso');
 
-      if (!studentCourses?.length) { setStudents([]); setIsLoadingStudents(false); return; }
+      if (studentCoursesError) throw studentCoursesError;
+
+      if (!studentCourses?.length) {
+        setStudents([]);
+        setGradeLookup({});
+        setPendingLookup({});
+        return;
+      }
 
       const studentMap = new Map<string, StudentOption>();
-      studentCourses.forEach(sc => {
-        const s = sc.students as any;
-        if (!s) return;
-        if (!studentMap.has(s.id)) {
-          studentMap.set(s.id, {
-            id: s.id,
-            full_name: s.full_name,
-            email: s.email,
-            moodle_user_id: s.moodle_user_id,
-            current_risk_level: s.current_risk_level,
+      studentCourses.forEach(studentCourse => {
+        const student = studentCourse.students as {
+          id: string;
+          full_name: string;
+          email?: string | null;
+          moodle_user_id: string;
+          current_risk_level?: string | null;
+          last_access?: string | null;
+        } | null;
+
+        if (!student) return;
+
+        if (!studentMap.has(student.id)) {
+          studentMap.set(student.id, {
+            id: student.id,
+            full_name: student.full_name,
+            email: student.email,
+            moodle_user_id: student.moodle_user_id,
+            current_risk_level: student.current_risk_level,
+            last_access: student.last_access,
             courses: [],
           });
         }
-        const course = courseMap.get(sc.course_id);
+
+        const course = courseMap.get(studentCourse.course_id);
         if (course) {
-          studentMap.get(s.id)!.courses.push({
+          studentMap.get(student.id)?.courses.push({
             course_id: course.id,
             course_name: course.name,
             category: course.category || undefined,
+            last_access: studentCourse.last_access,
           });
         }
       });
 
-      setStudents(Array.from(studentMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name)));
-    } catch (err) {
+      const studentIds = Array.from(new Set(studentCourses.map(studentCourse => studentCourse.student_id)));
+
+      const [{ data: grades, error: gradesError }, { data: pendingActivities, error: pendingActivitiesError }] = await Promise.all([
+        supabase
+          .from('student_course_grades')
+          .select('student_id, course_id, grade_formatted, grade_percentage')
+          .in('course_id', courseIds)
+          .in('student_id', studentIds),
+        supabase
+          .from('student_activities')
+          .select('student_id, course_id')
+          .in('course_id', courseIds)
+          .in('student_id', studentIds)
+          .is('completed_at', null)
+          .eq('hidden', false),
+      ]);
+
+      if (gradesError) throw gradesError;
+      if (pendingActivitiesError) throw pendingActivitiesError;
+
+      const nextGradeLookup: Record<string, GradeLookupValue> = {};
+      (grades || []).forEach(grade => {
+        nextGradeLookup[buildStudentCourseKey(grade.student_id, grade.course_id)] = {
+          gradeFormatted: grade.grade_formatted,
+          gradePercentage: grade.grade_percentage,
+        };
+      });
+
+      const nextPendingLookup: Record<string, number> = {};
+      (pendingActivities || []).forEach(activity => {
+        const key = buildStudentCourseKey(activity.student_id, activity.course_id);
+        nextPendingLookup[key] = (nextPendingLookup[key] || 0) + 1;
+      });
+
+      setStudents(Array.from(studentMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR')));
+      setGradeLookup(nextGradeLookup);
+      setPendingLookup(nextPendingLookup);
+    } catch (error) {
+      console.error(error);
+      setStudents([]);
+      setGradeLookup({});
+      setPendingLookup({});
       toast.error('Erro ao carregar alunos');
     } finally {
       setIsLoadingStudents(false);
     }
   }, [user]);
 
-  // Fetch templates
   const fetchTemplates = useCallback(async () => {
-    const { data } = await supabase
-      .from('message_templates')
-      .select('id, title, content, category')
-      .order('is_favorite', { ascending: false })
-      .order('title');
-    setTemplates((data || []) as TemplateOption[]);
-  }, []);
+    if (!user) return;
 
-  // Fetch recent jobs
-  const fetchRecentJobs = useCallback(async () => {
-    const { data } = await supabase
-      .from('bulk_message_jobs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(5);
-    setRecentJobs((data || []) as BulkJob[]);
-  }, []);
+    try {
+      await ensureDefaultMessageTemplates(user.id);
+
+      const { data, error } = await supabase
+        .from('message_templates')
+        .select('id, title, content, category, is_default')
+        .eq('user_id', user.id)
+        .order('is_favorite', { ascending: false })
+        .order('title');
+
+      if (error) throw error;
+
+      setTemplates((data || []) as TemplateOption[]);
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao carregar modelos');
+    }
+  }, [user]);
+
+  const fetchRecentJobs = useCallback(async (options?: { silent?: boolean }) => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('bulk_message_jobs')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      setRecentJobs((data || []) as BulkJob[]);
+    } catch (error) {
+      console.error(error);
+      if (!options?.silent) {
+        toast.error('Erro ao carregar envios recentes');
+      }
+    }
+  }, [user]);
 
   useEffect(() => {
     fetchStudents();
     fetchTemplates();
     fetchRecentJobs();
   }, [fetchStudents, fetchTemplates, fetchRecentJobs]);
-
-  // Subscribe to job updates
-  useEffect(() => {
-    const channel = supabase
-      .channel('bulk-jobs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'bulk_message_jobs' }, () => {
-        fetchRecentJobs();
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [fetchRecentJobs]);
 
   const categorySources = useMemo(
     () => students.flatMap(student => student.courses.map(course => ({
@@ -186,7 +356,6 @@ export function BulkSendTab() {
     [students],
   );
 
-  // Extract unique filter options from students' courses
   const filterOptions = useMemo(() => {
     return buildCourseCategoryFilterOptions(categorySources, {
       school: filterSchool,
@@ -222,21 +391,23 @@ export function BulkSendTab() {
     }
   }, [filterSchool, filterCourse, filterClass, filterUC, filterOptions]);
 
-  // Filtered students
   const filteredStudents = useMemo(() => {
-    return students.filter(s => {
-      // Text search
-      if (searchQuery && !s.full_name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-          !s.email?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return students.filter(student => {
+      if (
+        searchQuery &&
+        !student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !student.email?.toLowerCase().includes(searchQuery.toLowerCase())
+      ) {
+        return false;
+      }
 
-      // Category filters
       if (filterSchool !== 'todos' || filterCourse !== 'todos' || filterClass !== 'todos' || filterUC !== 'todos') {
-        const matchesCourse = s.courses.some(c => {
-          const parsed = parseCourseCategoryPath(c.category);
+        const matchesCourse = student.courses.some(course => {
+          const parsed = parseCourseCategoryPath(course.category);
           if (filterSchool !== 'todos' && parsed.school !== filterSchool) return false;
           if (filterCourse !== 'todos' && parsed.course !== filterCourse) return false;
           if (filterClass !== 'todos' && parsed.className !== filterClass) return false;
-          if (filterUC !== 'todos' && (parsed.uc || c.course_name) !== filterUC) return false;
+          if (filterUC !== 'todos' && (parsed.uc || course.course_name) !== filterUC) return false;
           return true;
         });
         if (!matchesCourse) return false;
@@ -245,6 +416,71 @@ export function BulkSendTab() {
       return true;
     });
   }, [students, searchQuery, filterSchool, filterCourse, filterClass, filterUC]);
+
+  const selectedStudents = useMemo(
+    () => students.filter(student => selectedStudentIds.has(student.id)),
+    [selectedStudentIds, students],
+  );
+
+  const contextStudents = useMemo(
+    () => (selectedStudents.length > 0 ? selectedStudents : filteredStudents),
+    [filteredStudents, selectedStudents],
+  );
+
+  const variableAvailability = useMemo(
+    () => buildBulkMessageVariableAvailability(contextStudents, currentFilters),
+    [contextStudents, currentFilters],
+  );
+
+  const availableVariableKeys = useMemo(
+    () => getAvailableVariableKeys(variableAvailability),
+    [variableAvailability],
+  );
+
+  const variableRestrictions = useMemo(() => {
+    const restrictions: Record<string, string> = {};
+
+    (Object.entries(variableAvailability) as Array<[DynamicVariableKey, { available: boolean; reason?: string }]>)
+      .forEach(([key, availability]) => {
+        if (!availability.available && availability.reason) {
+          restrictions[key] = availability.reason;
+        }
+      });
+
+    return restrictions;
+  }, [variableAvailability]);
+
+  const messageUnavailableVariables = useMemo(
+    () => getUnavailableTemplateVariables(messageContent, variableAvailability),
+    [messageContent, variableAvailability],
+  );
+
+  const templateUnavailableVariables = useMemo(() => {
+    return new Map(
+      templates.map(template => [
+        template.id,
+        getUnavailableTemplateVariables(template.content, variableAvailability),
+      ]),
+    );
+  }, [templates, variableAvailability]);
+
+  const canPreviewOrSend = selectedStudents.length > 0 && messageContent.trim().length > 0 && messageUnavailableVariables.length === 0;
+  const hasActiveJobs = useMemo(
+    () => recentJobs.some(job => job.status === 'pending' || job.status === 'processing'),
+    [recentJobs],
+  );
+
+  useEffect(() => {
+    if (!user || !hasActiveJobs) return;
+
+    const intervalId = window.setInterval(() => {
+      fetchRecentJobs({ silent: true });
+    }, 4000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchRecentJobs, hasActiveJobs, user]);
 
   const toggleStudent = (id: string) => {
     setSelectedStudentIds(prev => {
@@ -278,94 +514,102 @@ export function BulkSendTab() {
     setFilterUC('todos');
   };
 
-  const applyTemplate = (t: TemplateOption) => {
-    setMessageContent(t.content);
+  const validateMessageContext = useCallback((content: string, sourceLabel: string) => {
+    const unavailableVariables = getUnavailableTemplateVariables(content, variableAvailability);
+
+    if (unavailableVariables.length === 0) return true;
+
+    toast.error(`${sourceLabel} usa variaveis indisponiveis neste contexto: ${buildUnavailableVariablesText(unavailableVariables)}`);
+    return false;
+  }, [variableAvailability]);
+
+  const buildStudentVariableData = useCallback((student: StudentOption) => {
+    const resolvedContext = resolveStudentCourseContext(student, currentFilters);
+    const selectedCourse = resolvedContext.selectedCourse;
+    const courseLookupKey = selectedCourse
+      ? buildStudentCourseKey(student.id, selectedCourse.course_id)
+      : null;
+
+    return {
+      nome_aluno: student.full_name,
+      email_aluno: student.email || 'Sem email',
+      ultimo_acesso: formatDateLabel(selectedCourse?.last_access || student.last_access),
+      nivel_risco: formatRiskLevel(student.current_risk_level),
+      nota_media: formatGradeLabel(courseLookupKey ? gradeLookup[courseLookupKey] : undefined),
+      atividades_pendentes: String(courseLookupKey ? (pendingLookup[courseLookupKey] || 0) : 0),
+      unidade_curricular: resolvedContext.unidadeCurricular || 'N/A',
+      turma: resolvedContext.className || 'N/A',
+      curso: resolvedContext.course || 'N/A',
+      escola: resolvedContext.school || 'N/A',
+      nome_tutor: user?.full_name || 'Tutor',
+    };
+  }, [currentFilters, gradeLookup, pendingLookup, user]);
+
+  const applyTemplate = (template: TemplateOption) => {
+    const unavailableVariables = templateUnavailableVariables.get(template.id) || [];
+
+    if (unavailableVariables.length > 0) {
+      toast.error(`O modelo "${template.title}" nao pode ser usado neste contexto: ${buildUnavailableVariablesText(unavailableVariables)}`);
+      return;
+    }
+
+    setMessageContent(template.content);
     setTemplateDialogOpen(false);
-    toast.success(`Modelo "${t.title}" aplicado`);
+    toast.success(`Modelo "${template.title}" aplicado`);
   };
 
-  // Preview: resolve for first selected student
   const previewStudent = useMemo(() => {
-    const id = Array.from(selectedStudentIds)[0];
-    return students.find(s => s.id === id);
-  }, [selectedStudentIds, students]);
+    return selectedStudents[0];
+  }, [selectedStudents]);
 
   const previewMessage = useMemo(() => {
     if (!previewStudent || !messageContent) return '';
-    const course = previewStudent.courses[0];
-    const parsed = parseCourseCategoryPath(course?.category);
-    return resolveVariables(messageContent, {
-      nome_aluno: previewStudent.full_name,
-      email_aluno: previewStudent.email,
-      ultimo_acesso: 'N/A',
-      nivel_risco: previewStudent.current_risk_level,
-      nota_media: 'N/A',
-      atividades_pendentes: 'N/A',
-      unidade_curricular: parsed.uc || course?.course_name,
-      turma: parsed.className,
-      curso: parsed.course,
-      escola: parsed.school,
-      nome_tutor: user?.full_name,
-    });
-  }, [previewStudent, messageContent, user]);
+    return resolveVariables(messageContent, buildStudentVariableData(previewStudent));
+  }, [buildStudentVariableData, messageContent, previewStudent]);
 
-  // Send bulk
-  const handleSend = async () => {
-    if (!user || !moodleSession || selectedStudentIds.size === 0 || !messageContent.trim()) return;
+  const handlePreview = () => {
+    if (!validateMessageContext(messageContent, 'A mensagem')) return;
+    setPreviewDialogOpen(true);
+  };
+
+  const handleSend = useCallback(async () => {
+    if (!user || !moodleSession || selectedStudents.length === 0 || !messageContent.trim()) return;
+    if (!validateMessageContext(messageContent, 'A mensagem')) return;
+
     setIsSending(true);
+
     try {
-      // Create job
       const { data: job, error: jobErr } = await supabase
         .from('bulk_message_jobs')
         .insert({
           user_id: user.id,
           message_content: messageContent.trim(),
-          total_recipients: selectedStudentIds.size,
-          status: 'pending' as any,
+          total_recipients: selectedStudents.length,
+          status: 'pending',
         })
         .select('id')
         .single();
 
       if (jobErr || !job) throw jobErr || new Error('Falha ao criar job');
 
-      // Create recipients
-      const selectedStudents = students.filter(s => selectedStudentIds.has(s.id));
-      const recipients = selectedStudents.map(s => {
-        const course = s.courses[0];
-        const parsed = parseCourseCategoryPath(course?.category);
-        const personalized = resolveVariables(messageContent, {
-          nome_aluno: s.full_name,
-          email_aluno: s.email,
-          ultimo_acesso: 'N/A',
-          nivel_risco: s.current_risk_level,
-          nota_media: 'N/A',
-          atividades_pendentes: 'N/A',
-          unidade_curricular: parsed.uc || course?.course_name,
-          turma: parsed.className,
-          curso: parsed.course,
-          escola: parsed.school,
-          nome_tutor: user.full_name,
-        });
-
-        return {
+      const recipients = selectedStudents.map(student => ({
           job_id: job.id,
-          student_id: s.id,
-          moodle_user_id: s.moodle_user_id,
-          student_name: s.full_name,
-          personalized_message: personalized,
-          status: 'pending' as any,
-        };
-      });
+          student_id: student.id,
+          moodle_user_id: student.moodle_user_id,
+          student_name: student.full_name,
+          personalized_message: resolveVariables(messageContent, buildStudentVariableData(student)),
+          status: 'pending',
+        }));
 
       const { error: recipErr } = await supabase.from('bulk_message_recipients').insert(recipients);
       if (recipErr) throw recipErr;
 
-      // Trigger processing with moodle credentials
-      await supabase.functions.invoke('bulk-message-send', {
+      const { error: invokeErr } = await supabase.functions.invoke('bulk-message-send', {
         body: { job_id: job.id, moodleUrl: moodleSession.moodleUrl, token: moodleSession.moodleToken },
       });
+      if (invokeErr) throw invokeErr;
 
-      toast.success(`Envio em massa iniciado para ${selectedStudentIds.size} alunos`);
+      toast.success(`Envio em massa iniciado para ${selectedStudents.length} alunos`);
       setSelectedStudentIds(new Set());
       setMessageContent('');
       fetchRecentJobs();
@@ -375,13 +619,13 @@ export function BulkSendTab() {
     } finally {
       setIsSending(false);
     }
-  };
+  }, [buildStudentVariableData, fetchRecentJobs, messageContent, moodleSession, selectedStudents, user, validateMessageContext]);
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
       pending: { label: 'Na fila', variant: 'outline' },
       processing: { label: 'Enviando...', variant: 'default' },
-      completed: { label: 'Concluído', variant: 'secondary' },
+      completed: { label: 'Concluido', variant: 'secondary' },
       failed: { label: 'Falhou', variant: 'destructive' },
       cancelled: { label: 'Cancelado', variant: 'outline' },
     };
@@ -392,22 +636,21 @@ export function BulkSendTab() {
   return (
     <div className="flex flex-col h-full gap-4">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
-        {/* Left: recipient selection */}
         <Card className="flex flex-col min-h-0">
           <CardHeader className="pb-3 shrink-0">
             <CardTitle className="text-sm flex items-center justify-between">
               <span className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
-                Destinatários
-                {selectedStudentIds.size > 0 && (
-                  <Badge variant="default" className="text-[10px]">{selectedStudentIds.size}</Badge>
+                Destinatarios
+                {selectedStudents.length > 0 && (
+                  <Badge variant="default" className="text-[10px]">{selectedStudents.length}</Badge>
                 )}
               </span>
               <div className="flex gap-1">
                 <Button variant="ghost" size="sm" className="text-xs h-7" onClick={selectAll}>
                   Todos ({filteredStudents.length})
                 </Button>
-                {selectedStudentIds.size > 0 && (
+                {selectedStudents.length > 0 && (
                   <Button variant="ghost" size="sm" className="text-xs h-7" onClick={clearAll}>
                     Limpar
                   </Button>
@@ -469,22 +712,19 @@ export function BulkSendTab() {
             </div>
 
             {/* Selected tags */}
-            {selectedStudentIds.size > 0 && (
+            {selectedStudents.length > 0 && (
               <div className="flex flex-wrap gap-1 shrink-0 max-h-20 overflow-y-auto">
-                {Array.from(selectedStudentIds).slice(0, 20).map(id => {
-                  const s = students.find(st => st.id === id);
-                  return s ? (
-                    <Badge key={id} variant="secondary" className="text-[10px] pr-1 gap-1">
-                      {s.full_name}
-                      <button onClick={() => toggleStudent(id)} className="ml-0.5 hover:text-destructive">
+                {selectedStudents.slice(0, 20).map(student => (
+                  <Badge key={student.id} variant="secondary" className="text-[10px] pr-1 gap-1">
+                    {student.full_name}
+                    <button type="button" onClick={() => toggleStudent(student.id)} className="ml-0.5 hover:text-destructive">
                         <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ) : null;
-                })}
-                {selectedStudentIds.size > 20 && (
+                    </button>
+                  </Badge>
+                ))}
+                {selectedStudents.length > 20 && (
                   <Badge variant="outline" className="text-[10px]">
-                    +{selectedStudentIds.size - 20} mais
+                    +{selectedStudents.length - 20} mais
                   </Badge>
                 )}
               </div>
@@ -501,6 +741,7 @@ export function BulkSendTab() {
                   {filteredStudents.map(s => (
                     <button
                       key={s.id}
+                      type="button"
                       onClick={() => toggleStudent(s.id)}
                       className={cn(
                         'w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-3 transition-colors hover:bg-muted/50',
@@ -527,9 +768,8 @@ export function BulkSendTab() {
           </CardContent>
         </Card>
 
-        {/* Right: message composition */}
         <div className="flex flex-col gap-4 min-h-0">
-          <Card className="flex-1 flex flex-col min-h-0">
+          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
             <CardHeader className="pb-3 shrink-0">
               <CardTitle className="text-sm flex items-center justify-between">
                 <span>Mensagem</span>
@@ -539,13 +779,29 @@ export function BulkSendTab() {
                 </Button>
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col pt-0 min-h-0">
+            <CardContent className="flex-1 flex flex-col gap-3 pt-0 min-h-0 overflow-hidden">
               <DynamicVariableInput
                 value={messageContent}
                 onChange={setMessageContent}
                 rows={10}
-                className="flex-1"
+                className="min-h-[18rem] resize-none"
+                availableVariableKeys={availableVariableKeys}
+                variableRestrictions={variableRestrictions}
+                showInlinePreview={false}
               />
+
+              {messageUnavailableVariables.length > 0 && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <p className="font-medium">Este conteudo precisa de um contexto mais especifico para ser enviado.</p>
+                  <div className="mt-2 space-y-1">
+                    {messageUnavailableVariables.map(item => (
+                      <p key={item.key}>
+                        <span className="font-medium">{getVariableLabel(item.key)}:</span> {item.reason}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -554,20 +810,26 @@ export function BulkSendTab() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setPreviewDialogOpen(true)}
-              disabled={selectedStudentIds.size === 0 || !messageContent.trim()}
+              onClick={handlePreview}
+              disabled={!canPreviewOrSend}
             >
               <Eye className="h-4 w-4 mr-1" />
-              Pré-visualizar
+              Pre-visualizar
             </Button>
             <Button
               onClick={handleSend}
-              disabled={isSending || selectedStudentIds.size === 0 || !messageContent.trim()}
+              disabled={isSending || !canPreviewOrSend}
             >
               {isSending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
-              Enviar para {selectedStudentIds.size} aluno{selectedStudentIds.size !== 1 ? 's' : ''}
+              Enviar para {selectedStudents.length} aluno{selectedStudents.length !== 1 ? 's' : ''}
             </Button>
           </div>
+
+          {selectedStudents.length > 0 && filterUC === 'todos' && (
+            <p className="text-[11px] text-muted-foreground">
+              Selecione uma UC especifica para liberar variaveis como Unidade Curricular, Nota Media e Atividades Pendentes.
+            </p>
+          )}
 
           {/* Recent jobs */}
           {recentJobs.length > 0 && (
@@ -604,11 +866,13 @@ export function BulkSendTab() {
         </div>
       </div>
 
-      {/* Template picker dialog */}
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Escolher Modelo</DialogTitle>
+            <DialogDescription>
+              Selecione um modelo compativel com os filtros atuais de destinatarios.
+            </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-80">
             {templates.length === 0 ? (
@@ -617,27 +881,56 @@ export function BulkSendTab() {
               </p>
             ) : (
               <div className="space-y-2">
-                {templates.map(t => (
-                  <button
-                    key={t.id}
-                    className="w-full text-left p-3 rounded-lg border hover:bg-muted/50 transition-colors"
-                    onClick={() => applyTemplate(t)}
-                  >
-                    <p className="font-medium text-sm">{t.title}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{t.content}</p>
-                  </button>
-                ))}
+                {templates.map(template => {
+                  const unavailableVariables = templateUnavailableVariables.get(template.id) || [];
+                  const disabled = unavailableVariables.length > 0;
+
+                  return (
+                    <button
+                      key={template.id}
+                      type="button"
+                      disabled={disabled}
+                      className={cn(
+                        'w-full text-left p-3 rounded-lg border transition-colors',
+                        disabled
+                          ? 'cursor-not-allowed border-dashed opacity-70'
+                          : 'hover:bg-muted/50',
+                      )}
+                      onClick={() => applyTemplate(template)}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-sm">{template.title}</p>
+                        <Badge variant="outline" className="text-[10px]">
+                          {getCategoryLabel(template.category)}
+                        </Badge>
+                        {template.is_default && (
+                          <Badge variant="secondary" className="text-[10px]">
+                            Padrao
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{template.content}</p>
+                      {disabled && (
+                        <p className="mt-2 text-[11px] text-amber-700">
+                          {buildUnavailableVariablesText(unavailableVariables)}
+                        </p>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </ScrollArea>
         </DialogContent>
       </Dialog>
 
-      {/* Preview dialog */}
       <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Pré-visualização da Mensagem</DialogTitle>
+            <DialogTitle>Pre-visualizacao da Mensagem</DialogTitle>
+            <DialogDescription>
+              Confira como a mensagem personalizada sera enviada para o primeiro destinatario selecionado.
+            </DialogDescription>
           </DialogHeader>
           {previewStudent && (
             <div className="space-y-3">
@@ -647,14 +940,14 @@ export function BulkSendTab() {
                 </div>
                 <div>
                   <p className="text-sm font-medium">{previewStudent.full_name}</p>
-                  <p className="text-xs text-muted-foreground">Exemplo de como a mensagem será enviada</p>
+                  <p className="text-xs text-muted-foreground">Exemplo de como a mensagem sera enviada</p>
                 </div>
               </div>
               <div className="rounded-lg bg-muted p-4">
                 <p className="text-sm whitespace-pre-wrap">{previewMessage}</p>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                * Variáveis como nota média e atividades pendentes serão calculadas no momento do envio.
+                Variaveis dependentes de UC ficam disponiveis somente quando uma Unidade Curricular especifica esta selecionada.
               </p>
             </div>
           )}

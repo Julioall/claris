@@ -59,3 +59,6 @@ verify_jwt = false
 
 [functions.moodle-messaging]
 verify_jwt = false
+
+[functions.bulk-message-send]
+verify_jwt = false

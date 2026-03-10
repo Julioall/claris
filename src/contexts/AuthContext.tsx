@@ -297,7 +297,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signal: controller.signal,
       });
 
-      let payload: any = null;
+      let payload: Record<string, unknown> | null = null;
       try {
         payload = await response.json();
       } catch {
@@ -457,10 +457,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        const parsed = await parseFunctionsError(error);
+        const loginErrorMessage = resolveLoginErrorMessage(parsed.message || error.message);
         console.error('Login error:', error);
         toast({
           title: 'Erro de autenticacao',
-          description: error.message || 'Nao foi possivel conectar ao Moodle',
+          description: loginErrorMessage,
           variant: 'destructive',
         });
         return false;
@@ -509,9 +511,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (err) {
       console.error('Login error:', err);
+      const parsed = await parseFunctionsError(err);
       toast({
         title: 'Erro de autenticacao',
-        description: 'Nao foi possivel conectar ao Moodle. Verifique suas credenciais e a URL.',
+        description: resolveLoginErrorMessage(parsed.message) || 'Nao foi possivel conectar ao Moodle. Verifique suas credenciais e a URL.',
         variant: 'destructive',
       });
       return false;

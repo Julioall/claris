@@ -39,4 +39,42 @@ describe('DynamicVariableInput', () => {
     expect(screen.getByText(/Nome completo do aluno/i)).toBeInTheDocument();
     expect(screen.getByText('Joao Silva')).toBeInTheDocument();
   });
+
+  it('keeps restricted variables out of the slash menu and explains them in help', async () => {
+    const user = userEvent.setup();
+
+    render(
+      <DynamicVariableInput
+        value=""
+        onChange={vi.fn()}
+        availableVariableKeys={['nome_aluno']}
+        variableRestrictions={{
+          nota_media: 'Selecione uma Unidade Curricular especifica para liberar esta variavel.',
+        }}
+      />,
+    );
+
+    const input = screen.getByRole('textbox');
+    await user.type(input, '/nota');
+
+    expect(screen.queryByText('Nota Media')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /ver ajuda sobre variaveis dinamicas/i }));
+
+    expect(screen.getByText('Indisponivel neste contexto')).toBeInTheDocument();
+    expect(screen.getByText(/Selecione uma Unidade Curricular especifica/i)).toBeInTheDocument();
+  });
+
+  it('can hide the inline preview when the parent uses a dedicated preview action', () => {
+    render(
+      <DynamicVariableInput
+        value="Ola, {nome_aluno}"
+        onChange={vi.fn()}
+        showInlinePreview={false}
+      />,
+    );
+
+    expect(screen.queryByText(/Pre-visualizacao/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox')).toHaveValue('Ola, {nome_aluno}');
+  });
 });
