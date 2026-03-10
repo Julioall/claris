@@ -28,19 +28,13 @@ describe('DynamicVariableInput', () => {
     expect(screen.getByRole('textbox')).toHaveValue('{nome_aluno}');
   });
 
-  it('opens the help popover with detailed variable information', async () => {
-    const user = userEvent.setup();
-
+  it('does not render the old help button', () => {
     render(<DynamicVariableInput value="" onChange={vi.fn()} />);
 
-    await user.click(screen.getByRole('button', { name: /ver ajuda sobre variaveis dinamicas/i }));
-
-    expect(screen.getByText('Variaveis dinamicas')).toBeInTheDocument();
-    expect(screen.getByText(/Nome completo do aluno/i)).toBeInTheDocument();
-    expect(screen.getByText('Joao Silva')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /ver ajuda sobre variaveis dinamicas/i })).not.toBeInTheDocument();
   });
 
-  it('keeps restricted variables out of the slash menu and explains them in help', async () => {
+  it('keeps unavailable variables out of the slash menu', async () => {
     const user = userEvent.setup();
 
     render(
@@ -48,9 +42,6 @@ describe('DynamicVariableInput', () => {
         value=""
         onChange={vi.fn()}
         availableVariableKeys={['nome_aluno']}
-        variableRestrictions={{
-          nota_media: 'Selecione uma Unidade Curricular especifica para liberar esta variavel.',
-        }}
       />,
     );
 
@@ -58,11 +49,6 @@ describe('DynamicVariableInput', () => {
     await user.type(input, '/nota');
 
     expect(screen.queryByText('Nota Media')).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole('button', { name: /ver ajuda sobre variaveis dinamicas/i }));
-
-    expect(screen.getByText('Indisponivel neste contexto')).toBeInTheDocument();
-    expect(screen.getByText(/Selecione uma Unidade Curricular especifica/i)).toBeInTheDocument();
   });
 
   it('can hide the inline preview when the parent uses a dedicated preview action', () => {

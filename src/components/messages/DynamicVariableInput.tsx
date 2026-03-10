@@ -1,10 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { CircleHelp } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 
@@ -36,12 +33,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   Tutor: 'bg-amber-500/10 text-amber-700 dark:text-amber-400',
 };
 
-const VARIABLES_BY_CATEGORY = DYNAMIC_VARIABLES.reduce<Record<string, DynamicVariable[]>>((acc, variable) => {
-  if (!acc[variable.category]) acc[variable.category] = [];
-  acc[variable.category].push(variable);
-  return acc;
-}, {});
-
 interface DynamicVariableInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -50,7 +41,6 @@ interface DynamicVariableInputProps {
   className?: string;
   disabled?: boolean;
   availableVariableKeys?: string[];
-  variableRestrictions?: Record<string, string>;
   showInlinePreview?: boolean;
 }
 
@@ -62,11 +52,9 @@ export function DynamicVariableInput({
   className,
   disabled,
   availableVariableKeys,
-  variableRestrictions,
   showInlinePreview = true,
 }: DynamicVariableInputProps) {
   const [showMenu, setShowMenu] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
   const [filter, setFilter] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -216,83 +204,9 @@ export function DynamicVariableInput({
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-[11px] text-muted-foreground">
-          Digite <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">/</code> para inserir variaveis rapidamente
-        </p>
-
-        <Popover open={showHelp} onOpenChange={setShowHelp} modal={false}>
-          <PopoverTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 rounded-full text-muted-foreground"
-              aria-label="Ver ajuda sobre variaveis dinamicas"
-            >
-              <CircleHelp className="h-4 w-4" />
-            </Button>
-          </PopoverTrigger>
-
-          <PopoverContent
-            align="end"
-            className="w-[min(92vw,32rem)] p-0"
-            onOpenAutoFocus={(e) => e.preventDefault()}
-          >
-            <div className="border-b px-4 py-3">
-              <p className="text-sm font-semibold">Variaveis dinamicas</p>
-              <p className="text-xs text-muted-foreground">
-                Consulte os placeholders disponiveis e use <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">/</code> no campo para inserir sem decorar.
-              </p>
-            </div>
-
-            <ScrollArea className="max-h-[24rem]">
-              <div className="space-y-4 p-4">
-                {Object.entries(VARIABLES_BY_CATEGORY).map(([category, variables]) => (
-                  <div key={category} className="space-y-2">
-                    <Badge variant="outline" className={cn('text-[10px]', CATEGORY_COLORS[category])}>
-                      {category}
-                    </Badge>
-
-                    <div className="space-y-2">
-                      {variables.map(variable => (
-                        <div
-                          key={variable.key}
-                          className={cn(
-                            'rounded-lg border bg-background/80 p-3',
-                            !availableKeySet.has(variable.key) && 'border-dashed opacity-70',
-                          )}
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-primary">
-                              {`{${variable.key}}`}
-                            </code>
-                            <span className="text-sm font-medium">{variable.label}</span>
-                            {!availableKeySet.has(variable.key) && variableRestrictions?.[variable.key] && (
-                              <Badge variant="outline" className="text-[10px] text-amber-700">
-                                Indisponivel neste contexto
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="mt-1 text-xs text-muted-foreground">{variable.description}</p>
-                          {!availableKeySet.has(variable.key) && variableRestrictions?.[variable.key] && (
-                            <p className="mt-2 text-[11px] text-amber-700">
-                              {variableRestrictions[variable.key]}
-                            </p>
-                          )}
-                          <p className="mt-2 text-[11px] text-muted-foreground">
-                            Exemplo: <span className="font-medium text-foreground">{variable.example}</span>
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          </PopoverContent>
-        </Popover>
-      </div>
+      <p className="text-[11px] text-muted-foreground">
+        Digite <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">/</code> para inserir variaveis rapidamente
+      </p>
 
       <Popover
         open={showMenu}

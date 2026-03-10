@@ -437,19 +437,6 @@ export function BulkSendTab() {
     [variableAvailability],
   );
 
-  const variableRestrictions = useMemo(() => {
-    const restrictions: Record<string, string> = {};
-
-    (Object.entries(variableAvailability) as Array<[DynamicVariableKey, { available: boolean; reason?: string }]>)
-      .forEach(([key, availability]) => {
-        if (!availability.available && availability.reason) {
-          restrictions[key] = availability.reason;
-        }
-      });
-
-    return restrictions;
-  }, [variableAvailability]);
-
   const messageUnavailableVariables = useMemo(
     () => getUnavailableTemplateVariables(messageContent, variableAvailability),
     [messageContent, variableAvailability],
@@ -786,7 +773,6 @@ export function BulkSendTab() {
                 rows={10}
                 className="min-h-[18rem] resize-none"
                 availableVariableKeys={availableVariableKeys}
-                variableRestrictions={variableRestrictions}
                 showInlinePreview={false}
               />
 
