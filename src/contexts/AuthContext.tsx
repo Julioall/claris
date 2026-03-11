@@ -691,7 +691,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return 0;
               }
 
-              if (entity === 'students') return data?.students?.length || 0;
+              if (entity === 'students') return (data as any)?.students?.length || 0;
               if (entity === 'activities') return data?.activitiesCount || 0;
               return data?.gradesCount || 0;
             } catch (err) {
@@ -787,10 +787,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error || data?.error) {
           updateStep('courses', {
             status: 'error',
-            errorMessage: error?.message || data?.error || 'Falha ao sincronizar cursos',
+            errorMessage: error?.message || (data as any)?.error || 'Falha ao sincronizar cursos',
           });
         } else {
-          const allSyncedCourses: Course[] = data?.courses || [];
+          const allSyncedCourses: Course[] = (data as any)?.courses || [];
           setCourses(allSyncedCourses);
           syncedCourses = allSyncedCourses.filter(course => courseIds.includes(course.id));
           nextEntityLastSync.courses = new Date().toISOString();

@@ -64,7 +64,7 @@ interface TemplateOption {
   title: string;
   content: string;
   category: string | null;
-  is_default: boolean;
+  is_favorite: boolean | null;
 }
 
 interface BulkJob {
@@ -306,7 +306,7 @@ export function BulkSendTab() {
 
       const { data, error } = await supabase
         .from('message_templates')
-        .select('id, title, content, category, is_default')
+        .select('id, title, content, category, is_favorite')
         .eq('user_id', user.id)
         .order('is_favorite', { ascending: false })
         .order('title');
@@ -585,7 +585,7 @@ export function BulkSendTab() {
           moodle_user_id: student.moodle_user_id,
           student_name: student.full_name,
           personalized_message: resolveVariables(messageContent, buildStudentVariableData(student)),
-          status: 'pending',
+          status: 'pending' as const,
         }));
 
       const { error: recipErr } = await supabase.from('bulk_message_recipients').insert(recipients);
@@ -889,9 +889,9 @@ export function BulkSendTab() {
                         <Badge variant="outline" className="text-[10px]">
                           {getCategoryLabel(template.category)}
                         </Badge>
-                        {template.is_default && (
+                        {template.is_favorite && (
                           <Badge variant="secondary" className="text-[10px]">
-                            Padrao
+                            ★
                           </Badge>
                         )}
                       </div>
