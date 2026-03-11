@@ -8,7 +8,6 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DataCleanupCard } from '@/components/settings/DataCleanupCard';
 import { GradeDebugCard } from '@/components/settings/GradeDebugCard';
-import { ActionTypesCard } from '@/components/settings/ActionTypesCard';
 import { supabase } from '@/integrations/supabase/client';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -274,13 +273,15 @@ export default function Settings() {
         lastSavedRiskThresholdDays.risco !== riscoDays ||
         lastSavedRiskThresholdDays.critico !== criticoDays;
 
+      const syncPreferencesPayload = {
+        user_id: user.id,
+        sync_interval_hours: { ...syncSettings.syncIntervalHours },
+        risk_threshold_days: { ...normalizedRiskThresholdDays },
+      };
+
       const { error } = await supabase
         .from('user_sync_preferences')
-        .upsert({
-          user_id: user.id,
-          sync_interval_hours: syncSettings.syncIntervalHours as any,
-          risk_threshold_days: normalizedRiskThresholdDays as any,
-        } as any, { onConflict: 'user_id' });
+        .upsert(syncPreferencesPayload, { onConflict: 'user_id' });
 
       if (error) throw error;
 
@@ -471,7 +472,6 @@ export default function Settings() {
 
       <div className="space-y-6">
         <DataCleanupCard />
-        <ActionTypesCard />
       </div>
       <GradeDebugCard />
 

@@ -10,7 +10,6 @@ import {
   UserCheck
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
 import { 
   Select,
   SelectContent,
@@ -29,7 +28,7 @@ import {
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { useStudentsData } from '@/hooks/useStudentsData';
 import { useCoursesData } from '@/hooks/useCoursesData';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // Enrollment status config
@@ -60,7 +59,7 @@ export default function Students() {
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   
-  const { students, isLoading, error, refetch } = useStudentsData(
+  const { students, isLoading, error } = useStudentsData(
     courseFilter !== 'all' ? courseFilter : undefined
   );
   const { courses } = useCoursesData();
@@ -80,11 +79,6 @@ export default function Students() {
   const formatLastAccess = (date: string | undefined) => {
     if (!date) return 'Nunca';
     return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
-  };
-
-  const formatLastAction = (date: string | undefined) => {
-    if (!date) return '-';
-    return format(new Date(date), "dd/MM", { locale: ptBR });
   };
 
   if (isLoading) {
@@ -182,7 +176,6 @@ export default function Students() {
               <TableHead className="hidden sm:table-cell">Status</TableHead>
               <TableHead className="hidden md:table-cell">Pendências</TableHead>
               <TableHead className="hidden lg:table-cell">Último Acesso</TableHead>
-              <TableHead className="hidden lg:table-cell">Última Ação</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -234,11 +227,6 @@ export default function Students() {
                     <Clock className="h-4 w-4" />
                     <span>{formatLastAccess(student.last_access)}</span>
                   </div>
-                </TableCell>
-                <TableCell className="hidden lg:table-cell">
-                  <span className="text-sm text-muted-foreground">
-                    {formatLastAction(student.last_action_date)}
-                  </span>
                 </TableCell>
               </TableRow>
             ))}

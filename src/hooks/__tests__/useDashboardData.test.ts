@@ -13,13 +13,6 @@ const studentCoursesSelectMock = vi.fn();
 const studentCoursesInMock = vi.fn();
 const studentCoursesNeqMock = vi.fn();
 
-const actionsSelectMock = vi.fn();
-const actionsEqUserMock = vi.fn();
-const actionsEqStatusMock = vi.fn();
-const actionsGteMock = vi.fn();
-const actionsLteMock = vi.fn();
-const actionsLtMock = vi.fn();
-
 const pendingTasksSelectMock = vi.fn();
 const pendingTasksInMock = vi.fn();
 const pendingTasksNeqMock = vi.fn();
@@ -66,10 +59,6 @@ function setupFromMock() {
       return { select: studentCoursesSelectMock };
     }
 
-    if (table === "actions") {
-      return { select: actionsSelectMock };
-    }
-
     if (table === "pending_tasks") {
       return { select: pendingTasksSelectMock };
     }
@@ -114,32 +103,6 @@ describe("useDashboardData", () => {
       ],
       error: null,
     });
-
-    actionsSelectMock.mockReturnValue({ eq: actionsEqUserMock });
-    actionsEqUserMock.mockReturnValue({ eq: actionsEqStatusMock });
-
-    let actionStatusCall = 0;
-    actionsEqStatusMock.mockImplementation((_column: string, status: string) => {
-      actionStatusCall += 1;
-
-      if (status === "concluida") {
-        return { gte: actionsGteMock };
-      }
-
-      if (status === "planejada" && actionStatusCall === 2) {
-        return Promise.resolve({ count: 5, error: null });
-      }
-
-      if (status === "planejada" && actionStatusCall === 3) {
-        return { lt: actionsLtMock };
-      }
-
-      return Promise.resolve({ count: 0, error: null });
-    });
-
-    actionsGteMock.mockReturnValue({ lte: actionsLteMock });
-    actionsLteMock.mockResolvedValue({ count: 3, error: null });
-    actionsLtMock.mockResolvedValue({ count: 1, error: null });
 
     pendingTasksSelectMock.mockReturnValue({ in: pendingTasksInMock });
     pendingTasksInMock.mockReturnValue({ neq: pendingTasksNeqMock });
@@ -291,13 +254,10 @@ describe("useDashboardData", () => {
     });
 
     expect(result.current.summary).toEqual({
-      completed_actions: 0,
-      pending_actions: 0,
-      overdue_actions: 0,
       pending_tasks: 0,
+      overdue_tasks: 0,
       students_at_risk: 0,
       new_at_risk_this_week: 0,
-      students_without_contact: 0,
     });
     expect(result.current.pendingTasks).toEqual([]);
     expect(result.current.criticalStudents).toEqual([]);
@@ -313,17 +273,14 @@ describe("useDashboardData", () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.summary).toEqual({
-      completed_actions: 3,
-      pending_actions: 5,
-      overdue_actions: 1,
       pending_tasks: 3,
+      overdue_tasks: 1,
       students_at_risk: 2,
       new_at_risk_this_week: 2,
-      students_without_contact: 0,
     });
 
     expect(result.current.pendingTasks).toHaveLength(3);
-    expect(result.current.overdueActions.map((task) => task.id)).toEqual(["pt-1"]);
+    expect(result.current.overdueTasks.map((task) => task.id)).toEqual(["pt-1"]);
     expect(result.current.upcomingTasks.map((task) => task.id)).toEqual(["pt-2"]);
     expect(result.current.criticalStudents.map((student) => student.id)).toEqual(["s-1", "s-2"]);
     expect(result.current.activityFeed).toHaveLength(1);

@@ -20,7 +20,7 @@ export default function Dashboard() {
 
   const { 
     summary, 
-    overdueActions, 
+    overdueTasks, 
     upcomingTasks, 
     criticalStudents, 
     activityFeed,
@@ -30,13 +30,10 @@ export default function Dashboard() {
   const { courses, isLoading: coursesLoading } = useCoursesData();
 
   const defaultSummary = {
-    completed_actions: 0,
-    pending_actions: 0,
-    overdue_actions: 0,
     pending_tasks: 0,
+    overdue_tasks: 0,
     students_at_risk: 0,
     new_at_risk_this_week: 0,
-    students_without_contact: 0,
   };
 
   if (isLoading || coursesLoading) {
@@ -95,7 +92,7 @@ export default function Dashboard() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Priority List */}
         <PriorityList 
-          overdueActions={overdueActions}
+          overdueTasks={overdueTasks}
           upcomingTasks={upcomingTasks}
           criticalStudents={criticalStudents}
         />

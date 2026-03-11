@@ -14,17 +14,17 @@ vi.mock("@/hooks/useCoursesData", () => ({
 }));
 
 vi.mock("@/components/dashboard/WeeklyIndicators", () => ({
-  WeeklyIndicators: ({ summary }: { summary: { pending_actions: number } }) => (
-    <div data-testid="weekly-indicators">{summary.pending_actions}</div>
+  WeeklyIndicators: ({ summary }: { summary: { overdue_tasks: number } }) => (
+    <div data-testid="weekly-indicators">{summary.overdue_tasks}</div>
   ),
 }));
 
 vi.mock("@/components/dashboard/PriorityList", () => ({
   PriorityList: ({
-    overdueActions,
+    overdueTasks,
   }: {
-    overdueActions: Array<{ id: string }>;
-  }) => <div data-testid="priority-list">{overdueActions.length}</div>,
+    overdueTasks: Array<{ id: string }>;
+  }) => <div data-testid="priority-list">{overdueTasks.length}</div>,
 }));
 
 vi.mock("@/components/dashboard/CourseOverview", () => ({
@@ -44,15 +44,12 @@ describe("Dashboard page", () => {
     vi.clearAllMocks();
     useDashboardDataMock.mockReturnValue({
       summary: {
-        completed_actions: 1,
-        pending_actions: 2,
-        overdue_actions: 0,
         pending_tasks: 3,
+        overdue_tasks: 1,
         students_at_risk: 4,
         new_at_risk_this_week: 1,
-        students_without_contact: 0,
       },
-      overdueActions: [{ id: "o-1" }],
+      overdueTasks: [{ id: "o-1" }],
       upcomingTasks: [{ id: "u-1" }],
       criticalStudents: [{ id: "s-1" }],
       activityFeed: [{ id: "a-1" }],
@@ -67,7 +64,7 @@ describe("Dashboard page", () => {
   it("shows loading state while dashboard data is loading", () => {
     useDashboardDataMock.mockReturnValue({
       summary: null,
-      overdueActions: [],
+      overdueTasks: [],
       upcomingTasks: [],
       criticalStudents: [],
       activityFeed: [],
@@ -87,7 +84,7 @@ describe("Dashboard page", () => {
     render(<Dashboard />);
 
     expect(screen.getByText(/resumo da semana/i)).toBeInTheDocument();
-    expect(screen.getByTestId("weekly-indicators")).toHaveTextContent("2");
+    expect(screen.getByTestId("weekly-indicators")).toHaveTextContent("1");
     expect(screen.getByTestId("priority-list")).toHaveTextContent("1");
     expect(screen.getByTestId("course-overview")).toHaveTextContent("1");
     expect(screen.getByTestId("activity-feed")).toHaveTextContent("1");

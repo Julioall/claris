@@ -1,6 +1,6 @@
 // Mock data for development and demonstration
 import { 
-  Course, Student, PendingTask, Action, Note, 
+  Course, Student, PendingTask, Note,
   ActivityFeedItem, WeeklySummary, RiskLevel 
 } from '@/types';
 
@@ -80,7 +80,6 @@ export const mockStudents: Student[] = [
     created_at: daysAgo(90),
     updated_at: daysAgo(1),
     pending_tasks_count: 4,
-    last_action_date: daysAgo(3),
   },
   {
     id: 'student-2',
@@ -94,7 +93,6 @@ export const mockStudents: Student[] = [
     created_at: daysAgo(90),
     updated_at: daysAgo(2),
     pending_tasks_count: 2,
-    last_action_date: daysAgo(5),
   },
   {
     id: 'student-3',
@@ -108,7 +106,6 @@ export const mockStudents: Student[] = [
     created_at: daysAgo(90),
     updated_at: daysAgo(2),
     pending_tasks_count: 1,
-    last_action_date: daysAgo(7),
   },
   {
     id: 'student-4',
@@ -122,7 +119,6 @@ export const mockStudents: Student[] = [
     created_at: daysAgo(90),
     updated_at: daysAgo(1),
     pending_tasks_count: 0,
-    last_action_date: daysAgo(14),
   },
   {
     id: 'student-5',
@@ -136,7 +132,6 @@ export const mockStudents: Student[] = [
     created_at: daysAgo(60),
     updated_at: daysAgo(1),
     pending_tasks_count: 3,
-    last_action_date: daysAgo(2),
   },
   {
     id: 'student-6',
@@ -150,7 +145,6 @@ export const mockStudents: Student[] = [
     created_at: daysAgo(60),
     updated_at: daysAgo(0),
     pending_tasks_count: 5,
-    last_action_date: daysAgo(1),
   },
 ];
 
@@ -228,62 +222,6 @@ export const mockPendingTasks: PendingTask[] = [
   },
 ];
 
-// Mock Actions
-export const mockActions: Action[] = [
-  {
-    id: 'action-1',
-    student_id: 'student-1',
-    course_id: 'course-1',
-    user_id: 'mock-user-id',
-    action_type: 'contato',
-    description: 'Enviado e-mail de alerta sobre atividades pendentes',
-    status: 'concluida',
-    completed_at: daysAgo(3),
-    created_at: daysAgo(3),
-    updated_at: daysAgo(3),
-    student: mockStudents[0],
-  },
-  {
-    id: 'action-2',
-    student_id: 'student-1',
-    course_id: 'course-1',
-    user_id: 'mock-user-id',
-    action_type: 'contato',
-    description: 'Ligar para o aluno para verificar situação',
-    status: 'planejada',
-    scheduled_date: daysFromNow(1),
-    created_at: daysAgo(1),
-    updated_at: daysAgo(0),
-    student: mockStudents[0],
-  },
-  {
-    id: 'action-3',
-    student_id: 'student-6',
-    course_id: 'course-2',
-    user_id: 'mock-user-id',
-    action_type: 'orientacao',
-    description: 'Reunião de orientação pedagógica agendada',
-    status: 'planejada',
-    scheduled_date: daysFromNow(2),
-    created_at: daysAgo(1),
-    updated_at: daysAgo(0),
-    student: mockStudents[5],
-  },
-  {
-    id: 'action-4',
-    student_id: 'student-2',
-    course_id: 'course-1',
-    user_id: 'mock-user-id',
-    action_type: 'cobranca',
-    description: 'Enviada mensagem via WhatsApp sobre recuperação',
-    status: 'concluida',
-    completed_at: daysAgo(5),
-    created_at: daysAgo(5),
-    updated_at: daysAgo(5),
-    student: mockStudents[1],
-  },
-];
-
 // Mock Activity Feed
 export const mockActivityFeed: ActivityFeedItem[] = [
   {
@@ -301,9 +239,9 @@ export const mockActivityFeed: ActivityFeedItem[] = [
     user_id: 'mock-user-id',
     student_id: 'student-1',
     course_id: 'course-1',
-    event_type: 'action_completed',
-    title: 'Ação concluída',
-    description: 'E-mail de alerta enviado para João Pedro Santos',
+    event_type: 'task_created',
+    title: 'Pendência criada',
+    description: 'Nova pendência registrada para João Pedro Santos',
     created_at: daysAgo(3),
     student: mockStudents[0],
   },
@@ -331,18 +269,10 @@ export const mockActivityFeed: ActivityFeedItem[] = [
 
 // Weekly summary computed from mock data
 export const mockWeeklySummary: WeeklySummary = {
-  completed_actions: 2,
-  pending_actions: 2,
-  overdue_actions: 0,
   pending_tasks: mockPendingTasks.filter(t => t.status !== 'resolvida').length,
+  overdue_tasks: mockPendingTasks.filter(t => Boolean(t.due_date) && new Date(t.due_date as string) < new Date() && t.status !== 'resolvida').length,
   students_at_risk: mockStudents.filter(s => ['risco', 'critico'].includes(s.current_risk_level)).length,
   new_at_risk_this_week: 1,
-  students_without_contact: mockStudents.filter(s => {
-    const lastAction = s.last_action_date;
-    if (!lastAction) return true;
-    const daysSinceAction = Math.floor((Date.now() - new Date(lastAction).getTime()) / (1000 * 60 * 60 * 24));
-    return daysSinceAction > 7;
-  }).length,
 };
 
 // Helper function to get risk level label
@@ -368,7 +298,3 @@ export const getTasksByStudent = (studentId: string): PendingTask[] => {
   return mockPendingTasks.filter(t => t.student_id === studentId);
 };
 
-// Helper to get actions by student
-export const getActionsByStudent = (studentId: string): Action[] => {
-  return mockActions.filter(a => a.student_id === studentId);
-};

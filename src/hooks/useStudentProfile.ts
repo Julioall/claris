@@ -31,20 +31,6 @@ interface PendingTask {
   updated_at: string | null;
 }
 
-interface Action {
-  id: string;
-  student_id: string;
-  course_id: string | null;
-  user_id: string;
-  action_type: 'contato' | 'orientacao' | 'cobranca' | 'suporte_tecnico' | 'reuniao' | 'outro';
-  description: string;
-  status: 'planejada' | 'concluida';
-  scheduled_date: string | null;
-  completed_at: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
 interface Note {
   id: string;
   student_id: string;
@@ -58,12 +44,9 @@ interface Note {
 interface StudentProfileData {
   student: StudentProfile | null;
   pendingTasks: PendingTask[];
-  actions: Action[];
   notes: Note[];
   stats: {
     pendingTasksCount: number;
-    actionsCount: number;
-    lastActionDate: string | null;
   };
 }
 
@@ -72,12 +55,9 @@ export function useStudentProfile(studentId: string | undefined) {
   const [data, setData] = useState<StudentProfileData>({
     student: null,
     pendingTasks: [],
-    actions: [],
     notes: [],
     stats: {
       pendingTasksCount: 0,
-      actionsCount: 0,
-      lastActionDate: null,
     },
   });
   const [isLoading, setIsLoading] = useState(true);
@@ -119,15 +99,6 @@ export function useStudentProfile(studentId: string | undefined) {
 
       if (tasksError) throw tasksError;
 
-      // Fetch actions
-      const { data: actions, error: actionsError } = await supabase
-        .from('actions')
-        .select('*')
-        .eq('student_id', studentId)
-        .order('created_at', { ascending: false });
-
-      if (actionsError) throw actionsError;
-
       // Fetch notes
       const { data: notes, error: notesError } = await supabase
         .from('notes')
@@ -139,22 +110,15 @@ export function useStudentProfile(studentId: string | undefined) {
 
       // Calculate stats
       const openTasksCount = (pendingTasks || []).filter(t => t.status !== 'resolvida').length;
-      const lastAction = actions && actions.length > 0 
-        ? actions[0].completed_at || actions[0].created_at 
-        : null;
-
       setData({
         student: {
           ...student,
           current_risk_level: student.current_risk_level as RiskLevel,
         } as StudentProfile,
         pendingTasks: (pendingTasks || []) as PendingTask[],
-        actions: (actions || []) as Action[],
         notes: (notes || []) as Note[],
         stats: {
           pendingTasksCount: openTasksCount,
-          actionsCount: actions?.length || 0,
-          lastActionDate: lastAction,
         },
       });
     } catch (err) {

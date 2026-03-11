@@ -66,10 +66,6 @@ vi.mock("@/pages/PendingTasks", () => ({
   default: () => <div>PendingTasks Page</div>,
 }));
 
-vi.mock("@/pages/Actions", () => ({
-  default: () => <div>Actions Page</div>,
-}));
-
 vi.mock("@/pages/Messages", () => ({
   default: () => <div>Messages Page</div>,
 }));
@@ -156,6 +152,18 @@ describe("App routing", () => {
 
     expect(screen.getByText("Reports Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
+  });
+
+  it("redirects legacy actions route to pending tasks", () => {
+    setPath("/acoes");
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(<App />);
+
+    expect(screen.getByText("PendingTasks Page")).toBeInTheDocument();
   });
 
   it("renders not found page for unknown route", () => {

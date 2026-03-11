@@ -1,10 +1,7 @@
-import { 
-  CheckCircle2, 
-  Clock, 
-  AlertTriangle, 
-  Users, 
-  UserX,
-  ClipboardList
+import {
+  AlertTriangle,
+  ClipboardList,
+  Clock,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { WeeklySummary } from '@/types';
@@ -19,25 +16,18 @@ export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
       <h2 className="text-lg font-semibold">Indicadores da Semana</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatCard
-          title="Ações Concluídas"
-          value={summary.completed_actions}
-          subtitle="esta semana"
-          icon={CheckCircle2}
-          variant="success"
-        />
-        <StatCard
-          title="Ações Pendentes"
-          value={summary.pending_actions}
-          subtitle={summary.overdue_actions > 0 ? `${summary.overdue_actions} atrasadas` : undefined}
-          icon={Clock}
-          variant={summary.overdue_actions > 0 ? 'warning' : 'default'}
-        />
-        <StatCard
-          title="Pendências Abertas"
+          title="Pendencias Abertas"
           value={summary.pending_tasks}
           subtitle="a resolver"
           icon={ClipboardList}
           variant={summary.pending_tasks > 5 ? 'warning' : 'default'}
+        />
+        <StatCard
+          title="Pendencias Atrasadas"
+          value={summary.overdue_tasks}
+          subtitle={summary.overdue_tasks > 0 ? 'exigem atencao' : undefined}
+          icon={Clock}
+          variant={summary.overdue_tasks > 0 ? 'warning' : 'default'}
         />
         <StatCard
           title="Alunos em Risco"
@@ -47,16 +37,16 @@ export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
           trend={summary.new_at_risk_this_week > 0 ? {
             value: summary.new_at_risk_this_week,
             label: 'esta semana',
-            positive: false
+            positive: false,
           } : undefined}
           variant="danger"
         />
         <StatCard
-          title="Sem Contato Recente"
-          value={summary.students_without_contact}
-          subtitle="há mais de 7 dias"
-          icon={UserX}
-          variant={summary.students_without_contact > 0 ? 'warning' : 'default'}
+          title="Novos em Risco"
+          value={summary.new_at_risk_this_week}
+          subtitle="na semana selecionada"
+          icon={AlertTriangle}
+          variant={summary.new_at_risk_this_week > 0 ? 'warning' : 'default'}
         />
       </div>
     </div>

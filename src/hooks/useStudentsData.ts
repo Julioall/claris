@@ -5,9 +5,10 @@ import { Student, RiskLevel } from '@/types';
 
 interface StudentWithStats extends Student {
   pending_tasks_count: number;
-  last_action_date?: string;
   enrollment_status?: string;
 }
+
+type StudentCourseStudent = Student;
 
 export function useStudentsData(courseId?: string) {
   const { user } = useAuth();
@@ -68,17 +69,19 @@ export function useStudentsData(courseId?: string) {
 
       // Deduplicate students (same student can be in multiple courses)
       // Status final por precedência em UCs válidas: suspenso > concluido > ativo > inativo
-      const uniqueStudentsMap = new Map<string, { student: any; validStatuses: Set<string>; allStatuses: Set<string> }>();
+      const uniqueStudentsMap = new Map<string, { student: StudentCourseStudent; validStatuses: Set<string>; allStatuses: Set<string> }>();
       studentCourses.forEach(sc => {
-        if (sc.students) {
-          const studentId = (sc.students as any).id;
+        const relatedStudent = sc.students as StudentCourseStudent | null;
+
+        if (relatedStudent) {
+          const studentId = relatedStudent.id;
           const startDate = (sc.courses as { start_date?: string | null } | null)?.start_date;
           const isValidCourse = !startDate || new Date(startDate) <= now;
           const status = (sc.enrollment_status || 'ativo').toLowerCase();
 
           if (!uniqueStudentsMap.has(studentId)) {
             uniqueStudentsMap.set(studentId, { 
-              student: sc.students, 
+              student: relatedStudent,
               validStatuses: isValidCourse ? new Set([status]) : new Set<string>(),
               allStatuses: new Set([status]),
             });
@@ -125,20 +128,10 @@ export function useStudentsData(courseId?: string) {
             console.warn('Error counting pending tasks for student:', student.id, pendingTasksError);
           }
 
-          // Get last action date
-          const { data: lastAction } = await supabase
-            .from('actions')
-            .select('completed_at, created_at')
-            .eq('student_id', student.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-
           return {
             ...student,
             current_risk_level: student.current_risk_level as RiskLevel,
             pending_tasks_count: pendingTasksCount || 0,
-            last_action_date: lastAction?.completed_at || lastAction?.created_at,
             enrollment_status: enrollment_status || 'ativo',
           } as StudentWithStats;
         })

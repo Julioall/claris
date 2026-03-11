@@ -22,12 +22,12 @@ describe("ui/command", () => {
         <CommandInput placeholder="Buscar comando" />
         <CommandList>
           <CommandEmpty>Nada encontrado</CommandEmpty>
-          <CommandGroup heading="Ações">
+          <CommandGroup heading="Comandos">
             <CommandItem>Sincronizar</CommandItem>
             <CommandSeparator />
             <CommandItem>
-              Configurações
-              <CommandShortcut>⌘K</CommandShortcut>
+              Configuracoes
+              <CommandShortcut>Ctrl+K</CommandShortcut>
             </CommandItem>
           </CommandGroup>
         </CommandList>
@@ -38,8 +38,8 @@ describe("ui/command", () => {
     expect(input).toBeInTheDocument();
 
     expect(screen.getByText("Sincronizar")).toBeInTheDocument();
-    expect(screen.getByText("Configurações")).toBeInTheDocument();
-    expect(screen.getByText("⌘K")).toBeInTheDocument();
+    expect(screen.getByText("Configuracoes")).toBeInTheDocument();
+    expect(screen.getByText("Ctrl+K")).toBeInTheDocument();
 
     await user.type(input, "zzzz");
     expect((input as HTMLInputElement).value).toBe("zzzz");
@@ -51,12 +51,12 @@ describe("ui/command", () => {
       <CommandDialog open>
         <CommandInput placeholder="Pesquisar" />
         <CommandList>
-          <CommandItem>Item do diálogo</CommandItem>
+          <CommandItem>Item do dialogo</CommandItem>
         </CommandList>
       </CommandDialog>,
     );
 
     expect(screen.getByPlaceholderText(/pesquisar/i)).toBeInTheDocument();
-    expect(screen.getByText(/item do diálogo/i)).toBeInTheDocument();
+    expect(screen.getByText(/item do dialogo/i)).toBeInTheDocument();
   });
 });

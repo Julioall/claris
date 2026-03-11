@@ -2,7 +2,6 @@ import {
   LayoutDashboard, 
   Users, 
   ClipboardList, 
-  CheckSquare,
   FileSpreadsheet,
   Settings,
   LogOut,
@@ -34,7 +33,6 @@ const mainNavItems = [
   { title: 'Escolas', url: '/escolas', icon: Building2 },
   { title: 'Alunos', url: '/alunos', icon: Users },
   { title: 'Pendências', url: '/pendencias', icon: ClipboardList },
-  { title: 'Ações', url: '/acoes', icon: CheckSquare },
   { title: 'Mensagens', url: '/mensagens', icon: MessageSquare },
   { title: 'Relatórios', url: '/relatorios', icon: FileSpreadsheet },
 ];

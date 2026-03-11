@@ -13,10 +13,6 @@ const tasksSelectMock = vi.fn();
 const tasksEqMock = vi.fn();
 const tasksOrderMock = vi.fn();
 
-const actionsSelectMock = vi.fn();
-const actionsEqMock = vi.fn();
-const actionsOrderMock = vi.fn();
-
 const notesSelectMock = vi.fn();
 const notesEqMock = vi.fn();
 const notesOrderMock = vi.fn();
@@ -41,10 +37,6 @@ function setupFromMock() {
 
     if (table === "pending_tasks") {
       return { select: tasksSelectMock };
-    }
-
-    if (table === "actions") {
-      return { select: actionsSelectMock };
     }
 
     if (table === "notes") {
@@ -116,27 +108,6 @@ describe("useStudentProfile", () => {
       error: null,
     });
 
-    actionsSelectMock.mockReturnValue({ eq: actionsEqMock });
-    actionsEqMock.mockReturnValue({ order: actionsOrderMock });
-    actionsOrderMock.mockResolvedValue({
-      data: [
-        {
-          id: "a-1",
-          student_id: "s-1",
-          course_id: "c-1",
-          user_id: "user-1",
-          action_type: "contato",
-          description: "Contato realizado",
-          status: "concluida",
-          scheduled_date: null,
-          completed_at: "2026-02-21T00:00:00.000Z",
-          created_at: "2026-02-20T00:00:00.000Z",
-          updated_at: "2026-02-20T00:00:00.000Z",
-        },
-      ],
-      error: null,
-    });
-
     notesSelectMock.mockReturnValue({ eq: notesEqMock });
     notesEqMock.mockReturnValue({ order: notesOrderMock });
     notesOrderMock.mockResolvedValue({
@@ -159,7 +130,7 @@ describe("useStudentProfile", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("loads student profile with tasks, actions and notes", async () => {
+  it("loads student profile with tasks and notes", async () => {
     const { result } = renderHook(() => useStudentProfile("s-1"));
 
     await waitFor(() => {
@@ -172,12 +143,9 @@ describe("useStudentProfile", () => {
       current_risk_level: "risco",
     });
     expect(result.current.pendingTasks).toHaveLength(2);
-    expect(result.current.actions).toHaveLength(1);
     expect(result.current.notes).toHaveLength(1);
     expect(result.current.stats).toEqual({
       pendingTasksCount: 1,
-      actionsCount: 1,
-      lastActionDate: "2026-02-21T00:00:00.000Z",
     });
   });
 
@@ -214,22 +182,22 @@ describe("useStudentProfile", () => {
     const { result } = renderHook(() => useStudentProfile("unknown"));
 
     await waitFor(() => {
-      expect(result.current.error).toContain("não encontrado");
+      expect(result.current.error?.toLowerCase()).toMatch(/n.o encontrado/);
     });
 
     expect(result.current.student).toBeNull();
   });
 
   it("handles fetch errors from related resources", async () => {
-    actionsOrderMock.mockResolvedValueOnce({
+    notesOrderMock.mockResolvedValueOnce({
       data: null,
-      error: new Error("actions failed"),
+      error: new Error("notes failed"),
     });
 
     const { result } = renderHook(() => useStudentProfile("s-1"));
 
     await waitFor(() => {
-      expect(result.current.error).toContain("actions failed");
+      expect(result.current.error).toContain("notes failed");
     });
   });
 

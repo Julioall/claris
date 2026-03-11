@@ -6,7 +6,6 @@ import Students from "@/pages/Students";
 const useStudentsDataMock = vi.fn();
 const useCoursesDataMock = vi.fn();
 const navigateMock = vi.fn();
-const refetchMock = vi.fn();
 
 vi.mock("@/hooks/useStudentsData", () => ({
   useStudentsData: (...args: unknown[]) => useStudentsDataMock(...args),
@@ -29,7 +28,6 @@ vi.mock("react-router-dom", async () => {
 describe("Students page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    refetchMock.mockResolvedValue(undefined);
 
     useStudentsDataMock.mockReturnValue({
       students: [
@@ -41,12 +39,10 @@ describe("Students page", () => {
           enrollment_status: "ativo",
           pending_tasks_count: 2,
           last_access: "2026-02-20T00:00:00.000Z",
-          last_action_date: "2026-02-19T00:00:00.000Z",
         },
       ],
       isLoading: false,
       error: null,
-      refetch: refetchMock,
     });
 
     useCoursesDataMock.mockReturnValue({
@@ -59,7 +55,6 @@ describe("Students page", () => {
       students: [],
       isLoading: true,
       error: null,
-      refetch: refetchMock,
     });
 
     const { container } = render(<Students />);
@@ -87,7 +82,6 @@ describe("Students page", () => {
           enrollment_status: "ativo",
           pending_tasks_count: 2,
           last_access: "2026-02-20T00:00:00.000Z",
-          last_action_date: "2026-02-19T00:00:00.000Z",
         },
         {
           id: "s-2",
@@ -97,12 +91,10 @@ describe("Students page", () => {
           enrollment_status: "suspenso",
           pending_tasks_count: 0,
           last_access: "2026-02-18T00:00:00.000Z",
-          last_action_date: "2026-02-17T00:00:00.000Z",
         },
       ],
       isLoading: false,
       error: null,
-      refetch: refetchMock,
     });
     render(<Students />);
 

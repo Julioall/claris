@@ -57,7 +57,6 @@ export interface Student {
   // Computed fields for UI
   courses?: Course[];
   pending_tasks_count?: number;
-  last_action_date?: string;
 }
 
 export interface PendingTask {
@@ -84,24 +83,6 @@ export interface PendingTask {
   student?: Student;
   course?: Course;
   actions?: TaskAction[];
-}
-
-export interface Action {
-  id: string;
-  student_id: string;
-  course_id?: string;
-  user_id: string;
-  action_type: ActionType;
-  description: string;
-  status: ActionStatus;
-  scheduled_date?: string;
-  completed_at?: string;
-  created_at: string;
-  updated_at: string;
-  // Relations
-  student?: Student;
-  course?: Course;
-  user?: User;
 }
 
 export interface Note {
@@ -203,13 +184,10 @@ export interface TaskActionHistory {
 
 // UI-specific types
 export interface WeeklySummary {
-  completed_actions: number;
-  pending_actions: number;
-  overdue_actions: number;
   pending_tasks: number;
+  overdue_tasks: number;
   students_at_risk: number;
   new_at_risk_this_week: number;
-  students_without_contact: number;
 }
 
 export interface PriorityItem {

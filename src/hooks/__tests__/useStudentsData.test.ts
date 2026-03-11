@@ -13,10 +13,6 @@ const studentCoursesSelectMock = vi.fn();
 const studentCoursesInMock = vi.fn();
 
 const pendingTasksSelectMock = vi.fn();
-const pendingTasksEqMock = vi.fn();
-
-const actionsSelectMock = vi.fn();
-const actionsEqMock = vi.fn();
 
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -37,12 +33,6 @@ const pendingCountByStudent: Record<string, number> = {
   "s-3": 0,
 };
 
-const lastActionByStudent: Record<string, { completed_at?: string; created_at?: string } | null> = {
-  "s-1": { completed_at: "2026-02-20T10:00:00.000Z", created_at: "2026-02-19T10:00:00.000Z" },
-  "s-2": { completed_at: null, created_at: "2026-02-18T10:00:00.000Z" },
-  "s-3": null,
-};
-
 function setupFromMock() {
   fromMock.mockImplementation((table: string) => {
     if (table === "user_courses") {
@@ -60,12 +50,6 @@ function setupFromMock() {
     if (table === "pending_tasks") {
       return {
         select: pendingTasksSelectMock,
-      };
-    }
-
-    if (table === "actions") {
-      return {
-        select: actionsSelectMock,
       };
     }
 
@@ -168,24 +152,6 @@ describe("useStudentsData", () => {
         };
       },
     });
-
-    actionsSelectMock.mockReturnValue({
-      eq: (column: string, value: string) => {
-        if (column !== "student_id") {
-          throw new Error(`Unexpected column on actions.eq: ${column}`);
-        }
-        return {
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockReturnValue({
-              maybeSingle: vi.fn().mockResolvedValue({
-                data: lastActionByStudent[value],
-                error: null,
-              }),
-            }),
-          }),
-        };
-      },
-    });
   });
 
   afterAll(() => {
@@ -208,21 +174,18 @@ describe("useStudentsData", () => {
       current_risk_level: "critico",
       enrollment_status: "suspenso",
       pending_tasks_count: 5,
-      last_action_date: "2026-02-18T10:00:00.000Z",
     });
     expect(result.current.students[1]).toMatchObject({
       id: "s-1",
       current_risk_level: "atencao",
       enrollment_status: "suspenso",
       pending_tasks_count: 2,
-      last_action_date: "2026-02-20T10:00:00.000Z",
     });
     expect(result.current.students[2]).toMatchObject({
       id: "s-3",
       current_risk_level: "normal",
       enrollment_status: "concluido",
       pending_tasks_count: 0,
-      last_action_date: undefined,
     });
   });
 

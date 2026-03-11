@@ -1,5 +1,5 @@
 import { useState } from 'react';
- import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link } from 'react-router-dom';
 import { 
   ArrowLeft,
   User,
@@ -24,8 +24,6 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { StudentGradesTab } from '@/components/student/StudentGradesTab';
 import { ChatWindow } from '@/components/chat/ChatWindow';
- import { NewActionDialog, PreselectedStudent } from '@/components/actions/NewActionDialog';
-import { getRiskLevelLabel } from '@/lib/mock-data';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -36,24 +34,13 @@ const riskReasonLabels: Record<string, string> = {
   nao_responde: 'Não responde contato',
 };
 
-const actionTypeLabels: Record<string, string> = {
-  contato: 'Contato',
-  orientacao: 'Orientação',
-  cobranca: 'Cobrança',
-  suporte_tecnico: 'Suporte Técnico',
-  reuniao: 'Reunião',
-  outro: 'Outro',
-};
-
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState('pendencias');
-   const [isActionDialogOpen, setIsActionDialogOpen] = useState(false);
   
   const { 
     student, 
     pendingTasks, 
-    actions, 
     notes, 
     stats, 
     isLoading, 
@@ -92,15 +79,6 @@ export default function StudentProfile() {
   }
 
   const openTasks = pendingTasks.filter(t => t.status !== 'resolvida');
-
-   const preselectedStudent: PreselectedStudent | null = student ? {
-     id: student.id,
-     full_name: student.full_name,
-   } : null;
- 
-   const handleOpenActionDialog = () => {
-     setIsActionDialogOpen(true);
-   };
  
   return (
     <div className="space-y-6 animate-fade-in">
@@ -137,15 +115,11 @@ export default function StudentProfile() {
             <Edit className="h-4 w-4 mr-2" />
             Editar risco
           </Button>
-           <Button size="sm" onClick={handleOpenActionDialog}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nova ação
-          </Button>
         </div>
       </div>
 
       {/* Quick stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
@@ -174,33 +148,6 @@ export default function StudentProfile() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-status-pending-bg flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5 text-status-pending" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Ações</p>
-                <p className="font-medium">{stats.actionsCount} registradas</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-status-success-bg flex items-center justify-center">
-                <MessageSquare className="h-5 w-5 text-status-success" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Última ação</p>
-                <p className="font-medium">{stats.lastActionDate ? formatTime(stats.lastActionDate) : 'Nunca'}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Risk reasons */}
@@ -235,10 +182,6 @@ export default function StudentProfile() {
                 {openTasks.length}
               </Badge>
             )}
-          </TabsTrigger>
-          <TabsTrigger value="acoes" className="gap-2">
-            <CheckCircle2 className="h-4 w-4" />
-            Ações
           </TabsTrigger>
           <TabsTrigger value="notas" className="gap-2">
             <GraduationCap className="h-4 w-4" />
@@ -317,47 +260,6 @@ export default function StudentProfile() {
           )}
         </TabsContent>
 
-        {/* Ações */}
-        <TabsContent value="acoes" className="mt-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="font-medium">Ações Realizadas</h3>
-             <Button size="sm" variant="outline" onClick={handleOpenActionDialog}>
-              <Plus className="h-4 w-4 mr-2" />
-              Registrar ação
-            </Button>
-          </div>
-          
-          {actions.length > 0 ? (
-            <div className="space-y-2">
-              {actions.map(action => (
-                <Card key={action.id} className="card-interactive">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="capitalize">
-                            {actionTypeLabels[action.action_type] || action.action_type}
-                          </Badge>
-                          <StatusBadge status={action.status} size="sm" />
-                        </div>
-                        <p className="text-sm mt-2">{action.description}</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {action.created_at && formatTime(action.created_at)}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>Nenhuma ação registrada</p>
-            </div>
-          )}
-        </TabsContent>
-
         {/* Notas (Grades) */}
         <TabsContent value="notas" className="mt-4">
           {id && <StudentGradesTab studentId={id} />}
@@ -419,17 +321,6 @@ export default function StudentProfile() {
           )}
         </TabsContent>
       </Tabs>
-
-       {/* New Action Dialog with preselected student */}
-       <NewActionDialog
-         open={isActionDialogOpen}
-         onOpenChange={setIsActionDialogOpen}
-         preselectedStudent={preselectedStudent}
-         onSuccess={() => {
-           // Optionally refetch data or navigate
-           window.location.reload();
-         }}
-       />
     </div>
   );
 }

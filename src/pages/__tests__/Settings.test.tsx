@@ -5,12 +5,13 @@ import Settings from "@/pages/Settings";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
+const toastMock = vi.fn();
+const logoutMock = vi.fn();
+
 const selectMock = vi.fn();
 const eqMock = vi.fn();
 const maybeSingleMock = vi.fn();
 const upsertMock = vi.fn();
-const toastMock = vi.fn();
-const logoutMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
@@ -32,10 +33,6 @@ vi.mock("@/components/settings/DataCleanupCard", () => ({
 
 vi.mock("@/components/settings/GradeDebugCard", () => ({
   GradeDebugCard: () => <div data-testid="grade-debug-card" />,
-}));
-
-vi.mock("@/components/settings/ActionTypesCard", () => ({
-  ActionTypesCard: () => <div data-testid="action-types-card" />,
 }));
 
 describe("Settings page", () => {
@@ -73,7 +70,7 @@ describe("Settings page", () => {
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
     expect(screen.getByTestId("data-cleanup-card")).toBeInTheDocument();
     expect(screen.getByTestId("grade-debug-card")).toBeInTheDocument();
-    expect(screen.getByTestId("action-types-card")).toBeInTheDocument();
+    expect(screen.queryByTestId("action-types-card")).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(fromMock).toHaveBeenCalledWith("user_sync_preferences");

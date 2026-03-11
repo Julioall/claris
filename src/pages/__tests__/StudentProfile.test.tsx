@@ -30,12 +30,6 @@ vi.mock("@/components/chat/ChatWindow", () => ({
   ),
 }));
 
-vi.mock("@/components/actions/NewActionDialog", () => ({
-  NewActionDialog: ({ open }: { open: boolean }) => (
-    <div data-testid="new-student-action-dialog">open:{String(open)}</div>
-  ),
-}));
-
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/alunos/s-1"]}>
@@ -68,29 +62,18 @@ describe("StudentProfile page", () => {
           task_type: "manual",
           priority: "alta",
           due_date: "2099-01-01T00:00:00.000Z",
-          description: "Descrição",
-        },
-      ],
-      actions: [
-        {
-          id: "a-1",
-          action_type: "contato",
-          status: "planejada",
-          description: "Ação de contato",
-          created_at: "2026-02-20T00:00:00.000Z",
+          description: "Descricao",
         },
       ],
       notes: [
         {
           id: "n-1",
-          content: "Observação importante",
+          content: "Observacao importante",
           created_at: "2026-02-20T00:00:00.000Z",
         },
       ],
       stats: {
         pendingTasksCount: 1,
-        actionsCount: 1,
-        lastActionDate: "2026-02-20T00:00:00.000Z",
       },
       isLoading: false,
       error: null,
@@ -101,9 +84,8 @@ describe("StudentProfile page", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
       pendingTasks: [],
-      actions: [],
       notes: [],
-      stats: { pendingTasksCount: 0, actionsCount: 0, lastActionDate: null },
+      stats: { pendingTasksCount: 0 },
       isLoading: true,
       error: null,
     });
@@ -116,9 +98,8 @@ describe("StudentProfile page", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
       pendingTasks: [],
-      actions: [],
       notes: [],
-      stats: { pendingTasksCount: 0, actionsCount: 0, lastActionDate: null },
+      stats: { pendingTasksCount: 0 },
       isLoading: false,
       error: "Erro ao carregar aluno",
     });
@@ -127,22 +108,18 @@ describe("StudentProfile page", () => {
     expect(screen.getByText(/erro ao carregar aluno/i)).toBeInTheDocument();
   });
 
-  it("renders profile data and opens new action dialog", async () => {
-    const user = userEvent.setup();
+  it("renders profile data without the old actions flow", () => {
     renderPage();
 
     expect(screen.getByText("Ana Silva")).toBeInTheDocument();
     expect(screen.getByText(/motivos do risco/i)).toBeInTheDocument();
     expect(screen.getByText(/pendencia 1/i)).toBeInTheDocument();
-    expect(screen.getByTestId("new-student-action-dialog")).toHaveTextContent(
-      "open:false",
-    );
-
-    await user.click(screen.getByRole("button", { name: /nova a/i }));
-
-    expect(screen.getByTestId("new-student-action-dialog")).toHaveTextContent(
-      "open:true",
-    );
+    expect(screen.queryByRole("button", { name: /nova a/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", {
+        name: (name) => name.trim().toLowerCase() === "acoes",
+      }),
+    ).not.toBeInTheDocument();
   });
 
   it("renders chat tab with student moodle id", async () => {

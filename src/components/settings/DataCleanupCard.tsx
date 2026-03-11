@@ -77,17 +77,11 @@ const cleanupOptions: CleanupOption[] = [
     description: 'Remove todos os alunos',
     category: 'students',
   },
-  // Tarefas e ações
+  // Tarefas e anotações
   {
     id: 'notes',
     label: 'Anotações',
     description: 'Remove todas as anotações sobre alunos',
-    category: 'tasks',
-  },
-  {
-    id: 'actions',
-    label: 'Ações de tutoria',
-    description: 'Remove todas as ações e acompanhamentos',
     category: 'tasks',
   },
   {
@@ -209,7 +203,7 @@ export function DataCleanupCard() {
     preferences: 'Preferências do Usuário',
     courses: 'Registros de Cursos',
     students: 'Dados de Alunos',
-    tasks: 'Tarefas e Ações',
+    tasks: 'Tarefas e Anotações',
     history: 'Histórico',
   };
 
@@ -243,7 +237,6 @@ export function DataCleanupCard() {
       // Delete in dependency order: no references → with references
       const deleteOrder = [
         'notes',
-        'actions', 
         'pending_tasks',
         'risk_history',
         'activity_feed',
@@ -264,7 +257,7 @@ export function DataCleanupCard() {
       });
 
       let deletedCount = 0;
-      let errors: string[] = [];
+      const errors: string[] = [];
 
       for (const optionId of sortedOptions) {
         const option = cleanupOptions.find(o => o.id === optionId);
@@ -504,7 +497,7 @@ export function DataCleanupCard() {
               <ul className="list-disc list-inside space-y-1 text-sm">
                 <li>Todos os cursos, alunos e matrículas</li>
                 <li>Todas as atividades, notas e pendências</li>
-                <li>Todas as ações, anotações e mensagens</li>
+                <li>Todas as anotações e mensagens</li>
                 <li>Todo o histórico de risco e feed de atividades</li>
                 <li>Todas as preferências e modelos</li>
               </ul>
