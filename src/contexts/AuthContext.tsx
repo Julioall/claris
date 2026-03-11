@@ -787,7 +787,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error || data?.error) {
           updateStep('courses', {
             status: 'error',
-            errorMessage: error?.message || data?.error || 'Falha ao sincronizar cursos',
+            errorMessage: error?.message || (data as any)?.error || 'Falha ao sincronizar cursos',
           });
         } else {
           const allSyncedCourses: Course[] = data?.courses || [];
