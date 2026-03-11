@@ -64,7 +64,7 @@ interface TemplateOption {
   title: string;
   content: string;
   category: string | null;
-  is_default: boolean;
+  is_favorite: boolean | null;
 }
 
 interface BulkJob {
