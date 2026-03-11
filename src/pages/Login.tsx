@@ -120,6 +120,9 @@ export default function Login() {
                       onChange={(e) => setMoodleUrl(e.target.value)}
                       className="bg-background"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      A URL precisa estar acessivel pelo Supabase. Enderecos internos, hosts locais ou sem DNS publico podem falhar no login.
+                    </p>
                   </div>
 
                   <div className="space-y-2">

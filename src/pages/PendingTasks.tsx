@@ -1,26 +1,27 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { 
-  ClipboardList, 
-  Search, 
-  Filter,
-  Plus,
+import {
+  ArrowRight,
+  CalendarDays,
+  CheckCheck,
   CheckCircle2,
+  ClipboardList,
   Clock,
   ExternalLink,
-  Loader2,
-  Trash2,
-  Zap,
-  ListChecks,
-  CalendarDays,
+  Filter,
   List,
-  BookTemplate,
-  CheckCheck,
-  Users,
+  Loader2,
+  Plus,
+  RotateCcw,
+  Search,
+  SquareKanban,
+  Trash2,
 } from 'lucide-react';
+import { format, isPast, isToday } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -42,218 +43,226 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { PriorityBadge } from '@/components/ui/PriorityBadge';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { usePendingTasksData } from '@/hooks/usePendingTasksData';
 import { NewPendingTaskDialog } from '@/components/pending-tasks/NewPendingTaskDialog';
-import { GenerateAutomatedTasksDialog } from '@/components/pending-tasks/GenerateAutomatedTasksDialog';
-import { AddTaskActionDialog } from '@/components/pending-tasks/AddTaskActionDialog';
 import { TaskCalendarView } from '@/components/pending-tasks/TaskCalendarView';
-import { TaskTemplatesDialog } from '@/components/pending-tasks/TaskTemplatesDialog';
-import { BatchGenerateDialog } from '@/components/pending-tasks/BatchGenerateDialog';
-import { format, isPast, isToday } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { TaskKanbanView } from '@/components/pending-tasks/TaskKanbanView';
+import { TaskStatus } from '@/types';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+
+type ViewMode = 'list' | 'calendar' | 'kanban';
+
+const statusCopy: Record<TaskStatus, { title: string; success: string; error: string }> = {
+  aberta: {
+    title: 'A fazer',
+    success: 'Tarefa reaberta.',
+    error: 'Nao foi possivel reabrir a tarefa.',
+  },
+  em_andamento: {
+    title: 'Em andamento',
+    success: 'Tarefa movida para em andamento.',
+    error: 'Nao foi possivel iniciar a tarefa.',
+  },
+  resolvida: {
+    title: 'Concluida',
+    success: 'Tarefa concluida.',
+    error: 'Nao foi possivel concluir a tarefa.',
+  },
+};
+
+function formatDueDate(date?: string) {
+  if (!date) return null;
+
+  const parsedDate = new Date(date);
+  if (isToday(parsedDate)) return 'Hoje';
+
+  return format(parsedDate, "dd 'de' MMM", { locale: ptBR });
+}
+
+function isTaskOverdue(date: string | undefined, status: TaskStatus) {
+  if (!date || status === 'resolvida') return false;
+  return isPast(new Date(date));
+}
+
+function stripHtml(value?: string) {
+  return value?.replace(/<[^>]*>/g, '') ?? '';
+}
 
 export default function PendingTasks() {
-  const { user } = useAuth();
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isAutoDialogOpen, setIsAutoDialogOpen] = useState(false);
-  const [isTemplatesOpen, setIsTemplatesOpen] = useState(false);
-  const [isBatchOpen, setIsBatchOpen] = useState(false);
-  const [selectedTaskForAction, setSelectedTaskForAction] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
   const [isBatchClosing, setIsBatchClosing] = useState(false);
 
-  const { tasks, courses, isLoading, markAsResolved, deleteTask, refetch } = usePendingTasksData();
+  const {
+    tasks,
+    courses,
+    isLoading,
+    updateTaskStatus,
+    deleteTask,
+    refetch,
+  } = usePendingTasksData();
 
-  const filteredTasks = tasks.filter(task => {
-    const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.student?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.course?.short_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    
+  const filteredTasks = useMemo(() => tasks.filter((task) => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const matchesSearch = !normalizedQuery
+      || task.title.toLowerCase().includes(normalizedQuery)
+      || task.student?.full_name?.toLowerCase().includes(normalizedQuery)
+      || task.course?.short_name?.toLowerCase().includes(normalizedQuery);
+
     const matchesStatus = statusFilter === 'all' || task.status === statusFilter;
     const matchesCourse = courseFilter === 'all' || task.course_id === courseFilter;
-    
-    return matchesSearch && matchesStatus && matchesCourse;
-  });
 
+    return matchesSearch && matchesStatus && matchesCourse;
+  }), [courseFilter, searchQuery, statusFilter, tasks]);
+
+  const selectableTasks = filteredTasks.filter((task) => task.status !== 'resolvida');
   const toggleTaskSelection = (taskId: string) => {
-    setSelectedTaskIds(prev => {
-      const next = new Set(prev);
-      if (next.has(taskId)) next.delete(taskId);
-      else next.add(taskId);
-      return next;
+    setSelectedTaskIds((previousValue) => {
+      const nextValue = new Set(previousValue);
+      if (nextValue.has(taskId)) {
+        nextValue.delete(taskId);
+      } else {
+        nextValue.add(taskId);
+      }
+      return nextValue;
     });
   };
 
   const toggleSelectAll = () => {
-    if (selectedTaskIds.size === filteredTasks.filter(t => t.status !== 'resolvida').length) {
+    if (selectedTaskIds.size === selectableTasks.length) {
       setSelectedTaskIds(new Set());
-    } else {
-      setSelectedTaskIds(new Set(filteredTasks.filter(t => t.status !== 'resolvida').map(t => t.id)));
+      return;
     }
+
+    setSelectedTaskIds(new Set(selectableTasks.map((task) => task.id)));
   };
 
-  const handleBatchClose = async () => {
-    if (selectedTaskIds.size === 0) return;
-    setIsBatchClosing(true);
-    try {
-      const now = new Date().toISOString();
-      const { error } = await supabase
-        .from('pending_tasks')
-        .update({ status: 'resolvida' as any, completed_at: now })
-        .in('id', Array.from(selectedTaskIds));
+  const handleStatusChange = async (taskId: string, status: TaskStatus) => {
+    const success = await updateTaskStatus(taskId, status);
 
-      if (error) throw error;
-      toast.success(`${selectedTaskIds.size} pendências resolvidas!`);
-      setSelectedTaskIds(new Set());
-      refetch();
-    } catch (err) {
-      console.error('Error batch closing:', err);
-      toast.error('Erro ao fechar pendências em lote');
-    } finally {
-      setIsBatchClosing(false);
+    if (success) {
+      toast.success(statusCopy[status].success);
+      setSelectedTaskIds((currentValue) => {
+        if (!currentValue.has(taskId)) return currentValue;
+        const nextValue = new Set(currentValue);
+        if (status === 'resolvida') nextValue.delete(taskId);
+        return nextValue;
+      });
+      return;
     }
-  };
 
-  const getAutomationTypeBadge = (automationType?: string) => {
-    if (!automationType || automationType === 'manual') return null;
-    
-    const badges: Record<string, { label: string; variant: 'default' | 'secondary' | 'outline' }> = {
-      auto_at_risk: { label: 'Auto: Em Risco', variant: 'default' },
-      auto_missed_assignment: { label: 'Auto: Não Entregue', variant: 'secondary' },
-      auto_uncorrected_activity: { label: 'Auto: Não Corrigida', variant: 'outline' },
-      recurring: { label: 'Recorrente', variant: 'default' },
-    };
-
-    const badge = badges[automationType];
-    if (!badge) return null;
-
-    return <Badge variant={badge.variant} className="text-xs">{badge.label}</Badge>;
-  };
-
-  const formatDueDate = (date: string | undefined) => {
-    if (!date) return null;
-    const d = new Date(date);
-    if (isToday(d)) return 'Hoje';
-    return format(d, "dd 'de' MMM", { locale: ptBR });
-  };
-
-  const isOverdue = (date: string | undefined, status: string) => {
-    if (!date || status === 'resolvida') return false;
-    return isPast(new Date(date));
-  };
-
-  const handleMarkAsResolved = async (taskId: string) => {
-    const success = await markAsResolved(taskId);
-    if (success) toast.success('Pendência resolvida!');
-    else toast.error('Erro ao resolver pendência');
+    toast.error(statusCopy[status].error);
   };
 
   const handleDeleteTask = async (taskId: string) => {
     const success = await deleteTask(taskId);
-    if (success) toast.success('Pendência excluída!');
-    else toast.error('Erro ao excluir pendência');
+
+    if (success) {
+      toast.success('Tarefa excluida.');
+      setSelectedTaskIds((currentValue) => {
+        if (!currentValue.has(taskId)) return currentValue;
+        const nextValue = new Set(currentValue);
+        nextValue.delete(taskId);
+        return nextValue;
+      });
+      return;
+    }
+
+    toast.error('Nao foi possivel excluir a tarefa.');
+  };
+
+  const handleBatchClose = async () => {
+    if (selectedTaskIds.size === 0) return;
+
+    setIsBatchClosing(true);
+
+    let successCount = 0;
+    for (const taskId of selectedTaskIds) {
+      const ok = await updateTaskStatus(taskId, 'resolvida');
+      if (ok) successCount += 1;
+    }
+
+    setIsBatchClosing(false);
+    setSelectedTaskIds(new Set());
+
+    if (successCount === selectedTaskIds.size) {
+      toast.success(`${successCount} tarefa(s) concluidas.`);
+      return;
+    }
+
+    if (successCount > 0) {
+      toast.error(`${selectedTaskIds.size - successCount} tarefa(s) nao puderam ser concluidas.`);
+      return;
+    }
+
+    toast.error('Nao foi possivel concluir as tarefas selecionadas.');
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
-  const openCount = filteredTasks.filter(t => t.status !== 'resolvida').length;
-
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pendências</h1>
-          <p className="text-muted-foreground">
-            {openCount} pendência{openCount !== 1 ? 's' : ''} aberta{openCount !== 1 ? 's' : ''}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold tracking-tight">Todo list</h1>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Organize acompanhamentos manuais em lista, calendario ou kanban.
+            O fluxo automatico foi retirado desta aba para manter o foco nas tarefas reais do dia a dia.
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setIsDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nova
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="secondary">
-                <Zap className="h-4 w-4 mr-2" />
-                Automação
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setIsAutoDialogOpen(true)}>
-                <Zap className="h-4 w-4 mr-2" />
-                Gerar Automáticas
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsBatchOpen(true)}>
-                <Users className="h-4 w-4 mr-2" />
-                Gerar em Lote (Modelo)
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setIsTemplatesOpen(true)}>
-                <BookTemplate className="h-4 w-4 mr-2" />
-                Gerenciar Modelos
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <Button onClick={() => setIsDialogOpen(true)}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nova tarefa
+        </Button>
       </div>
 
-      {/* Filters */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1 max-w-md">
+        <div className="relative max-w-md flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             type="search"
-            placeholder="Buscar por título, aluno ou curso..."
+            placeholder="Buscar por titulo, aluno ou curso..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => setSearchQuery(event.target.value)}
             className="pl-9"
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[140px]">
-              <Filter className="h-4 w-4 mr-2" />
+            <SelectTrigger className="w-[160px]">
+              <Filter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="aberta">Aberta</SelectItem>
+              <SelectItem value="all">Todos os status</SelectItem>
+              <SelectItem value="aberta">A fazer</SelectItem>
               <SelectItem value="em_andamento">Em andamento</SelectItem>
-              <SelectItem value="resolvida">Resolvida</SelectItem>
+              <SelectItem value="resolvida">Concluidas</SelectItem>
             </SelectContent>
           </Select>
 
           <Select value={courseFilter} onValueChange={setCourseFilter}>
-            <SelectTrigger className="w-[160px]">
+            <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Curso" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os cursos</SelectItem>
-              {courses.map(course => (
+              {courses.map((course) => (
                 <SelectItem key={course.id} value={course.id}>
                   {course.short_name}
                 </SelectItem>
@@ -263,32 +272,26 @@ export default function PendingTasks() {
         </div>
       </div>
 
-      {/* Batch actions bar */}
-      {selectedTaskIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-muted/50 rounded-lg p-3 animate-fade-in">
+      {viewMode === 'list' && selectedTaskIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-3 rounded-lg bg-muted/50 p-3 animate-fade-in">
           <span className="text-sm font-medium">
-            {selectedTaskIds.size} selecionada{selectedTaskIds.size > 1 ? 's' : ''}
+            {selectedTaskIds.size} selecionada(s)
           </span>
-          <Button 
-            size="sm" 
-            onClick={handleBatchClose}
-            disabled={isBatchClosing}
-          >
+          <Button size="sm" onClick={handleBatchClose} disabled={isBatchClosing}>
             {isBatchClosing ? (
-              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             ) : (
-              <CheckCheck className="h-4 w-4 mr-1" />
+              <CheckCheck className="mr-1 h-4 w-4" />
             )}
-            Fechar Selecionadas
+            Concluir selecionadas
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setSelectedTaskIds(new Set())}>
-            Limpar seleção
+            Limpar selecao
           </Button>
         </div>
       )}
 
-      {/* Tabs: Lista / Calendário */}
-      <Tabs defaultValue="list" className="space-y-4">
+      <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as ViewMode)} className="space-y-4">
         <TabsList>
           <TabsTrigger value="list" className="gap-1.5">
             <List className="h-4 w-4" />
@@ -296,199 +299,212 @@ export default function PendingTasks() {
           </TabsTrigger>
           <TabsTrigger value="calendar" className="gap-1.5">
             <CalendarDays className="h-4 w-4" />
-            Calendário
+            Calendario
+          </TabsTrigger>
+          <TabsTrigger value="kanban" className="gap-1.5">
+            <SquareKanban className="h-4 w-4" />
+            Kanban
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="list" className="space-y-3">
-          {/* Select all */}
-          {filteredTasks.filter(t => t.status !== 'resolvida').length > 0 && (
+          {selectableTasks.length > 0 && (
             <div className="flex items-center gap-2 px-1">
               <Checkbox
-                checked={selectedTaskIds.size === filteredTasks.filter(t => t.status !== 'resolvida').length && selectedTaskIds.size > 0}
+                checked={selectedTaskIds.size === selectableTasks.length && selectedTaskIds.size > 0}
                 onCheckedChange={toggleSelectAll}
               />
-              <span className="text-xs text-muted-foreground">Selecionar todas</span>
+              <span className="text-xs text-muted-foreground">Selecionar todas as abertas</span>
             </div>
           )}
 
-          {filteredTasks.map((task) => (
-            <Card 
-              key={task.id} 
-              className={cn(
-                "card-interactive",
-                isOverdue(task.due_date, task.status) && "border-l-2 border-l-destructive",
-                selectedTaskIds.has(task.id) && "ring-2 ring-primary"
-              )}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  {task.status !== 'resolvida' && (
-                    <Checkbox
-                      checked={selectedTaskIds.has(task.id)}
-                      onCheckedChange={() => toggleTaskSelection(task.id)}
-                      className="mt-1"
-                    />
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium">{task.title}</p>
-                      <Badge variant="outline" className="text-xs">
-                        {task.task_type === 'moodle' ? 'Moodle' : 'Interna'}
-                      </Badge>
-                      {getAutomationTypeBadge(task.automation_type)}
-                    </div>
-                    
-                    <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
-                      {task.student && (
-                        <Link 
-                          to={`/alunos/${task.student_id}`}
-                          className="text-primary hover:underline"
-                        >
-                          {task.student.full_name}
-                        </Link>
-                      )}
-                      {task.student && task.course && <span>·</span>}
-                      {task.course && <span>{task.course.short_name}</span>}
-                    </div>
-                    
-                    {task.description && (
-                      <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
-                        {task.description.replace(/<[^>]*>/g, '')}
-                      </p>
-                    )}
-                    
-                    <div className="flex items-center gap-3 mt-2">
-                      <StatusBadge status={task.status} size="sm" />
-                      <PriorityBadge priority={task.priority} size="sm" />
-                      {task.due_date && (
-                        <span className={cn(
-                          "text-xs flex items-center gap-1",
-                          isOverdue(task.due_date, task.status) ? "text-destructive font-medium" : "text-muted-foreground"
-                        )}>
-                          <Clock className="h-3 w-3" />
-                          {formatDueDate(task.due_date)}
-                          {isOverdue(task.due_date, task.status) && " (atrasado)"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button 
-                      size="sm" 
-                      variant="ghost" 
-                      title="Adicionar ação"
-                      onClick={() => setSelectedTaskForAction(task.id)}
-                    >
-                      <ListChecks className="h-4 w-4" />
-                    </Button>
+          {filteredTasks.map((task) => {
+            const overdue = isTaskOverdue(task.due_date, task.status);
+
+            return (
+              <Card
+                key={task.id}
+                className={cn(
+                  'shadow-sm transition-shadow hover:shadow-md',
+                  overdue && 'border-l-2 border-l-destructive',
+                  selectedTaskIds.has(task.id) && 'ring-2 ring-primary',
+                )}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
                     {task.status !== 'resolvida' && (
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
-                        title="Marcar como resolvida"
-                        onClick={() => handleMarkAsResolved(task.id)}
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                      </Button>
+                      <Checkbox
+                        checked={selectedTaskIds.has(task.id)}
+                        onCheckedChange={() => toggleTaskSelection(task.id)}
+                        className="mt-1"
+                      />
                     )}
-                    {task.student_id && (
-                      <Button size="sm" variant="ghost" asChild>
-                        <Link to={`/alunos/${task.student_id}`}>
-                          <ExternalLink className="h-4 w-4" />
-                        </Link>
-                      </Button>
-                    )}
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          title="Excluir"
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Excluir pendência</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Tem certeza? Esta ação não pode ser desfeita.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction 
-                            onClick={() => handleDeleteTask(task.id)}
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium">{task.title}</p>
+                        <Badge variant="outline" className="text-xs">
+                          {task.task_type === 'moodle' ? 'Moodle' : 'Interna'}
+                        </Badge>
+                        {task.is_recurring && (
+                          <Badge variant="secondary" className="text-xs">
+                            Rotina
+                          </Badge>
+                        )}
+                      </div>
+
+                      {(task.student || task.course) && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                          {task.student && (
+                            <Link
+                              to={`/alunos/${task.student_id}`}
+                              className="text-primary hover:underline"
+                            >
+                              {task.student.full_name}
+                            </Link>
+                          )}
+                          {task.student && task.course && <span>|</span>}
+                          {task.course && <span>{task.course.short_name}</span>}
+                        </div>
+                      )}
+
+                      {task.description && (
+                        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+                          {stripHtml(task.description)}
+                        </p>
+                      )}
+
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <StatusBadge status={task.status} size="sm" />
+                        <PriorityBadge priority={task.priority} size="sm" />
+                        {task.due_date && (
+                          <span
+                            className={cn(
+                              'inline-flex items-center gap-1 text-xs',
+                              overdue ? 'font-medium text-destructive' : 'text-muted-foreground',
+                            )}
                           >
-                            Excluir
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                            <Clock className="h-3 w-3" />
+                            {formatDueDate(task.due_date)}
+                            {overdue && ' (atrasada)'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-1">
+                      {task.status === 'aberta' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Iniciar tarefa"
+                          onClick={() => void handleStatusChange(task.id, 'em_andamento')}
+                        >
+                          <ArrowRight className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      {task.status === 'em_andamento' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Concluir tarefa"
+                          onClick={() => void handleStatusChange(task.id, 'resolvida')}
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      {task.status === 'resolvida' && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          title="Reabrir tarefa"
+                          onClick={() => void handleStatusChange(task.id, 'aberta')}
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      {task.student_id && (
+                        <Button size="sm" variant="ghost" asChild>
+                          <Link to={`/alunos/${task.student_id}`}>
+                            <ExternalLink className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      )}
+
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            title="Excluir tarefa"
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir tarefa</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta acao remove a tarefa da lista e nao pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => void handleDeleteTask(task.id)}
+                              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            >
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
 
           {filteredTasks.length === 0 && (
-            <div className="text-center py-12">
-              <ClipboardList className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-              <h3 className="text-lg font-medium">Nenhuma pendência encontrada</h3>
-              <p className="text-muted-foreground text-sm mt-1">
-                {searchQuery || statusFilter !== 'all' || courseFilter !== 'all'
-                  ? 'Tente ajustar os filtros'
-                  : 'Todas as pendências foram resolvidas!'
-                }
-              </p>
-            </div>
+            <Card className="border-dashed shadow-none">
+              <CardContent className="py-12 text-center">
+                <ClipboardList className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
+                <h3 className="text-lg font-medium">Nenhuma tarefa encontrada</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {searchQuery || statusFilter !== 'all' || courseFilter !== 'all'
+                    ? 'Ajuste os filtros para encontrar outras tarefas.'
+                    : 'Crie a primeira tarefa manual desta lista.'}
+                </p>
+                {!searchQuery && statusFilter === 'all' && courseFilter === 'all' && (
+                  <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Criar tarefa
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
           )}
         </TabsContent>
 
         <TabsContent value="calendar">
-          <TaskCalendarView 
-            tasks={filteredTasks} 
-            onTaskClick={(taskId) => setSelectedTaskForAction(taskId)}
-          />
+          <TaskCalendarView tasks={filteredTasks} />
+        </TabsContent>
+
+        <TabsContent value="kanban">
+          <TaskKanbanView tasks={filteredTasks} onStatusChange={handleStatusChange} />
         </TabsContent>
       </Tabs>
 
-      {/* Dialogs */}
-      <NewPendingTaskDialog 
-        open={isDialogOpen} 
+      <NewPendingTaskDialog
+        open={isDialogOpen}
         onOpenChange={setIsDialogOpen}
         onSuccess={refetch}
       />
-
-      <GenerateAutomatedTasksDialog
-        open={isAutoDialogOpen}
-        onOpenChange={setIsAutoDialogOpen}
-        onSuccess={refetch}
-      />
-
-      <TaskTemplatesDialog
-        open={isTemplatesOpen}
-        onOpenChange={setIsTemplatesOpen}
-      />
-
-      <BatchGenerateDialog
-        open={isBatchOpen}
-        onOpenChange={setIsBatchOpen}
-        onSuccess={refetch}
-      />
-
-      {selectedTaskForAction && (
-        <AddTaskActionDialog 
-          open={!!selectedTaskForAction} 
-          onOpenChange={(open) => !open && setSelectedTaskForAction(null)}
-          pendingTaskId={selectedTaskForAction}
-          onSuccess={refetch}
-        />
-      )}
     </div>
   );
 }

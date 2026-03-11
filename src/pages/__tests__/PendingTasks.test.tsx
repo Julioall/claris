@@ -5,19 +5,14 @@ import { MemoryRouter } from "react-router-dom";
 import PendingTasks from "@/pages/PendingTasks";
 
 const usePendingTasksDataMock = vi.fn();
-const useAuthMock = vi.fn();
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
-const markAsResolvedMock = vi.fn();
+const updateTaskStatusMock = vi.fn();
 const deleteTaskMock = vi.fn();
 const refetchMock = vi.fn();
 
 vi.mock("@/hooks/usePendingTasksData", () => ({
   usePendingTasksData: () => usePendingTasksDataMock(),
-}));
-
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => useAuthMock(),
 }));
 
 vi.mock("sonner", () => ({
@@ -33,34 +28,6 @@ vi.mock("@/components/pending-tasks/NewPendingTaskDialog", () => ({
   ),
 }));
 
-vi.mock("@/components/pending-tasks/GenerateAutomatedTasksDialog", () => ({
-  GenerateAutomatedTasksDialog: ({ open }: { open: boolean }) => (
-    <div data-testid="auto-task-dialog">open:{String(open)}</div>
-  ),
-}));
-
-vi.mock("@/components/pending-tasks/AddTaskActionDialog", () => ({
-  AddTaskActionDialog: ({
-    open,
-    pendingTaskId,
-  }: {
-    open: boolean;
-    pendingTaskId: string;
-  }) => <div data-testid="add-task-action-dialog">{open ? pendingTaskId : "closed"}</div>,
-}));
-
-vi.mock("@/components/pending-tasks/TaskTemplatesDialog", () => ({
-  TaskTemplatesDialog: ({ open }: { open: boolean }) => (
-    <div data-testid="task-templates-dialog">open:{String(open)}</div>
-  ),
-}));
-
-vi.mock("@/components/pending-tasks/BatchGenerateDialog", () => ({
-  BatchGenerateDialog: ({ open }: { open: boolean }) => (
-    <div data-testid="batch-generate-dialog">open:{String(open)}</div>
-  ),
-}));
-
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -72,9 +39,10 @@ function renderPage() {
 describe("PendingTasks page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-    markAsResolvedMock.mockResolvedValue(true);
+
+    updateTaskStatusMock.mockResolvedValue(true);
     deleteTaskMock.mockResolvedValue(true);
+
     usePendingTasksDataMock.mockReturnValue({
       tasks: [
         {
@@ -82,7 +50,7 @@ describe("PendingTasks page", () => {
           title: "Contato urgente",
           description: "Entrar em contato com aluno",
           status: "aberta",
-          task_type: "manual",
+          task_type: "interna",
           automation_type: "manual",
           is_recurring: false,
           priority: "alta",
@@ -92,10 +60,25 @@ describe("PendingTasks page", () => {
           course_id: "c-1",
           course: { short_name: "MAT" },
         },
+        {
+          id: "t-2",
+          title: "Ajustar calendario",
+          description: "Revisar prazos",
+          status: "em_andamento",
+          task_type: "moodle",
+          automation_type: "recurring",
+          is_recurring: true,
+          priority: "media",
+          due_date: "2099-02-01T00:00:00.000Z",
+          student_id: "s-2",
+          student: { full_name: "Bruno Costa" },
+          course_id: "c-1",
+          course: { short_name: "MAT" },
+        },
       ],
       courses: [{ id: "c-1", short_name: "MAT" }],
       isLoading: false,
-      markAsResolved: markAsResolvedMock,
+      updateTaskStatus: updateTaskStatusMock,
       deleteTask: deleteTaskMock,
       refetch: refetchMock,
     });
@@ -106,7 +89,7 @@ describe("PendingTasks page", () => {
       tasks: [],
       courses: [],
       isLoading: true,
-      markAsResolved: markAsResolvedMock,
+      updateTaskStatus: updateTaskStatusMock,
       deleteTask: deleteTaskMock,
       refetch: refetchMock,
     });
@@ -115,39 +98,39 @@ describe("PendingTasks page", () => {
     expect(container.querySelector(".animate-spin")).toBeInTheDocument();
   });
 
-  it("opens manual and automated task dialogs", async () => {
+  it("opens the create dialog and no longer shows automation actions", async () => {
     const user = userEvent.setup();
     renderPage();
 
     expect(screen.getByTestId("new-task-dialog")).toHaveTextContent("open:false");
-    expect(screen.getByTestId("auto-task-dialog")).toHaveTextContent("open:false");
+    expect(screen.queryByRole("button", { name: /autom/i })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^nova$/i }));
-    await user.click(screen.getByRole("button", { name: /automa/i }));
-    await user.click(await screen.findByRole("menuitem", { name: /gerar autom/i }));
+    await user.click(screen.getByRole("button", { name: /nova tarefa/i }));
 
     expect(screen.getByTestId("new-task-dialog")).toHaveTextContent("open:true");
-    expect(screen.getByTestId("auto-task-dialog")).toHaveTextContent("open:true");
   });
 
-  it("marks a task as resolved and shows success toast", async () => {
+  it("moves an open task to in progress from the list view", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByTitle(/marcar como resolvida/i));
+    await user.click(screen.getByTitle(/iniciar tarefa/i));
 
     await waitFor(() => {
-      expect(markAsResolvedMock).toHaveBeenCalledWith("t-1");
+      expect(updateTaskStatusMock).toHaveBeenCalledWith("t-1", "em_andamento");
     });
-    expect(toastSuccessMock).toHaveBeenCalled();
+    expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringMatching(/em andamento/i));
   });
 
-  it("opens add action dialog for selected task", async () => {
+  it("renders kanban mode and allows moving tasks there", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByTitle(/adicionar a/i));
+    await user.click(screen.getByRole("tab", { name: /kanban/i }));
+    await user.click(screen.getByRole("button", { name: /concluir/i }));
 
-    expect(screen.getByTestId("add-task-action-dialog")).toHaveTextContent("t-1");
+    await waitFor(() => {
+      expect(updateTaskStatusMock).toHaveBeenCalledWith("t-2", "resolvida");
+    });
   });
 });

@@ -1,6 +1,11 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Course, Student } from '@/types';
+import {
+  normalizeMoodleUrl,
+  resolveFunctionsInvokeErrorMessage,
+  resolveMoodleErrorMessage,
+} from '@/lib/moodle-errors';
 
 interface MoodleSession {
   moodleToken: string;
@@ -38,9 +43,10 @@ export function useMoodleApi() {
   ): Promise<LoginResult> => {
     setIsLoading(true);
     try {
+      const cleanUrl = normalizeMoodleUrl(moodleUrl);
       const { data, error } = await supabase.functions.invoke('moodle-auth', {
         body: {
-          moodleUrl: moodleUrl.replace(/\/$/, ''),
+          moodleUrl: cleanUrl,
           username,
           password,
         },
@@ -48,17 +54,17 @@ export function useMoodleApi() {
 
       if (error) {
         console.error('Login error:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: resolveFunctionsInvokeErrorMessage(error) };
       }
 
       if (data.error) {
-        return { success: false, error: data.error };
+        return { success: false, error: resolveMoodleErrorMessage(data.error, data.errorcode) };
       }
 
       const session: MoodleSession = {
         moodleToken: data.moodleToken,
         moodleUserId: data.moodleUserId,
-        moodleUrl: moodleUrl.replace(/\/$/, ''),
+        moodleUrl: cleanUrl,
       };
 
       return {

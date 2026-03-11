@@ -10,11 +10,10 @@ const userCoursesSelectMock = vi.fn();
 const userCoursesEqMock = vi.fn();
 const studentCoursesSelectMock = vi.fn();
 const studentCoursesEqMock = vi.fn();
-const taskTemplatesSelectMock = vi.fn();
-const taskTemplatesEqUserMock = vi.fn();
-const taskTemplatesEqActiveMock = vi.fn();
-const taskTemplatesOrderMock = vi.fn();
 const pendingTasksInsertMock = vi.fn();
+const recurrenceInsertMock = vi.fn();
+const recurrenceSelectMock = vi.fn();
+const recurrenceSingleMock = vi.fn();
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
 
@@ -26,6 +25,14 @@ vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (...args: unknown[]) => fromMock(...args),
   },
+}));
+
+vi.mock("@/components/ui/calendar", () => ({
+  Calendar: ({ onSelect }: { onSelect?: (date: Date) => void }) => (
+    <button type="button" onClick={() => onSelect?.(new Date("2026-03-20T00:00:00.000Z"))}>
+      pick-date
+    </button>
+  ),
 }));
 
 vi.mock("sonner", () => ({
@@ -51,10 +58,9 @@ function renderDialog(props: Partial<ComponentProps<typeof NewPendingTaskDialog>
   return { onOpenChange, onSuccess };
 }
 
-async function pickComboboxOption(label: RegExp, optionName: RegExp) {
+async function selectOption(label: RegExp, optionName: RegExp) {
   const user = userEvent.setup();
-  const combobox = screen.getByRole("combobox", { name: label });
-  await user.click(combobox);
+  await user.click(screen.getByRole("combobox", { name: label }));
   await user.click(await screen.findByRole("option", { name: optionName }));
 }
 
@@ -73,12 +79,12 @@ describe("NewPendingTaskDialog", () => {
         return { select: studentCoursesSelectMock };
       }
 
-      if (table === "task_templates") {
-        return { select: taskTemplatesSelectMock };
-      }
-
       if (table === "pending_tasks") {
         return { insert: pendingTasksInsertMock };
+      }
+
+      if (table === "task_recurrence_configs") {
+        return { insert: recurrenceInsertMock };
       }
 
       throw new Error(`Unexpected table: ${table}`);
@@ -92,6 +98,7 @@ describe("NewPendingTaskDialog", () => {
           courses: {
             id: "c-1",
             short_name: "MAT",
+            category: "Escola A",
             end_date: null,
           },
         },
@@ -100,6 +107,7 @@ describe("NewPendingTaskDialog", () => {
           courses: {
             id: "c-2",
             short_name: "OLD",
+            category: "Escola B",
             end_date: "2020-01-01T00:00:00.000Z",
           },
         },
@@ -124,20 +132,17 @@ describe("NewPendingTaskDialog", () => {
       return Promise.resolve({ data: [], error: null });
     });
 
-    taskTemplatesSelectMock.mockReturnValue({ eq: taskTemplatesEqUserMock });
-    taskTemplatesEqUserMock.mockReturnValue({ eq: taskTemplatesEqActiveMock });
-    taskTemplatesEqActiveMock.mockReturnValue({ order: taskTemplatesOrderMock });
-    taskTemplatesOrderMock.mockResolvedValue({ data: [], error: null });
-
     pendingTasksInsertMock.mockResolvedValue({ error: null });
+    recurrenceInsertMock.mockReturnValue({ select: recurrenceSelectMock });
+    recurrenceSelectMock.mockReturnValue({ single: recurrenceSingleMock });
+    recurrenceSingleMock.mockResolvedValue({ data: { id: "r-1" }, error: null });
   });
 
   it("shows only active courses and loads students after selecting a course", async () => {
     const user = userEvent.setup();
     renderDialog();
 
-    await user.click(screen.getByRole("button", { name: /Escopo e detalhes/i }));
-    await user.click(screen.getByRole("combobox", { name: /Curso \/ Turma/i }));
+    await user.click(screen.getByRole("combobox", { name: /^Curso$/i }));
     expect(await screen.findByRole("option", { name: /MAT/i })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /OLD/i })).not.toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: /MAT/i }));
@@ -150,34 +155,71 @@ describe("NewPendingTaskDialog", () => {
     expect(await screen.findByRole("option", { name: /Ana Silva/i })).toBeInTheDocument();
   });
 
-  it("creates a non-recurring pending task", async () => {
+  it("creates a manual task without recurrence", async () => {
     const user = userEvent.setup();
     const { onOpenChange, onSuccess } = renderDialog();
 
     await user.type(
-      screen.getByPlaceholderText(/boas-vindas aos alunos/i),
+      screen.getByPlaceholderText(/follow-up com a turma/i),
       "  Nova pendencia importante  ",
     );
-    await user.click(screen.getByRole("button", { name: /Escopo e detalhes/i }));
-    await pickComboboxOption(/Curso \/ Turma/i, /MAT/i);
-    await user.click(screen.getByRole("button", { name: /Criar Pend/i }));
+    await user.type(
+      screen.getByPlaceholderText(/links importantes/i),
+      "Ligar para a turma na sexta.",
+    );
+    await selectOption(/^Curso$/i, /MAT/i);
+    await user.click(screen.getByRole("button", { name: /criar tarefa/i }));
 
     await waitFor(() => {
       expect(pendingTasksInsertMock).toHaveBeenCalledWith(
         expect.objectContaining({
           title: "Nova pendencia importante",
+          description: "Ligar para a turma na sexta.",
           course_id: "c-1",
           task_type: "interna",
+          status: "aberta",
           priority: "media",
           created_by_user_id: "user-1",
-          status: "aberta",
+          automation_type: "manual",
+          recurrence_id: null,
+          is_recurring: false,
         }),
       );
     });
 
-    expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringMatching(/pend.ncia criada com sucesso/i));
+    expect(recurrenceInsertMock).not.toHaveBeenCalled();
+    expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringMatching(/tarefa criada/i));
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(onSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it("creates a recurring routine linked to the first task", async () => {
+    const user = userEvent.setup();
+    renderDialog();
+
+    await user.type(
+      screen.getByPlaceholderText(/follow-up com a turma/i),
+      "Revisar engajamento semanal",
+    );
+    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: /^Prazo$/i }));
+    await user.click(await screen.findByRole("button", { name: /pick-date/i }));
+    await user.click(screen.getByRole("button", { name: /criar tarefa/i }));
+
+    await waitFor(() => {
+      expect(recurrenceInsertMock).toHaveBeenCalled();
+    });
+
+    expect(pendingTasksInsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Revisar engajamento semanal",
+        automation_type: "recurring",
+        recurrence_id: "r-1",
+        is_recurring: true,
+        due_date: "2026-03-20T00:00:00.000Z",
+      }),
+    );
+    expect(toastSuccessMock).toHaveBeenCalledWith(expect.stringMatching(/rotina criada/i));
   });
 
   it("shows an error toast when the user is not authenticated", async () => {
@@ -186,13 +228,13 @@ describe("NewPendingTaskDialog", () => {
     renderDialog();
 
     await user.type(
-      screen.getByPlaceholderText(/boas-vindas aos alunos/i),
+      screen.getByPlaceholderText(/follow-up com a turma/i),
       "Pendencia sem sessao",
     );
-    await user.click(screen.getByRole("button", { name: /Criar Pend/i }));
+    await user.click(screen.getByRole("button", { name: /criar tarefa/i }));
 
     await waitFor(() => {
-      expect(toastErrorMock).toHaveBeenCalledWith(expect.stringMatching(/precisa estar logado/i));
+      expect(toastErrorMock).toHaveBeenCalledWith(expect.stringMatching(/estar logado/i));
     });
 
     expect(pendingTasksInsertMock).not.toHaveBeenCalled();

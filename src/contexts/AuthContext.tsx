@@ -4,6 +4,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { SyncStep } from '@/components/sync/SyncProgressDialog';
 import { encryptSessionData, decryptSessionData } from '@/lib/session-crypto';
+import {
+  normalizeMoodleUrl,
+  resolveFunctionsInvokeErrorMessage,
+  resolveMoodleErrorMessage,
+} from '@/lib/moodle-errors';
 
 interface MoodleSession {
   moodleToken: string;
@@ -137,29 +142,6 @@ async function parseFunctionsError(err: unknown): Promise<{ status?: number; mes
     return { status, message };
   } catch {
     return { status };
-  }
-}
-
-function stripHtml(value: string): string {
-  return value
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function resolveLoginErrorMessage(rawError?: unknown, rawErrorCode?: unknown): string {
-  const error = typeof rawError === 'string' ? stripHtml(rawError) : '';
-  const errorCode = typeof rawErrorCode === 'string' ? rawErrorCode : '';
-
-  switch (errorCode) {
-    case 'invalidlogin':
-      return 'Usuario ou senha invalidos.';
-    case 'dbconnectionfailed':
-      return 'Moodle indisponivel: falha de conexao com o banco de dados do servidor Moodle.';
-    case 'service_unavailable':
-      return 'Servico web indisponivel neste Moodle. Verifique a configuracao do web service.';
-    default:
-      return error || (errorCode ? `Erro de autenticacao (${errorCode}).` : 'Nao foi possivel autenticar no Moodle.');
   }
 }
 
@@ -299,7 +281,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       let payload: Record<string, unknown> | null = null;
       try {
-        payload = await response.json();
+        payload = await response.json() as Record<string, unknown>;
       } catch {
         payload = null;
       }
@@ -445,7 +427,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(true);
 
     try {
-      const cleanUrl = moodleUrl.replace(/\/$/, '');
+      const cleanUrl = normalizeMoodleUrl(moodleUrl);
 
       const { data, error } = await supabase.functions.invoke('moodle-auth', {
         body: {
@@ -458,7 +440,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         const parsed = await parseFunctionsError(error);
-        const loginErrorMessage = resolveLoginErrorMessage(parsed.message || error.message);
+        const loginErrorMessage = resolveFunctionsInvokeErrorMessage(parsed.message || error);
         console.error('Login error:', error);
         toast({
           title: 'Erro de autenticacao',
@@ -469,7 +451,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (data.error) {
-        const loginErrorMessage = resolveLoginErrorMessage(data.error, data.errorcode);
+        const loginErrorMessage = resolveMoodleErrorMessage(data.error, data.errorcode);
         toast({
           title: 'Erro de autenticacao',
           description: loginErrorMessage,
@@ -514,7 +496,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const parsed = await parseFunctionsError(err);
       toast({
         title: 'Erro de autenticacao',
-        description: resolveLoginErrorMessage(parsed.message) || 'Nao foi possivel conectar ao Moodle. Verifique suas credenciais e a URL.',
+        description: resolveFunctionsInvokeErrorMessage(parsed.message || err),
         variant: 'destructive',
       });
       return false;

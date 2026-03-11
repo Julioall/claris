@@ -4,14 +4,22 @@ import { usePendingTasksData } from "@/hooks/usePendingTasksData";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
-const selectMock = vi.fn();
-const orMock = vi.fn();
-const orderMock = vi.fn();
-const updateMock = vi.fn();
-const updateEqMock = vi.fn();
-const deleteMock = vi.fn();
-const deleteEqMock = vi.fn();
-const insertMock = vi.fn();
+const pendingTasksSelectMock = vi.fn();
+const pendingTasksOrMock = vi.fn();
+const pendingTasksOrderMock = vi.fn();
+const pendingTasksUpdateMock = vi.fn();
+const pendingTasksUpdateEqMock = vi.fn();
+const pendingTasksDeleteMock = vi.fn();
+const pendingTasksDeleteEqMock = vi.fn();
+const pendingTasksInsertMock = vi.fn();
+const pendingTasksRecurrenceEqMock = vi.fn();
+const pendingTasksRecurrenceNeqMock = vi.fn();
+const pendingTasksRecurrenceLimitMock = vi.fn();
+const recurrenceSelectMock = vi.fn();
+const recurrenceEqMock = vi.fn();
+const recurrenceMaybeSingleMock = vi.fn();
+const recurrenceUpdateMock = vi.fn();
+const recurrenceUpdateEqMock = vi.fn();
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -24,11 +32,12 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-const pendingTasksRows = [
+const defaultTaskRows = [
   {
     id: "t-1",
     student_id: "s-1",
     course_id: "c-1",
+    category_name: "Escola A",
     created_by_user_id: "user-1",
     assigned_to_user_id: null,
     title: "Contato urgente",
@@ -39,6 +48,10 @@ const pendingTasksRows = [
     due_date: "2099-01-01T00:00:00.000Z",
     completed_at: null,
     moodle_activity_id: null,
+    automation_type: "manual",
+    is_recurring: false,
+    recurrence_id: null,
+    parent_task_id: null,
     created_at: "2026-02-20T10:00:00.000Z",
     updated_at: "2026-02-20T10:00:00.000Z",
     students: { id: "s-1", full_name: "Ana Silva" },
@@ -48,6 +61,7 @@ const pendingTasksRows = [
     id: "t-2",
     student_id: null,
     course_id: "c-1",
+    category_name: null,
     created_by_user_id: "user-1",
     assigned_to_user_id: null,
     title: "Sem valores",
@@ -58,6 +72,10 @@ const pendingTasksRows = [
     due_date: null,
     completed_at: null,
     moodle_activity_id: null,
+    automation_type: null,
+    is_recurring: null,
+    recurrence_id: null,
+    parent_task_id: null,
     created_at: null,
     updated_at: null,
     students: null,
@@ -66,18 +84,45 @@ const pendingTasksRows = [
 ];
 
 function setupPendingTasksChain() {
-  selectMock.mockReturnValue({ or: orMock });
-  orMock.mockReturnValue({ order: orderMock });
-  updateMock.mockReturnValue({ eq: updateEqMock });
-  deleteMock.mockReturnValue({ eq: deleteEqMock });
+  pendingTasksSelectMock.mockImplementation((query: string) => {
+    if (query.includes("students")) {
+      return { or: pendingTasksOrMock };
+    }
+
+    if (query === "id") {
+      return { eq: pendingTasksRecurrenceEqMock };
+    }
+
+    throw new Error(`Unexpected select query: ${query}`);
+  });
+
+  pendingTasksOrMock.mockReturnValue({ order: pendingTasksOrderMock });
+  pendingTasksUpdateMock.mockReturnValue({ eq: pendingTasksUpdateEqMock });
+  pendingTasksDeleteMock.mockReturnValue({ eq: pendingTasksDeleteEqMock });
+  pendingTasksRecurrenceEqMock.mockReturnValue({ neq: pendingTasksRecurrenceNeqMock });
+  pendingTasksRecurrenceNeqMock.mockReturnValue({ limit: pendingTasksRecurrenceLimitMock });
+
+  recurrenceSelectMock.mockReturnValue({ eq: recurrenceEqMock });
+  recurrenceEqMock.mockReturnValue({
+    maybeSingle: recurrenceMaybeSingleMock,
+    single: recurrenceMaybeSingleMock,
+  });
+  recurrenceUpdateMock.mockReturnValue({ eq: recurrenceUpdateEqMock });
 
   fromMock.mockImplementation((table: string) => {
     if (table === "pending_tasks") {
       return {
-        select: selectMock,
-        update: updateMock,
-        delete: deleteMock,
-        insert: insertMock,
+        select: pendingTasksSelectMock,
+        update: pendingTasksUpdateMock,
+        delete: pendingTasksDeleteMock,
+        insert: pendingTasksInsertMock,
+      };
+    }
+
+    if (table === "task_recurrence_configs") {
+      return {
+        select: recurrenceSelectMock,
+        update: recurrenceUpdateMock,
       };
     }
 
@@ -90,12 +135,24 @@ describe("usePendingTasksData", () => {
     vi.clearAllMocks();
 
     useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-
     setupPendingTasksChain();
-    orderMock.mockResolvedValue({ data: pendingTasksRows, error: null });
-    updateEqMock.mockResolvedValue({ error: null });
-    deleteEqMock.mockResolvedValue({ error: null });
-    insertMock.mockResolvedValue({ error: null });
+
+    pendingTasksOrderMock.mockResolvedValue({ data: defaultTaskRows, error: null });
+    pendingTasksUpdateEqMock.mockResolvedValue({ error: null });
+    pendingTasksDeleteEqMock.mockResolvedValue({ error: null });
+    pendingTasksInsertMock.mockResolvedValue({ error: null });
+    pendingTasksRecurrenceLimitMock.mockResolvedValue({ data: [], error: null });
+    recurrenceMaybeSingleMock.mockResolvedValue({
+      data: {
+        id: "r-1",
+        title: "Contato urgente",
+        description: "Ligar para aluno",
+        pattern: "semanal",
+        end_date: null,
+      },
+      error: null,
+    });
+    recurrenceUpdateEqMock.mockResolvedValue({ error: null });
   });
 
   afterAll(() => {
@@ -117,6 +174,7 @@ describe("usePendingTasksData", () => {
       course: { short_name: "MAT" },
       automation_type: "manual",
       is_recurring: false,
+      category_name: "Escola A",
     });
     expect(result.current.tasks[1]).toMatchObject({
       task_type: "interna",
@@ -126,7 +184,19 @@ describe("usePendingTasksData", () => {
     expect(result.current.courses).toEqual([{ id: "c-1", short_name: "MAT" }]);
   });
 
-  it("marks a task as resolved and refetches data", async () => {
+  it("marks a recurring task as resolved, creates the next occurrence and refetches data", async () => {
+    pendingTasksOrderMock.mockResolvedValue({
+      data: [
+        {
+          ...defaultTaskRows[0],
+          automation_type: "recurring",
+          is_recurring: true,
+          recurrence_id: "r-1",
+        },
+      ],
+      error: null,
+    });
+
     const { result } = renderHook(() => usePendingTasksData());
 
     await waitFor(() => {
@@ -139,14 +209,30 @@ describe("usePendingTasksData", () => {
     });
 
     expect(ok).toBe(true);
-    expect(updateMock).toHaveBeenCalledWith(
+    expect(pendingTasksUpdateMock).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "resolvida",
         completed_at: expect.any(String),
       }),
     );
-    expect(updateEqMock).toHaveBeenCalledWith("id", "t-1");
-    expect(orderMock).toHaveBeenCalledTimes(2);
+    expect(recurrenceMaybeSingleMock).toHaveBeenCalledTimes(1);
+    expect(pendingTasksInsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Contato urgente",
+        recurrence_id: "r-1",
+        is_recurring: true,
+        parent_task_id: "t-1",
+        automation_type: "recurring",
+        status: "aberta",
+      }),
+    );
+    expect(recurrenceUpdateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_generated_at: expect.any(String),
+        next_generation_at: expect.any(String),
+      }),
+    );
+    expect(pendingTasksOrderMock).toHaveBeenCalledTimes(2);
   });
 
   it("returns false when creating a task without authenticated user", async () => {
@@ -170,12 +256,12 @@ describe("usePendingTasksData", () => {
     });
 
     expect(ok).toBe(false);
-    expect(insertMock).not.toHaveBeenCalled();
+    expect(pendingTasksInsertMock).not.toHaveBeenCalled();
   });
 
   it("stores fetch error and returns false when delete fails", async () => {
-    orderMock.mockResolvedValue({ data: null, error: new Error("fetch failed") });
-    deleteEqMock.mockResolvedValue({ error: new Error("delete failed") });
+    pendingTasksOrderMock.mockResolvedValue({ data: null, error: new Error("fetch failed") });
+    pendingTasksDeleteEqMock.mockResolvedValue({ error: new Error("delete failed") });
 
     const { result } = renderHook(() => usePendingTasksData());
 
@@ -189,6 +275,6 @@ describe("usePendingTasksData", () => {
     });
 
     expect(ok).toBe(false);
-    expect(deleteEqMock).toHaveBeenCalledWith("id", "t-1");
+    expect(pendingTasksDeleteEqMock).toHaveBeenCalledWith("id", "t-1");
   });
 });

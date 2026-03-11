@@ -161,6 +161,71 @@ describe("AuthContext", () => {
     );
   });
 
+  it("shows a helpful toast when the function invocation fails due to DNS resolution", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: null,
+      error: { message: "{\"message\":\"name resolution failed\"}" },
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(authRef?.isLoading).toBe(false);
+    });
+
+    let loginResult = true;
+    await act(async () => {
+      loginResult = (await authRef!.login("julio", "secret", "https://moodle.local")) as boolean;
+    });
+
+    expect(loginResult).toBe(false);
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/erro de autenticacao/i),
+        description: expect.stringMatching(/localizar o endereco do moodle/i),
+        variant: "destructive",
+      }),
+    );
+  });
+
+  it("shows a helpful toast when Moodle returns a network error", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        error: "Erro de conexao: name resolution failed",
+        errorcode: "network_error",
+      },
+      error: null,
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(authRef?.isLoading).toBe(false);
+    });
+
+    let loginResult = true;
+    await act(async () => {
+      loginResult = (await authRef!.login("julio", "secret", "https://moodle.local")) as boolean;
+    });
+
+    expect(loginResult).toBe(false);
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/erro de autenticacao/i),
+        description: expect.stringMatching(/localizar o endereco do moodle/i),
+        variant: "destructive",
+      }),
+    );
+  });
+
   it("syncs courses and opens course selector, then allows logout", async () => {
     invokeMock
       .mockResolvedValueOnce({
