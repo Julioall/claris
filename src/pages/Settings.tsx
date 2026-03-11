@@ -8,6 +8,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DataCleanupCard } from '@/components/settings/DataCleanupCard';
 import { GradeDebugCard } from '@/components/settings/GradeDebugCard';
+import { ThemeCard } from '@/components/settings/ThemeCard';
 import { supabase } from '@/integrations/supabase/client';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
