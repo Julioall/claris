@@ -585,7 +585,7 @@ export function BulkSendTab() {
           moodle_user_id: student.moodle_user_id,
           student_name: student.full_name,
           personalized_message: resolveVariables(messageContent, buildStudentVariableData(student)),
-          status: 'pending',
+          status: 'pending' as const,
         }));
 
       const { error: recipErr } = await supabase.from('bulk_message_recipients').insert(recipients);

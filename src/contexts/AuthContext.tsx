@@ -790,7 +790,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             errorMessage: error?.message || (data as any)?.error || 'Falha ao sincronizar cursos',
           });
         } else {
-          const allSyncedCourses: Course[] = data?.courses || [];
+          const allSyncedCourses: Course[] = (data as any)?.courses || [];
           setCourses(allSyncedCourses);
           syncedCourses = allSyncedCourses.filter(course => courseIds.includes(course.id));
           nextEntityLastSync.courses = new Date().toISOString();

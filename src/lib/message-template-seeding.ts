@@ -11,54 +11,31 @@ export async function ensureDefaultMessageTemplates(userId: string) {
   }
 
   const request = (async () => {
-    const { data: userRecord, error: userError } = await supabase
-      .from('users')
-      .select('message_templates_seeded_at')
-      .eq('id', userId)
-      .maybeSingle();
-
-    if (userError) throw userError;
-    if (userRecord?.message_templates_seeded_at) return;
-
+    // Check if user already has any templates
     const { data: existingTemplates, error: existingError } = await supabase
       .from('message_templates')
-      .select('default_key')
+      .select('title')
       .eq('user_id', userId)
-      .not('default_key', 'is', null);
+      .limit(1);
 
     if (existingError) throw existingError;
+    if (existingTemplates && existingTemplates.length > 0) return;
 
-    const existingDefaultKeys = new Set(
-      (existingTemplates || [])
-        .map(template => template.default_key)
-        .filter((key): key is string => Boolean(key)),
-    );
+    // Seed all default templates
+    const defaults = DEFAULT_MESSAGE_TEMPLATES.map(template => ({
+      user_id: userId,
+      title: template.title,
+      content: template.content,
+      category: template.category,
+    }));
 
-    const missingDefaults = DEFAULT_MESSAGE_TEMPLATES
-      .filter(template => !existingDefaultKeys.has(template.defaultKey))
-      .map(template => ({
-        user_id: userId,
-        title: template.title,
-        content: template.content,
-        category: template.category,
-        is_default: true,
-        default_key: template.defaultKey,
-      }));
-
-    if (missingDefaults.length > 0) {
+    if (defaults.length > 0) {
       const { error: insertError } = await supabase
         .from('message_templates')
-        .insert(missingDefaults);
+        .insert(defaults);
 
       if (insertError) throw insertError;
     }
-
-    const { error: updateError } = await supabase
-      .from('users')
-      .update({ message_templates_seeded_at: new Date().toISOString() })
-      .eq('id', userId);
-
-    if (updateError) throw updateError;
   })();
 
   seedingRequests.set(userId, request);
