@@ -306,7 +306,7 @@ export function BulkSendTab() {
 
       const { data, error } = await supabase
         .from('message_templates')
-        .select('id, title, content, category, is_default')
+        .select('id, title, content, category, is_favorite')
         .eq('user_id', user.id)
         .order('is_favorite', { ascending: false })
         .order('title');
