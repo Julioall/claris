@@ -348,6 +348,10 @@ export default function Settings() {
       </div>
 
       <div className="space-y-6">
+        <ThemeCard />
+      </div>
+
+      <div className="space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
