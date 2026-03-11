@@ -39,41 +39,30 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-function AppRoutes() {
-  return (
-    <Routes>
-      <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
-      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-        <Route path="/" element={<Dashboard />} />
-        <Route path="/meus-cursos" element={<MyCourses />} />
-        <Route path="/escolas" element={<Schools />} />
-        <Route path="/cursos/:id" element={<CoursePanel />} />
-        <Route path="/alunos" element={<Students />} />
-        <Route path="/alunos/:id" element={<StudentProfile />} />
-        <Route path="/pendencias" element={<PendingTasks />} />
-        <Route path="/acoes" element={<Navigate to="/pendencias" replace />} />
-        <Route path="/mensagens" element={<Messages />} />
-        <Route path="/relatorios" element={<Reports />} />
-        <Route path="/configuracoes" element={<Settings />} />
-      </Route>
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
+function ColorThemeApplier({ children }: { children: React.ReactNode }) {
+  const { resolvedTheme } = useTheme();
+  useEffect(() => {
+    const stored = localStorage.getItem('actim-color-theme') || 'slate';
+    applyColorTheme(stored, resolvedTheme === 'dark');
+  }, [resolvedTheme]);
+  return <>{children}</>;
 }
 
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-            <AppRoutes />
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ColorThemeApplier>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+              <AppRoutes />
+            </BrowserRouter>
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ColorThemeApplier>
   </ThemeProvider>
 );
 
