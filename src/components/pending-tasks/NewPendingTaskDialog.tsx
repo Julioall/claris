@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -41,12 +41,18 @@ import { Calendar } from '@/components/ui/calendar';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { RecurrencePattern, TaskPriority, TaskStatus, TaskType } from '@/types';
+import { RecurrencePattern, RecurrenceWeekday, TaskPriority, TaskStatus, TaskType } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { Database } from '@/integrations/supabase/types';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import { recurrencePatternOptions } from '@/lib/task-recurrence';
+import {
+  calculateNextRecurringDate,
+  getWeekdayFromDate,
+  isDateOnWeekday,
+  recurrencePatternOptions,
+  recurrenceWeekdayOptions,
+} from '@/lib/task-recurrence';
 
 type PendingTaskInsert = Database['public']['Tables']['pending_tasks']['Insert'];
 type PendingTaskInsertPayload = PendingTaskInsert & {
@@ -58,6 +64,7 @@ interface RecurrenceInsertPayload {
   title: string;
   description: string | null;
   pattern: RecurrencePattern;
+  weekly_day: RecurrenceWeekday | null;
   start_date: string;
   end_date: string | null;
   course_id: string | null;
@@ -106,15 +113,13 @@ const formSchema = z.object({
     .min(3, 'Informe um titulo com pelo menos 3 caracteres.')
     .max(200, 'Use no maximo 200 caracteres no titulo.'),
   description: z.string().max(2000, 'Use no maximo 2000 caracteres.').optional(),
-  category_name: z.string().optional(),
-  course_id: z.string().optional(),
-  student_id: z.string().optional(),
   task_type: z.enum(['interna', 'moodle'] as const),
   status: z.enum(['aberta', 'em_andamento', 'resolvida'] as const),
   priority: z.enum(['baixa', 'media', 'alta', 'urgente'] as const),
   due_date: z.date().optional(),
   is_recurring: z.boolean(),
   recurrence_pattern: z.enum(['diario', 'semanal', 'quinzenal', 'mensal', 'bimestral', 'trimestral'] as const).optional(),
+  recurrence_weekday: z.number().int().min(0).max(6).optional(),
   recurrence_end_date: z.date().optional(),
 }).superRefine((data, context) => {
   if (data.is_recurring && !data.due_date) {
@@ -141,6 +146,28 @@ const formSchema = z.object({
     });
   }
 
+  if (data.is_recurring && data.recurrence_pattern === 'semanal' && data.recurrence_weekday === undefined) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['recurrence_weekday'],
+      message: 'Escolha o dia da semana da rotina.',
+    });
+  }
+
+  if (
+    data.is_recurring
+    && data.recurrence_pattern === 'semanal'
+    && data.due_date
+    && data.recurrence_weekday !== undefined
+    && !isDateOnWeekday(data.due_date, data.recurrence_weekday as RecurrenceWeekday)
+  ) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['recurrence_weekday'],
+      message: 'O prazo da primeira ocorrencia precisa cair no dia da semana selecionado.',
+    });
+  }
+
   if (data.due_date && data.recurrence_end_date && data.recurrence_end_date < data.due_date) {
     context.addIssue({
       code: z.ZodIssueCode.custom,
@@ -151,17 +178,6 @@ const formSchema = z.object({
 });
 
 type FormData = z.infer<typeof formSchema>;
-
-interface Student {
-  id: string;
-  full_name: string;
-}
-
-interface Course {
-  id: string;
-  short_name: string;
-  category?: string | null;
-}
 
 interface NewPendingTaskDialogProps {
   open: boolean;
@@ -181,10 +197,6 @@ export function NewPendingTaskDialog({
 }: NewPendingTaskDialogProps) {
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [students, setStudents] = useState<Student[]>([]);
-  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
-  const [isLoadingStudents, setIsLoadingStudents] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -196,112 +208,14 @@ export function NewPendingTaskDialog({
       priority: 'media',
       is_recurring: false,
       recurrence_pattern: 'semanal',
+      recurrence_weekday: undefined,
+      recurrence_end_date: undefined,
     },
   });
 
-  const selectedCourseId = form.watch('course_id');
-  const selectedCategory = form.watch('category_name');
   const isRecurring = form.watch('is_recurring');
-
-  const filteredCourses = useMemo(() => {
-    if (!selectedCategory) return courses;
-    return courses.filter((course) => course.category === selectedCategory);
-  }, [courses, selectedCategory]);
-
-  const categories = useMemo(() => {
-    return [...new Set(
-      courses.map((course) => course.category).filter((value): value is string => Boolean(value)),
-    )].sort();
-  }, [courses]);
-
-  useEffect(() => {
-    if (!open || !user) return;
-
-    const loadCourses = async () => {
-      setIsLoadingCourses(true);
-
-      try {
-        const { data, error } = await supabase
-          .from('user_courses')
-          .select(`
-            course_id,
-            courses!inner (
-              id,
-              short_name,
-              category,
-              end_date
-            )
-          `)
-          .eq('user_id', user.id);
-
-        if (error) throw error;
-
-        const now = new Date();
-        const activeCourses = (data ?? [])
-          .map((item) => item.courses)
-          .filter((course): course is { id: string; short_name: string | null; category: string | null; end_date: string | null } => {
-            if (!course) return false;
-            return !course.end_date || new Date(course.end_date) > now;
-          })
-          .map((course) => ({
-            id: course.id,
-            short_name: course.short_name || '',
-            category: course.category,
-          }));
-
-        setCourses(activeCourses);
-      } catch (error) {
-        console.error('Error fetching courses:', error);
-      } finally {
-        setIsLoadingCourses(false);
-      }
-    };
-
-    void loadCourses();
-  }, [open, user]);
-
-  useEffect(() => {
-    if (!selectedCourseId) {
-      setStudents([]);
-      return;
-    }
-
-    const loadStudents = async () => {
-      setIsLoadingStudents(true);
-
-      try {
-        const { data, error } = await supabase
-          .from('student_courses')
-          .select(`
-            student_id,
-            students!inner (
-              id,
-              full_name
-            )
-          `)
-          .eq('course_id', selectedCourseId);
-
-        if (error) throw error;
-
-        const courseStudents = (data ?? [])
-          .map((item) => item.students)
-          .filter((student): student is { id: string; full_name: string } => Boolean(student))
-          .map((student) => ({
-            id: student.id,
-            full_name: student.full_name,
-          }));
-
-        setStudents(courseStudents);
-      } catch (error) {
-        console.error('Error fetching students:', error);
-      } finally {
-        setIsLoadingStudents(false);
-      }
-    };
-
-    form.setValue('student_id', undefined);
-    void loadStudents();
-  }, [form, selectedCourseId]);
+  const recurrencePattern = form.watch('recurrence_pattern');
+  const dueDate = form.watch('due_date');
 
   useEffect(() => {
     if (!isRecurring && form.getValues('status') === 'resolvida') {
@@ -313,22 +227,34 @@ export function NewPendingTaskDialog({
     }
   }, [form, isRecurring]);
 
+  useEffect(() => {
+    if (recurrencePattern !== 'semanal') {
+      if (form.getValues('recurrence_weekday') !== undefined) {
+        form.setValue('recurrence_weekday', undefined);
+      }
+      return;
+    }
+
+    if (!dueDate || form.getValues('recurrence_weekday') !== undefined) {
+      return;
+    }
+
+    form.setValue('recurrence_weekday', getWeekdayFromDate(dueDate));
+  }, [dueDate, form, recurrencePattern]);
+
   const resetDialog = () => {
     form.reset({
       title: '',
       description: '',
-      category_name: undefined,
-      course_id: undefined,
-      student_id: undefined,
       task_type: 'interna',
       status: 'aberta',
       priority: 'media',
       due_date: undefined,
       is_recurring: false,
       recurrence_pattern: 'semanal',
+      recurrence_weekday: undefined,
       recurrence_end_date: undefined,
     });
-    setStudents([]);
   };
 
   const handleClose = (nextOpen: boolean) => {
@@ -352,19 +278,27 @@ export function NewPendingTaskDialog({
       const trimmedDescription = data.description?.trim() || null;
 
       if (data.is_recurring) {
+        const nextGenerationAt = calculateNextRecurringDate({
+          pattern: data.recurrence_pattern as RecurrencePattern,
+          startDate: data.due_date as Date,
+          referenceDate: data.due_date as Date,
+          weeklyDay: data.recurrence_weekday as RecurrenceWeekday | undefined,
+        });
+
         const recurrencePayload: RecurrenceInsertPayload = {
           title: data.title,
           description: trimmedDescription,
           pattern: data.recurrence_pattern as RecurrencePattern,
-          start_date: data.due_date!.toISOString(),
+          weekly_day: (data.recurrence_weekday as RecurrenceWeekday | undefined) ?? null,
+          start_date: (data.due_date as Date).toISOString(),
           end_date: data.recurrence_end_date?.toISOString() || null,
-          course_id: data.course_id || null,
-          student_id: data.student_id || null,
+          course_id: null,
+          student_id: null,
           created_by_user_id: user.id,
           task_type: data.task_type,
           priority: data.priority,
           is_active: true,
-          next_generation_at: data.due_date!.toISOString(),
+          next_generation_at: nextGenerationAt.toISOString(),
         };
 
         const recurrenceTable = (supabase.from as unknown as (table: 'task_recurrence_configs') => RecurrenceInsertClient)('task_recurrence_configs');
@@ -385,9 +319,9 @@ export function NewPendingTaskDialog({
         .insert({
           title: data.title,
           description: trimmedDescription,
-          student_id: data.student_id || null,
-          course_id: data.course_id || null,
-          category_name: data.category_name || null,
+          student_id: null,
+          course_id: null,
+          category_name: null,
           task_type: data.task_type,
           status: data.status,
           priority: data.priority,
@@ -403,7 +337,7 @@ export function NewPendingTaskDialog({
 
       toast.success(
         data.is_recurring
-          ? 'Rotina criada. A proxima tarefa sera aberta quando esta for concluida.'
+          ? 'Rotina criada. A agenda da proxima tarefa vai respeitar a frequencia escolhida.'
           : 'Tarefa criada com sucesso.',
       );
 
@@ -423,7 +357,7 @@ export function NewPendingTaskDialog({
         <DialogHeader>
           <DialogTitle>Nova tarefa</DialogTitle>
           <DialogDescription>
-            Crie uma tarefa manual para a sua todo list. Contexto e rotina sao opcionais.
+            Crie uma tarefa manual ou uma rotina simples, sem depender de contexto fixo.
           </DialogDescription>
         </DialogHeader>
 
@@ -436,7 +370,7 @@ export function NewPendingTaskDialog({
                 <FormItem>
                   <FormLabel>Titulo</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Fazer follow-up com a turma de Matematica" {...field} />
+                    <Input placeholder="Ex: Revisar engajamento semanal" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -452,19 +386,19 @@ export function NewPendingTaskDialog({
                   <FormControl>
                     <Textarea
                       rows={4}
-                      placeholder="Adicione contexto, proximos passos ou links importantes."
+                      placeholder="Adicione observacoes, proximos passos ou links importantes."
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    Use texto simples. O objetivo aqui e registrar rapido e manter a lista leve.
+                    Texto livre e curto. O foco aqui e capturar a tarefa sem inflar o fluxo.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <FormField
                 control={form.control}
                 name="status"
@@ -519,6 +453,31 @@ export function NewPendingTaskDialog({
 
               <FormField
                 control={form.control}
+                name="task_type"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tipo</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {taskTypeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="due_date"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
@@ -560,6 +519,9 @@ export function NewPendingTaskDialog({
                         </div>
                       </PopoverContent>
                     </Popover>
+                    <FormDescription>
+                      {isRecurring ? 'Esse prazo vira a primeira ocorrencia da rotina.' : 'Opcional para tarefas avulsas.'}
+                    </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -568,144 +530,11 @@ export function NewPendingTaskDialog({
 
             <Card className="shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Contexto opcional</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {categories.length > 0 && (
-                  <FormField
-                    control={form.control}
-                    name="category_name"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Escola ou categoria</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value === '__none__' ? undefined : value);
-                            form.setValue('course_id', undefined);
-                            form.setValue('student_id', undefined);
-                          }}
-                          value={field.value || '__none__'}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Todas as categorias" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="__none__">Todas as categorias</SelectItem>
-                            {categories.map((category) => (
-                              <SelectItem key={category} value={category}>
-                                {category}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="course_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Curso</FormLabel>
-                        <Select
-                          onValueChange={(value) => {
-                            field.onChange(value === '__none__' ? undefined : value);
-                            form.setValue('student_id', undefined);
-                          }}
-                          value={field.value || '__none__'}
-                          disabled={isLoadingCourses}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={isLoadingCourses ? 'Carregando cursos...' : 'Sem curso'} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="__none__">Sem curso especifico</SelectItem>
-                            {filteredCourses.map((course) => (
-                              <SelectItem key={course.id} value={course.id}>
-                                {course.short_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="task_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Tipo</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            {taskTypeOptions.map((option) => (
-                              <SelectItem key={option.value} value={option.value}>
-                                {option.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </FormItem>
-                    )}
-                  />
-                </div>
-
-                {selectedCourseId && (
-                  <FormField
-                    control={form.control}
-                    name="student_id"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Aluno</FormLabel>
-                        <Select
-                          onValueChange={(value) => field.onChange(value === '__none__' ? undefined : value)}
-                          value={field.value || '__none__'}
-                          disabled={isLoadingStudents}
-                        >
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder={isLoadingStudents ? 'Carregando alunos...' : 'Sem aluno especifico'} />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="__none__">Sem aluno especifico</SelectItem>
-                            {students.map((student) => (
-                              <SelectItem key={student.id} value={student.id}>
-                                {student.full_name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <FormDescription>
-                          Se nao selecionar um aluno, a tarefa fica ligada apenas ao contexto geral.
-                        </FormDescription>
-                      </FormItem>
-                    )}
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-sm">
-              <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <CardTitle className="text-base">Rotina</CardTitle>
                     <p className="mt-1 text-sm text-muted-foreground">
-                      Em vez de depender de um gerador automatico, a proxima tarefa sera criada ao concluir a atual.
+                      A proxima tarefa segue a agenda configurada. Concluir tarde nao empurra a recorrencia.
                     </p>
                   </div>
                   <FormField
@@ -725,7 +554,10 @@ export function NewPendingTaskDialog({
 
               {isRecurring && (
                 <CardContent className="space-y-4 pt-0">
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className={cn(
+                    'grid gap-4',
+                    recurrencePattern === 'semanal' ? 'md:grid-cols-3' : 'md:grid-cols-2',
+                  )}>
                     <FormField
                       control={form.control}
                       name="recurrence_pattern"
@@ -753,6 +585,39 @@ export function NewPendingTaskDialog({
                         </FormItem>
                       )}
                     />
+
+                    {recurrencePattern === 'semanal' && (
+                      <FormField
+                        control={form.control}
+                        name="recurrence_weekday"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Dia da semana</FormLabel>
+                            <Select
+                              onValueChange={(value) => field.onChange(Number(value))}
+                              value={field.value?.toString() ?? ''}
+                            >
+                              <FormControl>
+                                <SelectTrigger>
+                                  <SelectValue placeholder="Escolha o dia" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {recurrenceWeekdayOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value.toString()}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormDescription>
+                              A primeira ocorrencia precisa usar esse mesmo dia.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
 
                     <FormField
                       control={form.control}

@@ -11,6 +11,7 @@ export type ActionType = 'contato' | 'orientacao' | 'cobranca' | 'suporte_tecnic
 export type TaskAutomationType = 'manual' | 'auto_at_risk' | 'auto_missed_assignment' | 'auto_uncorrected_activity' | 'recurring';
 export type ActionEffectiveness = 'pendente' | 'eficaz' | 'nao_eficaz' | 'parcialmente_eficaz';
 export type RecurrencePattern = 'diario' | 'semanal' | 'quinzenal' | 'mensal' | 'bimestral' | 'trimestral';
+export type RecurrenceWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface User {
   id: string;
@@ -131,6 +132,7 @@ export interface TaskRecurrenceConfig {
   title: string;
   description?: string;
   pattern: RecurrencePattern;
+  weekly_day?: RecurrenceWeekday | null;
   start_date: string;
   end_date?: string;
   course_id?: string;

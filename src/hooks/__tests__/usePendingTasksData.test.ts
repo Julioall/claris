@@ -148,6 +148,8 @@ describe("usePendingTasksData", () => {
         title: "Contato urgente",
         description: "Ligar para aluno",
         pattern: "semanal",
+        weekly_day: 1,
+        start_date: "2026-03-16T00:00:00.000Z",
         end_date: null,
       },
       error: null,
@@ -189,6 +191,7 @@ describe("usePendingTasksData", () => {
       data: [
         {
           ...defaultTaskRows[0],
+          due_date: "2026-03-16T00:00:00.000Z",
           automation_type: "recurring",
           is_recurring: true,
           recurrence_id: "r-1",
@@ -203,36 +206,44 @@ describe("usePendingTasksData", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    let ok = false;
-    await act(async () => {
-      ok = await result.current.markAsResolved("t-1");
-    });
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-19T10:00:00.000Z"));
 
-    expect(ok).toBe(true);
-    expect(pendingTasksUpdateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: "resolvida",
-        completed_at: expect.any(String),
-      }),
-    );
-    expect(recurrenceMaybeSingleMock).toHaveBeenCalledTimes(1);
-    expect(pendingTasksInsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: "Contato urgente",
-        recurrence_id: "r-1",
-        is_recurring: true,
-        parent_task_id: "t-1",
-        automation_type: "recurring",
-        status: "aberta",
-      }),
-    );
-    expect(recurrenceUpdateMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        last_generated_at: expect.any(String),
-        next_generation_at: expect.any(String),
-      }),
-    );
-    expect(pendingTasksOrderMock).toHaveBeenCalledTimes(2);
+    try {
+      let ok = false;
+      await act(async () => {
+        ok = await result.current.markAsResolved("t-1");
+      });
+
+      expect(ok).toBe(true);
+      expect(pendingTasksUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "resolvida",
+          completed_at: expect.any(String),
+        }),
+      );
+      expect(recurrenceMaybeSingleMock).toHaveBeenCalledTimes(1);
+      expect(pendingTasksInsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Contato urgente",
+          recurrence_id: "r-1",
+          is_recurring: true,
+          parent_task_id: "t-1",
+          automation_type: "recurring",
+          status: "aberta",
+          due_date: "2026-03-23T00:00:00.000Z",
+        }),
+      );
+      expect(recurrenceUpdateMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          last_generated_at: "2026-03-19T10:00:00.000Z",
+          next_generation_at: "2026-03-30T00:00:00.000Z",
+        }),
+      );
+      expect(pendingTasksOrderMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns false when creating a task without authenticated user", async () => {

@@ -1,41 +1,99 @@
-import { addDays, addMonths, addWeeks } from 'date-fns';
-import { RecurrencePattern } from '@/types';
+import { addDays, addMonths, addWeeks, isAfter } from 'date-fns';
+import { RecurrencePattern, RecurrenceWeekday } from '@/types';
 
 export const recurrencePatternOptions: Array<{
   value: RecurrencePattern;
   label: string;
   helper: string;
 }> = [
-  { value: 'diario', label: 'Diario', helper: 'Repete todo dia apos concluir' },
-  { value: 'semanal', label: 'Semanal', helper: 'Repete 7 dias apos concluir' },
-  { value: 'quinzenal', label: 'Quinzenal', helper: 'Repete 14 dias apos concluir' },
-  { value: 'mensal', label: 'Mensal', helper: 'Repete 1 mes apos concluir' },
-  { value: 'bimestral', label: 'Bimestral', helper: 'Repete 2 meses apos concluir' },
-  { value: 'trimestral', label: 'Trimestral', helper: 'Repete 3 meses apos concluir' },
+  { value: 'diario', label: 'Diario', helper: 'Repete todos os dias na mesma agenda' },
+  { value: 'semanal', label: 'Semanal', helper: 'Repete toda semana no dia escolhido' },
+  { value: 'quinzenal', label: 'Quinzenal', helper: 'Repete a cada 2 semanas mantendo a agenda' },
+  { value: 'mensal', label: 'Mensal', helper: 'Repete todo mes seguindo a data da primeira ocorrencia' },
+  { value: 'bimestral', label: 'Bimestral', helper: 'Repete a cada 2 meses seguindo a primeira ocorrencia' },
+  { value: 'trimestral', label: 'Trimestral', helper: 'Repete a cada 3 meses seguindo a primeira ocorrencia' },
 ];
 
-export function calculateNextRecurringDate(
-  baseDate: Date | string,
-  pattern: RecurrencePattern,
-) {
-  const anchor = typeof baseDate === 'string' ? new Date(baseDate) : baseDate;
+export const recurrenceWeekdayOptions: Array<{
+  value: RecurrenceWeekday;
+  label: string;
+}> = [
+  { value: 0, label: 'Domingo' },
+  { value: 1, label: 'Segunda-feira' },
+  { value: 2, label: 'Terca-feira' },
+  { value: 3, label: 'Quarta-feira' },
+  { value: 4, label: 'Quinta-feira' },
+  { value: 5, label: 'Sexta-feira' },
+  { value: 6, label: 'Sabado' },
+];
 
+interface CalculateNextRecurringDateInput {
+  pattern: RecurrencePattern;
+  startDate: Date | string;
+  referenceDate?: Date | string;
+  weeklyDay?: RecurrenceWeekday | null;
+}
+
+function normalizeDate(date: Date | string) {
+  return typeof date === 'string' ? new Date(date) : new Date(date);
+}
+
+function incrementRecurringDate(date: Date, pattern: RecurrencePattern) {
   switch (pattern) {
     case 'diario':
-      return addDays(anchor, 1);
+      return addDays(date, 1);
     case 'semanal':
-      return addWeeks(anchor, 1);
+      return addWeeks(date, 1);
     case 'quinzenal':
-      return addWeeks(anchor, 2);
+      return addWeeks(date, 2);
     case 'mensal':
-      return addMonths(anchor, 1);
+      return addMonths(date, 1);
     case 'bimestral':
-      return addMonths(anchor, 2);
+      return addMonths(date, 2);
     case 'trimestral':
-      return addMonths(anchor, 3);
+      return addMonths(date, 3);
     default:
-      return addWeeks(anchor, 1);
+      return addWeeks(date, 1);
   }
+}
+
+function getFirstWeeklyOccurrence(startDate: Date, weeklyDay: RecurrenceWeekday) {
+  const candidate = new Date(startDate);
+  const delta = (weeklyDay - candidate.getUTCDay() + 7) % 7;
+  candidate.setUTCDate(candidate.getUTCDate() + delta);
+  return candidate;
+}
+
+export function getWeekdayFromDate(date: Date | string) {
+  return normalizeDate(date).getUTCDay() as RecurrenceWeekday;
+}
+
+export function isDateOnWeekday(date: Date | string, weekday: RecurrenceWeekday) {
+  return getWeekdayFromDate(date) === weekday;
+}
+
+export function calculateNextRecurringDate({
+  pattern,
+  startDate,
+  referenceDate,
+  weeklyDay,
+}: CalculateNextRecurringDateInput) {
+  const anchor = normalizeDate(startDate);
+  const reference = referenceDate ? normalizeDate(referenceDate) : anchor;
+
+  let next = pattern === 'semanal'
+    ? getFirstWeeklyOccurrence(anchor, weeklyDay ?? getWeekdayFromDate(anchor))
+    : anchor;
+
+  if (isAfter(next, reference)) {
+    return next;
+  }
+
+  while (!isAfter(next, reference)) {
+    next = incrementRecurringDate(next, pattern);
+  }
+
+  return next;
 }
 
 export function getRecurrencePatternLabel(pattern: RecurrencePattern) {

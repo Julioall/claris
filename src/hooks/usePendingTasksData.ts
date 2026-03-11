@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Database } from '@/integrations/supabase/types';
 import { useAuth } from '@/contexts/AuthContext';
-import { RecurrencePattern, TaskStatus, TaskPriority, TaskType } from '@/types';
+import { RecurrencePattern, RecurrenceWeekday, TaskStatus, TaskPriority, TaskType } from '@/types';
 import { calculateNextRecurringDate } from '@/lib/task-recurrence';
 
 type PendingTaskRow = Database['public']['Tables']['pending_tasks']['Row'] & {
@@ -56,6 +56,8 @@ interface RecurrenceConfig {
   title: string;
   description?: string | null;
   pattern: RecurrencePattern;
+  weekly_day?: RecurrenceWeekday | null;
+  start_date: string;
   end_date?: string | null;
 }
 
@@ -173,7 +175,7 @@ export function usePendingTasksData() {
 
     const recurrenceTable = (supabase.from as unknown as (table: 'task_recurrence_configs') => RecurrenceTableClient)('task_recurrence_configs');
     const recurrenceQuery = recurrenceTable
-      .select('id, title, description, pattern, end_date')
+      .select('id, title, description, pattern, weekly_day, start_date, end_date')
       .eq('id', task.recurrence_id);
 
     const recurrenceResult = recurrenceQuery.maybeSingle
@@ -185,7 +187,16 @@ export function usePendingTasksData() {
     }
 
     const recurrence = recurrenceResult.data as RecurrenceConfig;
-    const nextDueDate = calculateNextRecurringDate(completedAt, recurrence.pattern);
+    const scheduleReference = new Date(Math.max(
+      new Date(completedAt).getTime(),
+      new Date(task.due_date ?? recurrence.start_date).getTime(),
+    ));
+    const nextDueDate = calculateNextRecurringDate({
+      pattern: recurrence.pattern,
+      startDate: recurrence.start_date,
+      referenceDate: scheduleReference,
+      weeklyDay: recurrence.weekly_day,
+    });
 
     if (recurrence.end_date && nextDueDate > new Date(recurrence.end_date)) {
       return;
@@ -224,10 +235,17 @@ export function usePendingTasksData() {
 
     if (insertError) throw insertError;
 
+    const nextGenerationAt = calculateNextRecurringDate({
+      pattern: recurrence.pattern,
+      startDate: recurrence.start_date,
+      referenceDate: nextDueDate,
+      weeklyDay: recurrence.weekly_day,
+    });
+
     await recurrenceTable
       .update({
         last_generated_at: completedAt,
-        next_generation_at: calculateNextRecurringDate(nextDueDate, recurrence.pattern).toISOString(),
+        next_generation_at: nextGenerationAt.toISOString(),
       })
       .eq('id', task.recurrence_id);
   }, [user]);
