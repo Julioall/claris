@@ -691,7 +691,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 return 0;
               }
 
-              if (entity === 'students') return data?.students?.length || 0;
+              if (entity === 'students') return (data as any)?.students?.length || 0;
               if (entity === 'activities') return data?.activitiesCount || 0;
               return data?.gradesCount || 0;
             } catch (err) {
