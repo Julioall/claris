@@ -889,9 +889,9 @@ export function BulkSendTab() {
                         <Badge variant="outline" className="text-[10px]">
                           {getCategoryLabel(template.category)}
                         </Badge>
-                        {template.is_default && (
+                        {template.is_favorite && (
                           <Badge variant="secondary" className="text-[10px]">
-                            Padrao
+                            ★
                           </Badge>
                         )}
                       </div>

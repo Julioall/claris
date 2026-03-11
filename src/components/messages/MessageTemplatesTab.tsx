@@ -226,8 +226,8 @@ export function MessageTemplatesTab() {
                       <p className="font-medium text-sm truncate">{t.title}</p>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge variant="outline" className="text-[10px]">{getCategoryLabel(t.category)}</Badge>
-                        {t.is_default && (
-                          <Badge variant="secondary" className="text-[10px]">Padrao</Badge>
+                        {t.is_favorite && (
+                          <Badge variant="secondary" className="text-[10px]">★</Badge>
                         )}
                         {countVariables(t.content) > 0 && (
                           <span className="text-[10px] text-muted-foreground">
