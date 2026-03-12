@@ -170,6 +170,8 @@ export default function Reports() {
             name: course.name,
             short_name: course.short_name,
             category: course.category,
+            start_date: course.start_date,
+            end_date: course.end_date,
           }));
 
         const uniqueById = new Map<string, TutorCourse>();
