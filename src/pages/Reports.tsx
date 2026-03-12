@@ -378,9 +378,13 @@ export default function Reports() {
           };
 
           selectedUnitsWithHeader.forEach(unit => {
+            if (unit.status === 'nao_iniciada') {
+              row[unit.headerName] = '-';
+              return;
+            }
             const key = `${studentId}::${unit.id}`;
             const grade = totalsByStudentAndCourse.get(key);
-            row[unit.headerName] = grade === null || grade === undefined ? 'Sem nota' : grade;
+            row[unit.headerName] = grade === null || grade === undefined ? '' : grade;
           });
 
           return { row, isSuspended };
