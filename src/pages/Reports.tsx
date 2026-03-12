@@ -25,6 +25,7 @@ interface TutorCourse {
 interface EnrollmentRow {
   student_id: string;
   course_id: string;
+  enrollment_status: string | null;
   students: {
     full_name: string;
   } | null;
@@ -250,6 +251,7 @@ export default function Reports() {
           .select(`
             student_id,
             course_id,
+            enrollment_status,
             students!inner(full_name)
           `)
           .in('course_id', selectedUnitIds)
@@ -329,16 +331,21 @@ export default function Reports() {
       });
 
       const studentsById = new Map<string, string>();
+      const suspendedStudentIds = new Set<string>();
       enrollments.forEach(enrollment => {
         if (!studentsById.has(enrollment.student_id)) {
           studentsById.set(enrollment.student_id, enrollment.students?.full_name || 'Aluno sem nome');
+        }
+        if (enrollment.enrollment_status === 'suspenso') {
+          suspendedStudentIds.add(enrollment.student_id);
         }
       });
 
       const rows = Array.from(studentsById.entries())
         .map(([studentId, studentName]) => {
+          const isSuspended = suspendedStudentIds.has(studentId);
           const row: Record<string, string | number> = {
-            Aluno: studentName,
+            Aluno: isSuspended ? `${studentName} (Suspenso)` : studentName,
           };
 
           selectedUnitsWithHeader.forEach(unit => {
@@ -347,16 +354,26 @@ export default function Reports() {
             row[unit.headerName] = grade === null || grade === undefined ? 'Sem nota' : grade;
           });
 
-          return row;
+          return { row, isSuspended };
         })
-        .sort((a, b) => String(a.Aluno).localeCompare(String(b.Aluno), 'pt-BR'));
+        .sort((a, b) => {
+          // Suspended students go to the bottom
+          if (a.isSuspended !== b.isSuspended) return a.isSuspended ? 1 : -1;
+          return String(a.row.Aluno).localeCompare(String(b.row.Aluno), 'pt-BR');
+        });
 
       if (rows.length === 0) {
         toast.error('Nenhum dado encontrado para as unidades selecionadas');
         return;
       }
 
-      const worksheet = XLSX.utils.json_to_sheet(rows) as ExcelWorksheet;
+      // Track which Excel rows (1-indexed, after header) are suspended
+      const suspendedRowIndices = new Set<number>();
+      rows.forEach((entry, index) => {
+        if (entry.isSuspended) suspendedRowIndices.add(index + 1); // +1 for header row
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(rows.map(r => r.row)) as ExcelWorksheet;
 
       worksheet['!cols'] = [
         { wch: 32 },
@@ -382,20 +399,29 @@ export default function Reports() {
             }
 
             const isStudentColumn = colIndex === 0;
+            const isSuspendedRow = suspendedRowIndices.has(rowIndex);
             const baseBodyStyle = isStudentColumn ? STUDENT_CELL_STYLE : BODY_CELL_STYLE;
+
+            const suspendedStyle: ExcelStyle = isSuspendedRow ? {
+              fill: { patternType: 'solid', fgColor: { rgb: 'FFE0E0E0' } },
+              font: { color: { rgb: 'FF999999' } },
+            } : {};
 
             cell.s = {
               ...(cell.s || {}),
               ...baseBodyStyle,
+              ...suspendedStyle,
             };
 
             if (!isStudentColumn && typeof cell.v === 'number') {
-              const gradeStyle = getGradeCellStyle(cell.v);
-              if (gradeStyle) {
-                cell.s = {
-                  ...(cell.s || {}),
-                  ...gradeStyle,
-                };
+              if (!isSuspendedRow) {
+                const gradeStyle = getGradeCellStyle(cell.v);
+                if (gradeStyle) {
+                  cell.s = {
+                    ...(cell.s || {}),
+                    ...gradeStyle,
+                  };
+                }
               }
               cell.z = '0.0';
             }
