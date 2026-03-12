@@ -212,14 +212,29 @@ export default function CoursePanel() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="students">Alunos ({stats.totalStudents})</TabsTrigger>
-          <TabsTrigger value="activities">Atividades ({stats.totalActivities})</TabsTrigger>
-          {!isLoadingAttendanceFlag && isAttendanceEnabled && (
-            <TabsTrigger value="attendance">Presenças</TabsTrigger>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <TabsList>
+            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+            <TabsTrigger value="students">Alunos ({stats.totalStudents})</TabsTrigger>
+            <TabsTrigger value="activities">Atividades ({stats.totalActivities})</TabsTrigger>
+            {isAttendanceEnabled && (
+              <TabsTrigger value="attendance">Presenças</TabsTrigger>
+            )}
+          </TabsList>
+
+          {!isLoadingAttendanceFlag && (
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={isAttendanceEnabled}
+                onCheckedChange={toggleAttendance}
+                id="attendance-toggle"
+              />
+              <label htmlFor="attendance-toggle" className="text-sm text-muted-foreground cursor-pointer">
+                Controle de presença
+              </label>
+            </div>
           )}
-        </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-4 mt-4">
           {/* Course Info */}
