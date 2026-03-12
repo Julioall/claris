@@ -25,6 +25,7 @@ interface TutorCourse {
 interface EnrollmentRow {
   student_id: string;
   course_id: string;
+  enrollment_status: string | null;
   students: {
     full_name: string;
   } | null;
