@@ -251,6 +251,7 @@ export default function Reports() {
           .select(`
             student_id,
             course_id,
+            enrollment_status,
             students!inner(full_name)
           `)
           .in('course_id', selectedUnitIds)
