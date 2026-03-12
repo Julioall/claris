@@ -20,6 +20,8 @@ interface TutorCourse {
   name: string;
   short_name: string | null;
   category: string | null;
+  start_date: string | null;
+  end_date: string | null;
 }
 
 interface EnrollmentRow {
@@ -150,7 +152,9 @@ export default function Reports() {
               id,
               name,
               short_name,
-              category
+              category,
+              start_date,
+              end_date
             )
           `)
           .eq('user_id', user.id)
@@ -166,6 +170,8 @@ export default function Reports() {
             name: course.name,
             short_name: course.short_name,
             category: course.category,
+            start_date: course.start_date,
+            end_date: course.end_date,
           }));
 
         const uniqueById = new Map<string, TutorCourse>();
@@ -200,10 +206,16 @@ export default function Reports() {
   const availableUnits = useMemo(() => {
     if (!selectedCourseGroup) return [];
 
-    return tutorCourses.filter(course => {
-      const category = course.category?.trim() ? course.category : SEM_CATEGORIA;
-      return category === selectedCourseGroup;
-    });
+    return tutorCourses
+      .filter(course => {
+        const category = course.category?.trim() ? course.category : SEM_CATEGORIA;
+        return category === selectedCourseGroup;
+      })
+      .sort((a, b) => {
+        const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
+        const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
+        return dateA - dateB;
+      });
   }, [selectedCourseGroup, tutorCourses]);
 
   useEffect(() => {
@@ -310,7 +322,23 @@ export default function Reports() {
         totalsByStudentAndCourse.set(key, Math.round(totalRaw * 10) / 10);
       });
 
-      const selectedUnits = availableUnits.filter(unit => selectedUnitIds.includes(unit.id));
+      const now = new Date();
+      const selectedUnits = availableUnits
+        .filter(unit => selectedUnitIds.includes(unit.id))
+        .sort((a, b) => {
+          const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
+          const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
+          return dateA - dateB;
+        });
+
+      const getUnitStatus = (unit: TutorCourse): 'em_andamento' | 'nao_iniciada' | 'finalizada' => {
+        if (!unit.start_date) return 'em_andamento';
+        const start = new Date(unit.start_date);
+        if (start > now) return 'nao_iniciada';
+        if (unit.end_date && new Date(unit.end_date) < now) return 'finalizada';
+        return 'em_andamento';
+      };
+
       const usedHeaders = new Set<string>();
       const selectedUnitsWithHeader = selectedUnits.map(unit => {
         const simplifiedName = simplifyUnitName(unit.name);
@@ -327,6 +355,7 @@ export default function Reports() {
         return {
           ...unit,
           headerName,
+          status: getUnitStatus(unit),
         };
       });
 
@@ -349,9 +378,13 @@ export default function Reports() {
           };
 
           selectedUnitsWithHeader.forEach(unit => {
+            if (unit.status === 'nao_iniciada') {
+              row[unit.headerName] = '-';
+              return;
+            }
             const key = `${studentId}::${unit.id}`;
             const grade = totalsByStudentAndCourse.get(key);
-            row[unit.headerName] = grade === null || grade === undefined ? 'Sem nota' : grade;
+            row[unit.headerName] = grade === null || grade === undefined ? '' : grade;
           });
 
           return { row, isSuspended };
