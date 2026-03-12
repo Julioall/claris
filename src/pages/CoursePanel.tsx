@@ -60,8 +60,15 @@ export default function CoursePanel() {
 
       setIsLoadingAttendanceFlag(true);
       try {
-        // attendance_course_settings table doesn't exist yet — default to disabled
-        setIsAttendanceEnabled(false);
+        const { data, error } = await (supabase as any)
+          .from('attendance_course_settings')
+          .select('is_enabled')
+          .eq('user_id', user.id)
+          .eq('course_id', id)
+          .maybeSingle();
+
+        if (error) throw error;
+        setIsAttendanceEnabled(data?.is_enabled ?? false);
       } catch (err) {
         console.error('Error loading attendance flag:', err);
         setIsAttendanceEnabled(false);
@@ -72,6 +79,23 @@ export default function CoursePanel() {
 
     loadAttendanceFlag();
   }, [id, user]);
+
+  const toggleAttendance = async () => {
+    if (!user || !id) return;
+    const newValue = !isAttendanceEnabled;
+    try {
+      const { error } = await (supabase as any)
+        .from('attendance_course_settings')
+        .upsert(
+          { user_id: user.id, course_id: id, is_enabled: newValue },
+          { onConflict: 'user_id,course_id' }
+        );
+      if (error) throw error;
+      setIsAttendanceEnabled(newValue);
+    } catch (err) {
+      console.error('Error toggling attendance:', err);
+    }
+  };
 
   if (isLoading) {
     return (
