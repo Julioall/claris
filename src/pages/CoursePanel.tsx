@@ -62,13 +62,13 @@ export default function CoursePanel() {
       try {
         const { data, error } = await (supabase as any)
           .from('attendance_course_settings')
-          .select('is_enabled')
+          .select('id')
           .eq('user_id', user.id)
           .eq('course_id', id)
           .maybeSingle();
 
         if (error) throw error;
-        setIsAttendanceEnabled(data?.is_enabled ?? false);
+        setIsAttendanceEnabled(!!data);
       } catch (err) {
         console.error('Error loading attendance flag:', err);
         setIsAttendanceEnabled(false);
