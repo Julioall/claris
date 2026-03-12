@@ -399,20 +399,29 @@ export default function Reports() {
             }
 
             const isStudentColumn = colIndex === 0;
+            const isSuspendedRow = suspendedRowIndices.has(rowIndex);
             const baseBodyStyle = isStudentColumn ? STUDENT_CELL_STYLE : BODY_CELL_STYLE;
+
+            const suspendedStyle: ExcelStyle = isSuspendedRow ? {
+              fill: { patternType: 'solid', fgColor: { rgb: 'FFE0E0E0' } },
+              font: { color: { rgb: 'FF999999' } },
+            } : {};
 
             cell.s = {
               ...(cell.s || {}),
               ...baseBodyStyle,
+              ...suspendedStyle,
             };
 
             if (!isStudentColumn && typeof cell.v === 'number') {
-              const gradeStyle = getGradeCellStyle(cell.v);
-              if (gradeStyle) {
-                cell.s = {
-                  ...(cell.s || {}),
-                  ...gradeStyle,
-                };
+              if (!isSuspendedRow) {
+                const gradeStyle = getGradeCellStyle(cell.v);
+                if (gradeStyle) {
+                  cell.s = {
+                    ...(cell.s || {}),
+                    ...gradeStyle,
+                  };
+                }
               }
               cell.z = '0.0';
             }
