@@ -102,7 +102,7 @@ describe("CourseAttendanceTab", () => {
     render(<CourseAttendanceTab courseId="c-1" />);
 
     await waitFor(() => {
-      expect(screen.getByText(/registros de presenca/i)).toBeInTheDocument();
+      expect(screen.getByText(/registros de presença/i)).toBeInTheDocument();
     });
 
     expect(screen.getAllByText(/23\/02\/2026/i).length).toBeGreaterThan(0);
@@ -123,10 +123,10 @@ describe("CourseAttendanceTab", () => {
     render(<CourseAttendanceTab courseId="c-1" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /nova presenca/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /nova presença/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: /nova presenca/i }));
+    await user.click(screen.getByRole("button", { name: /nova presença/i }));
     await user.click(screen.getByRole("button", { name: /^salvar$/i }));
 
     expect(upsertMock).not.toHaveBeenCalled();
@@ -161,15 +161,15 @@ describe("CourseAttendanceTab", () => {
     render(<CourseAttendanceTab courseId="c-1" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /nova presenca/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /nova presença/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByRole("button", { name: /nova presenca/i }));
+    await user.click(screen.getByRole("button", { name: /nova presença/i }));
 
     await user.click(screen.getByRole("combobox"));
     await user.click(await screen.findByRole("option", { name: /^Presente$/i }));
 
-    await user.type(screen.getByPlaceholderText(/observacao \(opcional\)/i), "Chegou no horario");
+    await user.type(screen.getByPlaceholderText(/observação \(opcional\)/i), "Chegou no horario");
     await user.click(screen.getByRole("button", { name: /^salvar$/i }));
 
     await waitFor(() => {
@@ -190,7 +190,7 @@ describe("CourseAttendanceTab", () => {
     );
 
     expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringMatching(/presencas salvas/i) }),
+      expect.objectContaining({ title: expect.stringMatching(/presenças salvas/i) }),
     );
   });
 });

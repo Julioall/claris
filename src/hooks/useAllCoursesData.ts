@@ -120,8 +120,14 @@ export function useAllCoursesData() {
 
       const ignoredCourseIds = new Set(ignoredCourses?.map(ic => ic.course_id) || []);
 
-      // attendance_course_settings not yet implemented — default to disabled
-      const attendanceCourseIds = new Set<string>();
+      const { data: attendanceCourses, error: attendanceError } = await supabase
+        .from('attendance_course_settings')
+        .select('course_id')
+        .eq('user_id', user.id);
+
+      if (attendanceError) throw attendanceError;
+
+      const attendanceCourseIds = new Set(attendanceCourses?.map(ac => ac.course_id) || []);
 
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
@@ -302,14 +308,90 @@ export function useAllCoursesData() {
     }
   }, [setCoursesAssociationRole, user]);
 
-  // attendance toggle stubs — table not yet created
-  const toggleAttendance = useCallback(async (_courseId: string) => {
-    console.warn('attendance_course_settings table not yet created');
-  }, []);
+  const toggleAttendance = useCallback(async (courseId: string) => {
+    if (!user) return;
 
-  const toggleAttendanceMultiple = useCallback(async (_courseIds: string[], _shouldEnable: boolean) => {
-    console.warn('attendance_course_settings table not yet created');
-  }, []);
+    const course = courses.find(c => c.id === courseId);
+    if (!course) return;
+
+    const shouldEnable = !course.is_attendance_enabled;
+
+    try {
+      if (shouldEnable) {
+        const { error } = await supabase
+          .from('attendance_course_settings')
+          .insert({
+            user_id: user.id,
+            course_id: courseId,
+          });
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('attendance_course_settings')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('course_id', courseId);
+
+        if (error) throw error;
+      }
+
+      setCourses(prev => prev.map(c =>
+        c.id === courseId
+          ? { ...c, is_attendance_enabled: shouldEnable }
+          : c
+      ));
+    } catch (err) {
+      console.error('Error toggling attendance:', err);
+      throw err;
+    }
+  }, [courses, user]);
+
+  const toggleAttendanceMultiple = useCallback(async (courseIds: string[], shouldEnable: boolean) => {
+    if (!user || courseIds.length === 0) return;
+
+    try {
+      if (shouldEnable) {
+        const enabledCourseIds = new Set(
+          courses
+            .filter(c => courseIds.includes(c.id) && c.is_attendance_enabled)
+            .map(c => c.id)
+        );
+
+        const toInsert = courseIds
+          .filter(courseId => !enabledCourseIds.has(courseId))
+          .map(course_id => ({
+            user_id: user.id,
+            course_id,
+          }));
+
+        if (toInsert.length > 0) {
+          const { error } = await supabase
+            .from('attendance_course_settings')
+            .insert(toInsert);
+
+          if (error) throw error;
+        }
+      } else {
+        const { error } = await supabase
+          .from('attendance_course_settings')
+          .delete()
+          .eq('user_id', user.id)
+          .in('course_id', courseIds);
+
+        if (error) throw error;
+      }
+
+      setCourses(prev => prev.map(c =>
+        courseIds.includes(c.id)
+          ? { ...c, is_attendance_enabled: shouldEnable }
+          : c
+      ));
+    } catch (err) {
+      console.error('Error toggling attendance multiple:', err);
+      throw err;
+    }
+  }, [courses, user]);
 
   useEffect(() => {
     fetchCourses();

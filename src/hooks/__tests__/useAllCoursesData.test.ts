@@ -28,6 +28,16 @@ const ignoredDeleteInMock = vi.fn();
 
 const ignoredInsertMock = vi.fn();
 
+const attendanceSelectMock = vi.fn();
+const attendanceEqMock = vi.fn();
+
+const attendanceDeleteMock = vi.fn();
+const attendanceDeleteEqUserMock = vi.fn();
+const attendanceDeleteEqCourseMock = vi.fn();
+const attendanceDeleteInMock = vi.fn();
+
+const attendanceInsertMock = vi.fn();
+
 const studentCoursesSelectMock = vi.fn();
 const studentCoursesEqMock = vi.fn();
 
@@ -36,7 +46,6 @@ const pendingEqMock = vi.fn();
 const pendingNeqMock = vi.fn();
 
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
@@ -88,6 +97,14 @@ function setupFromMock() {
         select: ignoredSelectMock,
         delete: ignoredDeleteMock,
         insert: ignoredInsertMock,
+      };
+    }
+
+    if (table === "attendance_course_settings") {
+      return {
+        select: attendanceSelectMock,
+        delete: attendanceDeleteMock,
+        insert: attendanceInsertMock,
       };
     }
 
@@ -153,6 +170,12 @@ describe("useAllCoursesData", () => {
       error: null,
     });
 
+    attendanceSelectMock.mockReturnValue({ eq: attendanceEqMock });
+    attendanceEqMock.mockResolvedValue({
+      data: [{ course_id: "c-2" }],
+      error: null,
+    });
+
     studentCoursesSelectMock.mockImplementation((query: string) => {
       if (query.includes("students!inner")) {
         return {
@@ -210,11 +233,23 @@ describe("useAllCoursesData", () => {
     ignoredDeleteEqCourseMock.mockResolvedValue({ error: null });
     ignoredDeleteInMock.mockResolvedValue({ error: null });
     ignoredInsertMock.mockResolvedValue({ error: null });
+
+    attendanceDeleteMock.mockReturnValue({ eq: attendanceDeleteEqUserMock });
+    attendanceDeleteEqUserMock.mockImplementation((column: string, value: string) => {
+      if (column !== "user_id") throw new Error(`Unexpected attendance delete column: ${column}`);
+      if (!value) throw new Error("Missing user id");
+      return {
+        eq: attendanceDeleteEqCourseMock,
+        in: attendanceDeleteInMock,
+      };
+    });
+    attendanceDeleteEqCourseMock.mockResolvedValue({ error: null });
+    attendanceDeleteInMock.mockResolvedValue({ error: null });
+    attendanceInsertMock.mockResolvedValue({ error: null });
   });
 
   afterAll(() => {
     consoleErrorSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
   });
 
   it("loads all courses with stats and follow/ignore flags", async () => {
@@ -233,6 +268,7 @@ describe("useAllCoursesData", () => {
       pending_tasks_count: 5,
       is_following: true,
       is_ignored: false,
+      is_attendance_enabled: false,
     });
     expect(result.current.courses[1]).toMatchObject({
       id: "c-2",
@@ -241,6 +277,7 @@ describe("useAllCoursesData", () => {
       pending_tasks_count: 1,
       is_following: false,
       is_ignored: true,
+      is_attendance_enabled: true,
     });
   });
 
@@ -358,7 +395,7 @@ describe("useAllCoursesData", () => {
     expect(result.current.courses.every((course) => !course.is_following)).toBe(true);
   });
 
-  it("warns for attendance toggles because feature is not implemented", async () => {
+  it("toggles attendance for a single course", async () => {
     const { result } = renderHook(() => useAllCoursesData());
 
     await waitFor(() => {
@@ -367,10 +404,47 @@ describe("useAllCoursesData", () => {
 
     await act(async () => {
       await result.current.toggleAttendance("c-1");
+    });
+
+    expect(attendanceInsertMock).toHaveBeenCalledWith({
+      user_id: "user-1",
+      course_id: "c-1",
+    });
+    expect(result.current.courses.find((course) => course.id === "c-1")?.is_attendance_enabled).toBe(true);
+
+    await act(async () => {
+      await result.current.toggleAttendance("c-2");
+    });
+
+    expect(attendanceDeleteEqCourseMock).toHaveBeenCalledWith("course_id", "c-2");
+    expect(result.current.courses.find((course) => course.id === "c-2")?.is_attendance_enabled).toBe(false);
+  });
+
+  it("toggles attendance for multiple courses without duplicating existing settings", async () => {
+    const { result } = renderHook(() => useAllCoursesData());
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    await act(async () => {
       await result.current.toggleAttendanceMultiple(["c-1", "c-2"], true);
     });
 
-    expect(consoleWarnSpy).toHaveBeenCalledTimes(2);
+    expect(attendanceInsertMock).toHaveBeenCalledWith([
+      {
+        user_id: "user-1",
+        course_id: "c-1",
+      },
+    ]);
+    expect(result.current.courses.every((course) => course.is_attendance_enabled)).toBe(true);
+
+    await act(async () => {
+      await result.current.toggleAttendanceMultiple(["c-1", "c-2"], false);
+    });
+
+    expect(attendanceDeleteInMock).toHaveBeenCalledWith("course_id", ["c-1", "c-2"]);
+    expect(result.current.courses.every((course) => !course.is_attendance_enabled)).toBe(true);
   });
 
   it("returns empty courses when user is not authenticated", async () => {
