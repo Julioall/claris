@@ -452,7 +452,7 @@ export default function CoursePanel() {
           </Card>
         </TabsContent>
 
-        {!isLoadingAttendanceFlag && isAttendanceEnabled && (
+        {isAttendanceEnabled && (
           <TabsContent value="attendance" className="mt-4">
             <CourseAttendanceTab courseId={course.id} />
           </TabsContent>
