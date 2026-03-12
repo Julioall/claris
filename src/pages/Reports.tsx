@@ -240,16 +240,31 @@ export default function Reports() {
     try {
       const XLSX = await import('xlsx-js-style');
 
-      const [enrollmentsResponse, activitiesResponse] = await Promise.all([
-        supabase
+      // Fetch enrollments (paginated)
+      const allEnrollments: EnrollmentRow[] = [];
+      let enrollmentPage = 0;
+      const PAGE_SIZE = 1000;
+      while (true) {
+        const { data, error } = await supabase
           .from('student_courses')
           .select(`
             student_id,
             course_id,
             students!inner(full_name)
           `)
-          .in('course_id', selectedUnitIds),
-        supabase
+          .in('course_id', selectedUnitIds)
+          .range(enrollmentPage * PAGE_SIZE, (enrollmentPage + 1) * PAGE_SIZE - 1);
+        if (error) throw error;
+        allEnrollments.push(...((data || []) as EnrollmentRow[]));
+        if (!data || data.length < PAGE_SIZE) break;
+        enrollmentPage++;
+      }
+
+      // Fetch activities (paginated)
+      const allActivities: ActivityGradeRow[] = [];
+      let activityPage = 0;
+      while (true) {
+        const { data, error } = await supabase
           .from('student_activities')
           .select(`
             student_id,
@@ -259,14 +274,16 @@ export default function Reports() {
             hidden
           `)
           .in('course_id', selectedUnitIds)
-          .neq('activity_type', 'scorm'),
-      ]);
+          .neq('activity_type', 'scorm')
+          .range(activityPage * PAGE_SIZE, (activityPage + 1) * PAGE_SIZE - 1);
+        if (error) throw error;
+        allActivities.push(...((data || []) as ActivityGradeRow[]));
+        if (!data || data.length < PAGE_SIZE) break;
+        activityPage++;
+      }
 
-      if (enrollmentsResponse.error) throw enrollmentsResponse.error;
-      if (activitiesResponse.error) throw activitiesResponse.error;
-
-      const enrollments = (enrollmentsResponse.data || []) as EnrollmentRow[];
-      const activities = (activitiesResponse.data || []) as ActivityGradeRow[];
+      const enrollments = allEnrollments;
+      const activities = allActivities;
 
       const totalsByStudentAndCourse = new Map<string, number | null>();
 
