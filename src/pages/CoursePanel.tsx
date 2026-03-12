@@ -60,8 +60,15 @@ export default function CoursePanel() {
 
       setIsLoadingAttendanceFlag(true);
       try {
-        // attendance_course_settings table doesn't exist yet — default to disabled
-        setIsAttendanceEnabled(false);
+        const { data, error } = await (supabase as any)
+          .from('attendance_course_settings')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('course_id', id)
+          .maybeSingle();
+
+        if (error) throw error;
+        setIsAttendanceEnabled(!!data);
       } catch (err) {
         console.error('Error loading attendance flag:', err);
         setIsAttendanceEnabled(false);
@@ -72,6 +79,29 @@ export default function CoursePanel() {
 
     loadAttendanceFlag();
   }, [id, user]);
+
+  const toggleAttendance = async () => {
+    if (!user || !id) return;
+    const newValue = !isAttendanceEnabled;
+    try {
+      if (newValue) {
+        const { error } = await (supabase as any)
+          .from('attendance_course_settings')
+          .insert({ user_id: user.id, course_id: id });
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from('attendance_course_settings')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('course_id', id);
+        if (error) throw error;
+      }
+      setIsAttendanceEnabled(newValue);
+    } catch (err) {
+      console.error('Error toggling attendance:', err);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -188,14 +218,29 @@ export default function CoursePanel() {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="overview">Visão Geral</TabsTrigger>
-          <TabsTrigger value="students">Alunos ({stats.totalStudents})</TabsTrigger>
-          <TabsTrigger value="activities">Atividades ({stats.totalActivities})</TabsTrigger>
-          {!isLoadingAttendanceFlag && isAttendanceEnabled && (
-            <TabsTrigger value="attendance">Presenças</TabsTrigger>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <TabsList>
+            <TabsTrigger value="overview">Visão Geral</TabsTrigger>
+            <TabsTrigger value="students">Alunos ({stats.totalStudents})</TabsTrigger>
+            <TabsTrigger value="activities">Atividades ({stats.totalActivities})</TabsTrigger>
+            {isAttendanceEnabled && (
+              <TabsTrigger value="attendance">Presenças</TabsTrigger>
+            )}
+          </TabsList>
+
+          {!isLoadingAttendanceFlag && (
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={isAttendanceEnabled}
+                onCheckedChange={toggleAttendance}
+                id="attendance-toggle"
+              />
+              <label htmlFor="attendance-toggle" className="text-sm text-muted-foreground cursor-pointer">
+                Controle de presença
+              </label>
+            </div>
           )}
-        </TabsList>
+        </div>
 
         <TabsContent value="overview" className="space-y-4 mt-4">
           {/* Course Info */}
@@ -413,7 +458,7 @@ export default function CoursePanel() {
           </Card>
         </TabsContent>
 
-        {!isLoadingAttendanceFlag && isAttendanceEnabled && (
+        {isAttendanceEnabled && (
           <TabsContent value="attendance" className="mt-4">
             <CourseAttendanceTab courseId={course.id} />
           </TabsContent>
