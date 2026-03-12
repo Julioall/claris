@@ -355,6 +355,7 @@ export default function Reports() {
         return {
           ...unit,
           headerName,
+          status: getUnitStatus(unit),
         };
       });
 
