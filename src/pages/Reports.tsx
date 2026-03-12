@@ -152,7 +152,9 @@ export default function Reports() {
               id,
               name,
               short_name,
-              category
+              category,
+              start_date,
+              end_date
             )
           `)
           .eq('user_id', user.id)
