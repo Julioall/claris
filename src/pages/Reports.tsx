@@ -322,7 +322,23 @@ export default function Reports() {
         totalsByStudentAndCourse.set(key, Math.round(totalRaw * 10) / 10);
       });
 
-      const selectedUnits = availableUnits.filter(unit => selectedUnitIds.includes(unit.id));
+      const now = new Date();
+      const selectedUnits = availableUnits
+        .filter(unit => selectedUnitIds.includes(unit.id))
+        .sort((a, b) => {
+          const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
+          const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
+          return dateA - dateB;
+        });
+
+      const getUnitStatus = (unit: TutorCourse): 'em_andamento' | 'nao_iniciada' | 'finalizada' => {
+        if (!unit.start_date) return 'em_andamento';
+        const start = new Date(unit.start_date);
+        if (start > now) return 'nao_iniciada';
+        if (unit.end_date && new Date(unit.end_date) < now) return 'finalizada';
+        return 'em_andamento';
+      };
+
       const usedHeaders = new Set<string>();
       const selectedUnitsWithHeader = selectedUnits.map(unit => {
         const simplifiedName = simplifyUnitName(unit.name);
