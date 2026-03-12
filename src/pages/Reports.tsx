@@ -206,10 +206,16 @@ export default function Reports() {
   const availableUnits = useMemo(() => {
     if (!selectedCourseGroup) return [];
 
-    return tutorCourses.filter(course => {
-      const category = course.category?.trim() ? course.category : SEM_CATEGORIA;
-      return category === selectedCourseGroup;
-    });
+    return tutorCourses
+      .filter(course => {
+        const category = course.category?.trim() ? course.category : SEM_CATEGORIA;
+        return category === selectedCourseGroup;
+      })
+      .sort((a, b) => {
+        const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
+        const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
+        return dateA - dateB;
+      });
   }, [selectedCourseGroup, tutorCourses]);
 
   useEffect(() => {
