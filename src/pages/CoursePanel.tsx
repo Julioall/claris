@@ -84,13 +84,19 @@ export default function CoursePanel() {
     if (!user || !id) return;
     const newValue = !isAttendanceEnabled;
     try {
-      const { error } = await (supabase as any)
-        .from('attendance_course_settings')
-        .upsert(
-          { user_id: user.id, course_id: id, is_enabled: newValue },
-          { onConflict: 'user_id,course_id' }
-        );
-      if (error) throw error;
+      if (newValue) {
+        const { error } = await (supabase as any)
+          .from('attendance_course_settings')
+          .insert({ user_id: user.id, course_id: id });
+        if (error) throw error;
+      } else {
+        const { error } = await (supabase as any)
+          .from('attendance_course_settings')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('course_id', id);
+        if (error) throw error;
+      }
       setIsAttendanceEnabled(newValue);
     } catch (err) {
       console.error('Error toggling attendance:', err);
