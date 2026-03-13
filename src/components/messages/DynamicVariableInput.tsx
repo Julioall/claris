@@ -190,14 +190,16 @@ export function DynamicVariableInput({
         return <span key={index}>{part}</span>;
       }
 
+      const colorClass = {
+        Aluno: 'text-blue-600 dark:text-blue-400',
+        Academico: 'text-emerald-600 dark:text-emerald-400',
+        Tutor: 'text-amber-600 dark:text-amber-400',
+      }[variable.category] ?? 'text-primary';
+
       return (
-        <Badge
-          key={index}
-          variant="secondary"
-          className={cn('mx-0.5 cursor-default text-xs', CATEGORY_COLORS[variable.category])}
-        >
-          {variable.label}
-        </Badge>
+        <span key={index} className={cn('font-semibold', colorClass)}>
+          {`{${variable.key}}`}
+        </span>
       );
     });
   };
