@@ -703,7 +703,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         for (const result of results) {
           if (result.status === 'fulfilled') {
-            totalCount += result.value;
+            if (typeof result.value === 'number') {
+              totalCount += result.value;
+            }
           } else {
             errorCount++;
           }
@@ -787,7 +789,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (error || data?.error) {
           updateStep('courses', {
             status: 'error',
-            errorMessage: error?.message || (data as { error?: string })?.error || 'Falha ao sincronizar cursos',
+            errorMessage: (typeof error?.message === 'string' ? error.message : undefined) || (data as { error?: string })?.error || 'Falha ao sincronizar cursos',
           });
         } else {
           const allSyncedCourses: Course[] = (data as { courses?: Course[] })?.courses || [];
