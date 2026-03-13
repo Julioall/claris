@@ -132,7 +132,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const loadDateRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('attendance_records')
       .select('student_id, status, notes, updated_at')
       .eq('user_id', user.id)
