@@ -318,7 +318,7 @@ export function useAllCoursesData() {
 
     try {
       if (shouldEnable) {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('attendance_course_settings')
           .insert({
             user_id: user.id,
