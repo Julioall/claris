@@ -364,96 +364,126 @@ export default function CoursePanel() {
         <TabsContent value="activities" className="mt-4">
           <Card>
             <CardContent className="p-0">
-              {activities.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
-                  <ClipboardList className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                  <h3 className="text-lg font-medium">Nenhuma atividade encontrada</h3>
-                  <p className="text-muted-foreground text-sm">Use o botao de sincronizacao da barra superior para carregar as atividades.</p>
-                </div>
-              ) : (
-                <div className="divide-y">
-                  {activities.map((activity) => (
-                    <div 
-                      key={activity.id} 
-                      className={cn(
-                        "p-4 transition-opacity",
-                        activity.hidden && "opacity-50 bg-muted/30"
-                      )}
-                    >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="space-y-1 flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <p className={cn("font-medium", activity.hidden && "line-through text-muted-foreground")}>
-                              {activity.activity_name}
-                            </p>
-                            {activity.hidden && (
-                              <Badge variant="secondary" className="text-xs">
-                                <EyeOff className="h-3 w-3 mr-1" />
-                                Oculta
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            {activity.activity_type && (
-                              <Badge variant="outline" className="text-xs">
-                                {activity.activity_type}
-                              </Badge>
-                            )}
-                            {activity.due_date && (
-                              <span>Prazo: {formatDate(activity.due_date)}</span>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-3">
-                          {/* Edit mode: visibility and recovery toggles */}
-                          {isEditMode && (
-                            <div className="flex items-center gap-4">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="flex items-center gap-2">
-                                      <Switch
-                                        checked={!activity.hidden}
-                                        onCheckedChange={(checked) => 
-                                          toggleActivityVisibility(activity.moodle_activity_id, !checked)
-                                        }
-                                      />
-                                      {activity.hidden ? (
-                                        <EyeOff className="h-4 w-4 text-muted-foreground" />
-                                      ) : (
-                                        <Eye className="h-4 w-4 text-primary" />
-                                      )}
-                                    </div>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>{activity.hidden ? 'Exibir atividade nas métricas' : 'Ocultar atividade das métricas'}</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-
-                            </div>
-                          )}
-
-                          {/* Grade/Status display */}
-                          <div className="text-right">
-                            {activity.grade !== null && activity.grade_max !== null ? (
-                              <div>
-                                <span className="font-semibold">{activity.grade}</span>
-                                <span className="text-muted-foreground">/{activity.grade_max}</span>
-                              </div>
-                            ) : (
-                              <Badge variant={activity.status === 'completed' ? 'default' : 'secondary'}>
-                                {activity.status === 'completed' ? 'Concluída' : 'Pendente'}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
+              {(() => {
+                const visibleActivities = isEditMode 
+                  ? activities 
+                  : activities.filter(a => !a.hidden);
+                
+                if (visibleActivities.length === 0) {
+                  return (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <ClipboardList className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                      <h3 className="text-lg font-medium">Nenhuma atividade encontrada</h3>
+                      <p className="text-muted-foreground text-sm">Use o botão de sincronização da barra superior para carregar as atividades.</p>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                }
+
+                return (
+                  <div className="divide-y">
+                    {visibleActivities.map((activity) => {
+                      // Determine status tag logic:
+                      // Quiz: never show pendente/corrigido (auto-graded)
+                      // Assign/Forum: show "Corrigido" if graded, "Pendente" if not
+                      const isQuiz = activity.activity_type === 'quiz';
+                      const isGraded = activity.grade !== null && activity.grade_max !== null;
+                      const isCompleted = activity.status === 'completed' || activity.status === 'complete_pass';
+
+                      return (
+                        <div 
+                          key={activity.id} 
+                          className={cn(
+                            "p-4 transition-opacity",
+                            activity.hidden && "opacity-50 bg-muted/30"
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="space-y-1 flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className={cn("font-medium", activity.hidden && "line-through text-muted-foreground")}>
+                                  {activity.activity_name}
+                                </p>
+                                {activity.hidden && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    <EyeOff className="h-3 w-3 mr-1" />
+                                    Oculta
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                {activity.activity_type && (
+                                  <Badge variant="outline" className="text-xs">
+                                    {activity.activity_type}
+                                  </Badge>
+                                )}
+                                {activity.due_date && (
+                                  <span>Prazo: {formatDate(activity.due_date)}</span>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3">
+                              {/* Edit mode: visibility toggle */}
+                              {isEditMode && (
+                                <div className="flex items-center gap-4">
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="flex items-center gap-2">
+                                          <Switch
+                                            checked={!activity.hidden}
+                                            onCheckedChange={(checked) => 
+                                              toggleActivityVisibility(activity.moodle_activity_id, !checked)
+                                            }
+                                          />
+                                          {activity.hidden ? (
+                                            <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                          ) : (
+                                            <Eye className="h-4 w-4 text-primary" />
+                                          )}
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p>{activity.hidden ? 'Exibir atividade nas métricas' : 'Ocultar atividade das métricas'}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              )}
+
+                              {/* Status tag display - no grades shown */}
+                              <div className="text-right">
+                                {isQuiz ? (
+                                  isCompleted ? (
+                                    <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30">
+                                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                                      Concluído
+                                    </Badge>
+                                  ) : null
+                                ) : isGraded ? (
+                                  <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">
+                                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                                    Corrigido
+                                  </Badge>
+                                ) : isCompleted ? (
+                                  <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    Aguardando correção
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary">
+                                    Pendente
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>

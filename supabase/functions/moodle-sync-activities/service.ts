@@ -253,6 +253,8 @@ function buildActivityRecords(
         status,
         completed_at: completedAt,
         updated_at: now,
+        // Auto-hide forum activities
+        hidden: activity.modname === 'forum',
       }
       if (dueDate) record.due_date = dueDate
       records.push(record)
