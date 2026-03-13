@@ -41,6 +41,21 @@ interface ActivityGradeRow {
   hidden: boolean;
 }
 
+interface ActivityDetailRow {
+  student_id: string;
+  course_id: string;
+  activity_name: string;
+  activity_type: string | null;
+  status: string | null;
+  grade: number | null;
+  grade_max: number | null;
+  due_date: string | null;
+  hidden: boolean;
+  completed_at: string | null;
+  graded_at: string | null;
+  submitted_at: string | null;
+}
+
 const SEM_CATEGORIA = 'Sem categoria';
 
 type ExcelStyle = Record<string, unknown>;
@@ -124,6 +139,26 @@ const getGradeCellStyle = (grade: number) => {
 
   return null;
 };
+
+/**
+ * Infer end dates for units that don't have one.
+ * Uses the start date of the next unit (sorted chronologically) as the end date.
+ */
+function inferEndDates(units: TutorCourse[]): (TutorCourse & { effective_end_date: string | null })[] {
+  const sorted = [...units].sort((a, b) => {
+    const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
+    const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
+    return dateA - dateB;
+  });
+
+  return sorted.map((unit, index) => {
+    let effectiveEnd = unit.end_date || null;
+    if (!effectiveEnd && index < sorted.length - 1) {
+      effectiveEnd = sorted[index + 1].start_date || null;
+    }
+    return { ...unit, effective_end_date: effectiveEnd };
+  });
+}
 
 export default function Reports() {
   const { user } = useAuth();
@@ -390,7 +425,6 @@ export default function Reports() {
           return { row, isSuspended };
         })
         .sort((a, b) => {
-          // Suspended students go to the bottom
           if (a.isSuspended !== b.isSuspended) return a.isSuspended ? 1 : -1;
           return String(a.row.Aluno).localeCompare(String(b.row.Aluno), 'pt-BR');
         });
@@ -400,10 +434,9 @@ export default function Reports() {
         return;
       }
 
-      // Track which Excel rows (1-indexed, after header) are suspended
       const suspendedRowIndices = new Set<number>();
       rows.forEach((entry, index) => {
-        if (entry.isSuspended) suspendedRowIndices.add(index + 1); // +1 for header row
+        if (entry.isSuspended) suspendedRowIndices.add(index + 1);
       });
 
       const worksheet = XLSX.utils.json_to_sheet(rows.map(r => r.row)) as ExcelWorksheet;
@@ -486,6 +519,189 @@ export default function Reports() {
     }
   };
 
+  const generatePendingReport = async () => {
+    if (selectedUnitIds.length === 0) {
+      toast.error('Selecione ao menos uma unidade curricular');
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const XLSX = await import('xlsx-js-style');
+      const PAGE_SIZE = 1000;
+
+      // Fetch enrollments
+      const allEnrollments: EnrollmentRow[] = [];
+      let page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('student_courses')
+          .select('student_id, course_id, enrollment_status, students!inner(full_name)')
+          .in('course_id', selectedUnitIds)
+          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+        if (error) throw error;
+        allEnrollments.push(...((data || []) as EnrollmentRow[]));
+        if (!data || data.length < PAGE_SIZE) break;
+        page++;
+      }
+
+      // Fetch activities with details
+      const allActivities: ActivityDetailRow[] = [];
+      page = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('student_activities')
+          .select('student_id, course_id, activity_name, activity_type, status, grade, grade_max, due_date, hidden, completed_at, graded_at, submitted_at')
+          .in('course_id', selectedUnitIds)
+          .neq('activity_type', 'scorm')
+          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+        if (error) throw error;
+        allActivities.push(...((data || []) as ActivityDetailRow[]));
+        if (!data || data.length < PAGE_SIZE) break;
+        page++;
+      }
+
+      // Build units with inferred end dates
+      const selectedUnitsRaw = availableUnits.filter(u => selectedUnitIds.includes(u.id));
+      const unitsWithEndDates = inferEndDates(selectedUnitsRaw);
+      const unitEndDateMap = new Map(unitsWithEndDates.map(u => [u.id, u.effective_end_date]));
+      const unitNameMap = new Map(unitsWithEndDates.map(u => [u.id, simplifyUnitName(u.name)]));
+      const unitStartMap = new Map(unitsWithEndDates.map(u => [u.id, u.start_date]));
+
+      const now = new Date();
+
+      // Filter: only visible, non-quiz activities that are pending within the unit period
+      const pendingActivities = allActivities.filter(a => {
+        if (a.hidden) return false;
+        if (a.activity_type === 'quiz') return false;
+
+        // Must not be completed/graded/submitted
+        const isCompleted = a.status === 'completed' || a.status === 'complete_pass' || a.completed_at || a.graded_at || a.submitted_at;
+        if (isCompleted) return false;
+
+        // Check if the activity's unit period has started
+        const unitStart = unitStartMap.get(a.course_id);
+        if (unitStart && new Date(unitStart) > now) return false;
+
+        // Check if the activity's unit period has ended (past due)
+        const unitEnd = unitEndDateMap.get(a.course_id);
+        if (unitEnd && new Date(unitEnd) < now) {
+          // Unit already ended - activity is overdue
+          return true;
+        }
+
+        // Unit still in progress - check due_date if available
+        if (a.due_date && new Date(a.due_date) < now) return true;
+
+        // Unit in progress, no due date or not past due yet - still pending
+        return true;
+      });
+
+      // Build student map
+      const studentsById = new Map<string, string>();
+      const suspendedIds = new Set<string>();
+      allEnrollments.forEach(e => {
+        if (!studentsById.has(e.student_id)) {
+          studentsById.set(e.student_id, e.students?.full_name || 'Aluno sem nome');
+        }
+        if (e.enrollment_status === 'suspenso') suspendedIds.add(e.student_id);
+      });
+
+      // Group pending by student
+      const pendingByStudent = new Map<string, ActivityDetailRow[]>();
+      pendingActivities.forEach(a => {
+        if (suspendedIds.has(a.student_id)) return;
+        const list = pendingByStudent.get(a.student_id) || [];
+        list.push(a);
+        pendingByStudent.set(a.student_id, list);
+      });
+
+      if (pendingByStudent.size === 0) {
+        toast.info('Nenhuma atividade pendente encontrada para as unidades selecionadas');
+        setIsGenerating(false);
+        return;
+      }
+
+      // Build rows
+      const rows: Record<string, string | number>[] = [];
+      const sortedStudents = Array.from(pendingByStudent.entries())
+        .sort((a, b) => b[1].length - a[1].length); // Most pending first
+
+      for (const [studentId, activities] of sortedStudents) {
+        const studentName = studentsById.get(studentId) || 'Desconhecido';
+        for (const act of activities) {
+          const unitName = unitNameMap.get(act.course_id) || 'N/A';
+          const unitEnd = unitEndDateMap.get(act.course_id);
+          const isOverdue = act.due_date
+            ? new Date(act.due_date) < now
+            : unitEnd ? new Date(unitEnd) < now : false;
+
+          rows.push({
+            'Aluno': studentName,
+            'Unidade Curricular': unitName,
+            'Atividade': act.activity_name,
+            'Tipo': act.activity_type || '-',
+            'Prazo': act.due_date ? new Date(act.due_date).toLocaleDateString('pt-BR') : '-',
+            'Status': isOverdue ? 'Atrasada' : 'Pendente',
+          });
+        }
+      }
+
+      // Summary sheet: count per student
+      const summaryRows = sortedStudents.map(([studentId, activities]) => ({
+        'Aluno': studentsById.get(studentId) || 'Desconhecido',
+        'Atividades Pendentes': activities.length,
+        'Atrasadas': activities.filter(a => {
+          const unitEnd = unitEndDateMap.get(a.course_id);
+          return a.due_date
+            ? new Date(a.due_date) < now
+            : unitEnd ? new Date(unitEnd) < now : false;
+        }).length,
+      }));
+
+      const workbook = XLSX.utils.book_new();
+
+      // Summary sheet
+      const summaryWs = XLSX.utils.json_to_sheet(summaryRows) as ExcelWorksheet;
+      summaryWs['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 14 }];
+      applyBasicStyles(XLSX, summaryWs);
+      XLSX.utils.book_append_sheet(workbook, summaryWs, 'Resumo');
+
+      // Detail sheet
+      const detailWs = XLSX.utils.json_to_sheet(rows) as ExcelWorksheet;
+      detailWs['!cols'] = [{ wch: 32 }, { wch: 28 }, { wch: 36 }, { wch: 10 }, { wch: 14 }, { wch: 12 }];
+      applyPendingStyles(XLSX, detailWs);
+      XLSX.utils.book_append_sheet(workbook, detailWs, 'Detalhamento');
+
+      const safeCourseName = selectedCourseGroup
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9-_ ]/g, '')
+        .trim()
+        .replace(/\s+/g, '_');
+
+      const date = new Date();
+      const dateStamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+      const fileName = `relatorio_pendencias_${safeCourseName || 'curso'}_${dateStamp}.xlsx`;
+
+      XLSX.writeFile(workbook, fileName);
+      toast.success('Relatório de pendências gerado com sucesso');
+    } catch (err) {
+      console.error('Erro ao gerar relatório de pendências:', err);
+      toast.error('Não foi possível gerar o relatório');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleGenerate = () => {
+    if (selectedReportType === 'notas') {
+      generateGradesReport();
+    } else if (selectedReportType === 'pendencias') {
+      generatePendingReport();
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -506,6 +722,7 @@ export default function Reports() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="notas">Relatório de notas</SelectItem>
+                  <SelectItem value="pendencias">Relatório de atividades pendentes</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -586,8 +803,8 @@ export default function Reports() {
           <div className="flex items-center justify-end">
             <Button
               type="button"
-              onClick={generateGradesReport}
-              disabled={isGenerating || isLoadingCourses || selectedReportType !== 'notas' || selectedUnitIds.length === 0}
+              onClick={handleGenerate}
+              disabled={isGenerating || isLoadingCourses || selectedUnitIds.length === 0}
             >
               {isGenerating ? (
                 <>
@@ -606,4 +823,53 @@ export default function Reports() {
       </Card>
     </div>
   );
+}
+
+function applyBasicStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
+  const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
+  if (!range) return;
+
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[addr] as ExcelCell | undefined;
+      if (!cell) continue;
+
+      if (r === 0) {
+        cell.s = { ...(cell.s || {}), ...HEADER_CELL_STYLE };
+      } else {
+        cell.s = { ...(cell.s || {}), ...(c === 0 ? STUDENT_CELL_STYLE : BODY_CELL_STYLE) };
+      }
+    }
+  }
+}
+
+function applyPendingStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
+  const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
+  if (!range) return;
+
+  const STATUS_COL = 5; // 'Status' column index
+
+  for (let r = range.s.r; r <= range.e.r; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = ws[addr] as ExcelCell | undefined;
+      if (!cell) continue;
+
+      if (r === 0) {
+        cell.s = { ...(cell.s || {}), ...HEADER_CELL_STYLE };
+      } else {
+        const base = c === 0 ? STUDENT_CELL_STYLE : BODY_CELL_STYLE;
+        cell.s = { ...(cell.s || {}), ...base };
+
+        if (c === STATUS_COL && cell.v === 'Atrasada') {
+          cell.s = {
+            ...(cell.s || {}),
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFFFC7CE' } },
+            font: { bold: true, color: { rgb: 'FF9C0006' } },
+          };
+        }
+      }
+    }
+  }
 }
