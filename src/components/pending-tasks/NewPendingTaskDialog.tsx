@@ -306,8 +306,9 @@ export function NewPendingTaskDialog({
           .insert(recurrencePayload)
           .select('id');
 
-        const recurrenceResult = typeof (recurrenceQuery as any).single === 'function'
-          ? await (recurrenceQuery as any).single()
+        type RecurrenceQueryResult = { data: { id?: string } | null; error: unknown };
+        const recurrenceResult = typeof (recurrenceQuery as { single?: unknown }).single === 'function'
+          ? await (recurrenceQuery as { single: () => Promise<RecurrenceQueryResult> }).single()
           : await recurrenceQuery;
 
         if (recurrenceResult.error) throw recurrenceResult.error;

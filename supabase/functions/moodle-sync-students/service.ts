@@ -167,8 +167,9 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       isInactive,
     })
 
-    const lastCourseAccess = (student as any).lastcourseaccess
-      ? new Date((student as any).lastcourseaccess * 1000).toISOString()
+    const studentWithExtras = student as { lastcourseaccess?: number }
+    const lastCourseAccess = studentWithExtras.lastcourseaccess
+      ? new Date(studentWithExtras.lastcourseaccess * 1000).toISOString()
       : null
 
     return {

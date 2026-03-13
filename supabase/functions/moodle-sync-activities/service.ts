@@ -18,8 +18,8 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
 
   if (!dbCourse) return errorResponse('Course not found in database', 404)
 
-  let courseContents: any[] = []
-  let activitiesFromFallback: any[] | null = null
+  let courseContents: unknown[] = []
+  let activitiesFromFallback: unknown[] | null = null
   try {
     courseContents = await callMoodleApi(moodleUrl, token, 'core_course_get_contents', { courseid: courseId })
     console.log(`Found ${courseContents?.length || 0} sections in course ${courseId}`)
@@ -71,8 +71,8 @@ async function fetchActivitiesFallback(
   moodleUrl: string,
   token: string,
   courseId: number
-): Promise<any[]> {
-  const activities: any[] = []
+): Promise<unknown[]> {
+  const activities: unknown[] = []
 
   try {
     const assignData = await callMoodleApi(moodleUrl, token, 'mod_assign_get_assignments', { 'courseids[0]': courseId })
@@ -125,7 +125,7 @@ async function fetchActivitiesFallback(
     console.error(`Fallback forum fetch failed for course ${courseId}:`, err)
   }
 
-  const uniqueById = new Map<string, any>()
+  const uniqueById = new Map<string, unknown>()
   for (const activity of activities) {
     uniqueById.set(String(activity.id), activity)
   }
@@ -133,8 +133,8 @@ async function fetchActivitiesFallback(
   return Array.from(uniqueById.values())
 }
 
-function extractActivities(courseContents: any[]): any[] {
-  const activities: any[] = []
+function extractActivities(courseContents: unknown[]): unknown[] {
+  const activities: unknown[] = []
   for (const section of courseContents) {
     if (section.modules) {
       for (const mod of section.modules) {
@@ -157,7 +157,7 @@ async function fetchAssignDueDates(
   moodleUrl: string,
   token: string,
   courseId: number,
-  activities: any[]
+  activities: unknown[]
 ): Promise<Record<string, string | null>> {
   const dueDates: Record<string, string | null> = {}
   const assignActivities = activities.filter((a) => a.modname === 'assign')
@@ -185,7 +185,7 @@ async function fetchQuizDueDates(
   moodleUrl: string,
   token: string,
   courseId: number,
-  activities: any[]
+  activities: unknown[]
 ): Promise<Record<string, string | null>> {
   const dueDates: Record<string, string | null> = {}
   const quizActivities = activities.filter((a) => a.modname === 'quiz')
@@ -209,15 +209,15 @@ async function fetchQuizDueDates(
 }
 
 function buildActivityRecords(
-  activities: any[],
+  activities: unknown[],
   studentIds: string[],
   courseDbId: string,
   assignDueDates: Record<string, string | null>,
   quizDueDates: Record<string, string | null>,
   completionByStudent: Map<string, Map<string, { state: number; timecompleted: number | null }>>,
   now: string
-): any[] {
-  const records: any[] = []
+): Record<string, unknown>[] {
+  const records: Record<string, unknown>[] = []
 
   for (const activity of activities) {
     let dueDate: string | null = null
@@ -241,7 +241,7 @@ function buildActivityRecords(
         }
       }
 
-      const record: any = {
+      const record: Record<string, unknown> = {
         student_id: studentId,
         course_id: courseDbId,
         moodle_activity_id: String(activity.id),

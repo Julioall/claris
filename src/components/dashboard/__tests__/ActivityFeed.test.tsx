@@ -13,14 +13,14 @@ describe("ActivityFeed", () => {
             title: "Nova pendencia criada",
             description: "Pendencia para aluno Ana",
             created_at: "2026-02-20T12:00:00.000Z",
-          } as any,
+          } as unknown,
           {
             id: "evt-2",
             event_type: "evento_desconhecido",
             title: "Evento customizado",
             description: undefined,
             created_at: "2026-02-20T13:00:00.000Z",
-          } as any,
+          } as unknown,
         ]}
       />,
     );

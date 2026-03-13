@@ -28,7 +28,7 @@ const emblaApiMock = {
 };
 
 vi.mock("embla-carousel-react", () => ({
-  default: (...args: unknown[]) => useEmblaCarouselMock(...args),
+  default: function TestWrapper(...args: unknown[]) { return useEmblaCarouselMock(...args); },
 }));
 
 describe("ui/carousel", () => {

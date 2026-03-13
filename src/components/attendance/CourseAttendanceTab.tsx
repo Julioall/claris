@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { CalendarCheck2, Loader2, Plus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -71,7 +72,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const fetchRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await (supabase as SupabaseClient)
       .from('attendance_records')
       .select(`
         id,
@@ -86,7 +87,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
 
     if (error) throw error;
 
-    const mapped: AttendanceRecord[] = (data || []).map((row: any) => ({
+    const mapped: AttendanceRecord[] = (data || []).map((row: Record<string, unknown>) => ({
       id: row.id,
       attendance_date: row.attendance_date,
       status: row.status as AttendanceStatus,
@@ -132,7 +133,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const loadDateRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await (supabase as any)
+    const { data, error } = await (supabase as SupabaseClient)
       .from('attendance_records')
       .select('student_id, status, notes, updated_at')
       .eq('user_id', user.id)
@@ -230,7 +231,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
     setIsSaving(true);
 
     try {
-      const { error } = await (supabase as any)
+      const { error } = await (supabase as SupabaseClient)
         .from('attendance_records')
         .upsert(payload, { onConflict: 'user_id,course_id,student_id,attendance_date' });
 

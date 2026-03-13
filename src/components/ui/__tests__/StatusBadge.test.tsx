@@ -39,7 +39,7 @@ describe('StatusBadge', () => {
   });
 
   it('falls back gracefully for unknown status', () => {
-    render(<StatusBadge status={'desconhecido' as any} />);
+    render(<StatusBadge status={'desconhecido' as string} />);
     expect(screen.getByText('desconhecido')).toBeInTheDocument();
   });
 });

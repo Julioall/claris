@@ -30,6 +30,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ActionType, ActionEffectiveness } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -100,7 +101,7 @@ export function AddTaskActionDialog({
 
       // Try to insert into task_actions if table exists, otherwise just track via notes
       try {
-        const { error } = await (supabase.from as any)('task_actions').insert({
+        const { error } = await (supabase as SupabaseClient).from('task_actions').insert({
           pending_task_id: pendingTaskId,
           action_type: data.action_type,
           description: data.description.trim(),
@@ -121,7 +122,7 @@ export function AddTaskActionDialog({
         const { error: updateError } = await supabase
           .from('pending_tasks')
           .update({
-            status: 'resolvida' as any,
+            status: 'resolvida' as string,
             completed_at: now,
           })
           .eq('id', pendingTaskId);
@@ -135,7 +136,7 @@ export function AddTaskActionDialog({
         // Move to em_andamento if not already
         await supabase
           .from('pending_tasks')
-          .update({ status: 'em_andamento' as any })
+          .update({ status: 'em_andamento' as string })
           .eq('id', pendingTaskId)
           .in('status', ['aberta']);
         
