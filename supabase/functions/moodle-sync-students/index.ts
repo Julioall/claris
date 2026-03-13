@@ -1,13 +1,7 @@
 import { createHandler } from '../_shared/http/mod.ts'
-import { errorResponse } from '../_shared/http/mod.ts'
 import { syncStudents } from './service.ts'
+import { parseMoodleSyncStudentsPayload } from './payload.ts'
 
 Deno.serve(createHandler(async ({ body }) => {
-  const { moodleUrl, token, courseId } = body as Record<string, string | number>
-
-  if (!moodleUrl || !token || !courseId) {
-    return errorResponse('Missing required fields: moodleUrl, token, courseId')
-  }
-
-  return await syncStudents(String(moodleUrl), String(token), Number(courseId))
-}, { requireAuth: true }))
+  return await syncStudents(body.moodleUrl, body.token, body.courseId)
+}, { requireAuth: true, parseBody: parseMoodleSyncStudentsPayload }))

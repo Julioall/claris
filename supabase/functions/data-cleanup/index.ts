@@ -1,14 +1,9 @@
 import { createHandler } from '../_shared/http/mod.ts'
-import { errorResponse, jsonResponse } from '../_shared/http/mod.ts'
+import { jsonResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
+import { parseDataCleanupPayload } from './payload.ts'
 
 Deno.serve(createHandler(async ({ body, user }) => {
-  const { mode } = body as { mode?: string }
-
-  if (mode !== 'full_cleanup') {
-    return errorResponse('Invalid mode. Use "full_cleanup".')
-  }
-
   const supabase = createServiceClient()
 
   // Verify the user exists
@@ -24,6 +19,10 @@ Deno.serve(createHandler(async ({ body, user }) => {
   const deleteOrder = [
     { table: 'moodle_messages', label: 'Mensagens' },
     { table: 'moodle_conversations', label: 'Conversas' },
+    { table: 'bulk_message_recipients', label: 'Destinatários de envios em massa' },
+    { table: 'bulk_message_jobs', label: 'Jobs de envios em massa' },
+    { table: 'task_action_history', label: 'Histórico de ações de pendências' },
+    { table: 'task_actions', label: 'Ações de pendências' },
     { table: 'task_action_logs', label: 'Logs de ações' },
     { table: 'notes', label: 'Anotações' },
     { table: 'actions', label: 'Ações' },
@@ -33,11 +32,15 @@ Deno.serve(createHandler(async ({ body, user }) => {
     { table: 'student_activities', label: 'Atividades' },
     { table: 'student_course_grades', label: 'Notas' },
     { table: 'student_courses', label: 'Matrículas' },
+    { table: 'attendance_records', label: 'Registros de frequência' },
+    { table: 'attendance_course_settings', label: 'Configurações de frequência' },
     { table: 'user_courses', label: 'Vínculos de cursos' },
     { table: 'user_ignored_courses', label: 'Cursos ignorados' },
+    { table: 'task_recurrence_configs', label: 'Recorrências de pendências' },
     { table: 'user_sync_preferences', label: 'Preferências' },
     { table: 'action_types', label: 'Tipos de ação' },
     { table: 'task_templates', label: 'Modelos de tarefa' },
+    { table: 'message_templates', label: 'Modelos de mensagem' },
     { table: 'students', label: 'Alunos' },
     { table: 'courses', label: 'Cursos' },
   ] as const
@@ -69,4 +72,4 @@ Deno.serve(createHandler(async ({ body, user }) => {
     cleaned: results.filter(r => r.success).map(r => r.table),
     errors: failures,
   })
-}, { requireAuth: true }))
+}, { requireAuth: true, parseBody: parseDataCleanupPayload }))

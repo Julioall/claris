@@ -1,6 +1,13 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient, createAnonClient } from '../_shared/db/mod.ts'
 import { getMoodleToken, getSiteInfo } from '../_shared/moodle/mod.ts'
+import {
+  createUserProfile,
+  findUserByMoodleUserId,
+  findUserByMoodleUsername,
+  touchUserLastLogin,
+  updateUserProfile,
+} from '../_shared/domain/users/repository.ts'
 import type { MoodleTokenResponse } from '../_shared/moodle/mod.ts'
 
 interface LoginParams {
@@ -56,13 +63,10 @@ export async function login(params: LoginParams): Promise<Response> {
     const authEmail = `moodle_${siteInfo.userid}@moodle.local`
     const anonClient = createAnonClient()
 
-    const { data: existingUser, error: existingUserError } = await supabase
-      .from('users')
-      .select('*')
-      .eq('moodle_user_id', String(siteInfo.userid))
-      .maybeSingle()
-
-    if (existingUserError) {
+    let existingUser
+    try {
+      existingUser = await findUserByMoodleUserId(supabase, String(siteInfo.userid))
+    } catch (existingUserError) {
       console.error('Failed to query local user profile:', existingUserError)
       return jsonResponse(
         {
@@ -135,14 +139,9 @@ export async function login(params: LoginParams): Promise<Response> {
 
       session = signInResult.data.session
 
-      const { data: updatedUser, error: updateError } = await supabase
-        .from('users')
-        .update(userData)
-        .eq('id', existingUser.id)
-        .select()
-        .single()
-
-      if (updateError) {
+      try {
+        user = await updateUserProfile(supabase, existingUser.id, userData)
+      } catch (updateError) {
         console.error('Failed to update local user profile:', updateError)
         return jsonResponse(
           {
@@ -152,8 +151,6 @@ export async function login(params: LoginParams): Promise<Response> {
           200
         )
       }
-
-      user = updatedUser
     } else {
       let authUserId: string | null = null
 
@@ -199,13 +196,9 @@ export async function login(params: LoginParams): Promise<Response> {
         authUserId = newAuthUser.user.id
       }
 
-      const { data: newUser, error: insertError } = await supabase
-        .from('users')
-        .insert({ ...userData, id: authUserId })
-        .select()
-        .single()
-
-      if (insertError) {
+      try {
+        user = await createUserProfile(supabase, { ...userData, id: authUserId })
+      } catch (insertError) {
         console.error('Failed to insert local user profile:', insertError)
         return jsonResponse(
           {
@@ -215,8 +208,6 @@ export async function login(params: LoginParams): Promise<Response> {
           200
         )
       }
-
-      user = newUser
 
       const signInResult = await anonClient.auth.signInWithPassword({ email: authEmail, password })
       if (signInResult.error) {
@@ -259,11 +250,7 @@ export async function fallbackLogin(
   console.log('Moodle unavailable, attempting fallback login...')
 
   const supabase = createServiceClient()
-  const { data: fallbackUser } = await supabase
-    .from('users')
-    .select('*')
-    .eq('moodle_username', username)
-    .maybeSingle()
+  const fallbackUser = await findUserByMoodleUsername(supabase, username)
 
   if (fallbackUser) {
     const fallbackEmail = `moodle_${fallbackUser.moodle_user_id}@moodle.local`
@@ -275,10 +262,7 @@ export async function fallbackLogin(
     })
 
     if (!signInError && signInData.session) {
-      await supabase
-        .from('users')
-        .update({ last_login: new Date().toISOString(), updated_at: new Date().toISOString() })
-        .eq('id', fallbackUser.id)
+      await touchUserLastLogin(supabase, fallbackUser.id, new Date().toISOString())
 
       console.log('Fallback login successful for user:', fallbackUser.full_name)
 

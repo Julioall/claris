@@ -31,6 +31,25 @@ const feedOrMock = vi.fn();
 const feedOrderMock = vi.fn();
 const feedLimitMock = vi.fn();
 
+const studentActivitiesSelectMock = vi.fn();
+
+const missedActivitiesInCourseMock = vi.fn();
+const missedActivitiesInStudentMock = vi.fn();
+const missedActivitiesEqTypeMock = vi.fn();
+const missedActivitiesNotDueMock = vi.fn();
+const missedActivitiesLtDueMock = vi.fn();
+const missedActivitiesIsSubmittedMock = vi.fn();
+const missedActivitiesEqHiddenMock = vi.fn();
+
+const uncorrectedActivitiesInCourseMock = vi.fn();
+const uncorrectedActivitiesInStudentMock = vi.fn();
+const uncorrectedActivitiesEqTypeMock = vi.fn();
+const uncorrectedActivitiesNotDueMock = vi.fn();
+const uncorrectedActivitiesLtDueMock = vi.fn();
+const uncorrectedActivitiesIsGradedMock = vi.fn();
+const uncorrectedActivitiesEqHiddenMock = vi.fn();
+const uncorrectedActivitiesNotSubmittedMock = vi.fn();
+
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -73,6 +92,10 @@ function setupFromMock() {
 
     if (table === "activity_feed") {
       return { select: feedSelectMock };
+    }
+
+    if (table === "student_activities") {
+      return { select: studentActivitiesSelectMock };
     }
 
     throw new Error(`Unexpected table: ${table}`);
@@ -148,28 +171,8 @@ describe("useDashboardData", () => {
             email: "bruno@example.com",
           },
         },
-        {
-          id: "pt-3",
-          student_id: "s-2",
-          course_id: "c-1",
-          created_by_user_id: "user-1",
-          title: "Resolvida",
-          description: "Concluida",
-          task_type: "interna",
-          status: "resolvida",
-          priority: "baixa",
-          due_date: isoDaysFromNow(1),
-          created_at: "2026-02-20T10:00:00.000Z",
-          updated_at: "2026-02-20T10:00:00.000Z",
-          students: {
-            id: "s-2",
-            full_name: "Bruno",
-            current_risk_level: "critico",
-            email: "bruno@example.com",
-          },
-        },
       ],
-      count: 3,
+      count: 2,
       error: null,
     });
 
@@ -224,6 +227,49 @@ describe("useDashboardData", () => {
       ],
       error: null,
     });
+
+    studentActivitiesSelectMock
+      .mockReturnValueOnce({ in: missedActivitiesInCourseMock })
+      .mockReturnValueOnce({ in: uncorrectedActivitiesInCourseMock });
+
+    missedActivitiesInCourseMock.mockReturnValue({ in: missedActivitiesInStudentMock });
+    missedActivitiesInStudentMock.mockReturnValue({ eq: missedActivitiesEqTypeMock });
+    missedActivitiesEqTypeMock.mockReturnValue({ not: missedActivitiesNotDueMock });
+    missedActivitiesNotDueMock.mockReturnValue({ lt: missedActivitiesLtDueMock });
+    missedActivitiesLtDueMock.mockReturnValue({ is: missedActivitiesIsSubmittedMock });
+    missedActivitiesIsSubmittedMock.mockReturnValue({ eq: missedActivitiesEqHiddenMock });
+    missedActivitiesEqHiddenMock.mockResolvedValue({ count: 1, error: null });
+
+    uncorrectedActivitiesInCourseMock.mockReturnValue({ in: uncorrectedActivitiesInStudentMock });
+    uncorrectedActivitiesInStudentMock.mockReturnValue({ eq: uncorrectedActivitiesEqTypeMock });
+    uncorrectedActivitiesEqTypeMock.mockReturnValue({ not: uncorrectedActivitiesNotDueMock });
+    uncorrectedActivitiesNotDueMock.mockReturnValue({ lt: uncorrectedActivitiesLtDueMock });
+    uncorrectedActivitiesLtDueMock.mockReturnValue({ is: uncorrectedActivitiesIsGradedMock });
+    uncorrectedActivitiesIsGradedMock.mockReturnValue({ eq: uncorrectedActivitiesEqHiddenMock });
+    uncorrectedActivitiesEqHiddenMock.mockReturnValue({ not: uncorrectedActivitiesNotSubmittedMock });
+    uncorrectedActivitiesNotSubmittedMock.mockResolvedValue({
+      data: [
+        {
+          id: "act-1",
+          student_id: "s-2",
+          course_id: "c-1",
+          activity_name: "Trabalho final",
+          due_date: isoDaysFromNow(-4),
+          submitted_at: isoDaysFromNow(-3),
+          students: {
+            id: "s-2",
+            full_name: "Bruno",
+            current_risk_level: "critico",
+          },
+          courses: {
+            id: "c-1",
+            name: "Curso 1",
+            short_name: "CUR-1",
+          },
+        },
+      ],
+      error: null,
+    });
   });
 
   afterAll(() => {
@@ -256,11 +302,14 @@ describe("useDashboardData", () => {
     expect(result.current.summary).toEqual({
       pending_tasks: 0,
       overdue_tasks: 0,
+      activities_to_review: 0,
+      missed_assignments: 0,
       students_at_risk: 0,
       new_at_risk_this_week: 0,
     });
     expect(result.current.pendingTasks).toEqual([]);
     expect(result.current.criticalStudents).toEqual([]);
+    expect(result.current.activitiesToReview).toEqual([]);
     expect(result.current.activityFeed).toEqual([]);
   });
 
@@ -273,16 +322,26 @@ describe("useDashboardData", () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.summary).toEqual({
-      pending_tasks: 3,
+      pending_tasks: 2,
       overdue_tasks: 1,
+      activities_to_review: 1,
+      missed_assignments: 1,
       students_at_risk: 2,
       new_at_risk_this_week: 2,
     });
 
-    expect(result.current.pendingTasks).toHaveLength(3);
+    expect(result.current.pendingTasks).toHaveLength(2);
     expect(result.current.overdueTasks.map((task) => task.id)).toEqual(["pt-1"]);
     expect(result.current.upcomingTasks.map((task) => task.id)).toEqual(["pt-2"]);
-    expect(result.current.criticalStudents.map((student) => student.id)).toEqual(["s-1", "s-2"]);
+    expect(result.current.criticalStudents.map((student) => student.id)).toEqual(["s-2", "s-1"]);
+    expect(result.current.criticalStudents[0].pending_tasks_count).toBe(1);
+    expect(result.current.activitiesToReview).toHaveLength(1);
+    expect(result.current.activitiesToReview[0]).toMatchObject({
+      id: "act-1",
+      activity_name: "Trabalho final",
+      student: { id: "s-2", full_name: "Bruno" },
+      course: { id: "c-1", short_name: "CUR-1" },
+    });
     expect(result.current.activityFeed).toHaveLength(1);
     expect(result.current.activityFeed[0]).toMatchObject({
       id: "f-1",

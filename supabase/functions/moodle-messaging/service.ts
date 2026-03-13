@@ -1,5 +1,10 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { callMoodleApi, callMoodleApiPost, getSiteInfo } from '../_shared/moodle/mod.ts'
+import type {
+  GetConversationsPayload,
+  GetMessagesPayload,
+  SendMessagePayload,
+} from './payload.ts'
 
 function isConversationMissingError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
@@ -14,11 +19,8 @@ function isConversationMissingError(error: unknown): boolean {
     normalized.includes('conversation not found')
 }
 
-export async function sendMessage(body: Record<string, unknown>): Promise<Response> {
-  const { moodleUrl, token, moodle_user_id: targetMoodleUserId, message: messageText } = body
-  if (!targetMoodleUserId || !messageText) {
-    return errorResponse('moodle_user_id and message are required')
-  }
+export async function sendMessage(body: SendMessagePayload): Promise<Response> {
+  const { moodleUrl, token, moodleUserId: targetMoodleUserId, message: messageText } = body
 
   console.log(`Sending message to Moodle user ${targetMoodleUserId}`)
 
@@ -34,7 +36,7 @@ export async function sendMessage(body: Record<string, unknown>): Promise<Respon
   return jsonResponse({ success: true, message_id: msgResult?.msgid })
 }
 
-export async function getConversations(body: Record<string, unknown>): Promise<Response> {
+export async function getConversations(body: GetConversationsPayload): Promise<Response> {
   const { moodleUrl, token } = body
   console.log('Fetching conversations from Moodle')
 
@@ -64,10 +66,8 @@ export async function getConversations(body: Record<string, unknown>): Promise<R
   return jsonResponse({ conversations, current_user_id: siteInfo.userid })
 }
 
-export async function getMessages(body: Record<string, unknown>): Promise<Response> {
-  const { moodleUrl, token, moodle_user_id: otherUserId, limit_num: limitNum } = body
-  if (!otherUserId) return errorResponse('moodle_user_id is required')
-
+export async function getMessages(body: GetMessagesPayload): Promise<Response> {
+  const { moodleUrl, token, moodleUserId: otherUserId, limitNum } = body
   console.log(`Fetching messages with Moodle user ${otherUserId}`)
 
   const siteInfo = await getSiteInfo(String(moodleUrl), String(token))
@@ -83,7 +83,7 @@ export async function getMessages(body: Record<string, unknown>): Promise<Respon
         otheruserid: Number(otherUserId),
         includecontactrequests: 0,
         includeprivacyinfo: 0,
-        messagelimit: Number(limitNum) || 50,
+        messagelimit: limitNum || 50,
         messageoffset: 0,
         newestmessagesfirst: 1,
       },

@@ -1,5 +1,12 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
+import {
+  findCourseByMoodleCourseId,
+  listExistingCourseStudentLinks,
+  touchCourseLastSync,
+  upsertStudentCourseLinks,
+  upsertStudents,
+} from '../_shared/domain/moodle-sync/repository.ts'
 import { getCourseEnrolledUsers, getCourseSuspendedUserIds } from '../_shared/moodle/mod.ts'
 
 const STAFF_ROLE_SHORTNAMES = new Set(['manager', 'editingteacher', 'teacher', 'coursecreator'])
@@ -76,11 +83,7 @@ function resolveEnrollmentStatus(args: {
 export async function syncStudents(moodleUrl: string, token: string, courseId: number): Promise<Response> {
   const supabase = createServiceClient()
 
-  const { data: dbCourse } = await supabase
-    .from('courses')
-    .select('id, start_date')
-    .eq('moodle_course_id', String(courseId))
-    .maybeSingle()
+  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
 
   if (!dbCourse) return errorResponse('Course not found in database', 404)
 
@@ -189,12 +192,10 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
   )
 
   const studentsForUpsert = studentsData.map(({ _enrollment_status, _last_course_access, ...rest }) => rest)
-  const { data: syncedStudents, error: upsertError } = await supabase
-    .from('students')
-    .upsert(studentsForUpsert, { onConflict: 'moodle_user_id', ignoreDuplicates: false })
-    .select()
-
-  if (upsertError) {
+  let syncedStudents
+  try {
+    syncedStudents = await upsertStudents(supabase, studentsForUpsert)
+  } catch (upsertError) {
     console.error('Error upserting students:', upsertError)
     return errorResponse('Failed to sync students', 500)
   }
@@ -207,14 +208,11 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
 
     const currentMoodleUserIds = new Set(studentsData.map((s) => s.moodle_user_id))
 
-    const { data: existingCourseLinks } = await supabase
-      .from('student_courses')
-      .select('student_id, students (moodle_user_id)')
-      .eq('course_id', dbCourse.id)
+    const existingCourseLinks = await listExistingCourseStudentLinks(supabase, dbCourse.id)
 
-    const inferredSuspendedLinks = (existingCourseLinks || [])
-      .map((row: any) => {
-        const moodleUserId = row?.students?.moodle_user_id ? String(row.students.moodle_user_id) : null
+    const inferredSuspendedLinks = existingCourseLinks
+      .map((row) => {
+        const moodleUserId = row.moodle_user_id ? String(row.moodle_user_id) : null
         if (!moodleUserId) return null
         if (currentMoodleUserIds.has(moodleUserId)) return null
         return {
@@ -224,7 +222,7 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
           last_sync: now,
         }
       })
-      .filter((row: any) => row !== null)
+      .filter((row) => row !== null)
 
     if (inferredSuspendedLinks.length > 0 && studentsData.length > 0) {
       console.log(
@@ -232,7 +230,7 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       )
     }
 
-    const studentCourseLinks = syncedStudents.map((s: any) => {
+    const studentCourseLinks = syncedStudents.map((s) => {
       const data = studentDataMap.get(s.moodle_user_id)
       return {
         student_id: s.id,
@@ -248,14 +246,14 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
         ? [...studentCourseLinks, ...inferredSuspendedLinks]
         : studentCourseLinks
 
-    const { error: linkError } = await supabase
-      .from('student_courses')
-      .upsert(linksToUpsert, { onConflict: 'student_id,course_id', ignoreDuplicates: false })
-
-    if (linkError) console.error('Error linking students to course:', linkError)
+    try {
+      await upsertStudentCourseLinks(supabase, linksToUpsert)
+    } catch (linkError) {
+      console.error('Error linking students to course:', linkError)
+    }
   }
 
-  await supabase.from('courses').update({ last_sync: now }).eq('id', dbCourse.id)
+  await touchCourseLastSync(supabase, dbCourse.id, now)
 
   return jsonResponse({ success: true, students: syncedStudents || [] })
 }

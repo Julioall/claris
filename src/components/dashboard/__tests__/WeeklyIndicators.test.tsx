@@ -27,21 +27,24 @@ vi.mock("@/components/ui/StatCard", () => ({
 }));
 
 describe("WeeklyIndicators", () => {
-  it("renders four stat cards with warning/trend states when thresholds are exceeded", () => {
+  it("renders five stat cards with operational monitoring signals", () => {
     render(
       <WeeklyIndicators
         summary={{
           pending_tasks: 9,
           overdue_tasks: 2,
+          activities_to_review: 5,
+          missed_assignments: 2,
           students_at_risk: 4,
           new_at_risk_this_week: 3,
         }}
       />,
     );
 
-    expect(screen.getByText(/indicadores da semana/i)).toBeInTheDocument();
-    expect(screen.getAllByTestId("stat-card")).toHaveLength(4);
-    expect(screen.getByText(/exigem atencao/i)).toBeInTheDocument();
+    expect(screen.getByText(/sinais do monitoramento/i)).toBeInTheDocument();
+    expect(screen.getAllByTestId("stat-card")).toHaveLength(5);
+    expect(screen.getByText(/exigem atenção/i)).toBeInTheDocument();
+    expect(screen.getByText(/entregues sem nota/i)).toBeInTheDocument();
     expect(screen.getByText("trend:3")).toBeInTheDocument();
   });
 
@@ -51,6 +54,8 @@ describe("WeeklyIndicators", () => {
         summary={{
           pending_tasks: 1,
           overdue_tasks: 0,
+          activities_to_review: 0,
+          missed_assignments: 0,
           students_at_risk: 0,
           new_at_risk_this_week: 0,
         }}

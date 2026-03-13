@@ -1,4 +1,9 @@
 import { createServiceClient } from '../_shared/db/mod.ts'
+import {
+  createPendingTask,
+  listDueRecurrenceConfigs,
+  updateRecurrenceSchedule,
+} from '../_shared/domain/task-automation/repository.ts'
 
 interface RecurrenceGeneration {
   config_id: string
@@ -95,15 +100,7 @@ export async function generateRecurringTasks(
   const now = new Date()
   const results: RecurrenceGeneration[] = []
 
-  const { data: configs, error: configError } = await supabase
-    .from('task_recurrence_configs')
-    .select('*')
-    .eq('is_active', true)
-    .lte('start_date', now.toISOString())
-    .or(`next_generation_at.is.null,next_generation_at.lte.${now.toISOString()}`)
-    .or(`end_date.is.null,end_date.gte.${now.toISOString()}`)
-
-  if (configError) throw configError
+  const configs = await listDueRecurrenceConfigs(supabase, now.toISOString())
 
   if (!configs || configs.length === 0) {
     return { message: 'No recurrence configurations due for generation', results: [] }
@@ -121,9 +118,8 @@ export async function generateRecurringTasks(
         continue
       }
 
-      const { error: insertError } = await supabase
-        .from('pending_tasks')
-        .insert({
+      try {
+        await createPendingTask(supabase, {
           title: config.title,
           description: config.description,
           task_type: config.task_type,
@@ -138,23 +134,19 @@ export async function generateRecurringTasks(
           recurrence_id: config.id,
           created_at: now.toISOString(),
         })
-
-      if (insertError) {
+      } catch (insertError) {
         console.error(`Error creating task for config ${config.id}:`, insertError)
         continue
       }
 
       const nextDate = calculateNextRecurringDate(config, occurrenceDueDate)
 
-      const { error: updateError } = await supabase
-        .from('task_recurrence_configs')
-        .update({
+      try {
+        await updateRecurrenceSchedule(supabase, config.id, {
           last_generated_at: now.toISOString(),
           next_generation_at: nextDate.toISOString(),
         })
-        .eq('id', config.id)
-
-      if (updateError) {
+      } catch (updateError) {
         console.error(`Error updating config ${config.id}:`, updateError)
       }
 

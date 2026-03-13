@@ -1,4 +1,4 @@
-import { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import type { AppSupabaseClient } from '../db/mod.ts'
 
 export interface AuthUser {
   id: string
@@ -11,7 +11,7 @@ export interface AuthUser {
  */
 export async function getAuthenticatedUser(
   req: Request,
-  supabase: SupabaseClient
+  supabase: AppSupabaseClient
 ): Promise<AuthUser | null> {
   const authHeader = req.headers.get('Authorization')
   if (!authHeader) return null
