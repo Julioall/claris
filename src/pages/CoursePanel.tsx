@@ -60,7 +60,7 @@ export default function CoursePanel() {
 
       setIsLoadingAttendanceFlag(true);
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('attendance_course_settings')
           .select('id')
           .eq('user_id', user.id)
