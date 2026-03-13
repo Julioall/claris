@@ -85,7 +85,7 @@ export default function CoursePanel() {
     const newValue = !isAttendanceEnabled;
     try {
       if (newValue) {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('attendance_course_settings')
           .insert({ user_id: user.id, course_id: id });
         if (error) throw error;
