@@ -1,3 +1,4 @@
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
 /// <reference path="../edge-runtime.d.ts" />
 
 import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
@@ -56,7 +57,7 @@ const handleBulkMessageSend = async ({ body, user }: AuthenticatedHandlerContext
     const batch = recipients.slice(i, i + BATCH_SIZE)
 
     const results = await Promise.allSettled(
-      batch.map(async (r: any) => {
+      batch.map(async (r: { id: string; moodle_user_id: string; personalized_message?: string; student_name?: string }) => {
         try {
           const result = await callMoodleApi(moodleUrl, token, 'core_message_send_instant_messages', {
             'messages[0][touserid]': Number(r.moodle_user_id),

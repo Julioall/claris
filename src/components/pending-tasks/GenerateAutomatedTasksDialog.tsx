@@ -94,12 +94,12 @@ export function GenerateAutomatedTasksDialog({
 
       if (error) throw error;
 
-      const totalCreated = data?.results?.reduce((sum: number, r: any) => sum + r.tasks_created, 0) || 0;
+      const totalCreated = data?.results?.reduce((sum: number, r: { tasks_created: number; type: string }) => sum + r.tasks_created, 0) || 0;
       
       if (totalCreated > 0) {
         const details = data.results
-          .filter((r: any) => r.tasks_created > 0)
-          .map((r: any) => {
+          .filter((r: { tasks_created: number; type: string }) => r.tasks_created > 0)
+          .map((r: { tasks_created: number; type: string }) => {
             const type = automationTypes.find(t => t.id === r.type);
             return `${type?.label || r.type}: ${r.tasks_created}`;
           })

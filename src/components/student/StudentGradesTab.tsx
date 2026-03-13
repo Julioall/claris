@@ -85,7 +85,7 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
       const formattedGrades: CourseGrade[] = (gradesResponse.data || []).map(grade => ({
         id: grade.id,
         course_id: grade.course_id,
-        course_name: (grade.courses as any).name,
+        course_name: (grade.courses as { name: string }).name,
         grade_raw: grade.grade_raw,
         grade_max: grade.grade_max,
         grade_percentage: grade.grade_percentage,

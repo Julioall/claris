@@ -47,14 +47,14 @@ export async function getConversations(body: GetConversationsPayload): Promise<R
     limitnum: 50,
   })
 
-  const conversations = (result?.conversations || []).map((conv: any) => ({
+  const conversations = (result?.conversations || []).map((conv: Record<string, unknown>) => ({
     id: conv.id,
-    members: (conv.members || []).map((m: any) => ({
+    members: (conv.members || []).map((m: Record<string, unknown>) => ({
       id: m.id,
       fullname: m.fullname,
       profileimageurl: m.profileimageurl,
     })),
-    messages: (conv.messages || []).map((msg: any) => ({
+    messages: (conv.messages || []).map((msg: Record<string, unknown>) => ({
       id: msg.id,
       text: msg.text,
       timecreated: msg.timecreated,
@@ -71,7 +71,7 @@ export async function getMessages(body: GetMessagesPayload): Promise<Response> {
   console.log(`Fetching messages with Moodle user ${otherUserId}`)
 
   const siteInfo = await getSiteInfo(String(moodleUrl), String(token))
-  let convResult: any
+  let convResult: Record<string, unknown> | undefined
 
   try {
     convResult = await callMoodleApiPost(
@@ -101,7 +101,7 @@ export async function getMessages(body: GetMessagesPayload): Promise<Response> {
     throw error
   }
 
-  const messages = (convResult?.messages || []).map((msg: any) => ({
+  const messages = (convResult?.messages || []).map((msg: Record<string, unknown>) => ({
     id: msg.id,
     text: msg.text,
     timecreated: msg.timecreated,

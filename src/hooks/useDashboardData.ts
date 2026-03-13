@@ -58,7 +58,7 @@ const EMPTY_SUMMARY: WeeklySummary = {
   new_at_risk_this_week: 0,
 };
 
-function mapActivityFeedItems(items: Array<Record<string, any>>): ActivityFeedItem[] {
+function mapActivityFeedItems(items: Array<Record<string, unknown>>): ActivityFeedItem[] {
   return items.map(item => {
     const feedStudent = item.students as FeedStudentSummary | null;
 
@@ -167,7 +167,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         setPendingTasks([]);
         setCriticalStudents([]);
         setActivitiesToReview([]);
-        setActivityFeed(mapActivityFeedItems((feedData || []) as Array<Record<string, any>>));
+        setActivityFeed(mapActivityFeedItems((feedData || []) as Array<Record<string, unknown>>));
         setIsLoading(false);
         return;
       }
@@ -388,7 +388,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
       setActivitiesToReview(typedActivitiesToReview);
 
       // Set activity feed
-      setActivityFeed(mapActivityFeedItems((feedData || []) as Array<Record<string, any>>));
+      setActivityFeed(mapActivityFeedItems((feedData || []) as Array<Record<string, unknown>>));
 
     } catch (err) {
       console.error('Error fetching dashboard data:', err);

@@ -86,8 +86,8 @@ export function useChat() {
       setCurrentMoodleUserId(currentUserId);
 
       // Map conversations — each has members (other user) + last message
-      const mapped: Conversation[] = (data.conversations || []).map((conv: any) => {
-        const otherMember = conv.members?.find((m: any) => m.id !== currentUserId) || conv.members?.[0];
+      const mapped: Conversation[] = (data.conversations || []).map((conv: { id: number; members?: { id: number; fullname: string; profileimageurl?: string }[]; messages?: { id: number; text: string; timecreated: number; useridfrom: number }[]; unreadcount?: number }) => {
+        const otherMember = conv.members?.find((m: { id: number }) => m.id !== currentUserId) || conv.members?.[0];
         const lastMsg = conv.messages?.[0];
 
         return {
@@ -160,7 +160,7 @@ export function useChat() {
       const currentUserId = data.current_user_id;
       setCurrentMoodleUserId(currentUserId);
 
-      const mapped: ChatMessage[] = (data.messages || []).map((msg: any) => ({
+      const mapped: ChatMessage[] = (data.messages || []).map((msg: { id: number; text: string; timecreated: number; useridfrom: number }) => ({
         id: String(msg.id),
         text: msg.text,
         timecreated: msg.timecreated,

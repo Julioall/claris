@@ -69,7 +69,7 @@ export function useCoursesData() {
             .eq('course_id', course.id);
 
           const atRiskCount = atRiskData?.filter(
-            sc => sc.students && ['risco', 'critico'].includes((sc.students as any).current_risk_level)
+            sc => sc.students && ['risco', 'critico'].includes((sc.students as { current_risk_level: string }).current_risk_level)
           ).length || 0;
 
           // Count pending tasks

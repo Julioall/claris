@@ -26,7 +26,7 @@ describe("CourseOverview", () => {
             at_risk_count: 3,
             pending_tasks_count: 4,
             last_sync: "2026-02-20T12:00:00.000Z",
-          } as any,
+          } as unknown,
         ]}
       />,
     );
@@ -56,7 +56,7 @@ describe("CourseOverview", () => {
             at_risk_count: 0,
             pending_tasks_count: 0,
             last_sync: undefined,
-          } as any,
+          } as unknown,
         ]}
       />,
     );

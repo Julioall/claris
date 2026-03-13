@@ -24,7 +24,7 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
 
   console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`)
 
-  const activityGradeRecords: any[] = []
+  const activityGradeRecords: Record<string, unknown>[] = []
   const now = new Date().toISOString()
   const enrolledStudentIds = enrolledStudents.map((e) => e.student_id)
 
@@ -177,8 +177,8 @@ export async function debugGrades(
   return jsonResponse({
     success: true,
     raw_response: gradesData,
-    course_grade_item: gradesData.usergrades?.[0]?.gradeitems?.find((item: any) => item.itemtype === 'course'),
-    all_item_types: gradesData.usergrades?.[0]?.gradeitems?.map((item: any) => ({
+    course_grade_item: gradesData.usergrades?.[0]?.gradeitems?.find((item: Record<string, unknown>) => item.itemtype === 'course'),
+    all_item_types: gradesData.usergrades?.[0]?.gradeitems?.map((item: Record<string, unknown>) => ({
       itemtype: item.itemtype,
       itemname: item.itemname,
       cmid: item.cmid,
