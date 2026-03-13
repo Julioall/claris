@@ -373,7 +373,7 @@ export function useAllCoursesData() {
           if (error) throw error;
         }
       } else {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('attendance_course_settings')
           .delete()
           .eq('user_id', user.id)
