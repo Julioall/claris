@@ -148,8 +148,8 @@ describe("useMoodleApi", () => {
     let syncAllResult: Awaited<ReturnType<typeof result.current.syncAllStudents>> | undefined;
     await act(async () => {
       syncAllResult = await result.current.syncAllStudents(session, [
-        { id: "c-1", name: "Mat", moodle_course_id: "10" } as any,
-        { id: "c-2", name: "His", moodle_course_id: "20" } as any,
+        { id: "c-1", name: "Mat", moodle_course_id: "10" } as unknown,
+        { id: "c-2", name: "His", moodle_course_id: "20" } as unknown,
       ]);
     });
 

@@ -12,7 +12,7 @@ async function callGetEnrolledUsers(
   token: string,
   courseId: number,
   extraParams: Record<string, string | number> = {}
-): Promise<any[]> {
+): Promise<unknown[]> {
   const result = await callMoodleApi(moodleUrl, token, 'core_enrol_get_enrolled_users', {
     courseid: courseId,
     ...extraParams,
@@ -80,7 +80,7 @@ export async function callMoodleApi(
   token: string,
   wsfunction: string,
   params: Record<string, string | number> = {}
-): Promise<any> {
+): Promise<unknown> {
   const apiUrl = `${moodleUrl}/webservice/rest/server.php`
   const queryParams = new URLSearchParams({
     wstoken: token,
@@ -110,7 +110,7 @@ export async function callMoodleApiPost(
   token: string,
   wsfunction: string,
   params: Record<string, string | number>
-): Promise<any> {
+): Promise<unknown> {
   const apiUrl = `${moodleUrl}/webservice/rest/server.php`
   const formData = new URLSearchParams({
     wstoken: token,
@@ -272,7 +272,7 @@ export async function getCourseSuspendedUserIds(
 
         const allEnrolledUsers = await getCourseEnrolledUsers(moodleUrl, token, courseId)
 
-        let activeUsers: any[] = []
+        let activeUsers: unknown[] = []
         try {
           activeUsers = await callGetEnrolledUsers(moodleUrl, token, courseId, { onlyactive: 1 })
         } catch {

@@ -41,6 +41,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { TaskPriority, TaskType, RecurrencePattern } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -227,7 +228,7 @@ export function NewRecurringTaskDialog({
       }
 
       // Calculate next generation date based on pattern
-      const { data: nextDate, error: rpcError } = await (supabase.rpc as any)(
+      const { data: nextDate, error: rpcError } = await (supabase as SupabaseClient).rpc(
         'calculate_next_recurrence_date',
         {
           current_date: data.start_date.toISOString(),
@@ -239,7 +240,7 @@ export function NewRecurringTaskDialog({
         console.error('RPC error:', rpcError);
       }
 
-      const { error } = await (supabase.from as any)('task_recurrence_configs').insert({
+      const { error } = await (supabase as SupabaseClient).from('task_recurrence_configs').insert({
         title: data.title.trim(),
         description: data.description?.trim() || null,
         pattern: data.pattern,

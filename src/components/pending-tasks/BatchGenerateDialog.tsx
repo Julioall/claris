@@ -127,11 +127,11 @@ export function BatchGenerateDialog({ open, onOpenChange, onSuccess }: BatchGene
             student_id: student.id,
             course_id: selectedCourseId,
             template_id: template.id,
-            task_type: template.task_type as any,
-            priority: template.priority as any,
+            task_type: template.task_type as string,
+            priority: template.priority as string,
             created_by_user_id: user.id,
             status: 'aberta',
-          } as any);
+          } as Record<string, unknown>);
 
         if (!insertError) created++;
       }

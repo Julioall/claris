@@ -202,9 +202,9 @@ export function usePendingTasksData() {
       return;
     }
 
-    const { data: existingTasks, error: existingError } = await (supabase
+    const { data: existingTasks, error: existingError } = await supabase
       .from('pending_tasks')
-      .select('id') as any)
+      .select('id')
       .eq('recurrence_id', task.recurrence_id)
       .neq('status', 'resolvida')
       .limit(1);

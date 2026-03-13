@@ -118,8 +118,8 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
           .update({
             title: data.title,
             description: data.description || null,
-            task_type: data.task_type as any,
-            priority: data.priority as any,
+            task_type: data.task_type as string,
+            priority: data.priority as string,
             auto_message_template: data.auto_message_template || null,
             auto_close_on_action: data.auto_close_on_action,
           })
@@ -133,8 +133,8 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
             user_id: user.id,
             title: data.title,
             description: data.description || null,
-            task_type: data.task_type as any,
-            priority: data.priority as any,
+            task_type: data.task_type as string,
+            priority: data.priority as string,
             auto_message_template: data.auto_message_template || null,
             auto_close_on_action: data.auto_close_on_action,
           });
@@ -158,8 +158,8 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
     form.reset({
       title: template.title,
       description: template.description || '',
-      task_type: template.task_type as any,
-      priority: template.priority as any,
+      task_type: template.task_type as string,
+      priority: template.priority as string,
       auto_message_template: template.auto_message_template || '',
       auto_close_on_action: template.auto_close_on_action,
     });

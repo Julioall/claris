@@ -28,7 +28,7 @@ export function GradeDebugCard() {
   const [selectedCourse, setSelectedCourse] = useState<string>('');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
-  const [debugResponse, setDebugResponse] = useState<any>(null);
+  const [debugResponse, setDebugResponse] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadCourses = async () => {
@@ -60,7 +60,7 @@ export function GradeDebugCard() {
       .limit(20);
     
     if (data) {
-      const studentList = data.map((sc: any) => ({
+      const studentList = data.map((sc: { students: { id: string; full_name: string; moodle_user_id: string } }) => ({
         id: sc.students.id,
         full_name: sc.students.full_name,
         moodle_user_id: sc.students.moodle_user_id,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { Course } from '@/types';
 
@@ -120,7 +121,7 @@ export function useAllCoursesData() {
 
       const ignoredCourseIds = new Set(ignoredCourses?.map(ic => ic.course_id) || []);
 
-      const { data: attendanceCourses, error: attendanceError } = await (supabase as any)
+      const { data: attendanceCourses, error: attendanceError } = await (supabase as SupabaseClient)
         .from('attendance_course_settings')
         .select('course_id')
         .eq('user_id', user.id);
@@ -318,7 +319,7 @@ export function useAllCoursesData() {
 
     try {
       if (shouldEnable) {
-        const { error } = await (supabase as any)
+        const { error } = await (supabase as SupabaseClient)
           .from('attendance_course_settings')
           .insert({
             user_id: user.id,
@@ -327,7 +328,7 @@ export function useAllCoursesData() {
 
         if (error) throw error;
       } else {
-        const { error } = await (supabase as any)
+        const { error } = await (supabase as SupabaseClient)
           .from('attendance_course_settings')
           .delete()
           .eq('user_id', user.id)
@@ -366,14 +367,14 @@ export function useAllCoursesData() {
           }));
 
         if (toInsert.length > 0) {
-          const { error } = await (supabase as any)
+          const { error } = await (supabase as SupabaseClient)
             .from('attendance_course_settings')
             .insert(toInsert);
 
           if (error) throw error;
         }
       } else {
-        const { error } = await (supabase as any)
+        const { error } = await (supabase as SupabaseClient)
           .from('attendance_course_settings')
           .delete()
           .eq('user_id', user.id)
