@@ -25,6 +25,26 @@ export interface Conversation {
   studentId?: string; // mapped from our DB
 }
 
+interface MoodleConvMember {
+  id: number;
+  fullname: string;
+  profileimageurl?: string;
+}
+
+interface MoodleConvMessage {
+  id: number;
+  text: string;
+  timecreated: number;
+  useridfrom: number;
+}
+
+interface MoodleConversation {
+  id: number;
+  members?: MoodleConvMember[];
+  messages?: MoodleConvMessage[];
+  unreadcount?: number;
+}
+
 function normalizeChatErrorMessage(message: string): string {
   return message
     .normalize('NFD')
@@ -86,8 +106,8 @@ export function useChat() {
       setCurrentMoodleUserId(currentUserId);
 
       // Map conversations — each has members (other user) + last message
-      const mapped: Conversation[] = (data.conversations || []).map((conv: { id: number; members?: { id: number; fullname: string; profileimageurl?: string }[]; messages?: { id: number; text: string; timecreated: number; useridfrom: number }[]; unreadcount?: number }) => {
-        const otherMember = conv.members?.find((m: { id: number }) => m.id !== currentUserId) || conv.members?.[0];
+      const mapped: Conversation[] = (data.conversations || []).map((conv: MoodleConversation) => {
+        const otherMember = conv.members?.find((m: MoodleConvMember) => m.id !== currentUserId) || conv.members?.[0];
         const lastMsg = conv.messages?.[0];
 
         return {
@@ -160,7 +180,7 @@ export function useChat() {
       const currentUserId = data.current_user_id;
       setCurrentMoodleUserId(currentUserId);
 
-      const mapped: ChatMessage[] = (data.messages || []).map((msg: { id: number; text: string; timecreated: number; useridfrom: number }) => ({
+      const mapped: ChatMessage[] = (data.messages || []).map((msg: MoodleConvMessage) => ({
         id: String(msg.id),
         text: msg.text,
         timecreated: msg.timecreated,
