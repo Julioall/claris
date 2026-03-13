@@ -71,7 +71,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const fetchRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('attendance_records')
       .select(`
         id,
