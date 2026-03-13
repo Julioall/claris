@@ -70,7 +70,7 @@ describe("CourseAttendanceTab", () => {
     });
   });
 
-  it("renders grouped attendance stats and latest details", async () => {
+  it("renders grouped attendance stats and latest details without Teams actions", async () => {
     recordsOrderMock.mockResolvedValueOnce({
       data: [
         {
@@ -110,6 +110,7 @@ describe("CourseAttendanceTab", () => {
     expect(screen.getByText(/Ausente:\s*1/i)).toBeInTheDocument();
     expect(screen.getByText("Ana Silva")).toBeInTheDocument();
     expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /importar do teams/i })).not.toBeInTheDocument();
   });
 
   it("shows warning toast when trying to save without selecting any status", async () => {
