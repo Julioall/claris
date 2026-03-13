@@ -13,6 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 
 interface TutorCourse {
@@ -39,9 +41,14 @@ interface ActivityGradeRow {
   grade: number | null;
   grade_max: number | null;
   hidden: boolean;
+  status: string | null;
+  graded_at: string | null;
+  submitted_at: string | null;
 }
 
 const SEM_CATEGORIA = 'Sem categoria';
+
+type ReportActivityStatus = 'graded' | 'submitted' | 'pending' | 'nao_iniciada' | 'sem_atividades';
 
 type ExcelStyle = Record<string, unknown>;
 type ExcelWorksheet = XLSXType.WorkSheet & {
@@ -125,6 +132,38 @@ const getGradeCellStyle = (grade: number) => {
   return null;
 };
 
+const REPORT_ACTIVITY_STATUS_LABELS: Record<ReportActivityStatus, string> = {
+  graded: 'Corrigida',
+  submitted: 'Aguardando correção',
+  pending: 'Pendente',
+  nao_iniciada: 'Não iniciada',
+  sem_atividades: 'Sem atividades',
+};
+
+const getNormalizedActivityStatus = (activity: ActivityGradeRow): Exclude<ReportActivityStatus, 'nao_iniciada' | 'sem_atividades'> => {
+  const rawStatus = activity.status?.toLowerCase();
+
+  if (rawStatus === 'submitted') {
+    return 'submitted';
+  }
+
+  if (rawStatus === 'graded' || rawStatus === 'completed') {
+    return 'graded';
+  }
+
+  if (activity.submitted_at && !activity.graded_at) {
+    return 'submitted';
+  }
+
+  if (activity.grade !== null || activity.graded_at) {
+    return 'graded';
+  }
+
+  return 'pending';
+};
+
+const getReportActivityStatusLabel = (status: ReportActivityStatus) => REPORT_ACTIVITY_STATUS_LABELS[status];
+
 export default function Reports() {
   const { user } = useAuth();
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
@@ -133,6 +172,7 @@ export default function Reports() {
   const [selectedReportType, setSelectedReportType] = useState('notas');
   const [selectedCourseGroup, setSelectedCourseGroup] = useState<string>('');
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
+  const [includeSuspendedStudents, setIncludeSuspendedStudents] = useState(true);
 
   useEffect(() => {
     const fetchTutorCourses = async () => {
@@ -285,7 +325,10 @@ export default function Reports() {
             course_id,
             grade,
             grade_max,
-            hidden
+            hidden,
+            status,
+            graded_at,
+            submitted_at
           `)
           .in('course_id', selectedUnitIds)
           .neq('activity_type', 'scorm')
@@ -299,7 +342,10 @@ export default function Reports() {
       const enrollments = allEnrollments;
       const activities = allActivities;
 
-      const totalsByStudentAndCourse = new Map<string, number | null>();
+      const summaryByStudentAndCourse = new Map<string, {
+        grade: number | null;
+        status: Exclude<ReportActivityStatus, 'nao_iniciada'>;
+      }>();
 
       const groupedByKey = activities.reduce<Record<string, ActivityGradeRow[]>>((acc, row) => {
         const key = `${row.student_id}::${row.course_id}`;
@@ -314,12 +360,28 @@ export default function Reports() {
         const visibleActivities = rows.filter(row => !row.hidden);
 
         if (visibleActivities.length === 0) {
-          totalsByStudentAndCourse.set(key, null);
+          summaryByStudentAndCourse.set(key, {
+            grade: null,
+            status: 'sem_atividades',
+          });
           return;
         }
 
-        const totalRaw = visibleActivities.reduce((sum, row) => sum + (row.grade || 0), 0);
-        totalsByStudentAndCourse.set(key, Math.round(totalRaw * 10) / 10);
+        const normalizedStatuses = visibleActivities.map(getNormalizedActivityStatus);
+        const gradedActivities = visibleActivities.filter(row => row.grade !== null);
+        const totalRaw = gradedActivities.reduce((sum, row) => sum + (row.grade || 0), 0);
+
+        let reportStatus: Exclude<ReportActivityStatus, 'nao_iniciada'> = 'graded';
+        if (normalizedStatuses.some(status => status === 'submitted')) {
+          reportStatus = 'submitted';
+        } else if (normalizedStatuses.some(status => status === 'pending')) {
+          reportStatus = 'pending';
+        }
+
+        summaryByStudentAndCourse.set(key, {
+          grade: gradedActivities.length === 0 ? null : Math.round(totalRaw * 10) / 10,
+          status: reportStatus,
+        });
       });
 
       const now = new Date();
@@ -355,6 +417,7 @@ export default function Reports() {
         return {
           ...unit,
           headerName,
+          statusHeaderName: `${headerName} - Status`,
           status: getUnitStatus(unit),
         };
       });
@@ -380,11 +443,15 @@ export default function Reports() {
           selectedUnitsWithHeader.forEach(unit => {
             if (unit.status === 'nao_iniciada') {
               row[unit.headerName] = '-';
+              row[unit.statusHeaderName] = getReportActivityStatusLabel('nao_iniciada');
               return;
             }
+
             const key = `${studentId}::${unit.id}`;
-            const grade = totalsByStudentAndCourse.get(key);
-            row[unit.headerName] = grade === null || grade === undefined ? '' : grade;
+            const summary = summaryByStudentAndCourse.get(key);
+
+            row[unit.headerName] = summary?.grade === null || summary?.grade === undefined ? '' : summary.grade;
+            row[unit.statusHeaderName] = getReportActivityStatusLabel(summary?.status || 'sem_atividades');
           });
 
           return { row, isSuspended };
@@ -395,22 +462,29 @@ export default function Reports() {
           return String(a.row.Aluno).localeCompare(String(b.row.Aluno), 'pt-BR');
         });
 
-      if (rows.length === 0) {
+      const reportRows = includeSuspendedStudents
+        ? rows
+        : rows.filter(entry => !entry.isSuspended);
+
+      if (reportRows.length === 0) {
         toast.error('Nenhum dado encontrado para as unidades selecionadas');
         return;
       }
 
       // Track which Excel rows (1-indexed, after header) are suspended
       const suspendedRowIndices = new Set<number>();
-      rows.forEach((entry, index) => {
+      reportRows.forEach((entry, index) => {
         if (entry.isSuspended) suspendedRowIndices.add(index + 1); // +1 for header row
       });
 
-      const worksheet = XLSX.utils.json_to_sheet(rows.map(r => r.row)) as ExcelWorksheet;
+      const worksheet = XLSX.utils.json_to_sheet(reportRows.map(r => r.row)) as ExcelWorksheet;
 
       worksheet['!cols'] = [
         { wch: 32 },
-        ...selectedUnitsWithHeader.map(unit => ({ wch: Math.max(18, Math.min(42, unit.headerName.length + 4)) })),
+        ...selectedUnitsWithHeader.flatMap(unit => ([
+          { wch: Math.max(18, Math.min(42, unit.headerName.length + 4)) },
+          { wch: Math.max(20, Math.min(28, unit.statusHeaderName.length + 4)) },
+        ])),
       ];
 
       const worksheetRange = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
@@ -446,7 +520,9 @@ export default function Reports() {
               ...suspendedStyle,
             };
 
-            if (!isStudentColumn && typeof cell.v === 'number') {
+            const isGradeColumn = !isStudentColumn && colIndex % 2 === 1;
+
+            if (isGradeColumn && typeof cell.v === 'number') {
               if (!isSuspendedRow) {
                 const gradeStyle = getGradeCellStyle(cell.v);
                 if (gradeStyle) {
@@ -581,6 +657,21 @@ export default function Reports() {
                 );
               })}
             </div>
+          </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-md border p-4">
+            <div className="space-y-1">
+              <Label htmlFor="include-suspended-students">Incluir alunos suspensos</Label>
+              <p className="text-sm text-muted-foreground">
+                Quando desativado, alunos com status suspenso não entram no Excel.
+              </p>
+            </div>
+            <Switch
+              id="include-suspended-students"
+              checked={includeSuspendedStudents}
+              onCheckedChange={setIncludeSuspendedStudents}
+              aria-label="Incluir alunos suspensos"
+            />
           </div>
 
           <div className="flex items-center justify-end">
