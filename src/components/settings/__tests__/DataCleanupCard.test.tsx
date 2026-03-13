@@ -58,7 +58,7 @@ describe("DataCleanupCard", () => {
     expect(cleanupButton).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: /Selecionar tudo/i }));
-    expect(cleanupButton).toHaveTextContent("(13)");
+    expect(cleanupButton).toHaveTextContent("(12)");
     expect(cleanupButton).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: /Desmarcar tudo/i }));
