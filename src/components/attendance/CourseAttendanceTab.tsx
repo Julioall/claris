@@ -230,7 +230,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
     setIsSaving(true);
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('attendance_records')
         .upsert(payload, { onConflict: 'user_id,course_id,student_id,attendance_date' });
 

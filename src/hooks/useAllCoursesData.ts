@@ -120,7 +120,7 @@ export function useAllCoursesData() {
 
       const ignoredCourseIds = new Set(ignoredCourses?.map(ic => ic.course_id) || []);
 
-      const { data: attendanceCourses, error: attendanceError } = await supabase
+      const { data: attendanceCourses, error: attendanceError } = await (supabase as any)
         .from('attendance_course_settings')
         .select('course_id')
         .eq('user_id', user.id);
