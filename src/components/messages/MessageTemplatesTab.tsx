@@ -32,6 +32,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { DynamicVariableInput, DYNAMIC_VARIABLES } from './DynamicVariableInput';
+import { HighlightedVariableText } from './HighlightedVariableText';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -260,10 +261,7 @@ export function MessageTemplatesTab() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-3 whitespace-pre-wrap">
-                    {t.content.replace(/\{([a-z_]+)\}/g, (_, key) => {
-                      const v = DYNAMIC_VARIABLES.find(dv => dv.key === key);
-                      return v ? `[${v.label}]` : `{${key}}`;
-                    })}
+                    <HighlightedVariableText text={t.content} />
                   </p>
                 </CardContent>
               </Card>
