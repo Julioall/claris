@@ -126,6 +126,17 @@ export interface ActivityFeedItem {
   user?: User;
 }
 
+export interface DashboardReviewActivity {
+  id: string;
+  activity_name: string;
+  student_id: string;
+  course_id: string;
+  due_date?: string;
+  submitted_at?: string;
+  student: Pick<Student, 'id' | 'full_name' | 'current_risk_level'>;
+  course: Pick<Course, 'id' | 'name' | 'short_name'>;
+}
+
 // Task recurrence configuration
 export interface TaskRecurrenceConfig {
   id: string;
@@ -188,6 +199,8 @@ export interface TaskActionHistory {
 export interface WeeklySummary {
   pending_tasks: number;
   overdue_tasks: number;
+  activities_to_review: number;
+  missed_assignments: number;
   students_at_risk: number;
   new_at_risk_this_week: number;
 }

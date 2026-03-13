@@ -11,6 +11,7 @@ import { WeeklyIndicators } from '@/components/dashboard/WeeklyIndicators';
 import { PriorityList } from '@/components/dashboard/PriorityList';
 import { CourseOverview } from '@/components/dashboard/CourseOverview';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
+import { ActivitiesToReview } from '@/components/dashboard/ActivitiesToReview';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useCoursesData } from '@/hooks/useCoursesData';
 
@@ -23,6 +24,7 @@ export default function Dashboard() {
     overdueTasks, 
     upcomingTasks, 
     criticalStudents, 
+    activitiesToReview,
     activityFeed,
     isLoading 
   } = useDashboardData(selectedWeek, selectedCourse);
@@ -32,6 +34,8 @@ export default function Dashboard() {
   const defaultSummary = {
     pending_tasks: 0,
     overdue_tasks: 0,
+    activities_to_review: 0,
+    missed_assignments: 0,
     students_at_risk: 0,
     new_at_risk_this_week: 0,
   };
@@ -49,9 +53,9 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Resumo da Semana</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Painel de monitoramento</h1>
           <p className="text-muted-foreground">
-            Acompanhe o progresso e prioridades dos seus alunos
+            Acompanhe risco, entregas e fila operacional dos cursos monitorados
           </p>
         </div>
 
@@ -90,19 +94,20 @@ export default function Dashboard() {
 
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Priority List */}
         <PriorityList 
           overdueTasks={overdueTasks}
           upcomingTasks={upcomingTasks}
           criticalStudents={criticalStudents}
         />
 
-        {/* Course Overview */}
-        <CourseOverview courses={courses} />
+        <ActivitiesToReview activities={activitiesToReview} />
       </div>
 
-      {/* Activity Feed */}
-      <ActivityFeed items={activityFeed} />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <CourseOverview courses={courses} />
+
+        <ActivityFeed items={activityFeed} />
+      </div>
     </div>
   );
 }

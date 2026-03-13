@@ -35,6 +35,19 @@ run_supabase() {
   supabase "$@" --workdir "$WORKDIR"
 }
 
+sync_edge_database_types() {
+  source_file="${WORKDIR}/src/integrations/supabase/types.ts"
+  target_file="${WORKDIR}/supabase/functions/_shared/db/generated.types.ts"
+
+  if [ ! -f "${source_file}" ]; then
+    log "Skipping Edge Function type sync: ${source_file} not found."
+    return
+  fi
+
+  mkdir -p "$(dirname "${target_file}")"
+  cp "${source_file}" "${target_file}"
+}
+
 wait_for_api() {
   health_url="${SUPABASE_API_URL%/}${SUPABASE_API_HEALTH_PATH}"
   retries="${SUPABASE_API_WAIT_SECONDS}"
@@ -73,6 +86,8 @@ prepare_workdir_alias
 
 log "Using workdir: ${WORKDIR}"
 cd "${WORKDIR}"
+log "Syncing generated Supabase types into Edge Functions..."
+sync_edge_database_types
 log "Starting Supabase local stack from ${WORKDIR}..."
 run_supabase start
 

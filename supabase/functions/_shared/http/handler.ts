@@ -1,27 +1,33 @@
 import { corsHeaders } from './cors.ts'
 import { jsonResponse, errorResponse } from './response.ts'
+import { RequestBodyValidationError } from './body.ts'
+
+type EmptyBody = Record<string, never>
+type BodyParser<TBody> = (rawBody: unknown, req: Request) => TBody | Promise<TBody>
 
 /**
  * Context passed to every handler function.
  */
-export interface HandlerContext {
+export interface HandlerContext<TBody = EmptyBody> {
   req: Request
-  body: Record<string, unknown>
+  body: TBody
 }
 
 /**
  * Context for authenticated handlers — includes the verified user.
  */
-export interface AuthenticatedHandlerContext extends HandlerContext {
+export interface AuthenticatedHandlerContext<TBody = EmptyBody> extends HandlerContext<TBody> {
   user: { id: string; email?: string }
 }
 
-type HandlerFn = (ctx: HandlerContext) => Promise<Response>
-type AuthenticatedHandlerFn = (ctx: AuthenticatedHandlerContext) => Promise<Response>
+type HandlerFn<TBody> = (ctx: HandlerContext<TBody>) => Promise<Response>
+type AuthenticatedHandlerFn<TBody> = (ctx: AuthenticatedHandlerContext<TBody>) => Promise<Response>
 
-interface HandlerOptions {
+interface HandlerOptions<TBody> {
   /** If true, validates Authorization header and injects user into context. */
   requireAuth?: boolean
+  /** Parses and validates the request body before the handler runs. */
+  parseBody?: BodyParser<TBody>
 }
 
 /**
@@ -31,11 +37,17 @@ interface HandlerOptions {
  * - Wraps errors in a consistent response
  * - Optionally validates authentication
  */
-export function createHandler(fn: HandlerFn): (req: Request) => Promise<Response>
-export function createHandler(fn: AuthenticatedHandlerFn, options: { requireAuth: true }): (req: Request) => Promise<Response>
-export function createHandler(
-  fn: HandlerFn | AuthenticatedHandlerFn,
-  options: HandlerOptions = {}
+export function createHandler<TBody = EmptyBody>(
+  fn: AuthenticatedHandlerFn<TBody>,
+  options: HandlerOptions<TBody> & { requireAuth: true },
+): (req: Request) => Promise<Response>
+export function createHandler<TBody = EmptyBody>(
+  fn: HandlerFn<TBody>,
+  options?: HandlerOptions<TBody>,
+): (req: Request) => Promise<Response>
+export function createHandler<TBody = EmptyBody>(
+  fn: HandlerFn<TBody> | AuthenticatedHandlerFn<TBody>,
+  options: HandlerOptions<TBody> = {}
 ): (req: Request) => Promise<Response> {
   return async (req: Request): Promise<Response> => {
     // CORS preflight
@@ -45,14 +57,18 @@ export function createHandler(
 
     try {
       // Parse body (empty object for GET/DELETE)
-      let body: Record<string, unknown> = {}
+      let rawBody: unknown = {}
       if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
         try {
-          body = await req.json()
+          rawBody = await req.json()
         } catch {
           return errorResponse('Invalid JSON body', 400)
         }
       }
+
+      const body = options.parseBody
+        ? await options.parseBody(rawBody, req)
+        : rawBody as TBody
 
       // Auth check
       if (options.requireAuth) {
@@ -61,11 +77,15 @@ export function createHandler(
         const supabase = createServiceClient()
         const user = await getAuthenticatedUser(req, supabase)
         if (!user) return errorResponse('Unauthorized', 401)
-        return await (fn as AuthenticatedHandlerFn)({ req, body, user })
+        return await (fn as AuthenticatedHandlerFn<TBody>)({ req, body, user })
       }
 
-      return await (fn as HandlerFn)({ req, body })
+      return await (fn as HandlerFn<TBody>)({ req, body })
     } catch (error: unknown) {
+      if (error instanceof RequestBodyValidationError) {
+        return errorResponse(error.message, error.status)
+      }
+
       console.error('Unhandled error:', error)
       return errorResponse(
         error instanceof Error ? error.message : 'Internal server error',

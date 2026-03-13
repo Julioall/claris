@@ -1,54 +1,50 @@
+/// <reference path="../edge-runtime.d.ts" />
+
 import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
+import type { AuthenticatedHandlerContext } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
+import {
+  finalizeJob,
+  findJobForUser,
+  listPendingRecipients,
+  markJobProcessing,
+  markJobProgress,
+  markRecipientFailed,
+  markRecipientSent,
+} from '../_shared/domain/bulk-messaging/repository.ts'
+import { findUserById } from '../_shared/domain/users/repository.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
+import { parseBulkMessageSendPayload } from './payload.ts'
+import type { BulkMessageSendPayload } from './payload.ts'
 
 const BATCH_SIZE = 5
 const DELAY_BETWEEN_BATCHES_MS = 1000
 
-Deno.serve(createHandler(async ({ body, user }) => {
+const handleBulkMessageSend = async ({ body, user }: AuthenticatedHandlerContext<BulkMessageSendPayload>) => {
   const userId = user.id
-  const { job_id } = body as { job_id?: string }
-  if (!job_id) return errorResponse('job_id is required')
+  const { jobId, moodleUrl, token } = body
 
   const db = createServiceClient()
 
   // Get job
-  const { data: job, error: jobErr } = await db
-    .from('bulk_message_jobs')
-    .select('*')
-    .eq('id', job_id)
-    .eq('user_id', userId)
-    .single()
+  const job = await findJobForUser(db, jobId, userId)
 
-  if (jobErr || !job) return errorResponse('Job not found')
+  if (!job) return errorResponse('Job not found')
   if (job.status !== 'pending') return errorResponse(`Job status is ${job.status}, expected pending`)
 
   // Get user's moodle credentials
-  const { data: userData } = await db
-    .from('users')
-    .select('moodle_user_id')
-    .eq('id', userId)
-    .single()
+  const userData = await findUserById(db, userId)
 
   if (!userData) return errorResponse('User not found')
 
-  // Get moodle session from request headers (passed via auth)
-  const { moodleUrl, token } = body as { moodleUrl?: string; token?: string }
-  if (!moodleUrl || !token) return errorResponse('Moodle credentials required')
-
   // Mark as processing
-  await db.from('bulk_message_jobs').update({ status: 'processing', started_at: new Date().toISOString() }).eq('id', job_id)
+  await markJobProcessing(db, jobId, new Date().toISOString())
 
   // Get pending recipients
-  const { data: recipients } = await db
-    .from('bulk_message_recipients')
-    .select('*')
-    .eq('job_id', job_id)
-    .eq('status', 'pending')
-    .order('created_at')
+  const recipients = await listPendingRecipients(db, jobId)
 
   if (!recipients || recipients.length === 0) {
-    await db.from('bulk_message_jobs').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', job_id)
+    await finalizeJob(db, jobId, 'completed', 0, 0, new Date().toISOString())
     return jsonResponse({ success: true, sent: 0 })
   }
 
@@ -71,18 +67,12 @@ Deno.serve(createHandler(async ({ body, user }) => {
           const msgResult = Array.isArray(result) ? result[0] : result
           if (msgResult?.errormessage) throw new Error(msgResult.errormessage)
 
-          await db.from('bulk_message_recipients').update({
-            status: 'sent',
-            sent_at: new Date().toISOString(),
-          }).eq('id', r.id)
+          await markRecipientSent(db, r.id, new Date().toISOString())
 
           sentCount++
         } catch (err) {
           console.error(`Failed to send to ${r.student_name}:`, err)
-          await db.from('bulk_message_recipients').update({
-            status: 'failed',
-            error_message: err instanceof Error ? err.message : 'Unknown error',
-          }).eq('id', r.id)
+          await markRecipientFailed(db, r.id, err instanceof Error ? err.message : 'Unknown error')
 
           failedCount++
         }
@@ -90,10 +80,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
     )
 
     // Update job progress
-    await db.from('bulk_message_jobs').update({
-      sent_count: sentCount,
-      failed_count: failedCount,
-    }).eq('id', job_id)
+    await markJobProgress(db, jobId, sentCount, failedCount)
 
     // Delay between batches
     if (i + BATCH_SIZE < recipients.length) {
@@ -103,12 +90,9 @@ Deno.serve(createHandler(async ({ body, user }) => {
 
   // Mark complete
   const finalStatus = failedCount === recipients.length ? 'failed' : 'completed'
-  await db.from('bulk_message_jobs').update({
-    status: finalStatus,
-    sent_count: sentCount,
-    failed_count: failedCount,
-    completed_at: new Date().toISOString(),
-  }).eq('id', job_id)
+  await finalizeJob(db, jobId, finalStatus, sentCount, failedCount, new Date().toISOString())
 
   return jsonResponse({ success: true, sent: sentCount, failed: failedCount })
-}, { requireAuth: true }))
+}
+
+Deno.serve(createHandler(handleBulkMessageSend, { requireAuth: true, parseBody: parseBulkMessageSendPayload }))

@@ -1,5 +1,12 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
+import type { AppSupabaseClient } from '../_shared/db/mod.ts'
+import {
+  findCourseByMoodleCourseId,
+  listStudentIdsByCourseId,
+  listStudentsWithMoodleUserId,
+  upsertStudentActivities,
+} from '../_shared/domain/moodle-sync/repository.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 
 const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
@@ -7,11 +14,7 @@ const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
 export async function syncActivities(moodleUrl: string, token: string, courseId: number): Promise<Response> {
   const supabase = createServiceClient()
 
-  const { data: dbCourse } = await supabase
-    .from('courses')
-    .select('id')
-    .eq('moodle_course_id', String(courseId))
-    .maybeSingle()
+  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
 
   if (!dbCourse) return errorResponse('Course not found in database', 404)
 
@@ -26,12 +29,7 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
     console.log(`Fallback found ${activitiesFromFallback.length} activities in course ${courseId}`)
   }
 
-  const { data: studentCourses } = await supabase
-    .from('student_courses')
-    .select('student_id')
-    .eq('course_id', dbCourse.id)
-
-  const studentIds = studentCourses?.map((sc: any) => sc.student_id) || []
+  const studentIds = await listStudentIdsByCourseId(supabase, dbCourse.id)
   if (studentIds.length === 0) return jsonResponse({ success: true, activitiesCount: 0 })
 
   // Extract activities
@@ -56,12 +54,11 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   let activitiesCount = 0
   for (let i = 0; i < activityRecords.length; i += BATCH_SIZE) {
     const batch = activityRecords.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase
-      .from('student_activities')
-      .upsert(batch, { onConflict: 'student_id,course_id,moodle_activity_id', ignoreDuplicates: false })
-
-    if (error) console.error(`Error upserting activity batch ${i / BATCH_SIZE}:`, error)
-    else activitiesCount += batch.length
+    try {
+      activitiesCount += await upsertStudentActivities(supabase, batch, batch.length)
+    } catch (error) {
+      console.error(`Error upserting activity batch ${i / BATCH_SIZE}:`, error)
+    }
   }
 
   console.log(`Upserted ${activitiesCount} activity records`)
@@ -274,15 +271,11 @@ async function fetchCompletionStatuses(
   courseId: number,
   studentIds: string[],
   courseDbId: string,
-  supabase: any
+  supabase: AppSupabaseClient
 ): Promise<Map<string, Map<string, { state: number; timecompleted: number | null }>>> {
   const result = new Map<string, Map<string, { state: number; timecompleted: number | null }>>()
 
-  // Get moodle_user_id for each student
-  const { data: students } = await supabase
-    .from('students')
-    .select('id, moodle_user_id')
-    .in('id', studentIds)
+  const students = await listStudentsWithMoodleUserId(supabase, studentIds)
 
   if (!students?.length) return result
 

@@ -33,6 +33,12 @@ vi.mock("@/components/dashboard/CourseOverview", () => ({
   ),
 }));
 
+vi.mock("@/components/dashboard/ActivitiesToReview", () => ({
+  ActivitiesToReview: ({ activities }: { activities: Array<{ id: string }> }) => (
+    <div data-testid="activities-to-review">{activities.length}</div>
+  ),
+}));
+
 vi.mock("@/components/dashboard/ActivityFeed", () => ({
   ActivityFeed: ({ items }: { items: Array<{ id: string }> }) => (
     <div data-testid="activity-feed">{items.length}</div>
@@ -46,12 +52,15 @@ describe("Dashboard page", () => {
       summary: {
         pending_tasks: 3,
         overdue_tasks: 1,
+        activities_to_review: 2,
+        missed_assignments: 1,
         students_at_risk: 4,
         new_at_risk_this_week: 1,
       },
       overdueTasks: [{ id: "o-1" }],
       upcomingTasks: [{ id: "u-1" }],
       criticalStudents: [{ id: "s-1" }],
+      activitiesToReview: [{ id: "r-1" }, { id: "r-2" }],
       activityFeed: [{ id: "a-1" }],
       isLoading: false,
     });
@@ -67,6 +76,7 @@ describe("Dashboard page", () => {
       overdueTasks: [],
       upcomingTasks: [],
       criticalStudents: [],
+      activitiesToReview: [],
       activityFeed: [],
       isLoading: true,
     });
@@ -83,9 +93,10 @@ describe("Dashboard page", () => {
   it("renders dashboard sections when data is loaded", () => {
     render(<Dashboard />);
 
-    expect(screen.getByText(/resumo da semana/i)).toBeInTheDocument();
+    expect(screen.getByText(/painel de monitoramento/i)).toBeInTheDocument();
     expect(screen.getByTestId("weekly-indicators")).toHaveTextContent("1");
     expect(screen.getByTestId("priority-list")).toHaveTextContent("1");
+    expect(screen.getByTestId("activities-to-review")).toHaveTextContent("2");
     expect(screen.getByTestId("course-overview")).toHaveTextContent("1");
     expect(screen.getByTestId("activity-feed")).toHaveTextContent("1");
   });
