@@ -71,7 +71,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const fetchRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('attendance_records')
       .select(`
         id,
@@ -132,7 +132,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const loadDateRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('attendance_records')
       .select('student_id, status, notes, updated_at')
       .eq('user_id', user.id)
@@ -230,7 +230,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
     setIsSaving(true);
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('attendance_records')
         .upsert(payload, { onConflict: 'user_id,course_id,student_id,attendance_date' });
 

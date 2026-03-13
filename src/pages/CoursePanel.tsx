@@ -60,7 +60,7 @@ export default function CoursePanel() {
 
       setIsLoadingAttendanceFlag(true);
       try {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('attendance_course_settings')
           .select('id')
           .eq('user_id', user.id)
@@ -85,12 +85,12 @@ export default function CoursePanel() {
     const newValue = !isAttendanceEnabled;
     try {
       if (newValue) {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('attendance_course_settings')
           .insert({ user_id: user.id, course_id: id });
         if (error) throw error;
       } else {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('attendance_course_settings')
           .delete()
           .eq('user_id', user.id)
