@@ -3,6 +3,7 @@ import { FileSpreadsheet, Loader2 } from 'lucide-react';
 import type * as XLSXType from 'xlsx-js-style';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -16,6 +17,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface TutorCourse {
   id: string;
@@ -74,6 +76,8 @@ type ExcelCell = XLSXType.CellObject & {
   s?: ExcelStyle;
   z?: string;
 };
+
+type UnitLifecycleStatus = ReturnType<typeof getCourseLifecycleStatus>;
 
 const BORDER_STYLE: ExcelStyle = {
   top: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
@@ -155,6 +159,18 @@ const REPORT_ACTIVITY_STATUS_LABELS: Record<ReportActivityStatus, string> = {
   sem_atividades: 'Sem atividades',
 };
 
+const UNIT_STATUS_LABELS: Record<UnitLifecycleStatus, string> = {
+  finalizada: 'Finalizada',
+  em_andamento: 'Em andamento',
+  nao_iniciada: 'Nao iniciada',
+};
+
+const UNIT_STATUS_BADGE_STYLES: Record<UnitLifecycleStatus, string> = {
+  finalizada: 'border-slate-300 bg-slate-100 text-slate-700',
+  em_andamento: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+  nao_iniciada: 'border-amber-200 bg-amber-50 text-amber-700',
+};
+
 const getNormalizedActivityStatus = (activity: ActivityGradeRow): Exclude<ReportActivityStatus, 'nao_iniciada' | 'sem_atividades'> => {
   const rawStatus = activity.status?.toLowerCase();
 
@@ -178,26 +194,6 @@ const getNormalizedActivityStatus = (activity: ActivityGradeRow): Exclude<Report
 };
 
 const getReportActivityStatusLabel = (status: ReportActivityStatus) => REPORT_ACTIVITY_STATUS_LABELS[status];
-
-/**
- * Infer end dates for units that don't have one.
- * Uses the start date of the next unit (sorted chronologically) as the end date.
- */
-function inferEndDates(units: TutorCourse[]): (TutorCourse & { effective_end_date: string | null })[] {
-  const sorted = [...units].sort((a, b) => {
-    const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
-    const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
-    return dateA - dateB;
-  });
-
-  return sorted.map((unit, index) => {
-    let effectiveEnd = unit.end_date || null;
-    if (!effectiveEnd && index < sorted.length - 1) {
-      effectiveEnd = sorted[index + 1].start_date || null;
-    }
-    return { ...unit, effective_end_date: effectiveEnd };
-  });
-}
 
 export default function Reports() {
   const { user } = useAuth();
@@ -293,6 +289,13 @@ export default function Reports() {
       });
   }, [selectedCourseGroup, tutorCourses]);
 
+  const availableUnitsWithStatus = useMemo(() => {
+    return withEffectiveCourseDates(availableUnits).map(unit => ({
+      ...unit,
+      lifecycleStatus: getCourseLifecycleStatus(unit),
+    }));
+  }, [availableUnits]);
+
   useEffect(() => {
     setSelectedUnitIds([]);
   }, [selectedCourseGroup]);
@@ -311,7 +314,7 @@ export default function Reports() {
   };
 
   const selectAllUnits = () => {
-    setSelectedUnitIds(availableUnits.map(unit => unit.id));
+    setSelectedUnitIds(availableUnitsWithStatus.map(unit => unit.id));
   };
 
   const clearUnitsSelection = () => {
@@ -420,21 +423,15 @@ export default function Reports() {
       });
 
       const now = new Date();
-      const selectedUnits = availableUnits
-        .filter(unit => selectedUnitIds.includes(unit.id))
-        .sort((a, b) => {
-          const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
-          const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
-          return dateA - dateB;
-        });
-
-      const getUnitStatus = (unit: TutorCourse): 'em_andamento' | 'nao_iniciada' | 'finalizada' => {
-        if (!unit.start_date) return 'em_andamento';
-        const start = new Date(unit.start_date);
-        if (start > now) return 'nao_iniciada';
-        if (unit.end_date && new Date(unit.end_date) < now) return 'finalizada';
-        return 'em_andamento';
-      };
+      const selectedUnits = withEffectiveCourseDates(
+        availableUnits
+          .filter(unit => selectedUnitIds.includes(unit.id))
+          .sort((a, b) => {
+            const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
+            const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
+            return dateA - dateB;
+          }),
+      );
 
       const usedHeaders = new Set<string>();
       const selectedUnitsWithHeader = selectedUnits.map(unit => {
@@ -453,7 +450,7 @@ export default function Reports() {
           ...unit,
           headerName,
           statusHeaderName: `${headerName} - Status`,
-          status: getUnitStatus(unit),
+          status: getCourseLifecycleStatus(unit, now),
         };
       });
 
@@ -639,7 +636,7 @@ export default function Reports() {
 
       // Build units with inferred end dates
       const selectedUnitsRaw = availableUnits.filter(u => selectedUnitIds.includes(u.id));
-      const unitsWithEndDates = inferEndDates(selectedUnitsRaw);
+      const unitsWithEndDates = withEffectiveCourseDates(selectedUnitsRaw);
       const unitEndDateMap = new Map(unitsWithEndDates.map(u => [u.id, u.effective_end_date]));
       const unitNameMap = new Map(unitsWithEndDates.map(u => [u.id, simplifyUnitName(u.name)]));
       const unitStartMap = new Map(unitsWithEndDates.map(u => [u.id, u.start_date]));
@@ -854,7 +851,7 @@ export default function Reports() {
                 <p className="text-sm text-muted-foreground">Selecione um curso para listar as unidades curriculares.</p>
               )}
 
-              {availableUnits.map(unit => {
+              {availableUnitsWithStatus.map(unit => {
                 const checked = selectedUnitIds.includes(unit.id);
                 return (
                   <label
@@ -866,10 +863,20 @@ export default function Reports() {
                       onCheckedChange={(value) => toggleUnit(unit.id, value === true)}
                       className="mt-0.5"
                     />
-                    <span className="text-sm">
-                      {unit.name}
-                      {unit.short_name ? ` (${unit.short_name})` : ''}
-                    </span>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm">
+                          {unit.name}
+                          {unit.short_name ? ` (${unit.short_name})` : ''}
+                        </span>
+                        <Badge
+                          variant="outline"
+                          className={UNIT_STATUS_BADGE_STYLES[unit.lifecycleStatus]}
+                        >
+                          {UNIT_STATUS_LABELS[unit.lifecycleStatus]}
+                        </Badge>
+                      </div>
+                    </div>
                   </label>
                 );
               })}

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { getCourseEffectiveEndDate } from '@/lib/course-dates';
 
 interface CourseWithStats {
   id: string;
@@ -19,6 +20,7 @@ interface CourseWithStats {
   category?: string;
   start_date?: string;
   end_date?: string;
+  effective_end_date?: string;
   last_sync?: string;
   students_count: number;
   at_risk_count: number;
@@ -82,7 +84,7 @@ export function CourseCard({ course }: CourseCardProps) {
               <Calendar className="h-3 w-3" />
               <span>Início: {formatDate(course.start_date)}</span>
               <span>•</span>
-              <span>Fim: {formatDate(course.end_date)}</span>
+              <span>Fim: {formatDate(getCourseEffectiveEndDate(course) || undefined)}</span>
             </div>
             <div className="flex items-center gap-2">
               <Clock className="h-3 w-3" />

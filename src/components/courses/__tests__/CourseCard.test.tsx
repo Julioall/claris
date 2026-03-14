@@ -59,4 +59,25 @@ describe("CourseCard", () => {
     expect(spanTexts).toContain("Fim: -");
     expect(screen.getByText(/nunca/i)).toBeInTheDocument();
   });
+
+  it("prefers the effective end date when it is available", () => {
+    render(
+      <MemoryRouter>
+        <CourseCard
+          course={{
+            id: "c-3",
+            name: "Curso com termino inferido",
+            students_count: 0,
+            at_risk_count: 0,
+            pending_tasks_count: 0,
+            start_date: "2026-01-10T00:00:00.000Z",
+            end_date: "2026-12-20T00:00:00.000Z",
+            effective_end_date: "2026-03-15T12:00:00.000Z",
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/fim: 15\/03\/2026/i)).toBeInTheDocument();
+  });
 });

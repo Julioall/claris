@@ -44,6 +44,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { isCourseEffectivelyActive, withEffectiveCourseDates } from '@/lib/course-dates';
 
 const priorityOptions: { value: TaskPriority; label: string }[] = [
   { value: 'baixa', label: 'Baixa' },
@@ -142,6 +143,8 @@ export function NewRecurringTaskDialog({
           courses!inner (
             id,
             short_name,
+            category,
+            start_date,
             end_date
           )
         `)
@@ -149,14 +152,18 @@ export function NewRecurringTaskDialog({
 
       if (error) throw error;
 
-      const now = new Date();
-      const activeCourses = data
-        ?.map(uc => uc.courses)
-        .filter((c): c is { id: string; short_name: string | null; end_date: string | null } => {
-          if (!c) return false;
-          const isActive = !c.end_date || new Date(c.end_date) > now;
-          return isActive;
-        })
+      const activeCourses = withEffectiveCourseDates(
+        data
+          ?.map(uc => uc.courses)
+          .filter((c): c is {
+            id: string;
+            short_name: string | null;
+            category: string | null;
+            start_date: string | null;
+            end_date: string | null;
+          } => Boolean(c)) || [],
+      )
+        .filter(course => isCourseEffectivelyActive(course))
         .map(c => ({ id: c.id, short_name: c.short_name || '' })) || [];
 
       setCourses(activeCourses);

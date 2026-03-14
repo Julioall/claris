@@ -40,7 +40,8 @@ describe("MyCourses page", () => {
           short_name: "MAT",
           category: "Exatas",
           is_following: true,
-          end_date: null,
+          end_date: "2020-01-01T00:00:00.000Z",
+          effective_end_date: "2099-01-01T00:00:00.000Z",
         },
         {
           id: "c-2",
@@ -83,11 +84,11 @@ describe("MyCourses page", () => {
     expect(container.querySelector(".animate-spin")).toBeInTheDocument();
   });
 
-  it("renders only active followed courses", () => {
+  it("renders followed courses, including finished units", () => {
     render(<MyCourses />);
 
-    expect(screen.getByText(/1 cursos em acompanhamento/i)).toBeInTheDocument();
-    expect(screen.getByTestId("category-hierarchy")).toHaveTextContent("cursos:1");
+    expect(screen.getByText(/2 cursos em acompanhamento/i)).toBeInTheDocument();
+    expect(screen.getByTestId("category-hierarchy")).toHaveTextContent("cursos:2");
     expect(screen.getByTestId("category-hierarchy")).toHaveTextContent("editable:no");
   });
 

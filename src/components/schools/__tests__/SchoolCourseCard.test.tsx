@@ -37,6 +37,7 @@ describe("SchoolCourseCard", () => {
     );
 
     expect(screen.getByText("Curso da Escola")).toBeInTheDocument();
+    expect(screen.getByText(/em andamento/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /curso da escola/i })).toHaveAttribute(
       "href",
       "/cursos/school-c-1",
@@ -78,6 +79,7 @@ describe("SchoolCourseCard", () => {
             is_ignored: true,
             is_attendance_enabled: true,
             end_date: "2020-01-01T00:00:00.000Z",
+            effective_end_date: "2020-03-15T12:00:00.000Z",
           }}
         />
       </MemoryRouter>,
@@ -85,6 +87,8 @@ describe("SchoolCourseCard", () => {
 
     expect(screen.getByText(/ignorado/i)).toBeInTheDocument();
     expect(screen.getByText(/presenca/i)).toBeInTheDocument();
+    expect(screen.getByText(/finalizada/i)).toBeInTheDocument();
     expect(screen.getByText(/encerrado em/i)).toBeInTheDocument();
+    expect(screen.getByText(/15\/03\/2020/i)).toBeInTheDocument();
   });
 });

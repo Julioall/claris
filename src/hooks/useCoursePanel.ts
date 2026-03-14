@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Course, Student } from '@/types';
 import { toast } from '@/hooks/use-toast';
+import { withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface StudentActivity {
   id: string;
@@ -71,7 +72,23 @@ export function useCoursePanel(courseId: string | undefined) {
         .single();
 
       if (courseError) throw courseError;
-      setCourse(courseData);
+
+      let normalizedCourseData = courseData as Course;
+      const { data: courseDateRows, error: courseDateRowsError } = await supabase
+        .from('courses')
+        .select('id, category, start_date, end_date');
+
+      if (!courseDateRowsError && courseDateRows) {
+        const matchedCourseDates = withEffectiveCourseDates(courseDateRows).find(course => course.id === courseId);
+        if (matchedCourseDates) {
+          normalizedCourseData = {
+            ...courseData,
+            effective_end_date: matchedCourseDates.effective_end_date,
+          };
+        }
+      }
+
+      setCourse(normalizedCourseData);
 
       const { data: studentCoursesData, error: studentsError } = await supabase
         .from('student_courses')

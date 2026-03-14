@@ -46,12 +46,14 @@ const coursesFixture: Course[] = [
     moodle_course_id: "101",
     name: "Turma A1",
     category: "Instituicao > Escola A > Evento A > Turma 1",
+    end_date: "2099-01-01T00:00:00.000Z",
   }),
   buildCourse({
     id: "c2",
     moodle_course_id: "102",
     name: "Turma A2",
     category: "Instituicao > Escola A > Evento A > Turma 2",
+    end_date: "2020-01-01T00:00:00.000Z",
   }),
   buildCourse({
     id: "c3",
@@ -138,12 +140,14 @@ describe("CourseSelectorDialog", () => {
     const { onOpenChange, onSync } = renderDialog();
 
     await waitFor(() => {
-      expect(screen.getByText(/3 cursos selecionados/i)).toBeInTheDocument();
+      expect(screen.getByText(/2 cursos selecionados/i)).toBeInTheDocument();
     });
+
+    expect(screen.queryByText("Evento C")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^Sincronizar$/i }));
 
-    expect(onSync).toHaveBeenCalledWith(["c1", "c2", "c4"]);
+    expect(onSync).toHaveBeenCalledWith(["c1", "c2"]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(prefsUpsertMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -161,7 +165,7 @@ describe("CourseSelectorDialog", () => {
     const { onSync } = renderDialog();
 
     await waitFor(() => {
-      expect(screen.getByText(/3 cursos selecionados/i)).toBeInTheDocument();
+      expect(screen.getByText(/2 cursos selecionados/i)).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: /Limpar sele/i }));
@@ -171,15 +175,15 @@ describe("CourseSelectorDialog", () => {
     expect(screen.getByRole("button", { name: /^Sincronizar$/i })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: /^Sincronizar$/i }));
 
-    expect(onSync).toHaveBeenCalledWith(expect.arrayContaining(["c1", "c2", "c4"]));
-    expect(onSync.mock.calls[0][0]).toHaveLength(3);
+    expect(onSync).toHaveBeenCalledWith(expect.arrayContaining(["c1", "c2"]));
+    expect(onSync.mock.calls[0][0]).toHaveLength(2);
   });
 
   it("loads saved preferences and includes finished courses when enabled", async () => {
     const user = userEvent.setup();
     prefsMaybeSingleMock.mockResolvedValueOnce({
       data: {
-        selected_keys: ["Escola B::Evento B"],
+        selected_keys: ["Escola B::Evento B", "Escola C::Evento C"],
         include_empty_courses: false,
         include_finished: true,
       },
@@ -194,6 +198,6 @@ describe("CourseSelectorDialog", () => {
     });
 
     await user.click(screen.getByRole("button", { name: /^Sincronizar$/i }));
-    expect(onSync).toHaveBeenCalledWith(["c3"]);
+    expect(onSync).toHaveBeenCalledWith(["c3", "c4"]);
   });
 });

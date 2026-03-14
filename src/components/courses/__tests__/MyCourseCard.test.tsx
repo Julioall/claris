@@ -18,8 +18,8 @@ const baseCourse = {
   students_count: 20,
   at_risk_count: 3,
   pending_tasks_count: 5,
-  start_date: "2026-01-01T00:00:00.000Z",
-  end_date: "2026-12-01T00:00:00.000Z",
+  start_date: "2000-01-01T00:00:00.000Z",
+  end_date: "2099-12-01T00:00:00.000Z",
   last_sync: "2026-02-20T10:00:00.000Z",
   is_attendance_enabled: false,
 };
@@ -37,6 +37,7 @@ describe("MyCourseCard", () => {
     );
 
     expect(screen.getByText("Curso em acompanhamento")).toBeInTheDocument();
+    expect(screen.getByText(/em andamento/i)).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute("href", "/cursos/c-1");
   });
 
@@ -71,5 +72,25 @@ describe("MyCourseCard", () => {
 
     expect(onToggleAttendance).toHaveBeenCalledWith("c-1");
     expect(toastSuccessMock).toHaveBeenCalled();
+  });
+
+  it("shows finalized status for finished units", () => {
+    render(
+      <MemoryRouter>
+        <MyCourseCard
+          course={{
+            ...baseCourse,
+            id: "c-2",
+            name: "Curso finalizado",
+            end_date: "2020-01-01T00:00:00.000Z",
+            effective_end_date: "2020-03-15T00:00:00.000Z",
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/finalizada/i)).toBeInTheDocument();
+    expect(screen.getByText(/fim:/i)).toBeInTheDocument();
+    expect(screen.getByText(/14\/03\/2020|15\/03\/2020/i)).toBeInTheDocument();
   });
 });
