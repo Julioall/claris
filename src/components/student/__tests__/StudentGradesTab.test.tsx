@@ -52,7 +52,7 @@ describe("StudentGradesTab", () => {
     expect(screen.getByText(/após a sincronização dos cursos/i)).toBeInTheDocument();
   });
 
-  it("renders absolute course total using visible activities only", async () => {
+  it("renders the course total from the gradebook instead of summing visible activities", async () => {
     const user = userEvent.setup();
 
     gradesEqMock.mockResolvedValueOnce({
@@ -120,7 +120,9 @@ describe("StudentGradesTab", () => {
       expect(screen.getByText("Matematica")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("15.0")).toBeInTheDocument();
+    expect(screen.getByText("18/20")).toBeInTheDocument();
+    expect(screen.getByText("90.0%")).toBeInTheDocument();
+    expect(screen.getByText(/livro de notas/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
 

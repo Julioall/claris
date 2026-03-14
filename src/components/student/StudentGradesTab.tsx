@@ -142,20 +142,18 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
     return (activitiesByCourse[courseId] || []).filter((activity) => !activity.hidden);
   };
 
-  const getVisibleCourseTotal = (courseId: string) => {
-    const visibleActivities = getVisibleActivities(courseId);
+  const formatCourseGrade = (grade: CourseGrade): string | null => {
+    if (grade.grade_formatted) return grade.grade_formatted;
 
-    if (visibleActivities.length === 0) {
-      return null;
+    if (grade.grade_raw !== null && grade.grade_max !== null) {
+      return `${Number(grade.grade_raw).toFixed(1)} / ${grade.grade_max}`;
     }
 
-    const totalRaw = visibleActivities.reduce((sum, activity) => sum + (activity.grade || 0), 0);
+    if (grade.grade_raw !== null) {
+      return Number(grade.grade_raw).toFixed(1);
+    }
 
-    return {
-      gradeRaw: totalRaw,
-      gradeMax: null,
-      gradePercentage: null,
-    };
+    return null;
   };
 
   if (isLoading) {
@@ -185,11 +183,10 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
       <div className="grid gap-3">
         {grades.map(grade => {
           const visibleActivities = getVisibleActivities(grade.course_id);
-          const visibleCourseTotal = getVisibleCourseTotal(grade.course_id);
-          const displayedPercentage = null;
-          const displayedGradeText = visibleCourseTotal
-            ? `${visibleCourseTotal.gradeRaw.toFixed(1)}`
+          const displayedPercentage = grade.grade_percentage !== null
+            ? `${Number(grade.grade_percentage).toFixed(1)}%`
             : null;
+          const displayedGradeText = formatCourseGrade(grade);
 
           return (
           <Card key={grade.id} className="card-interactive">
@@ -216,10 +213,10 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
                     <div className="text-right shrink-0">
                       {displayedGradeText !== null ? (
                         <div className="flex flex-col items-end gap-1">
-                          <span className="text-xl font-bold">
+                          <span className={`text-xl font-bold ${getGradeColor(grade.grade_percentage)}`}>
                             {displayedGradeText}
                           </span>
-                          {grade.letter_grade && visibleCourseTotal && (
+                          {grade.letter_grade && (
                             <Badge variant="outline" className="text-xs">
                               {grade.letter_grade}
                             </Badge>
@@ -234,10 +231,8 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
                   {displayedGradeText !== null && (
                     <div>
                       <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Soma das atividades visíveis</span>
-                        <span>
-                          Nota total
-                        </span>
+                        <span>Livro de notas</span>
+                        <span>{displayedPercentage || 'Nota total'}</span>
                       </div>
                     </div>
                   )}

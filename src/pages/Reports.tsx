@@ -63,6 +63,13 @@ interface ActivityDetailRow {
   submitted_at: string | null;
 }
 
+interface CourseTotalRow {
+  student_id: string;
+  course_id: string;
+  grade_raw: number | null;
+  grade_percentage: number | null;
+}
+
 const SEM_CATEGORIA = 'Sem categoria';
 
 type ReportActivityStatus = 'graded' | 'submitted' | 'pending' | 'nao_iniciada' | 'sem_atividades';
@@ -377,13 +384,45 @@ export default function Reports() {
         activityPage++;
       }
 
+      // Fetch course totals from the gradebook sync (paginated)
+      const allCourseTotals: CourseTotalRow[] = [];
+      let courseTotalPage = 0;
+      while (true) {
+        const { data, error } = await supabase
+          .from('student_course_grades')
+          .select(`
+            student_id,
+            course_id,
+            grade_raw,
+            grade_percentage
+          `)
+          .in('course_id', selectedUnitIds)
+          .range(courseTotalPage * PAGE_SIZE, (courseTotalPage + 1) * PAGE_SIZE - 1);
+        if (error) throw error;
+        allCourseTotals.push(...((data || []) as CourseTotalRow[]));
+        if (!data || data.length < PAGE_SIZE) break;
+        courseTotalPage++;
+      }
+
       const enrollments = allEnrollments;
       const activities = allActivities;
+      const courseTotals = allCourseTotals;
 
       const summaryByStudentAndCourse = new Map<string, {
         grade: number | null;
+        gradePercentage: number | null;
         status: Exclude<ReportActivityStatus, 'nao_iniciada'>;
       }>();
+
+      const gradebookTotalsByKey = new Map(
+        courseTotals.map(total => [
+          `${total.student_id}::${total.course_id}`,
+          {
+            grade: total.grade_raw,
+            gradePercentage: total.grade_percentage,
+          },
+        ]),
+      );
 
       const groupedByKey = activities.reduce<Record<string, ActivityGradeRow[]>>((acc, row) => {
         const key = `${row.student_id}::${row.course_id}`;
@@ -396,18 +435,18 @@ export default function Reports() {
 
       Object.entries(groupedByKey).forEach(([key, rows]) => {
         const visibleActivities = rows.filter(row => !row.hidden);
+        const gradebookTotal = gradebookTotalsByKey.get(key);
 
         if (visibleActivities.length === 0) {
           summaryByStudentAndCourse.set(key, {
-            grade: null,
-            status: 'sem_atividades',
+            grade: gradebookTotal?.grade ?? null,
+            gradePercentage: gradebookTotal?.gradePercentage ?? null,
+            status: gradebookTotal?.grade !== null && gradebookTotal?.grade !== undefined ? 'graded' : 'sem_atividades',
           });
           return;
         }
 
         const normalizedStatuses = visibleActivities.map(getNormalizedActivityStatus);
-        const gradedActivities = visibleActivities.filter(row => row.grade !== null);
-        const totalRaw = gradedActivities.reduce((sum, row) => sum + (row.grade || 0), 0);
 
         let reportStatus: Exclude<ReportActivityStatus, 'nao_iniciada'> = 'graded';
         if (normalizedStatuses.some(status => status === 'submitted')) {
@@ -417,7 +456,8 @@ export default function Reports() {
         }
 
         summaryByStudentAndCourse.set(key, {
-          grade: gradedActivities.length === 0 ? null : Math.round(totalRaw * 10) / 10,
+          grade: gradebookTotal?.grade ?? null,
+          gradePercentage: gradebookTotal?.gradePercentage ?? null,
           status: reportStatus,
         });
       });
@@ -471,22 +511,31 @@ export default function Reports() {
           const row: Record<string, string | number> = {
             Aluno: isSuspended ? `${studentName} (Suspenso)` : studentName,
           };
+          const gradePercentagesByUnitHeader = new Map<string, number | null>();
 
           selectedUnitsWithHeader.forEach(unit => {
             if (unit.status === 'nao_iniciada') {
               row[unit.headerName] = '-';
               row[unit.statusHeaderName] = getReportActivityStatusLabel('nao_iniciada');
+              gradePercentagesByUnitHeader.set(unit.headerName, null);
               return;
             }
 
             const key = `${studentId}::${unit.id}`;
-            const summary = summaryByStudentAndCourse.get(key);
+            const summary = summaryByStudentAndCourse.get(key) || {
+              grade: gradebookTotalsByKey.get(key)?.grade ?? null,
+              gradePercentage: gradebookTotalsByKey.get(key)?.gradePercentage ?? null,
+              status: gradebookTotalsByKey.get(key)?.grade !== null && gradebookTotalsByKey.get(key)?.grade !== undefined
+                ? 'graded'
+                : 'sem_atividades',
+            };
 
             row[unit.headerName] = summary?.grade === null || summary?.grade === undefined ? '' : summary.grade;
             row[unit.statusHeaderName] = getReportActivityStatusLabel(summary?.status || 'sem_atividades');
+            gradePercentagesByUnitHeader.set(unit.headerName, summary?.gradePercentage ?? null);
           });
 
-          return { row, isSuspended };
+          return { row, isSuspended, gradePercentagesByUnitHeader };
         })
         .sort((a, b) => {
           if (a.isSuspended !== b.isSuspended) return a.isSuspended ? 1 : -1;
@@ -554,7 +603,12 @@ export default function Reports() {
 
             if (isGradeColumn && typeof cell.v === 'number') {
               if (!isSuspendedRow) {
-                const gradeStyle = getGradeCellStyle(cell.v);
+                const selectedUnitIndex = Math.floor((colIndex - 1) / 2);
+                const selectedUnit = selectedUnitsWithHeader[selectedUnitIndex];
+                const gradePercentage = selectedUnit
+                  ? reportRows[rowIndex - 1]?.gradePercentagesByUnitHeader.get(selectedUnit.headerName) ?? null
+                  : null;
+                const gradeStyle = gradePercentage !== null ? getGradeCellStyle(gradePercentage) : null;
                 if (gradeStyle) {
                   cell.s = {
                     ...(cell.s || {}),
