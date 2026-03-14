@@ -441,7 +441,7 @@ export default function Reports() {
           summaryByStudentAndCourse.set(key, {
             grade: gradebookTotal?.grade ?? null,
             gradePercentage: gradebookTotal?.gradePercentage ?? null,
-            status: gradebookTotal?.grade !== null && gradebookTotal?.grade !== undefined ? 'graded' : 'sem_atividades',
+            status: gradebookTotal?.grade != null ? 'graded' : 'sem_atividades',
           });
           return;
         }
@@ -522,10 +522,11 @@ export default function Reports() {
             }
 
             const key = `${studentId}::${unit.id}`;
+            const gradebookTotal = gradebookTotalsByKey.get(key);
             const summary = summaryByStudentAndCourse.get(key) || {
-              grade: gradebookTotalsByKey.get(key)?.grade ?? null,
-              gradePercentage: gradebookTotalsByKey.get(key)?.gradePercentage ?? null,
-              status: gradebookTotalsByKey.get(key)?.grade !== null && gradebookTotalsByKey.get(key)?.grade !== undefined
+              grade: gradebookTotal?.grade ?? null,
+              gradePercentage: gradebookTotal?.gradePercentage ?? null,
+              status: gradebookTotal?.grade != null
                 ? 'graded'
                 : 'sem_atividades',
             };
@@ -603,6 +604,8 @@ export default function Reports() {
 
             if (isGradeColumn && typeof cell.v === 'number') {
               if (!isSuspendedRow) {
+                // Each unit occupies 2 columns (grade + status); column 1 is "Aluno".
+                // Unit index = (colIndex - 1) / 2 (integer division).
                 const selectedUnitIndex = Math.floor((colIndex - 1) / 2);
                 const selectedUnit = selectedUnitsWithHeader[selectedUnitIndex];
                 const gradePercentage = selectedUnit
