@@ -4,12 +4,9 @@ export type RiskLevel = 'normal' | 'atencao' | 'risco' | 'critico' | 'inativo';
 export type TaskStatus = 'aberta' | 'em_andamento' | 'resolvida';
 export type TaskPriority = 'baixa' | 'media' | 'alta' | 'urgente';
 export type TaskType = 'moodle' | 'interna';
-export type ActionStatus = 'planejada' | 'concluida';
-export type ActionType = 'contato' | 'orientacao' | 'cobranca' | 'suporte_tecnico' | 'reuniao' | 'outro';
 
 // Advanced pending tasks system types
 export type TaskAutomationType = 'manual' | 'auto_at_risk' | 'auto_missed_assignment' | 'auto_uncorrected_activity' | 'recurring';
-export type ActionEffectiveness = 'pendente' | 'eficaz' | 'nao_eficaz' | 'parcialmente_eficaz';
 export type RecurrencePattern = 'diario' | 'semanal' | 'quinzenal' | 'mensal' | 'bimestral' | 'trimestral';
 export type RecurrenceWeekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
@@ -83,7 +80,6 @@ export interface PendingTask {
   // Relations
   student?: Student;
   course?: Course;
-  actions?: TaskAction[];
 }
 
 export interface Note {
@@ -162,39 +158,6 @@ export interface TaskRecurrenceConfig {
   created_by?: User;
 }
 
-// Task action (linked to pending task)
-export interface TaskAction {
-  id: string;
-  pending_task_id: string;
-  action_type: ActionType;
-  description: string;
-  effectiveness: ActionEffectiveness;
-  executed_by_user_id?: string;
-  executed_at?: string;
-  notes?: string;
-  created_at: string;
-  updated_at: string;
-  // Relations
-  pending_task?: PendingTask;
-  executed_by?: User;
-  history?: TaskActionHistory[];
-}
-
-// Task action history
-export interface TaskActionHistory {
-  id: string;
-  task_action_id: string;
-  pending_task_id: string;
-  previous_effectiveness?: ActionEffectiveness;
-  new_effectiveness: ActionEffectiveness;
-  notes?: string;
-  changed_by_user_id?: string;
-  created_at: string;
-  // Relations
-  task_action?: TaskAction;
-  changed_by?: User;
-}
-
 // UI-specific types
 export interface WeeklySummary {
   pending_tasks: number;
@@ -206,7 +169,7 @@ export interface WeeklySummary {
 }
 
 export interface PriorityItem {
-  type: 'action' | 'task' | 'student';
+  type: 'task' | 'student';
   id: string;
   title: string;
   description?: string;

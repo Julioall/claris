@@ -18,16 +18,6 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Resolvida')).toBeInTheDocument();
   });
 
-  it('renders "Planejada" for action status planejada', () => {
-    render(<StatusBadge status="planejada" />);
-    expect(screen.getByText('Planejada')).toBeInTheDocument();
-  });
-
-  it('renders "Concluída" for action status concluida', () => {
-    render(<StatusBadge status="concluida" />);
-    expect(screen.getByText('Concluída')).toBeInTheDocument();
-  });
-
   it('applies small size classes', () => {
     const { container } = render(<StatusBadge status="aberta" size="sm" />);
     expect(container.firstChild).toHaveClass('text-xs', 'px-1.5', 'py-0.5');
@@ -36,10 +26,5 @@ describe('StatusBadge', () => {
   it('applies custom className', () => {
     const { container } = render(<StatusBadge status="aberta" className="custom-class" />);
     expect(container.firstChild).toHaveClass('custom-class');
-  });
-
-  it('falls back gracefully for unknown status', () => {
-    render(<StatusBadge status={'desconhecido' as string} />);
-    expect(screen.getByText('desconhecido')).toBeInTheDocument();
   });
 });
