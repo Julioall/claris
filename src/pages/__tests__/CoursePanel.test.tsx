@@ -47,6 +47,7 @@ describe("CoursePanel page", () => {
         last_sync: "2026-02-20T00:00:00.000Z",
         start_date: "2026-01-01T00:00:00.000Z",
         end_date: "2026-12-31T00:00:00.000Z",
+        effective_end_date: "2026-03-15T12:00:00.000Z",
         moodle_course_id: "123",
       },
       students: [
@@ -140,5 +141,6 @@ describe("CoursePanel page", () => {
     expect(screen.getByText("Curso de Matematica")).toBeInTheDocument();
     expect(screen.getByText(/alunos matriculados/i)).toBeInTheDocument();
     expect(screen.getByText(/distribui/i)).toBeInTheDocument();
+    expect(screen.getByText("15/03/2026")).toBeInTheDocument();
   });
 });

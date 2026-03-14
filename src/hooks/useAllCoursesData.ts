@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { Course } from '@/types';
+import { withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface CourseWithStats extends Course {
   students_count: number;
@@ -111,6 +112,7 @@ export function useAllCoursesData() {
         return;
       }
 
+      const datedCourses = withEffectiveCourseDates(allCourses);
       const followedCourseIds = new Set(tutorCourseIds);
 
       // Get user's ignored courses
@@ -132,7 +134,7 @@ export function useAllCoursesData() {
 
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
-        allCourses.map(async (course) => {
+        datedCourses.map(async (course) => {
           // Count students in this course
           const { data: studentData } = await supabase
             .from('student_courses')

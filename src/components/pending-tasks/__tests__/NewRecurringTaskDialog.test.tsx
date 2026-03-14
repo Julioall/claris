@@ -99,7 +99,9 @@ describe("NewRecurringTaskDialog", () => {
           courses: {
             id: "c-1",
             short_name: "MAT",
-            end_date: null,
+            category: "Senai > Escola A > Curso X > Turma 1",
+            start_date: "2026-01-01T00:00:00.000Z",
+            end_date: "2020-01-01T00:00:00.000Z",
           },
         },
         {
@@ -107,6 +109,8 @@ describe("NewRecurringTaskDialog", () => {
           courses: {
             id: "c-2",
             short_name: "OLD",
+            category: "Senai > Escola A > Curso X > Turma 1",
+            start_date: "2099-01-01T00:00:00.000Z",
             end_date: "2020-01-01T00:00:00.000Z",
           },
         },

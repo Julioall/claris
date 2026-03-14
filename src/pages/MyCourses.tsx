@@ -1,14 +1,11 @@
 import { 
   BookOpen, 
   Search,
-  Loader2,
-  Building2
+  Loader2
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAllCoursesData } from '@/hooks/useAllCoursesData';
 import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
 import { CategoryHierarchy } from '@/components/courses/CategoryHierarchy';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -17,13 +14,8 @@ export default function MyCourses() {
   const { isEditMode } = useAuth();
   const { courses, isLoading, error, toggleFollow, unfollowMultiple, toggleAttendance, toggleAttendanceMultiple } = useAllCoursesData();
 
-  // Filter only followed courses that are active (end_date is null or in the future)
   const followedCourses = useMemo(() => {
-    return courses.filter(course => {
-      if (!course.is_following) return false;
-      if (!course.end_date) return true;
-      return new Date(course.end_date) >= new Date();
-    });
+    return courses.filter(course => course.is_following);
   }, [courses]);
 
   const filteredCourses = followedCourses.filter(course =>

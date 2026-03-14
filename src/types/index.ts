@@ -31,6 +31,7 @@ export interface Course {
   category?: string;
   start_date?: string;
   end_date?: string;
+  effective_end_date?: string;
   last_sync?: string;
   created_at: string;
   updated_at: string;

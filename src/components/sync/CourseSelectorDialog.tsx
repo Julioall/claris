@@ -12,6 +12,7 @@ import { Course } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { isCourseEffectivelyActive, withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface SyncPreferences {
   selectedKeys: string[];
@@ -32,6 +33,7 @@ interface EventNode {
   name: string;
   courses: Course[];
   studentCount: number;
+  isFullyFinished: boolean;
 }
 
 interface SchoolNode {
@@ -41,10 +43,16 @@ interface SchoolNode {
   totalCourses: number;
 }
 
-const isCourseActive = (course: Course): boolean => {
-  if (!course.end_date) return true;
-  return new Date(course.end_date) >= new Date();
-};
+function isCourseFinishedForSyncFilter(course: Course): boolean {
+  const hasDeclaredEndDate = Boolean(course.end_date?.trim());
+  const hasEffectiveEndDate = Boolean(course.effective_end_date?.trim());
+
+  if (!hasDeclaredEndDate && !hasEffectiveEndDate) {
+    return true;
+  }
+
+  return !isCourseEffectivelyActive(course);
+}
 
 async function loadPreferencesFromDB(userId: string): Promise<SyncPreferences | null> {
   try {
@@ -90,6 +98,7 @@ export function CourseSelectorDialog({
   isLoading,
 }: CourseSelectorDialogProps) {
   const { user } = useAuth();
+  const normalizedCourses = useMemo(() => withEffectiveCourseDates(courses), [courses]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [includeEmptyCourses, setIncludeEmptyCourses] = useState(false);
   const [includeFinished, setIncludeFinished] = useState(false);
@@ -151,39 +160,25 @@ export function CourseSelectorDialog({
     load();
   }, [open, user]);
 
-  // Count active vs finished courses
-  const courseStats = useMemo(() => {
-    let active = 0;
-    let finished = 0;
-    courses.forEach(c => {
-      if (isCourseActive(c)) active++;
-      else finished++;
-    });
-    return { active, finished };
-  }, [courses]);
-
-  // Build hierarchy from category paths
-  const schools = useMemo(() => {
-    const schoolMap = new Map<string, Map<string, Course[]>>();
-
-    courses.forEach(course => {
-      // Apply filters
-      if (!isCourseActive(course) && !includeFinished) return;
-      
-      // For empty course filter: only filter if studentCounts has been fully loaded
-      // Count of 0 means the course has no students (but has been checked)
-      // undefined means we haven't loaded the data yet, so we should include it
+  const selectableCourses = useMemo(() => {
+    return normalizedCourses.filter(course => {
       const count = studentCounts.get(course.id);
-      
+
       if (count === 0 && !includeEmptyCourses && countsLoaded) {
         console.warn(`Filtering out course "${course.name}" - empty and includeEmptyCourses is false`);
-        return;
+        return false;
       }
 
-      if (!course.category) return;
+      return Boolean(course.category);
+    });
+  }, [normalizedCourses, includeEmptyCourses, studentCounts, countsLoaded]);
 
+  const groupedSchools = useMemo(() => {
+    const schoolMap = new Map<string, Map<string, Course[]>>();
+
+    selectableCourses.forEach(course => {
       // Parse: "Institution > School > Event > Class"
-      const parts = course.category.split(' > ').map(p => p.trim());
+      const parts = (course.category || '').split(' > ').map(p => p.trim());
       const school = parts[1] || 'Sem escola';
       const event = parts[2] || 'Sem evento';
 
@@ -211,6 +206,7 @@ export function CourseSelectorDialog({
           name: eventName,
           courses: eventCourses,
           studentCount: eventStudentCount,
+          isFullyFinished: eventCourses.length > 0 && eventCourses.every(isCourseFinishedForSyncFilter),
         });
 
         totalStudents += eventStudentCount;
@@ -229,21 +225,56 @@ export function CourseSelectorDialog({
 
     result.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
     return result;
-  }, [courses, includeFinished, includeEmptyCourses, studentCounts, countsLoaded]);
+  }, [selectableCourses, studentCounts]);
+
+  // Count active vs fully finished course groups
+  const courseStats = useMemo(() => {
+    let active = 0;
+    let finished = 0;
+
+    groupedSchools.forEach(school => {
+      school.events.forEach(event => {
+        if (event.isFullyFinished) finished++;
+        else active++;
+      });
+    });
+
+    return { active, finished };
+  }, [groupedSchools]);
+
+  // Build hierarchy from category paths
+  const schools = useMemo(() => {
+    return groupedSchools
+      .map(school => {
+        const events = school.events.filter(event => includeFinished || !event.isFullyFinished);
+        if (events.length === 0) return null;
+
+        return {
+          ...school,
+          events,
+          totalStudents: events.reduce((sum, event) => sum + event.studentCount, 0),
+          totalCourses: events.reduce((sum, event) => sum + event.courses.length, 0),
+        };
+      })
+      .filter((school): school is SchoolNode => Boolean(school));
+  }, [groupedSchools, includeFinished]);
 
   // First-time: select all events
   useEffect(() => {
     if (!prefsLoaded || schools.length === 0) return;
 
-    // Check if we have saved prefs (selectedKeys would be populated from DB load)
-    if (selectedKeys.size === 0) {
-      // First time: select everything
+    setSelectedKeys(previousKeys => {
+      if (previousKeys.size > 0) {
+        return previousKeys;
+      }
+
       const allKeys = new Set<string>();
       schools.forEach(school => {
         school.events.forEach(event => allKeys.add(event.key));
       });
-      setSelectedKeys(allKeys);
-    }
+      return allKeys;
+    });
+
     // Always open all schools
     setOpenSchools(new Set(schools.map(s => s.name)));
   }, [prefsLoaded, schools]);

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { CourseLifecycleBadge } from '@/components/courses/CourseLifecycleBadge';
+import { getCourseEffectiveEndDate, isCourseEffectivelyFinished } from '@/lib/course-dates';
 
 interface CourseWithStats {
   id: string;
@@ -13,6 +15,7 @@ interface CourseWithStats {
   category?: string;
   start_date?: string;
   end_date?: string;
+  effective_end_date?: string;
   last_sync?: string;
   students_count: number;
   at_risk_count: number;
@@ -30,7 +33,8 @@ interface SchoolCourseCardProps {
 }
 
 export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore, onToggleAttendance }: SchoolCourseCardProps) {
-  const isExpired = course.end_date && new Date(course.end_date) < new Date();
+  const effectiveEndDate = getCourseEffectiveEndDate(course);
+  const isExpired = isCourseEffectivelyFinished(course);
 
   const handleToggleFollow = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -74,12 +78,13 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore, onTog
     <Card className={`hover:shadow-md transition-shadow ${isExpired ? 'opacity-60' : ''} ${course.is_ignored ? 'bg-muted/50' : ''}`}>
       <CardHeader className="pb-2">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 space-y-2">
             <Link to={`/cursos/${course.id}`}>
               <CardTitle className={`text-sm font-medium hover:text-primary transition-colors line-clamp-2 ${course.is_ignored ? 'text-muted-foreground' : ''}`}>
                 {course.name}
               </CardTitle>
             </Link>
+            <CourseLifecycleBadge course={course} />
           </div>
           <div className="flex items-center gap-1 shrink-0">
             {isEditMode && (
@@ -162,9 +167,9 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore, onTog
           )}
         </div>
         
-        {isExpired && course.end_date && (
+        {isExpired && effectiveEndDate && (
           <p className="text-xs text-muted-foreground mt-2">
-            Encerrado em {format(new Date(course.end_date), "dd/MM/yyyy", { locale: ptBR })}
+            Encerrado em {format(new Date(effectiveEndDate), "dd/MM/yyyy", { locale: ptBR })}
           </p>
         )}
       </CardContent>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Course } from '@/types';
+import { withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface CourseWithStats extends Course {
   students_count: number;
@@ -49,10 +50,11 @@ export function useCoursesData() {
       const coursesData = userCourses
         .map(uc => uc.courses)
         .filter((c): c is NonNullable<typeof c> => c !== null);
+      const datedCourses = withEffectiveCourseDates(coursesData);
 
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
-        coursesData.map(async (course) => {
+        datedCourses.map(async (course) => {
           // Count students in this course
           const { count: studentsCount } = await supabase
             .from('student_courses')

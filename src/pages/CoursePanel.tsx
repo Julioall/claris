@@ -32,6 +32,7 @@ import { RiskBadge } from '@/components/ui/RiskBadge';
 import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { CourseAttendanceTab } from '@/components/attendance/CourseAttendanceTab';
+import { getCourseEffectiveEndDate } from '@/lib/course-dates';
 
 export default function CoursePanel() {
   const { id } = useParams<{ id: string }>();
@@ -259,7 +260,7 @@ export default function CoursePanel() {
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Término:</span>
-                  <span className="font-medium">{formatDate(course.end_date)}</span>
+                  <span className="font-medium">{formatDate(getCourseEffectiveEndDate(course))}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />

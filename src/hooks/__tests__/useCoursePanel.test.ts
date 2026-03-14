@@ -65,7 +65,23 @@ describe("useCoursePanel", () => {
 
     setupFromMock();
 
-    coursesSelectMock.mockReturnValue({ eq: coursesEqMock });
+    coursesSelectMock.mockImplementation((query: string) => {
+      if (query === "*") {
+        return { eq: coursesEqMock };
+      }
+
+      return Promise.resolve({
+        data: [
+          {
+            id: "c-1",
+            category: "Senai > Escola A > Curso X > Turma 1",
+            start_date: "2026-01-01T00:00:00.000Z",
+            end_date: "2026-12-31T00:00:00.000Z",
+          },
+        ],
+        error: null,
+      });
+    });
     coursesEqMock.mockReturnValue({ single: coursesSingleMock });
     coursesSingleMock.mockResolvedValue({
       data: {
@@ -73,6 +89,9 @@ describe("useCoursePanel", () => {
         name: "Matematica",
         short_name: "MAT",
         moodle_course_id: "10",
+        category: "Senai > Escola A > Curso X > Turma 1",
+        start_date: "2026-01-01T00:00:00.000Z",
+        end_date: "2026-12-31T00:00:00.000Z",
       },
       error: null,
     });
@@ -270,7 +289,7 @@ describe("useCoursePanel", () => {
         title: expect.stringMatching(/oculta/i),
       }),
     );
-    expect(coursesSelectMock).toHaveBeenCalledTimes(2);
+    expect(coursesSelectMock).toHaveBeenCalledTimes(4);
   });
 
   it("shows destructive toast when visibility update fails", async () => {
