@@ -154,18 +154,6 @@ describe("App routing", () => {
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("redirects legacy actions route to pending tasks", () => {
-    setPath("/acoes");
-    useAuthMock.mockReturnValue({
-      isAuthenticated: true,
-      isLoading: false,
-    });
-
-    render(<App />);
-
-    expect(screen.getByText("PendingTasks Page")).toBeInTheDocument();
-  });
-
   it("renders not found page for unknown route", () => {
     setPath("/rota-inexistente");
     useAuthMock.mockReturnValue({

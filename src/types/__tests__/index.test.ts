@@ -4,8 +4,6 @@ import type {
   TaskStatus,
   TaskPriority,
   TaskType,
-  ActionStatus,
-  ActionType,
   RecurrencePattern,
 } from '../index';
 
@@ -28,16 +26,6 @@ describe('Type contracts', () => {
   it('TaskType values are valid', () => {
     const types: TaskType[] = ['moodle', 'interna'];
     expect(types).toHaveLength(2);
-  });
-
-  it('ActionStatus values are valid', () => {
-    const statuses: ActionStatus[] = ['planejada', 'concluida'];
-    expect(statuses).toHaveLength(2);
-  });
-
-  it('ActionType values are valid', () => {
-    const types: ActionType[] = ['contato', 'orientacao', 'cobranca', 'suporte_tecnico', 'reuniao', 'outro'];
-    expect(types).toHaveLength(6);
   });
 
   it('RecurrencePattern values are valid', () => {

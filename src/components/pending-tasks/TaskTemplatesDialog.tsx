@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -30,7 +30,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,7 +44,6 @@ const formSchema = z.object({
   task_type: z.enum(['interna', 'moodle']),
   priority: z.enum(['baixa', 'media', 'alta', 'urgente']),
   auto_message_template: z.string().max(2000).optional(),
-  auto_close_on_action: z.boolean().default(false),
 });
 
 type FormData = z.infer<typeof formSchema>;
@@ -57,7 +55,6 @@ interface Template {
   task_type: string;
   priority: string;
   auto_message_template: string | null;
-  auto_close_on_action: boolean;
   is_active: boolean;
 }
 
@@ -82,7 +79,6 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
       task_type: 'interna',
       priority: 'media',
       auto_message_template: '',
-      auto_close_on_action: false,
     },
   });
 
@@ -121,7 +117,6 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
             task_type: data.task_type as string,
             priority: data.priority as string,
             auto_message_template: data.auto_message_template || null,
-            auto_close_on_action: data.auto_close_on_action,
           })
           .eq('id', editingId);
         if (error) throw error;
@@ -136,7 +131,6 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
             task_type: data.task_type as string,
             priority: data.priority as string,
             auto_message_template: data.auto_message_template || null,
-            auto_close_on_action: data.auto_close_on_action,
           });
         if (error) throw error;
         toast.success('Modelo criado!');
@@ -161,7 +155,6 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
       task_type: template.task_type as string,
       priority: template.priority as string,
       auto_message_template: template.auto_message_template || '',
-      auto_close_on_action: template.auto_close_on_action,
     });
     setShowForm(true);
   };
@@ -170,7 +163,7 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
     try {
       const { error } = await supabase.from('task_templates').delete().eq('id', id);
       if (error) throw error;
-      toast.success('Modelo excluído!');
+      toast.success('Modelo excluido!');
       fetchTemplates();
     } catch (err) {
       console.error('Error deleting template:', err);
@@ -184,10 +177,10 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookTemplate className="h-5 w-5" />
-            Modelos de Pendência
+            Modelos de Pendencia
           </DialogTitle>
           <DialogDescription>
-            Crie modelos reutilizáveis para gerar pendências rapidamente. Modelos com mensagem automática podem enviar mensagens via Moodle.
+            Crie modelos reutilizaveis para gerar pendencias rapidamente. Modelos com mensagem automatica podem enviar mensagens via Moodle.
           </DialogDescription>
         </DialogHeader>
 
@@ -207,31 +200,28 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
                 Nenhum modelo criado ainda.
               </p>
             ) : (
-              templates.map(t => (
-                <Card key={t.id} className="card-interactive">
+              templates.map((template) => (
+                <Card key={template.id} className="card-interactive">
                   <CardContent className="p-3 flex items-center justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{t.title}</p>
+                      <p className="font-medium text-sm truncate">{template.title}</p>
                       <div className="flex items-center gap-2 mt-1">
-                        <PriorityBadge priority={t.priority as TaskPriority} size="sm" />
-                        <Badge variant="outline" className="text-xs">{t.task_type}</Badge>
-                        {t.auto_close_on_action && (
-                          <Badge variant="secondary" className="text-xs">Auto-fechar</Badge>
-                        )}
-                        {t.auto_message_template && (
-                          <Badge variant="secondary" className="text-xs">Msg automática</Badge>
+                        <PriorityBadge priority={template.priority as TaskPriority} size="sm" />
+                        <Badge variant="outline" className="text-xs">{template.task_type}</Badge>
+                        {template.auto_message_template && (
+                          <Badge variant="secondary" className="text-xs">Msg automatica</Badge>
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">
-                      <Button size="sm" variant="ghost" onClick={() => handleEdit(t)}>
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(template)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button 
-                        size="sm" 
-                        variant="ghost" 
+                      <Button
+                        size="sm"
+                        variant="ghost"
                         className="text-destructive"
-                        onClick={() => handleDelete(t.id)}
+                        onClick={() => handleDelete(template.id)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -249,7 +239,7 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
                 name="title"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Título *</FormLabel>
+                    <FormLabel>Titulo *</FormLabel>
                     <FormControl>
                       <Input placeholder="Ex: Mensagem de Boas-vindas" {...field} />
                     </FormControl>
@@ -263,9 +253,9 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Descrição</FormLabel>
+                    <FormLabel>Descricao</FormLabel>
                     <FormControl>
-                      <Textarea placeholder="Instruções padrão para esta pendência..." rows={2} {...field} />
+                      <Textarea placeholder="Instrucoes padrao para esta pendencia..." rows={2} {...field} />
                     </FormControl>
                   </FormItem>
                 )}
@@ -298,7 +288,7 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
                         <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
                         <SelectContent>
                           <SelectItem value="baixa">Baixa</SelectItem>
-                          <SelectItem value="media">Média</SelectItem>
+                          <SelectItem value="media">Media</SelectItem>
                           <SelectItem value="alta">Alta</SelectItem>
                           <SelectItem value="urgente">Urgente</SelectItem>
                         </SelectContent>
@@ -313,35 +303,17 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
                 name="auto_message_template"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Mensagem Automática (Moodle)</FormLabel>
+                    <FormLabel>Mensagem Automatica (Moodle)</FormLabel>
                     <FormControl>
-                      <Textarea 
-                        placeholder="Texto da mensagem que será enviada automaticamente ao aluno via chat do Moodle..."
+                      <Textarea
+                        placeholder="Texto da mensagem que sera enviada automaticamente ao aluno via chat do Moodle..."
                         rows={3}
-                        {...field} 
+                        {...field}
                       />
                     </FormControl>
                     <FormDescription className="text-xs">
-                      Se preenchido, ao gerar pendências em lote com este modelo a mensagem será enviada automaticamente via Moodle.
+                      Se preenchido, ao gerar pendencias em lote com este modelo a mensagem sera enviada automaticamente via Moodle.
                     </FormDescription>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="auto_close_on_action"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div>
-                      <FormLabel>Fechar automaticamente ao registrar ação</FormLabel>
-                      <FormDescription className="text-xs">
-                        A pendência será resolvida quando qualquer ação for registrada
-                      </FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
                   </FormItem>
                 )}
               />

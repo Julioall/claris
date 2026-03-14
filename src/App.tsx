@@ -51,7 +51,6 @@ function AppRoutes() {
         <Route path="/alunos" element={<Students />} />
         <Route path="/alunos/:id" element={<StudentProfile />} />
         <Route path="/pendencias" element={<PendingTasks />} />
-        <Route path="/acoes" element={<Navigate to="/pendencias" replace />} />
         <Route path="/mensagens" element={<Messages />} />
         <Route path="/relatorios" element={<Reports />} />
         <Route path="/configuracoes" element={<Settings />} />

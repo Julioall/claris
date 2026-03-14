@@ -1,23 +1,21 @@
 import { cn } from '@/lib/utils';
-import { TaskStatus, ActionStatus } from '@/types';
+import { TaskStatus } from '@/types';
 
 interface StatusBadgeProps {
-  status: TaskStatus | ActionStatus;
+  status: TaskStatus;
   size?: 'sm' | 'md';
   className?: string;
 }
 
-const statusConfig: Record<string, { label: string; className: string }> = {
+const statusConfig: Record<TaskStatus, { label: string; className: string }> = {
   aberta: { label: 'Aberta', className: 'bg-status-pending-bg text-status-pending' },
   em_andamento: { label: 'Em andamento', className: 'bg-status-warning-bg text-status-warning' },
   resolvida: { label: 'Resolvida', className: 'bg-status-success-bg text-status-success' },
-  planejada: { label: 'Planejada', className: 'bg-status-pending-bg text-status-pending' },
-  concluida: { label: 'Concluída', className: 'bg-status-success-bg text-status-success' },
 };
 
 export function StatusBadge({ status, size = 'md', className }: StatusBadgeProps) {
-  const config = statusConfig[status] || { label: status, className: 'bg-muted text-muted-foreground' };
-  
+  const config = statusConfig[status];
+
   return (
     <span
       className={cn(

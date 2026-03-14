@@ -70,7 +70,6 @@ describe("Settings page", () => {
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
     expect(screen.getByTestId("data-cleanup-card")).toBeInTheDocument();
     expect(screen.getByTestId("grade-debug-card")).toBeInTheDocument();
-    expect(screen.queryByTestId("action-types-card")).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(fromMock).toHaveBeenCalledWith("user_sync_preferences");

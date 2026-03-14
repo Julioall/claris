@@ -118,7 +118,6 @@ async function deleteFromTable(tableId: string): Promise<{ success: boolean; err
         // First delete dependencies
         await supabase.from('student_courses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         await supabase.from('pending_tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('actions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         await supabase.from('notes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         await supabase.from('risk_history').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         await supabase.from('student_activities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
@@ -134,9 +133,6 @@ async function deleteFromTable(tableId: string): Promise<{ success: boolean; err
         break;
       case 'pending_tasks':
         ({ error } = await supabase.from('pending_tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'actions':
-        ({ error } = await supabase.from('actions').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
         break;
       case 'notes':
         ({ error } = await supabase.from('notes').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
@@ -458,7 +454,8 @@ export function DataCleanupCard() {
               <AlertTriangle className="h-5 w-5 text-destructive" />
               Confirmar limpeza de dados
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
               <p>Você está prestes a remover permanentemente:</p>
               <ul className="list-disc list-inside space-y-1 text-sm">
                 {selectedOptions.map(id => {
@@ -469,6 +466,7 @@ export function DataCleanupCard() {
               <p className="font-medium text-destructive">
                 Esta ação não pode ser desfeita!
               </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -490,7 +488,8 @@ export function DataCleanupCard() {
               <AlertTriangle className="h-5 w-5 text-destructive" />
               Limpar TODA a base de dados
             </AlertDialogTitle>
-            <AlertDialogDescription className="space-y-2">
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
               <p>
                 Esta ação vai remover <strong>todos os dados</strong> do sistema, incluindo dados que podem ter sido criados por outras sincronizações ou que não estão mais vinculados à sua conta:
               </p>
@@ -504,6 +503,7 @@ export function DataCleanupCard() {
               <p className="font-medium text-destructive">
                 Esta ação é irreversível! Sua conta de usuário será preservada.
               </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
