@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Clock3, Expand, MessageCircle, MoreHorizontal, Pencil, Plus, Sparkles, Send, Trash2, X } from 'lucide-react';
+import { Check, Expand, MessageCircle, MoreHorizontal, Pencil, Plus, Sparkles, Send, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
