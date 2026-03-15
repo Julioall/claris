@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Send, Loader2, AlertCircle, MessageSquare } from 'lucide-react';
+import { Send, AlertCircle, MessageSquare } from 'lucide-react';
 import DOMPurify from 'dompurify';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -98,7 +99,7 @@ export function ChatWindow({ moodleUserId, studentName, className, hideHeader }:
         <ScrollArea ref={scrollRef} className="flex-1 p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <Spinner className="h-6 w-6" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -147,7 +148,7 @@ export function ChatWindow({ moodleUserId, studentName, className, hideHeader }:
               className="shrink-0"
             >
               {isSending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" onAccent />
               ) : (
                 <Send className="h-4 w-4" />
               )}

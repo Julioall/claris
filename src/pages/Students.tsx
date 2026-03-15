@@ -6,9 +6,9 @@ import {
   Filter,
   Clock,
   ClipboardList,
-  Loader2,
   UserCheck
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
 import { 
   Select,
@@ -33,16 +33,16 @@ import { ptBR } from 'date-fns/locale';
 
 // Enrollment status config
 const enrollmentStatusConfig: Record<string, { label: string; className: string }> = {
-  ativo: { label: 'Ativo', className: 'bg-status-success-bg text-status-success' },
-  suspenso: { label: 'Suspenso', className: 'bg-status-warning-bg text-status-warning' },
-  inativo: { label: 'Inativo', className: 'bg-muted text-muted-foreground' },
-  concluido: { label: 'Concluído', className: 'bg-primary/10 text-primary' },
+  ativo: { label: 'Ativo', className: 'bg-card border border-l-2 border-status-success/30 border-l-status-success text-status-success' },
+  suspenso: { label: 'Suspenso', className: 'bg-card border border-l-2 border-status-warning/30 border-l-status-warning text-status-warning' },
+  inativo: { label: 'Inativo', className: 'bg-card border border-l-2 border-border border-l-muted-foreground/40 text-muted-foreground' },
+  concluido: { label: 'Concluído', className: 'bg-card border border-l-2 border-primary/30 border-l-primary text-primary' },
 };
 
 function EnrollmentStatusBadge({ status }: { status: string }) {
   const config = enrollmentStatusConfig[status?.toLowerCase()] || { 
     label: status || 'Ativo', 
-    className: 'bg-muted text-muted-foreground' 
+    className: 'bg-card border border-l-2 border-border border-l-muted-foreground/40 text-muted-foreground' 
   };
   
   return (
@@ -84,7 +84,7 @@ export default function Students() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }

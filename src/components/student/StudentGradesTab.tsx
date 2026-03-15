@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, GraduationCap, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, GraduationCap } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -159,7 +160,7 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        <Spinner className="h-6 w-6" />
       </div>
     );
   }

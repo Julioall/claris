@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { useAuth } from '@/contexts/AuthContext';
 import { Course } from '@/types';
-import { withEffectiveCourseDates } from '@/lib/course-dates';
+import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface CourseWithStats extends Course {
   students_count: number;
@@ -135,6 +135,8 @@ export function useAllCoursesData() {
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
         datedCourses.map(async (course) => {
+          const isCourseInProgress = getCourseLifecycleStatus(course) === 'em_andamento';
+
           // Count students in this course
           const { data: studentData } = await supabase
             .from('student_courses')
@@ -143,21 +145,24 @@ export function useAllCoursesData() {
 
           const studentIds = studentData?.map(s => s.student_id) || [];
 
-          // Count at-risk students
-          const { data: atRiskData } = await supabase
-            .from('student_courses')
-            .select(`
-              student_id,
-              students!inner (current_risk_level)
-            `)
-            .eq('course_id', course.id);
+          let atRiskCount = 0;
+          if (isCourseInProgress) {
+            // Count at-risk students only for ongoing courses
+            const { data: atRiskData } = await supabase
+              .from('student_courses')
+              .select(`
+                student_id,
+                students!inner (current_risk_level)
+              `)
+              .eq('course_id', course.id);
 
-          const atRiskCount = atRiskData?.filter(
-            sc => {
-              const row = sc as StudentCourseRiskRow;
-              return row.students && ['risco', 'critico'].includes(row.students.current_risk_level);
-            }
-          ).length || 0;
+            atRiskCount = atRiskData?.filter(
+              sc => {
+                const row = sc as StudentCourseRiskRow;
+                return row.students && ['risco', 'critico'].includes(row.students.current_risk_level);
+              }
+            ).length || 0;
+          }
 
           // Count pending tasks
           const { count: pendingTasksCount } = await supabase

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Course, Student } from '@/types';
 import { toast } from '@/hooks/use-toast';
-import { withEffectiveCourseDates } from '@/lib/course-dates';
+import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface StudentActivity {
   id: string;
@@ -142,6 +142,8 @@ export function useCoursePanel(courseId: string | undefined) {
 
       setActivities(uniqueActivities);
 
+      const isCourseInProgress = getCourseLifecycleStatus(normalizedCourseData) === 'em_andamento';
+
       const riskDistribution = {
         normal: 0,
         atencao: 0,
@@ -149,12 +151,14 @@ export function useCoursePanel(courseId: string | undefined) {
         critico: 0,
       };
 
-      studentsData.forEach((student: Student) => {
-        const level = student.current_risk_level || 'normal';
-        if (level in riskDistribution) {
-          riskDistribution[level as keyof typeof riskDistribution]++;
-        }
-      });
+      if (isCourseInProgress) {
+        studentsData.forEach((student: Student) => {
+          const level = student.current_risk_level || 'normal';
+          if (level in riskDistribution) {
+            riskDistribution[level as keyof typeof riskDistribution]++;
+          }
+        });
+      }
 
       const visibleActivities = activitiesData?.filter(a => !a.hidden) || [];
       const completedActivities = visibleActivities.filter(a => a.status === 'completed').length;

@@ -3,7 +3,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Clock,
-  FileX,
+  UserCheck,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import { WeeklySummary } from '@/types';
@@ -22,14 +22,14 @@ export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
           value={summary.pending_tasks}
           subtitle="a resolver"
           icon={ClipboardList}
-          variant={summary.pending_tasks > 5 ? 'warning' : 'default'}
+          variant="pending"
         />
         <StatCard
           title="Pendências atrasadas"
           value={summary.overdue_tasks}
           subtitle={summary.overdue_tasks > 0 ? 'exigem atenção' : undefined}
           icon={Clock}
-          variant={summary.overdue_tasks > 0 ? 'warning' : 'default'}
+          variant="risk"
         />
         <StatCard
           title="Atividades para corrigir"
@@ -38,14 +38,14 @@ export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
             ? `Envio pendente: ${summary.pending_submission_assignments} • Correção pendente: ${summary.pending_correction_assignments}`
             : 'fila zerada'}
           icon={ClipboardCheck}
-          variant={summary.activities_to_review > 0 ? 'warning' : 'success'}
+          variant="warning"
         />
         <StatCard
-          title="Não entregues"
-          value={summary.missed_assignments}
-          subtitle={summary.missed_assignments > 0 ? 'prazo vencido sem envio' : 'nenhum atraso detectado'}
-          icon={FileX}
-          variant={summary.missed_assignments > 0 ? 'danger' : 'success'}
+          title="Alunos Regulares"
+          value={summary.active_normal_students}
+          subtitle={summary.active_normal_students > 0 ? 'monitoramento estável' : 'nenhum aluno regular no momento'}
+          icon={UserCheck}
+          variant="success"
         />
         <StatCard
           title="Alunos em risco"

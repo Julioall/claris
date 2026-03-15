@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Calendar, Filter, Loader2 } from 'lucide-react';
+import { Calendar, Filter } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { 
   Select,
   SelectContent,
@@ -35,7 +36,7 @@ export default function Dashboard() {
     pending_tasks: 0,
     overdue_tasks: 0,
     activities_to_review: 0,
-    missed_assignments: 0,
+    active_normal_students: 0,
     pending_submission_assignments: 0,
     pending_correction_assignments: 0,
     students_at_risk: 0,
@@ -45,7 +46,7 @@ export default function Dashboard() {
   if (isLoading || coursesLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }

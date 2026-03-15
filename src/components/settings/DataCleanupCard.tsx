@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Trash2, AlertTriangle, Loader2 } from 'lucide-react';
+import { Trash2, AlertTriangle } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -421,7 +422,7 @@ export function DataCleanupCard() {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Spinner className="h-4 w-4 mr-2" onAccent />
                   Limpando...
                 </>
               ) : (
@@ -438,7 +439,7 @@ export function DataCleanupCard() {
               disabled={isLoading || isFullCleanupLoading}
             >
               {isFullCleanupLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="h-4 w-4" />
               ) : (
                 'Limpar tudo'
               )}

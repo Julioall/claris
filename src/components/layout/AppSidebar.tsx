@@ -51,12 +51,12 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-accent/40 p-1 overflow-hidden">
-            <ClarisIcon className="h-full w-full text-sidebar-foreground" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg overflow-hidden">
+            <ClarisIcon className="h-full w-full text-primary" />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
-              <span className="font-semibold text-sidebar-foreground">Claris</span>
+              <span className="font-semibold text-primary">Claris</span>
               <span className="text-xs text-sidebar-foreground/60">Central de Tutoria</span>
             </div>
           )}

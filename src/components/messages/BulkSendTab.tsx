@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Send, Search, X, Users, Loader2, FileText, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Send, Search, X, Users, FileText, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -721,7 +722,7 @@ export function BulkSendTab() {
             <ScrollArea className="flex-1 min-h-0">
               {isLoadingStudents ? (
                 <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  <Spinner className="h-5 w-5" />
                 </div>
               ) : (
                 <div className="space-y-0.5">
@@ -806,7 +807,7 @@ export function BulkSendTab() {
               onClick={handleSend}
               disabled={isSending || !canPreviewOrSend}
             >
-              {isSending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Send className="h-4 w-4 mr-1" />}
+              {isSending ? <Spinner className="h-4 w-4 mr-1" onAccent /> : <Send className="h-4 w-4 mr-1" />}
               Enviar para {selectedStudents.length} aluno{selectedStudents.length !== 1 ? 's' : ''}
             </Button>
           </div>

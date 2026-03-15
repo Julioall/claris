@@ -53,7 +53,7 @@ describe("Dashboard page", () => {
         pending_tasks: 3,
         overdue_tasks: 1,
         activities_to_review: 2,
-        missed_assignments: 1,
+        active_normal_students: 1,
         pending_submission_assignments: 1,
         pending_correction_assignments: 2,
         students_at_risk: 4,

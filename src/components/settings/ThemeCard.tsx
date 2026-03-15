@@ -3,6 +3,7 @@ import { Sun, Moon, Monitor, Check } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { syncFaviconWithPrimaryColor } from '@/lib/favicon';
 import { useEffect, useState } from 'react';
 
 const MODES = [
@@ -199,6 +200,7 @@ export function ThemeCard() {
   useEffect(() => {
     if (resolvedTheme) {
       applyColorTheme(colorTheme, resolvedTheme === 'dark');
+      syncFaviconWithPrimaryColor();
     }
   }, [resolvedTheme, colorTheme]);
 

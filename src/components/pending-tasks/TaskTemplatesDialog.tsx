@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Pencil, Trash2, Loader2, BookTemplate } from 'lucide-react';
+import { Plus, Pencil, Trash2, BookTemplate } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Dialog,
   DialogContent,
@@ -193,7 +194,7 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
 
             {isLoading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                <Spinner className="h-6 w-6" />
               </div>
             ) : templates.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
@@ -323,7 +324,7 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
                   Voltar
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isSubmitting && <Spinner className="mr-2 h-4 w-4" onAccent />}
                   {editingId ? 'Atualizar' : 'Criar'} Modelo
                 </Button>
               </DialogFooter>

@@ -10,13 +10,13 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  Loader2,
   GraduationCap,
   Eye,
   EyeOff,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -139,7 +139,7 @@ export default function CoursePanel() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }

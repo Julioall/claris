@@ -4,7 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { CalendarIcon, Loader2 } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Dialog,
   DialogContent,
@@ -562,7 +563,7 @@ export function NewRecurringTaskDialog({
                 Cancelar
               </Button>
               <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSubmitting && <Spinner className="mr-2 h-4 w-4" onAccent />}
                 Criar Recorrência
               </Button>
             </DialogFooter>

@@ -34,7 +34,7 @@ describe("WeeklyIndicators", () => {
           pending_tasks: 9,
           overdue_tasks: 2,
           activities_to_review: 5,
-          missed_assignments: 2,
+          active_normal_students: 2,
           pending_submission_assignments: 2,
           pending_correction_assignments: 5,
           students_at_risk: 4,
@@ -57,7 +57,7 @@ describe("WeeklyIndicators", () => {
           pending_tasks: 1,
           overdue_tasks: 0,
           activities_to_review: 0,
-          missed_assignments: 0,
+          active_normal_students: 0,
           pending_submission_assignments: 0,
           pending_correction_assignments: 0,
           students_at_risk: 0,
@@ -67,6 +67,9 @@ describe("WeeklyIndicators", () => {
     );
 
     expect(screen.getAllByText("no-trend").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("default").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("pending").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("risk").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("warning").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("success").length).toBeGreaterThan(0);
   });
 });

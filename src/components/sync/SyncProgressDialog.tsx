@@ -1,7 +1,8 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, XCircle, Loader2, BookOpen, Users, ClipboardList, GraduationCap } from 'lucide-react';
+import { CheckCircle2, XCircle, BookOpen, Users, ClipboardList, GraduationCap } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
 
 export interface SyncStep {
@@ -75,7 +76,7 @@ export function SyncProgressDialog({
               )
             ) : (
               <>
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <Spinner className="h-5 w-5" />
                 Sincronizando dados...
               </>
             )}
@@ -123,7 +124,7 @@ export function SyncProgressDialog({
                       <CheckCircle2 className="h-4 w-4 text-primary" />
                     )}
                     {step.status === 'in_progress' && (
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                      <Spinner className="h-4 w-4" />
                     )}
                     {step.status === 'error' && (
                       <XCircle className="h-4 w-4 text-destructive" />

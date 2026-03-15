@@ -1,8 +1,8 @@
 import { 
   BookOpen, 
-  Search,
-  Loader2
+  Search
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
 import { useAllCoursesData } from '@/hooks/useAllCoursesData';
 import { useState, useMemo } from 'react';
@@ -43,7 +43,7 @@ export default function MyCourses() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }

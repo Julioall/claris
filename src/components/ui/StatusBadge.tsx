@@ -8,9 +8,9 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<TaskStatus, { label: string; className: string }> = {
-  aberta: { label: 'Aberta', className: 'bg-status-pending-bg text-status-pending' },
-  em_andamento: { label: 'Em andamento', className: 'bg-status-warning-bg text-status-warning' },
-  resolvida: { label: 'Resolvida', className: 'bg-status-success-bg text-status-success' },
+  aberta: { label: 'Aberta', className: 'bg-card border border-l-2 border-status-pending/30 border-l-status-pending text-status-pending' },
+  em_andamento: { label: 'Em andamento', className: 'bg-card border border-l-2 border-status-warning/30 border-l-status-warning text-status-warning' },
+  resolvida: { label: 'Resolvida', className: 'bg-card border border-l-2 border-status-success/30 border-l-status-success text-status-success' },
 };
 
 export function StatusBadge({ status, size = 'md', className }: StatusBadgeProps) {

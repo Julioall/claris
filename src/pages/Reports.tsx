@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
-import { FileSpreadsheet, Loader2 } from 'lucide-react';
+import { FileSpreadsheet } from 'lucide-react';
 import type * as XLSXType from 'xlsx-js-style';
+import { Spinner } from '@/components/ui/spinner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
@@ -947,7 +948,7 @@ export default function Reports() {
             >
               {isGenerating ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Spinner className="h-4 w-4 mr-2" onAccent />
                   Gerando...
                 </>
               ) : (

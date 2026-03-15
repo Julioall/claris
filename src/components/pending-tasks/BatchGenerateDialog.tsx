@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Loader2, Zap, Users, BookTemplate } from 'lucide-react';
+import { Zap, Users, BookTemplate } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Dialog,
   DialogContent,
@@ -186,7 +187,7 @@ export function BatchGenerateDialog({ open, onOpenChange, onSuccess }: BatchGene
 
         {isLoading ? (
           <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Spinner className="h-6 w-6" />
           </div>
         ) : templates.length === 0 ? (
           <div className="text-center py-8">
@@ -255,7 +256,7 @@ export function BatchGenerateDialog({ open, onOpenChange, onSuccess }: BatchGene
             disabled={isGenerating || !selectedTemplateId || !selectedCourseId}
           >
             {isGenerating ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Spinner className="h-4 w-4 mr-2" onAccent />
             ) : (
               <Users className="h-4 w-4 mr-2" />
             )}

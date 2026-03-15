@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Plus, Trash2, Star, StarOff, Copy, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Star, StarOff, Copy } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -205,7 +206,7 @@ export function MessageTemplatesTab() {
       <ScrollArea className="flex-1 min-h-0">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <Spinner className="h-6 w-6" />
           </div>
         ) : filteredTemplates.length === 0 ? (
           <div className="text-center py-12">
@@ -327,7 +328,7 @@ export function MessageTemplatesTab() {
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancelar</Button>
               <Button onClick={handleSave} disabled={isSaving || !formTitle.trim() || !formContent.trim()}>
-                {isSaving && <Loader2 className="h-4 w-4 mr-1 animate-spin" />}
+                {isSaving && <Spinner className="h-4 w-4 mr-1" onAccent />}
                 {editingTemplate ? 'Salvar' : 'Criar'}
               </Button>
             </div>

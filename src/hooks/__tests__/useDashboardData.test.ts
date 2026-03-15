@@ -19,6 +19,7 @@ const pendingTasksNeqMock = vi.fn();
 const studentsSelectMock = vi.fn();
 const studentsInIdMock = vi.fn();
 const studentsInRiskMock = vi.fn();
+const studentsEqRiskLevelMock = vi.fn();
 
 const riskHistorySelectMock = vi.fn();
 const riskHistoryInStudentMock = vi.fn();
@@ -174,7 +175,10 @@ describe("useDashboardData", () => {
     });
 
     studentsSelectMock.mockReturnValue({ in: studentsInIdMock });
-    studentsInIdMock.mockReturnValue({ in: studentsInRiskMock });
+    studentsInIdMock.mockImplementation(() => ({
+      in: studentsInRiskMock,
+      eq: studentsEqRiskLevelMock,
+    }));
     studentsInRiskMock.mockResolvedValue({
       data: [
         {
@@ -198,6 +202,7 @@ describe("useDashboardData", () => {
       ],
       error: null,
     });
+    studentsEqRiskLevelMock.mockResolvedValue({ count: 0, error: null });
 
     riskHistorySelectMock.mockReturnValue({ in: riskHistoryInStudentMock });
     riskHistoryInStudentMock.mockReturnValue({ in: riskHistoryInLevelMock });
@@ -316,7 +321,7 @@ describe("useDashboardData", () => {
       pending_tasks: 0,
       overdue_tasks: 0,
       activities_to_review: 0,
-      missed_assignments: 0,
+      active_normal_students: 0,
       pending_submission_assignments: 0,
       pending_correction_assignments: 0,
       students_at_risk: 0,
@@ -340,7 +345,7 @@ describe("useDashboardData", () => {
       pending_tasks: 2,
       overdue_tasks: 1,
       activities_to_review: 2,
-      missed_assignments: 1,
+      active_normal_students: 0,
       pending_submission_assignments: 1,
       pending_correction_assignments: 2,
       students_at_risk: 2,

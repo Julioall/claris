@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Bug, Loader2, ChevronDown, ChevronUp, GraduationCap } from 'lucide-react';
+import { Bug, ChevronDown, ChevronUp, GraduationCap } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -181,7 +182,7 @@ export function GradeDebugCard() {
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Spinner className="h-4 w-4 mr-2" onAccent />
                   Buscando...
                 </>
               ) : (

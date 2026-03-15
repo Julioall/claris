@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Course } from '@/types';
-import { withEffectiveCourseDates } from '@/lib/course-dates';
+import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface CourseWithStats extends Course {
   students_count: number;
@@ -55,24 +55,29 @@ export function useCoursesData() {
       // Get stats for each course
       const coursesWithStats: CourseWithStats[] = await Promise.all(
         datedCourses.map(async (course) => {
+          const isCourseInProgress = getCourseLifecycleStatus(course) === 'em_andamento';
+
           // Count students in this course
           const { count: studentsCount } = await supabase
             .from('student_courses')
             .select('*', { count: 'exact', head: true })
             .eq('course_id', course.id);
 
-          // Count at-risk students
-          const { data: atRiskData } = await supabase
-            .from('student_courses')
-            .select(`
-              student_id,
-              students!inner (current_risk_level)
-            `)
-            .eq('course_id', course.id);
+          let atRiskCount = 0;
+          if (isCourseInProgress) {
+            // Count at-risk students only for ongoing courses
+            const { data: atRiskData } = await supabase
+              .from('student_courses')
+              .select(`
+                student_id,
+                students!inner (current_risk_level)
+              `)
+              .eq('course_id', course.id);
 
-          const atRiskCount = atRiskData?.filter(
-            sc => sc.students && ['risco', 'critico'].includes((sc.students as { current_risk_level: string }).current_risk_level)
-          ).length || 0;
+            atRiskCount = atRiskData?.filter(
+              sc => sc.students && ['risco', 'critico'].includes((sc.students as { current_risk_level: string }).current_risk_level)
+            ).length || 0;
+          }
 
           // Count pending tasks
           const { count: pendingTasksCount } = await supabase

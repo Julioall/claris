@@ -53,7 +53,7 @@ const EMPTY_SUMMARY: WeeklySummary = {
   pending_tasks: 0,
   overdue_tasks: 0,
   activities_to_review: 0,
-  missed_assignments: 0,
+  active_normal_students: 0,
   pending_submission_assignments: 0,
   pending_correction_assignments: 0,
   students_at_risk: 0,
@@ -154,6 +154,12 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
           .map(sc => sc.student_id)
       )];
 
+      const activeStudentIds = [...new Set(
+        (studentCourses || [])
+          .filter(sc => normalizeEnrollmentStatus(sc.enrollment_status) === 'ativo')
+          .map(sc => sc.student_id)
+      )];
+
       const feedFilter = studentIds.length > 0
         ? `user_id.eq.${user.id},student_id.in.(${studentIds.join(',')})`
         : `user_id.eq.${user.id}`;
@@ -203,6 +209,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
       const [
         pendingTasksResponse,
         atRiskStudentsResponse,
+        activeNormalStudentsResponse,
         newAtRiskResponse,
         feedResponse,
         missedAssignmentsResponse,
@@ -221,6 +228,11 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
           .select('*')
           .in('id', studentIds)
           .in('current_risk_level', ['risco', 'critico']),
+        supabase
+          .from('students')
+          .select('id', { count: 'exact', head: true })
+          .in('id', activeStudentIds.length > 0 ? activeStudentIds : ['__none__'])
+          .eq('current_risk_level', 'normal'),
         supabase
           .from('risk_history')
           .select('*', { count: 'exact', head: true })
@@ -262,6 +274,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
 
       const { data: tasksData, count: pendingTasksCount, error: pendingTasksError } = pendingTasksResponse;
       const { data: atRiskStudents, error: atRiskStudentsError } = atRiskStudentsResponse;
+      const { count: activeNormalStudentsCount, error: activeNormalStudentsError } = activeNormalStudentsResponse;
       const { count: newAtRisk, error: newAtRiskError } = newAtRiskResponse;
       const { data: feedData, error: feedError } = feedResponse;
       const { count: missedAssignmentsCount, error: missedAssignmentsError } = missedAssignmentsResponse;
@@ -269,6 +282,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
 
       if (pendingTasksError) throw pendingTasksError;
       if (atRiskStudentsError) throw atRiskStudentsError;
+      if (activeNormalStudentsError) throw activeNormalStudentsError;
       if (newAtRiskError) throw newAtRiskError;
       if (feedError) throw feedError;
       if (missedAssignmentsError) throw missedAssignmentsError;
@@ -290,7 +304,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         pending_tasks: pendingTasksCount || 0,
         overdue_tasks: overdueTasksCount,
         activities_to_review: uncorrectedActivities?.length || 0,
-        missed_assignments: missedAssignmentsCount || 0,
+        active_normal_students: activeNormalStudentsCount || 0,
         pending_submission_assignments: missedAssignmentsCount || 0,
         pending_correction_assignments: uncorrectedActivities?.length || 0,
         students_at_risk: atRiskStudents?.length || 0,

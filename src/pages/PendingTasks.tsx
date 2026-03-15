@@ -10,13 +10,13 @@ import {
   ExternalLink,
   Filter,
   List,
-  Loader2,
   Plus,
   RotateCcw,
   Search,
   SquareKanban,
   Trash2,
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { format, isPast, isToday } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -208,7 +208,7 @@ export default function PendingTasks() {
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Spinner className="h-8 w-8" />
       </div>
     );
   }
@@ -279,7 +279,7 @@ export default function PendingTasks() {
           </span>
           <Button size="sm" onClick={handleBatchClose} disabled={isBatchClosing}>
             {isBatchClosing ? (
-              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              <Spinner className="mr-1 h-4 w-4" onAccent />
             ) : (
               <CheckCheck className="mr-1 h-4 w-4" />
             )}

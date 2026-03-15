@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, Eye, EyeOff, Settings } from 'lucide-react';
+import { Eye, EyeOff, Settings } from 'lucide-react';
 import { ClarisLogo } from '@/components/ui/claris-logo';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,7 +40,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
       <div className="w-full max-w-md space-y-6 animate-fade-in">
         <div className="text-center space-y-2">
-          <ClarisLogo className="mx-auto w-48 text-[hsl(var(--primary))]" />
+          <ClarisLogo className="mx-auto w-60 text-primary" />
         </div>
 
         <Card className="border-0 shadow-lg">
@@ -56,7 +57,7 @@ export default function Login() {
                 <Input
                   id="username"
                   type="text"
-                  placeholder="seu.usuario"
+                  placeholder="usuario"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   autoComplete="username"
@@ -151,7 +152,7 @@ export default function Login() {
               >
                 {isLoading ? (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Spinner className="mr-2 h-4 w-4" onAccent />
                     Entrando...
                   </>
                 ) : (

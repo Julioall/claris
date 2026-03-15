@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Search, Loader2, AlertCircle, Send, FileText } from 'lucide-react';
+import { MessageSquare, Search, AlertCircle, Send, FileText } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -151,7 +152,7 @@ export default function Messages() {
               <ScrollArea className="flex-1 min-h-0">
                 {isLoading ? (
                   <div className="flex items-center justify-center py-12">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    <Spinner className="h-6 w-6" />
                   </div>
                 ) : filteredConversations.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-center px-4">

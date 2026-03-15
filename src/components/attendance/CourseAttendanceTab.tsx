@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { CalendarCheck2, Loader2, Plus } from 'lucide-react';
+import { CalendarCheck2, Plus } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -259,7 +260,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-40">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Spinner className="h-6 w-6" />
       </div>
     );
   }
@@ -372,7 +373,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
                     Cancelar
                   </Button>
                   <Button onClick={saveAttendance} disabled={isSaving} className="w-full sm:w-auto">
-                    {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                    {isSaving ? <Spinner className="h-4 w-4 mr-2" onAccent /> : null}
                     Salvar
                   </Button>
                 </DialogFooter>

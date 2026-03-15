@@ -3,9 +3,9 @@ import {
   AlertTriangle, 
   FileX, 
   ClipboardX, 
-  Loader2,
   Zap,
 } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import {
   Dialog,
   DialogContent,
@@ -179,7 +179,7 @@ export function GenerateAutomatedTasksDialog({
             disabled={isGenerating || selectedTypes.length === 0}
           >
             {isGenerating ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              <Spinner className="h-4 w-4 mr-2" onAccent />
             ) : (
               <Zap className="h-4 w-4 mr-2" />
             )}

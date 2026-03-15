@@ -164,7 +164,7 @@ export interface WeeklySummary {
   pending_tasks: number;
   overdue_tasks: number;
   activities_to_review: number;
-  missed_assignments: number;
+  active_normal_students: number;
   pending_submission_assignments: number;
   pending_correction_assignments: number;
   students_at_risk: number;

@@ -18,7 +18,7 @@ interface ActivitiesToReviewProps {
 }
 
 function formatShortDate(date?: string) {
-  if (!date) return 'Sem prazo';
+  if (!date) return null;
   return format(new Date(date), "dd 'de' MMM", { locale: ptBR });
 }
 
@@ -51,11 +51,12 @@ export function ActivitiesToReview({ activities }: ActivitiesToReviewProps) {
           <div className="space-y-3">
             {visibleActivities.map((activity) => {
               const courseLabel = activity.course.short_name || activity.course.name;
+              const dueDateLabel = formatShortDate(activity.due_date);
 
               return (
                 <div
                   key={activity.id}
-                  className="rounded-lg border border-status-warning/20 bg-status-warning-bg/40 p-3"
+                  className="rounded-lg border border-status-warning/25 p-3"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 space-y-1.5">
@@ -75,9 +76,11 @@ export function ActivitiesToReview({ activities }: ActivitiesToReviewProps) {
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <RiskBadge level={activity.student.current_risk_level} size="sm" />
-                        <span className="text-xs text-muted-foreground">
-                          Prazo: {formatShortDate(activity.due_date)}
-                        </span>
+                        {dueDateLabel && (
+                          <span className="text-xs text-muted-foreground">
+                            Prazo: {dueDateLabel}
+                          </span>
+                        )}
                       </div>
                     </div>
 

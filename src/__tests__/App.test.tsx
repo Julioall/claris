@@ -102,9 +102,9 @@ describe("App routing", () => {
       isLoading: true,
     });
 
-    render(<App />);
+    const { container } = render(<App />);
 
-    expect(screen.getByText(/carregando/i)).toBeInTheDocument();
+    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
   });
 
   it("redirects unauthenticated users to login page", () => {

@@ -11,7 +11,7 @@ interface StatCardProps {
     label: string;
     positive?: boolean;
   };
-  variant?: 'default' | 'warning' | 'danger' | 'success';
+  variant?: 'default' | 'warning' | 'danger' | 'success' | 'pending' | 'risk';
   className?: string;
 }
 
@@ -26,9 +26,11 @@ export function StatCard({
 }: StatCardProps) {
   const variantStyles = {
     default: 'bg-card',
-    warning: 'bg-status-warning-bg border-l-2 border-l-status-warning',
-    danger: 'bg-risk-critico-bg border-l-2 border-l-risk-critico',
-    success: 'bg-status-success-bg border-l-2 border-l-status-success',
+    warning: 'bg-card border-l-2 border-l-status-warning',
+    danger: 'bg-card border-l-2 border-l-risk-critico',
+    success: 'bg-card border-l-2 border-l-status-success',
+    pending: 'bg-card border-l-2 border-l-status-pending',
+    risk: 'bg-card border-l-2 border-l-risk-risco',
   };
 
   return (
@@ -56,10 +58,6 @@ export function StatCard({
         {Icon && (
           <div className={cn(
             'rounded-lg p-2',
-            variant === 'default' && 'bg-muted',
-            variant === 'warning' && 'bg-status-warning/10',
-            variant === 'danger' && 'bg-risk-critico/10',
-            variant === 'success' && 'bg-status-success/10',
           )}>
             <Icon className={cn(
               'h-5 w-5',
@@ -67,6 +65,8 @@ export function StatCard({
               variant === 'warning' && 'text-status-warning',
               variant === 'danger' && 'text-risk-critico',
               variant === 'success' && 'text-status-success',
+              variant === 'pending' && 'text-status-pending',
+              variant === 'risk' && 'text-risk-risco',
             )} />
           </div>
         )}

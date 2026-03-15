@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Course } from '@/types';
+import { getCourseLifecycleStatus } from '@/lib/course-dates';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -12,6 +13,8 @@ interface CourseOverviewProps {
 }
 
 export function CourseOverview({ courses }: CourseOverviewProps) {
+  const ongoingCourses = courses.filter(course => getCourseLifecycleStatus(course) === 'em_andamento');
+
   const formatLastSync = (date: string | undefined) => {
     if (!date) return 'Nunca';
     return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
@@ -28,7 +31,7 @@ export function CourseOverview({ courses }: CourseOverviewProps) {
       <CardContent className="p-0">
         <ScrollArea className="h-[300px] px-6 pb-6">
           <div className="space-y-3">
-          {courses.map((course) => (
+          {ongoingCourses.map((course) => (
             <div 
               key={course.id}
               className="flex items-center justify-between gap-4 p-3 rounded-lg bg-muted/30 border card-interactive"
@@ -66,7 +69,7 @@ export function CourseOverview({ courses }: CourseOverviewProps) {
             </div>
           ))}
 
-          {courses.length === 0 && (
+          {ongoingCourses.length === 0 && (
             <div className="text-center py-6 text-muted-foreground">
               <BookOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p className="text-sm">Nenhum curso encontrado</p>
