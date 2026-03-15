@@ -91,7 +91,7 @@ describe("StudentProfile page", () => {
     });
 
     const { container } = renderPage();
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("shows error state when student is missing", () => {

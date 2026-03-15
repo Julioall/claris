@@ -76,7 +76,7 @@ export default function Schools() {
           <p className="text-muted-foreground text-sm mt-1">
             {searchQuery 
               ? 'Tente uma busca diferente'
-              : 'Use o botão de sincronização na barra superior para carregar os cursos'
+              : 'Use a sincronização geral inicial nas Configurações para carregar os cursos'
             }
           </p>
         </div>

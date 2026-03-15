@@ -5,6 +5,7 @@ import Students from "@/pages/Students";
 
 const useStudentsDataMock = vi.fn();
 const useCoursesDataMock = vi.fn();
+const useAuthMock = vi.fn();
 const navigateMock = vi.fn();
 
 vi.mock("@/hooks/useStudentsData", () => ({
@@ -13,6 +14,10 @@ vi.mock("@/hooks/useStudentsData", () => ({
 
 vi.mock("@/hooks/useCoursesData", () => ({
   useCoursesData: () => useCoursesDataMock(),
+}));
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => useAuthMock(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -43,10 +48,17 @@ describe("Students page", () => {
       ],
       isLoading: false,
       error: null,
+      refetch: vi.fn(),
     });
 
     useCoursesDataMock.mockReturnValue({
       courses: [{ id: "c-1", name: "Curso 1", short_name: "C1" }],
+    });
+
+    useAuthMock.mockReturnValue({
+      syncStudentsIncremental: vi.fn(),
+      isSyncing: false,
+      isOfflineMode: false,
     });
   });
 
@@ -55,10 +67,11 @@ describe("Students page", () => {
       students: [],
       isLoading: true,
       error: null,
+      refetch: vi.fn(),
     });
 
     const { container } = render(<Students />);
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("navigates to student profile when a row is clicked", async () => {
@@ -95,6 +108,7 @@ describe("Students page", () => {
       ],
       isLoading: false,
       error: null,
+      refetch: vi.fn(),
     });
     render(<Students />);
 

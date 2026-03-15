@@ -106,9 +106,8 @@ export function useCoursePanel(courseId: string | undefined) {
       if (studentsError) throw studentsError;
 
       const allStudentCourses = studentCoursesData || [];
-      const activeStudentCourses = allStudentCourses.filter(sc => sc.enrollment_status !== 'suspenso');
 
-      const studentsData = activeStudentCourses
+      const studentsData = allStudentCourses
         ?.map(sc => {
           if (!sc.students) return null;
           const student = sc.students as unknown as Student;
@@ -133,9 +132,25 @@ export function useCoursePanel(courseId: string | undefined) {
       const activityRecords = (activitiesData as StudentActivity[]) || [];
       setActivitySubmissions(activityRecords);
 
+      const hasAnyGradebookData = activityRecords.some(record =>
+        record.grade_max !== null || record.percentage !== null || record.grade !== null
+      );
+
+      const hasWeightByActivityId = new Map<string, boolean>();
+      for (const record of activityRecords) {
+        const contributesToGradebook = (record.grade_max ?? 0) > 0;
+        const previous = hasWeightByActivityId.get(record.moodle_activity_id) ?? false;
+        hasWeightByActivityId.set(record.moodle_activity_id, previous || contributesToGradebook);
+      }
+
       const uniqueActivities = activityRecords.reduce((acc, activity) => {
         if (!acc.find(a => a.moodle_activity_id === activity.moodle_activity_id)) {
-          acc.push(activity);
+          const contributesToGradebook = hasWeightByActivityId.get(activity.moodle_activity_id) ?? false;
+
+          acc.push({
+            ...activity,
+            hidden: hasAnyGradebookData ? !contributesToGradebook : activity.hidden,
+          });
         }
         return acc;
       }, [] as StudentActivity[]) || [];
@@ -160,7 +175,15 @@ export function useCoursePanel(courseId: string | undefined) {
         });
       }
 
-      const visibleActivities = activitiesData?.filter(a => !a.hidden) || [];
+      const visibleActivityIds = new Set(
+        uniqueActivities
+          .filter(activity => !activity.hidden)
+          .map(activity => activity.moodle_activity_id)
+      );
+
+      const visibleActivities = activityRecords.filter(activity =>
+        visibleActivityIds.has(activity.moodle_activity_id)
+      );
       const completedActivities = visibleActivities.filter(a => a.status === 'completed').length;
       const totalActivityRecords = visibleActivities.length;
 

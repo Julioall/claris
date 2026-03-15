@@ -44,6 +44,33 @@ function isInactiveValue(value: unknown): boolean {
   return false
 }
 
+function isNotCurrentValue(value: unknown): boolean {
+  if (typeof value !== 'string') return false
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+
+  return (
+    normalized === 'nao atualmente' ||
+    normalized === 'not current' ||
+    normalized === 'not_current' ||
+    normalized === 'notcurrently'
+  )
+}
+
+function isActiveValue(value: unknown): boolean {
+  if (value === true) return true
+  if (value === 1) return true
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    return normalized === '1' || normalized === 'true' || normalized === 'active' || normalized === 'ativo'
+  }
+  return false
+}
+
 function isStudentLikeUser(user: { roles?: { shortname?: string }[] }): boolean {
   const roleShortnames = (user.roles || [])
     .map((role) => String(role.shortname || '').toLowerCase())
@@ -64,6 +91,8 @@ function resolveEnrollmentStatus(args: {
   isSuspendedByPayload: boolean
   isCompleted: boolean
   isInactive: boolean
+  isNotCurrent: boolean
+  isExplicitlyActive: boolean
 }): 'ativo' | 'suspenso' | 'concluido' | 'inativo' {
   const {
     isMassSuspensionPreStartIgnored,
@@ -71,8 +100,12 @@ function resolveEnrollmentStatus(args: {
     isSuspendedByPayload,
     isCompleted,
     isInactive,
+    isNotCurrent,
+    isExplicitlyActive,
   } = args
 
+  if (isNotCurrent) return 'inativo'
+  if (isExplicitlyActive && !isSuspendedByPayload) return 'ativo'
   if (isMassSuspensionPreStartIgnored && isSuspendedByOnlySuspended) return 'inativo'
   if (isSuspendedByOnlySuspended || isSuspendedByPayload) return 'suspenso'
   if (isCompleted) return 'concluido'
@@ -137,11 +170,29 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
     const suspendedByEnrollmentStatus = isSuspendedValue(courseEnrolment?.status)
     const suspendedByEnrolledCourseFlag = isSuspendedValue(courseInfo?.suspended)
 
-    const isSuspendedByPayload =
+    const isNotCurrent =
+      isNotCurrentValue((student as { status?: unknown }).status) ||
+      isNotCurrentValue((student as { enrollmentstatus?: unknown }).enrollmentstatus) ||
+      isNotCurrentValue(courseEnrolment?.name)
+
+    const isActiveByEnrollmentStatus =
+      courseEnrolment?.status === 0 ||
+      String(courseEnrolment?.status ?? '').trim() === '0'
+
+    const isActiveByFlag =
+      isActiveValue((student as { active?: unknown }).active) ||
+      isActiveValue((student as { isactive?: unknown }).isactive)
+
+    const isExplicitlyActive = isActiveByEnrollmentStatus || isActiveByFlag
+
+    const suspendedByStrongPayload =
       suspendedByStudentStatus ||
       suspendedByStudentFlag ||
-      suspendedByEnrollmentStatus ||
       suspendedByEnrolledCourseFlag
+
+    const isSuspendedByPayload =
+      suspendedByStrongPayload ||
+      (suspendedByEnrollmentStatus && !isNotCurrent)
 
     const isSuspendedByOnlySuspended = suspendedUserIds.has(student.id) && !isMassSuspensionPreStartIgnored
 
@@ -165,6 +216,8 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       isSuspendedByPayload,
       isCompleted,
       isInactive,
+      isNotCurrent,
+      isExplicitlyActive,
     })
 
     const studentWithExtras = student as { lastcourseaccess?: number }
@@ -216,6 +269,8 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
         const moodleUserId = row.moodle_user_id ? String(row.moodle_user_id) : null
         if (!moodleUserId) return null
         if (currentMoodleUserIds.has(moodleUserId)) return null
+        const moodleUserIdNumber = Number(moodleUserId)
+        if (!Number.isFinite(moodleUserIdNumber) || !suspendedUserIds.has(moodleUserIdNumber)) return null
         return {
           student_id: row.student_id,
           course_id: dbCourse.id,

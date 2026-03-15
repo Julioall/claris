@@ -14,7 +14,8 @@ import {
   Eye,
   EyeOff,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  RefreshCw
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -37,12 +38,13 @@ import { getCourseEffectiveEndDate } from '@/lib/course-dates';
 
 export default function CoursePanel() {
   const { id } = useParams<{ id: string }>();
-  const { course, students, activities, activitySubmissions = [], stats, isLoading, error, toggleActivityVisibility } = useCoursePanel(id);
-  const { user, isEditMode } = useAuth();
+  const { course, students, activities, activitySubmissions = [], stats, isLoading, error, toggleActivityVisibility, refetch } = useCoursePanel(id);
+  const { user, isEditMode, syncCourseIncremental, isSyncing, isOfflineMode } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isAttendanceEnabled, setIsAttendanceEnabled] = useState(false);
   const [isLoadingAttendanceFlag, setIsLoadingAttendanceFlag] = useState(true);
   const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
+  const [isSyncingSection, setIsSyncingSection] = useState<'students' | 'activities' | null>(null);
 
   const activeStudentIds = new Set(students.map(student => student.id));
   const studentsById = new Map(students.map(student => [student.id, student]));
@@ -136,6 +138,30 @@ export default function CoursePanel() {
       setIsAttendanceEnabled(newValue);
     } catch (err) {
       console.error('Error toggling attendance:', err);
+    }
+  };
+
+  const handleSyncStudentsTab = async () => {
+    if (!id || isOfflineMode) return;
+
+    setIsSyncingSection('students');
+    try {
+      await syncCourseIncremental(id, ['students']);
+      await refetch();
+    } finally {
+      setIsSyncingSection(null);
+    }
+  };
+
+  const handleSyncActivitiesTab = async () => {
+    if (!id || isOfflineMode) return;
+
+    setIsSyncingSection('activities');
+    try {
+      await syncCourseIncremental(id, ['activities', 'grades']);
+      await refetch();
+    } finally {
+      setIsSyncingSection(null);
     }
   };
 
@@ -264,18 +290,46 @@ export default function CoursePanel() {
             )}
           </TabsList>
 
-          {!isLoadingAttendanceFlag && (
-            <div className="flex items-center gap-2">
-              <Switch
-                checked={isAttendanceEnabled}
-                onCheckedChange={toggleAttendance}
-                id="attendance-toggle"
-              />
-              <label htmlFor="attendance-toggle" className="text-sm text-muted-foreground cursor-pointer">
-                Controle de presença
-              </label>
+          <div className="flex items-center gap-2">
+              {activeTab === 'students' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncStudentsTab}
+                  disabled={isOfflineMode || isSyncing || isSyncingSection !== null}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${(isSyncing || isSyncingSection === 'students') ? 'animate-spin' : ''}`} />
+                  Sincronizar alunos da UC
+                </Button>
+              )}
+
+              {activeTab === 'activities' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSyncActivitiesTab}
+                  disabled={isOfflineMode || isSyncing || isSyncingSection !== null}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${(isSyncing || isSyncingSection === 'activities') ? 'animate-spin' : ''}`} />
+                  Sincronizar atividades e notas
+                </Button>
+              )}
+
+              {!isLoadingAttendanceFlag && (
+                <>
+                  <Switch
+                    checked={isAttendanceEnabled}
+                    onCheckedChange={toggleAttendance}
+                    id="attendance-toggle"
+                  />
+                  <label htmlFor="attendance-toggle" className="text-sm text-muted-foreground cursor-pointer">
+                    Controle de presença
+                  </label>
+                </>
+              )}
             </div>
-          )}
         </div>
 
         <TabsContent value="overview" className="space-y-4 mt-4">
@@ -356,7 +410,7 @@ export default function CoursePanel() {
                 <div className="flex flex-col items-center justify-center py-12">
                   <Users className="h-12 w-12 text-muted-foreground/50 mb-4" />
                   <h3 className="text-lg font-medium">Nenhum aluno encontrado</h3>
-                  <p className="text-muted-foreground text-sm">Use o botao de sincronizacao da barra superior para carregar os alunos.</p>
+                  <p className="text-muted-foreground text-sm">Use o botao "Sincronizar alunos da UC" nesta aba para carregar os alunos.</p>
                 </div>
               ) : (
                 <div className="divide-y">
@@ -410,7 +464,7 @@ export default function CoursePanel() {
                     <div className="flex flex-col items-center justify-center py-12">
                       <ClipboardList className="h-12 w-12 text-muted-foreground/50 mb-4" />
                       <h3 className="text-lg font-medium">Nenhuma atividade encontrada</h3>
-                      <p className="text-muted-foreground text-sm">Use o botão de sincronização da barra superior para carregar as atividades.</p>
+                      <p className="text-muted-foreground text-sm">Use o botão "Sincronizar atividades e notas" nesta aba para carregar as atividades.</p>
                     </div>
                   );
                 }

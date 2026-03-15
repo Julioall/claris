@@ -12,23 +12,48 @@ interface LogoProps {
 function ClarisSparklesSymbol({ className }: LogoProps) {
   return (
     <svg
-      viewBox="0 0 24 24"
+      viewBox="0 0 120 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
       aria-hidden="true"
     >
       <path
-        d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        d="M60 30
+       L64 48
+       L82 52
+       L64 56
+       L60 74
+       L56 56
+       L38 52
+       L56 48
+       Z"
+        fill="currentColor"
       />
-      <path d="M20 3v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M22 5h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M4 17v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M5 18H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M76 34
+       L77.5 39
+       L82.5 40.5
+       L77.5 42
+       L76 47
+       L74.5 42
+       L69.5 40.5
+       L74.5 39
+       Z"
+        fill="currentColor"
+      />
+      <path
+        d="M44 64
+       L45.5 69
+       L50.5 70.5
+       L45.5 72
+       L44 77
+       L42.5 72
+       L37.5 70.5
+       L42.5 69
+       Z"
+        fill="currentColor"
+      />
     </svg>
   );
 }
@@ -44,18 +69,43 @@ export function ClarisLogo({ className }: LogoProps) {
       aria-label="Claris"
       role="img"
     >
-      <g transform="translate(22 26) scale(1.15)">
+      <g transform="translate(8 8) scale(0.7)">
         <path
-          d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          d="M60 30
+       L64 48
+       L82 52
+       L64 56
+       L60 74
+       L56 56
+       L38 52
+       L56 48
+       Z"
+          fill="currentColor"
         />
-        <path d="M20 3v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M22 5h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4 17v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M5 18H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M76 34
+       L77.5 39
+       L82.5 40.5
+       L77.5 42
+       L76 47
+       L74.5 42
+       L69.5 40.5
+       L74.5 39
+       Z"
+          fill="currentColor"
+        />
+        <path
+          d="M44 64
+       L45.5 69
+       L50.5 70.5
+       L45.5 72
+       L44 77
+       L42.5 72
+       L37.5 70.5
+       L42.5 69
+       Z"
+          fill="currentColor"
+        />
       </g>
       <text
         x="70"

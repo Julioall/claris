@@ -7,6 +7,7 @@ const useAuthMock = vi.fn();
 const fromMock = vi.fn();
 const toastMock = vi.fn();
 const logoutMock = vi.fn();
+const syncDataMock = vi.fn();
 
 const selectMock = vi.fn();
 const eqMock = vi.fn();
@@ -59,6 +60,10 @@ describe("Settings page", () => {
       },
       logout: logoutMock,
       lastSync: "2026-02-20T12:00:00.000Z",
+      syncData: syncDataMock,
+      isSyncing: false,
+      isOfflineMode: false,
+      courses: [],
     });
 
     maybeSingleMock.mockResolvedValue({ data: null, error: null });
@@ -102,10 +107,13 @@ describe("Settings page", () => {
     });
 
     const numericInputs = screen.getAllByRole("spinbutton");
-    await user.clear(numericInputs[4]);
-    await user.type(numericInputs[4], "20");
-    await user.clear(numericInputs[5]);
-    await user.type(numericInputs[5], "10");
+    const atencaoInput = numericInputs[0];
+    const riscoInput = numericInputs[1];
+
+    await user.clear(atencaoInput);
+    await user.type(atencaoInput, "20");
+    await user.clear(riscoInput);
+    await user.type(riscoInput, "10");
     await user.click(screen.getByRole("button", { name: /salvar configuracoes/i }));
 
     expect(toastMock).toHaveBeenCalledWith(
@@ -139,6 +147,14 @@ describe("Settings page", () => {
 
     await user.click(screen.getByRole("button", { name: /sair da conta/i }));
     expect(logoutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("triggers initial general sync from settings", async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await user.click(screen.getByRole("button", { name: /sincronizacao geral inicial/i }));
+    expect(syncDataMock).toHaveBeenCalledTimes(1);
   });
 
   it("validates claris connection test input", async () => {

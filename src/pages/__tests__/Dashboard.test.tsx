@@ -89,7 +89,7 @@ describe("Dashboard page", () => {
     });
 
     const { container } = render(<Dashboard />);
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("renders dashboard sections when data is loaded", () => {

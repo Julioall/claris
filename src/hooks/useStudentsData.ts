@@ -10,6 +10,24 @@ interface StudentWithStats extends Student {
 
 type StudentCourseStudent = Student;
 
+function normalizeEnrollmentStatus(status: string | null | undefined): 'ativo' | 'suspenso' | 'concluido' | 'inativo' {
+  const normalized = (status || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (normalized === 'ativo' || normalized === 'active') return 'ativo';
+  if (normalized === 'suspenso' || normalized === 'suspended') return 'suspenso';
+  if (normalized === 'concluido' || normalized === 'completed') return 'concluido';
+  if (normalized === 'inativo' || normalized === 'inactive') return 'inativo';
+  if (normalized === 'nao atualmente' || normalized === 'not current' || normalized === 'not_current' || normalized === 'notcurrently') {
+    return 'inativo';
+  }
+
+  return 'ativo';
+}
+
 export function useStudentsData(courseId?: string) {
   const { user } = useAuth();
   const [students, setStudents] = useState<StudentWithStats[]>([]);
@@ -68,7 +86,7 @@ export function useStudentsData(courseId?: string) {
       const now = new Date();
 
       // Deduplicate students (same student can be in multiple courses)
-      // Status final por precedência em UCs válidas: suspenso > concluido > ativo > inativo
+      // Status final por precedência em UCs válidas: ativo > suspenso > concluido > inativo
       const uniqueStudentsMap = new Map<string, { student: StudentCourseStudent; validStatuses: Set<string>; allStatuses: Set<string> }>();
       studentCourses.forEach(sc => {
         const relatedStudent = sc.students as StudentCourseStudent | null;
@@ -77,7 +95,7 @@ export function useStudentsData(courseId?: string) {
           const studentId = relatedStudent.id;
           const startDate = (sc.courses as { start_date?: string | null } | null)?.start_date;
           const isValidCourse = !startDate || new Date(startDate) <= now;
-          const status = (sc.enrollment_status || 'ativo').toLowerCase();
+          const status = normalizeEnrollmentStatus(sc.enrollment_status);
 
           if (!uniqueStudentsMap.has(studentId)) {
             uniqueStudentsMap.set(studentId, { 
@@ -98,19 +116,19 @@ export function useStudentsData(courseId?: string) {
         student: entry.student,
         enrollment_status:
           entry.validStatuses.size > 0
-            ? entry.validStatuses.has('suspenso')
-              ? 'suspenso'
-              : entry.validStatuses.has('concluido')
-                ? 'concluido'
-                : entry.validStatuses.has('ativo')
-                  ? 'ativo'
+            ? entry.validStatuses.has('ativo')
+              ? 'ativo'
+              : entry.validStatuses.has('suspenso')
+                ? 'suspenso'
+                : entry.validStatuses.has('concluido')
+                  ? 'concluido'
                   : 'inativo'
-            : entry.allStatuses.has('concluido')
-              ? 'concluido'
-              : entry.allStatuses.has('ativo')
-                ? 'ativo'
-                : entry.allStatuses.has('suspenso')
-                  ? 'suspenso'
+            : entry.allStatuses.has('ativo')
+              ? 'ativo'
+              : entry.allStatuses.has('suspenso')
+                ? 'suspenso'
+                : entry.allStatuses.has('concluido')
+                  ? 'concluido'
                   : 'inativo',
       }));
 

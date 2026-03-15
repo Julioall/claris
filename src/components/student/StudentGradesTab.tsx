@@ -140,7 +140,16 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
   };
 
   const getVisibleActivities = (courseId: string): StudentActivityGrade[] => {
-    return (activitiesByCourse[courseId] || []).filter((activity) => !activity.hidden);
+    const courseActivities = activitiesByCourse[courseId] || [];
+    const hasAnyGradebookData = courseActivities.some(
+      (activity) => activity.grade_max !== null || activity.percentage !== null || activity.grade !== null,
+    );
+
+    if (!hasAnyGradebookData) {
+      return courseActivities.filter((activity) => !activity.hidden);
+    }
+
+    return courseActivities.filter((activity) => (activity.grade_max ?? 0) > 0);
   };
 
   const formatCourseGrade = (grade: CourseGrade): string | null => {

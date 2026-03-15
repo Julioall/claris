@@ -6,7 +6,6 @@ import { MemoryRouter } from "react-router-dom";
 import { TopBar } from "@/components/layout/TopBar";
 
 const useAuthMock = vi.fn();
-const syncDataMock = vi.fn();
 const setIsEditModeMock = vi.fn();
 const fromMock = vi.fn();
 const selectMock = vi.fn();
@@ -50,17 +49,14 @@ describe("TopBar", () => {
 
     useAuthMock.mockReturnValue({
       user: { id: "u-1", full_name: "Julio" },
-      syncData: syncDataMock,
       lastSync: null,
-      isSyncing: false,
       isEditMode: false,
       setIsEditMode: setIsEditModeMock,
       isOfflineMode: false,
     });
   });
 
-  it("shows sync controls and triggers sync action", async () => {
-    const user = userEvent.setup();
+  it("shows last sync info and loads notifications", async () => {
     render(
       <MemoryRouter>
         <TopBar />
@@ -68,10 +64,6 @@ describe("TopBar", () => {
     );
 
     expect(screen.getByText(/nunca/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /sincronizar/i })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /sincronizar/i }));
-    expect(syncDataMock).toHaveBeenCalledTimes(1);
 
     await waitFor(() => {
       expect(fromMock).toHaveBeenCalledWith("activity_feed");
@@ -94,9 +86,7 @@ describe("TopBar", () => {
   it("shows offline banner and hides sync button in offline mode", () => {
     useAuthMock.mockReturnValue({
       user: { id: "u-1", full_name: "Julio" },
-      syncData: syncDataMock,
       lastSync: "2026-02-20T12:00:00.000Z",
-      isSyncing: false,
       isEditMode: true,
       setIsEditMode: setIsEditModeMock,
       isOfflineMode: true,
@@ -109,7 +99,6 @@ describe("TopBar", () => {
     );
 
     expect(screen.getByText(/modo offline/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /sincronizar/i })).not.toBeInTheDocument();
   });
 
   it("opens notifications popover and shows unread badge", async () => {

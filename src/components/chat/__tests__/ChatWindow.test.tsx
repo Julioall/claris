@@ -66,7 +66,7 @@ describe("ChatWindow", () => {
       <ChatWindow moodleUserId={123} studentName="Ana Silva" />,
     );
 
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
 
     useChatMock.mockReturnValue({
       messages: [],

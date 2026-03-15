@@ -81,7 +81,7 @@ describe("MyCourses page", () => {
     });
 
     const { container } = render(<MyCourses />);
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("renders followed courses, including finished units", () => {

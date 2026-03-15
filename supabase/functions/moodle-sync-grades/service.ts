@@ -16,6 +16,48 @@ function readOptionalText(value: unknown): string | null {
   return trimmedValue.length > 0 ? trimmedValue : null
 }
 
+function parseNullableWeight(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string') return null
+
+  const normalized = value
+    .trim()
+    .replace('%', '')
+    .replace(',', '.')
+
+  if (!normalized) return null
+
+  const parsed = Number(normalized)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function hasGradebookWeight(item: Record<string, unknown>, itemGradeMax: number | null): boolean {
+  const numericWeightCandidates = [
+    item.weightraw,
+    item.weight,
+    item.aggregationweight,
+    item.contributiontocoursetotal,
+  ]
+
+  for (const candidate of numericWeightCandidates) {
+    const parsed = parseNullableWeight(candidate)
+    if (parsed !== null) return parsed > 0
+  }
+
+  const formattedWeightCandidates = [
+    item.weightformatted,
+    item.weightrawformatted,
+    item.aggregationweightformatted,
+  ]
+
+  for (const candidate of formattedWeightCandidates) {
+    const parsed = parseNullableWeight(candidate)
+    if (parsed !== null) return parsed > 0
+  }
+
+  return (itemGradeMax ?? 0) > 0
+}
+
 export async function syncGrades(moodleUrl: string, token: string, courseId: number): Promise<Response> {
   const supabase = createServiceClient()
 
@@ -74,6 +116,7 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
 
           const itemGradeRaw = parseNullableNumber(item.graderaw)
           const itemGradeMax = parseNullableNumber(item.grademax)
+          const showInMetrics = hasGradebookWeight(item, itemGradeMax)
           let itemPercentage: number | null = null
           if (itemGradeRaw !== null && itemGradeMax && itemGradeMax > 0) {
             itemPercentage = (itemGradeRaw / itemGradeMax) * 100
@@ -108,6 +151,7 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             graded_at: gradedAt,
             submitted_at: submittedAt,
             completed_at: gradedAt || submittedAt,
+            hidden: !showInMetrics,
             updated_at: now,
           })
         }

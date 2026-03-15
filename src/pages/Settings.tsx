@@ -22,7 +22,6 @@ import {
   type ClarisLlmSettings,
 } from '@/lib/claris-settings';
 
-type SyncEntity = 'courses' | 'students' | 'activities' | 'grades';
 type RiskLevelThreshold = 'atencao' | 'risco' | 'critico';
 
 interface RiskThresholdDays {
@@ -32,7 +31,6 @@ interface RiskThresholdDays {
 }
 
 interface SyncSettings {
-  syncIntervalHours: Record<SyncEntity, number>;
   riskThresholdDays: RiskThresholdDays;
 }
 
@@ -42,12 +40,6 @@ const asObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 const DEFAULT_SYNC_SETTINGS: SyncSettings = {
-  syncIntervalHours: {
-    courses: 24,
-    students: 12,
-    activities: 2.4,
-    grades: 2.4,
-  },
   riskThresholdDays: {
     atencao: 7,
     risco: 14,
@@ -61,15 +53,8 @@ const normalizeRiskThresholdDays = (value: RiskThresholdDays): RiskThresholdDays
   critico: Math.max(1, Math.floor(value.critico)),
 });
 
-const ENTITY_LABELS: Record<SyncEntity, string> = {
-  courses: 'Cursos e escolas',
-  students: 'Dados cadastrais de alunos',
-  activities: 'Atividades',
-  grades: 'Notas',
-};
-
 export default function Settings() {
-  const { user, logout, lastSync } = useAuth();
+  const { user, logout, lastSync, syncData, isSyncing, isOfflineMode, courses } = useAuth();
   const [syncSettings, setSyncSettings] = useState<SyncSettings>(DEFAULT_SYNC_SETTINGS);
   const [lastSavedRiskThresholdDays, setLastSavedRiskThresholdDays] = useState<RiskThresholdDays>(DEFAULT_SYNC_SETTINGS.riskThresholdDays);
   const [isLoadingSyncSettings, setIsLoadingSyncSettings] = useState(false);
@@ -217,16 +202,9 @@ export default function Settings() {
         }
 
         if (data) {
-          const rawSyncInterval = asObject(data.sync_interval_hours);
           const rawRiskThreshold = asObject(data.risk_threshold_days);
 
           const loadedSettings: SyncSettings = {
-            syncIntervalHours: {
-              courses: Number(rawSyncInterval.courses ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.courses),
-              students: Number(rawSyncInterval.students ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.students),
-              activities: Number(rawSyncInterval.activities ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.activities),
-              grades: Number(rawSyncInterval.grades ?? DEFAULT_SYNC_SETTINGS.syncIntervalHours.grades),
-            },
             riskThresholdDays: normalizeRiskThresholdDays({
               atencao: Number(rawRiskThreshold.atencao ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.atencao),
               risco: Number(rawRiskThreshold.risco ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.risco),
@@ -263,18 +241,6 @@ export default function Settings() {
     return format(new Date(date), "dd 'de' MMMM 'de' yyyy 'as' HH:mm", { locale: ptBR });
   };
 
-  const updateSyncIntervalHours = (entity: SyncEntity, value: string) => {
-    const parsed = Number(value);
-    const safeValue = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-    setSyncSettings(prev => ({
-      ...prev,
-      syncIntervalHours: {
-        ...prev.syncIntervalHours,
-        [entity]: safeValue,
-      },
-    }));
-  };
-
   const saveSyncSettings = async () => {
     if (!user) return;
 
@@ -301,7 +267,6 @@ export default function Settings() {
 
       const syncPreferencesPayload = {
         user_id: user.id,
-        sync_interval_hours: { ...syncSettings.syncIntervalHours },
         risk_threshold_days: { ...normalizedRiskThresholdDays },
       };
 
@@ -338,13 +303,13 @@ export default function Settings() {
 
       toast({
         title: 'Configuracoes salvas',
-        description: `Intervalos de sincronizacao atualizados com sucesso.${recalculationSummary}`,
+        description: `Parametros de risco atualizados com sucesso.${recalculationSummary}`,
       });
     } catch (err) {
       console.error('Error saving sync settings:', err);
       toast({
         title: 'Erro ao salvar configuracoes',
-        description: 'Nao foi possivel salvar os intervalos de sincronizacao.',
+        description: 'Nao foi possivel salvar os parametros de risco.',
         variant: 'destructive',
       });
     } finally {
@@ -622,7 +587,7 @@ export default function Settings() {
               <RefreshCw className="h-5 w-5" />
               Sincronizacao
             </CardTitle>
-            <CardDescription>Status atual e regras do botao de sincronizacao da barra superior</CardDescription>
+            <CardDescription>Sincronizacao geral para carga inicial da plataforma (quando ainda nao houver dados)</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center justify-between">
@@ -643,25 +608,26 @@ export default function Settings() {
 
             <Separator />
 
-            <div className="space-y-3">
-              <div className="text-sm font-medium">Intervalo minimo entre sincronizacoes (horas)</div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {(['courses', 'students', 'activities', 'grades'] as SyncEntity[]).map(entity => (
-                  <div key={`interval-${entity}`} className="flex items-center justify-between rounded-md border p-3 gap-3">
-                    <Label className="text-sm">{ENTITY_LABELS[entity]}</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.5}
-                      value={String(syncSettings.syncIntervalHours[entity])}
-                      onChange={(e) => updateSyncIntervalHours(entity, e.target.value)}
-                      disabled={isLoadingSyncSettings}
-                      className="w-[140px]"
-                    />
-                  </div>
-                ))}
-              </div>
+            <div className="rounded-md border p-3 bg-muted/30">
+              <p className="text-sm text-muted-foreground">
+                Use este botao apenas no inicio, quando ainda nao houver dados sincronizados. Para uso diario, prefira os botoes incrementais nas telas de Alunos e Unidades Curriculares.
+              </p>
             </div>
+
+            <Button
+              variant="outline"
+              onClick={syncData}
+              disabled={isOfflineMode || isSyncing || courses.length > 0}
+              className="w-full"
+            >
+              {isSyncing ? 'Sincronizando...' : 'Sincronizacao geral inicial'}
+            </Button>
+
+            {courses.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                A sincronizacao geral inicial fica disponivel apenas quando ainda nao houver dados na plataforma.
+              </p>
+            )}
 
             <Separator />
 

@@ -178,7 +178,7 @@ describe("useStudentsData", () => {
     expect(result.current.students[1]).toMatchObject({
       id: "s-1",
       current_risk_level: "atencao",
-      enrollment_status: "suspenso",
+      enrollment_status: "ativo",
       pending_tasks_count: 2,
     });
     expect(result.current.students[2]).toMatchObject({

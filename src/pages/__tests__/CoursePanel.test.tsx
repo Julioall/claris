@@ -157,7 +157,7 @@ describe("CoursePanel page", () => {
     });
 
     const { container } = renderPage();
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("shows not found state when course is missing", () => {

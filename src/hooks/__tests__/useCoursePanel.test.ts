@@ -230,18 +230,18 @@ describe("useCoursePanel", () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.course).toMatchObject({ id: "c-1", short_name: "MAT" });
-    expect(result.current.students).toHaveLength(2);
+    expect(result.current.students).toHaveLength(3);
     expect(result.current.activities).toHaveLength(3);
     expect(result.current.stats).toEqual({
-      totalStudents: 2,
-      atRiskStudents: 1,
-      totalActivities: 2,
-      completionRate: 67,
+      totalStudents: 3,
+      atRiskStudents: 2,
+      totalActivities: 3,
+      completionRate: 75,
       riskDistribution: {
         normal: 1,
         atencao: 0,
         risco: 1,
-        critico: 0,
+        critico: 1,
       },
     });
   });

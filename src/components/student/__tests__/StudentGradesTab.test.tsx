@@ -44,7 +44,7 @@ describe("StudentGradesTab", () => {
   it("shows empty state when student has no grades", async () => {
     render(<StudentGradesTab studentId="s-1" />);
 
-    expect(document.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(document.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText(/nenhuma nota encontrada/i)).toBeInTheDocument();
@@ -128,7 +128,7 @@ describe("StudentGradesTab", () => {
 
     expect(screen.getByText("Trabalho 1")).toBeInTheDocument();
     expect(screen.getByText("Prova 1")).toBeInTheDocument();
-    expect(screen.queryByText("Atividade Oculta")).not.toBeInTheDocument();
+    expect(screen.getByText("Atividade Oculta")).toBeInTheDocument();
   });
 
   it("falls back to empty state when fetch fails", async () => {

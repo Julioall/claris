@@ -70,7 +70,7 @@ describe("Schools page", () => {
     });
 
     const { container } = render(<Schools />);
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("renders school hierarchy and total count", () => {

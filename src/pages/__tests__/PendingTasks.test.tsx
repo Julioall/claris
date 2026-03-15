@@ -95,7 +95,7 @@ describe("PendingTasks page", () => {
     });
 
     const { container } = renderPage();
-    expect(container.querySelector(".animate-spin")).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("opens the create dialog and no longer shows automation actions", async () => {

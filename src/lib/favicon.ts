@@ -9,7 +9,7 @@ export function syncFaviconWithPrimaryColor() {
 
   const color = `hsl(${primary})`;
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 3v4" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M22 5h-4" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v2" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 18H3" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="34 26 52 55" fill="none"><path d="M60 30 L64 48 L82 52 L64 56 L60 74 L56 56 L38 52 L56 48 Z" fill="${color}"/><path d="M76 34 L77.5 39 L82.5 40.5 L77.5 42 L76 47 L74.5 42 L69.5 40.5 L74.5 39 Z" fill="${color}"/><path d="M44 64 L45.5 69 L50.5 70.5 L45.5 72 L44 77 L42.5 72 L37.5 70.5 L42.5 69 Z" fill="${color}"/></svg>`;
   const href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
 
   let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;

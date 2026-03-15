@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw, Search, Bell, Pencil, WifiOff, CheckCheck } from 'lucide-react';
+import { Bell, Pencil, WifiOff, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -55,9 +54,7 @@ function formatNotificationDate(value: string | null): string {
 export function TopBar() {
   const {
     user,
-    syncData,
     lastSync,
-    isSyncing,
     isEditMode,
     setIsEditMode,
     isOfflineMode
@@ -145,25 +142,15 @@ export function TopBar() {
     }
   };
 
-  const handleSync = () => {
-    syncData();
-  };
   const formatLastSync = (date: string | null) => {
     if (!date) return 'Nunca';
     return format(new Date(date), "dd/MM 'às' HH:mm", {
       locale: ptBR
     });
   };
+
   return <header className="sticky top-0 z-30 h-14 gap-4 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80 px-4 md:px-6 flex items-center justify-end">
       <SidebarTrigger className="md:hidden" />
-      
-      {/* Search */}
-      <div className="flex-1 max-w-md">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input type="search" placeholder="Buscar aluno..." className="pl-9 bg-muted/50 border-0 focus-visible:ring-1 focus-visible:ring-primary/30" />
-        </div>
-      </div>
 
       {/* Right side actions */}
       <div className="flex items-center gap-2">
@@ -173,8 +160,8 @@ export function TopBar() {
           <span className="font-medium">{formatLastSync(lastSync)}</span>
         </div>
 
-        {/* Sync button */}
-        {isOfflineMode ? (
+        {/* Offline status */}
+        {isOfflineMode && (
           <Tooltip>
             <TooltipTrigger asChild>
               <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-md px-2.5 py-1.5">
@@ -184,11 +171,6 @@ export function TopBar() {
             </TooltipTrigger>
             <TooltipContent>Moodle indisponível. Sincronização e mensagens desabilitadas.</TooltipContent>
           </Tooltip>
-        ) : (
-          <Button variant="outline" size="sm" onClick={handleSync} disabled={isSyncing} className="gap-2">
-            <RefreshCw className={cn("h-4 w-4", isSyncing && "animate-spin")} />
-            <span className="hidden sm:inline">Sincronizar</span>
-          </Button>
         )}
 
         {/* Notifications */}

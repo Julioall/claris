@@ -108,7 +108,7 @@ describe("App routing", () => {
 
     const { container } = render(<App />);
 
-    expect(container.querySelector('.animate-spin')).toBeInTheDocument();
+    expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("redirects unauthenticated users to login page", () => {

@@ -6,10 +6,12 @@ import {
   Filter,
   Clock,
   ClipboardList,
-  UserCheck
+  UserCheck,
+  RefreshCw
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { 
   Select,
   SelectContent,
@@ -28,6 +30,7 @@ import {
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { useStudentsData } from '@/hooks/useStudentsData';
 import { useCoursesData } from '@/hooks/useCoursesData';
+import { useAuth } from '@/contexts/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -58,11 +61,27 @@ export default function Students() {
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [isSyncingStudents, setIsSyncingStudents] = useState(false);
+  const { syncStudentsIncremental, isSyncing, isOfflineMode } = useAuth();
   
-  const { students, isLoading, error } = useStudentsData(
+  const { students, isLoading, error, refetch } = useStudentsData(
     courseFilter !== 'all' ? courseFilter : undefined
   );
   const { courses } = useCoursesData();
+
+  const targetCourseIds = courseFilter !== 'all' ? [courseFilter] : courses.map(course => course.id);
+
+  const handleSyncStudents = async () => {
+    if (targetCourseIds.length === 0 || isOfflineMode) return;
+
+    setIsSyncingStudents(true);
+    try {
+      await syncStudentsIncremental(targetCourseIds);
+      await refetch();
+    } finally {
+      setIsSyncingStudents(false);
+    }
+  };
 
   const filteredStudents = students.filter(student => {
     const matchesSearch = student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -99,6 +118,16 @@ export default function Students() {
             {students.length} alunos em seus cursos
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSyncStudents}
+          disabled={isOfflineMode || isSyncing || isSyncingStudents || targetCourseIds.length === 0}
+          className="gap-2 self-start md:self-auto"
+        >
+          <RefreshCw className={`h-4 w-4 ${(isSyncing || isSyncingStudents) ? 'animate-spin' : ''}`} />
+          Sincronizar alunos
+        </Button>
       </div>
 
       {error && (
@@ -240,7 +269,7 @@ export default function Students() {
             <p className="text-muted-foreground text-sm mt-1">
               {searchQuery || riskFilter !== 'all' 
                 ? 'Tente ajustar os filtros de busca'
-                : 'Use o botão de sincronização na barra superior para carregar seus alunos'
+                : 'Use o botão "Sincronizar alunos" desta tela para carregar seus alunos'
               }
             </p>
           </div>
