@@ -443,7 +443,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingConversationTitle, setEditingConversationTitle] = useState('');
   const [editingConversationError, setEditingConversationError] = useState('');
-  const [isIcebreakersOpen, setIsIcebreakersOpen] = useState(true);
+  const [_isIcebreakersOpen, _setIsIcebreakersOpen] = useState(true);
   const scrollEndRef = useRef<HTMLDivElement>(null);
 
   const canSend = useMemo(() => inputValue.trim().length > 0 && !isSending, [inputValue, isSending]);
