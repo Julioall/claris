@@ -907,7 +907,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     >
           <div
             className={cn(
-              'transition-all duration-200 ease-out',
+              'flex flex-1 min-h-0 flex-col transition-all duration-200 ease-out',
               isFloating && !isOpen ? 'translate-y-2 scale-95 opacity-0 pointer-events-none' : 'translate-y-0 scale-100 opacity-100'
             )}
           >
