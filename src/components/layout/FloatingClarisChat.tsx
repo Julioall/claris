@@ -104,25 +104,25 @@ const ROUTE_QUICK_SUGGESTIONS: Array<{ match: RegExp; suggestions: string[] }> =
   {
     match: /\/alunos(?:\/|$)/,
     suggestions: [
-      'Liste os alunos em risco com o último acesso de cada um.',
-      'Quais alunos tiveram maior piora de engajamento esta semana?',
-      'Monte um plano rápido de acompanhamento para os 5 alunos mais críticos.',
+      'Alunos em risco com último acesso',
+      'Piora de engajamento esta semana',
+      'Plano de acompanhamento — 5 mais críticos',
     ],
   },
   {
     match: /\/pendencias(?:\/|$)/,
     suggestions: [
-      'Liste as pendências abertas por prioridade e prazo.',
-      'Quais pendências estão atrasadas e precisam de ação hoje?',
-      'Resuma as pendências por curso para eu distribuir atendimento.',
+      'Pendências por prioridade e prazo',
+      'Pendências atrasadas — ação hoje',
+      'Resumo por curso para distribuir',
     ],
   },
   {
     match: /\/mensagens(?:\/|$)/,
     suggestions: [
-      'Liste templates recomendados para contato com alunos em risco.',
-      'Prepare um rascunho de mensagem de acompanhamento para alunos críticos.',
-      'Mostre alunos que precisam de contato e sugira ordem de envio.',
+      'Templates para alunos em risco',
+      'Rascunho de acompanhamento',
+      'Alunos que precisam de contato',
     ],
   },
 ];

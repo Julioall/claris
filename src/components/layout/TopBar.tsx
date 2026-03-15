@@ -1,5 +1,5 @@
-import { RefreshCw, Search, Bell, Pencil, Sparkles, WifiOff } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { RefreshCw, Search, Bell, Pencil, WifiOff } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
