@@ -400,17 +400,17 @@ describe('FloatingClarisChat', () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText(/conversas/i)).toBeInTheDocument();
+    expect(screen.getByText(/seus chats/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /nova conversa/i })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.queryAllByText('Quero um resumo do dia').length).toBeGreaterThan(0);
     });
 
-    expect(screen.queryByText(/quebra-gelos da claris/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/alunos em risco com último acesso/i)).not.toBeInTheDocument();
   });
 
-  it('shows icebreakers dropdown only when conversation has no messages yet', async () => {
+  it('shows icebreakers only when conversation has no messages yet', async () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter initialEntries={["/claris?context=%2Falunos"]}>
@@ -418,13 +418,13 @@ describe('FloatingClarisChat', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/quebra-gelos da claris/i)).toBeInTheDocument();
-    expect(screen.getByText(/priorize quem devo contatar hoje/i)).toBeInTheDocument();
+    const suggestionButton = await screen.findByRole('button', { name: /^alunos em risco com último acesso$/i });
+    expect(suggestionButton).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: /alternar quebra-gelos da claris/i }));
+    await user.click(suggestionButton);
 
     await waitFor(() => {
-      expect(screen.queryByText(/liste os alunos em risco/i)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^alunos em risco com último acesso$/i })).not.toBeInTheDocument();
     });
   });
 
@@ -446,8 +446,8 @@ describe('FloatingClarisChat', () => {
     await user.click(newConversationButton);
 
     await waitFor(() => {
-      expect(screen.getByText(/ainda não há conversas iniciadas/i)).toBeInTheDocument();
       expect(screen.queryByText('Sem mensagens ainda')).not.toBeInTheDocument();
+      expect(screen.queryAllByRole('button', { name: /mais opções da conversa/i })).toHaveLength(0);
     });
   });
 
