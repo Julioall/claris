@@ -45,7 +45,14 @@ sync_edge_database_types() {
   fi
 
   mkdir -p "$(dirname "${target_file}")"
+
+  if [ -f "${target_file}" ] && cmp -s "${source_file}" "${target_file}"; then
+    log "Edge Function types already in sync."
+    return
+  fi
+
   cp "${source_file}" "${target_file}"
+  log "Edge Function types synchronized."
 }
 
 wait_for_api() {

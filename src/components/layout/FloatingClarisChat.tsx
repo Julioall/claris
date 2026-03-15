@@ -899,10 +899,10 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const chatPanel = (
     <div
       className={cn(
-        'overflow-hidden rounded-xl border bg-card shadow-xl',
+        'overflow-hidden bg-card',
         isFloating
-          ? 'w-full sm:w-[360px] max-w-full'
-          : 'flex h-full min-h-[calc(100vh-12rem)] w-full flex-col border-border/60 shadow-sm',
+          ? 'w-full max-w-full rounded-xl border shadow-xl sm:w-[360px]'
+          : 'flex h-full min-h-[calc(100vh-12rem)] w-full flex-col',
       )}
     >
           <div
@@ -1048,8 +1048,11 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     return (
       <div className="flex h-full min-h-[calc(100vh-12rem)] w-full flex-col lg:flex-row">
         <aside className="flex w-full shrink-0 flex-col border-b border-border/60 bg-muted/20 lg:w-[320px] lg:border-b-0 lg:border-r">
-           <div className="min-h-0 flex-1 overflow-hidden px-4 py-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seus Chats</p>
+          <div className="border-b px-3 py-2">
+            <span className="text-sm font-semibold">Seus Chats</span>
+          </div>
+
+          <div className="min-h-0 flex-1 px-4 py-4">
 
             <ScrollArea className="h-[240px] lg:h-full pr-2">
               {isHydratingConversations ? (
