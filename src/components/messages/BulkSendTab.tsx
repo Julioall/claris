@@ -48,6 +48,8 @@ interface StudentCourseOption {
   course_name: string;
   category?: string;
   last_access?: string | null;
+  start_date?: string | null;
+  enrollment_status?: string | null;
 }
 
 interface StudentOption {
@@ -57,6 +59,7 @@ interface StudentOption {
   moodle_user_id: string;
   current_risk_level?: string | null;
   last_access?: string | null;
+  enrollment_status?: string;
   courses: StudentCourseOption[];
 }
 
@@ -86,6 +89,7 @@ interface GradeLookupValue {
 const variableLabels = new Map(DYNAMIC_VARIABLES.map(variable => [variable.key, variable.label]));
 const categoryLabels = new Map(MESSAGE_TEMPLATE_CATEGORIES.map(category => [category.value, category.label]));
 const riskLevelLabels: Record<string, string> = {
+  todos: 'Todos riscos',
   normal: 'Normal',
   atencao: 'Atencao',
   risco: 'Risco',
@@ -120,6 +124,11 @@ function formatDateLabel(value?: string | null) {
 function formatRiskLevel(value?: string | null) {
   if (!value) return 'Sem classificacao';
   return riskLevelLabels[value] || value;
+}
+
+function normalizeRiskLevel(value?: string | null) {
+  if (!value) return 'inativo';
+  return value.toLowerCase();
 }
 
 function formatGradeLabel(grade?: GradeLookupValue) {
@@ -161,6 +170,7 @@ export function BulkSendTab() {
   const [filterCourse, setFilterCourse] = useState<string>('todos');
   const [filterClass, setFilterClass] = useState<string>('todos');
   const [filterUC, setFilterUC] = useState<string>('todos');
+  const [filterRiskStatus, setFilterRiskStatus] = useState<string>('todos');
 
   const currentFilters = useMemo(() => ({
     school: filterSchool,
@@ -177,7 +187,7 @@ export function BulkSendTab() {
     try {
       const { data: userCourses, error: userCoursesError } = await supabase
         .from('user_courses')
-        .select('course_id, courses(id, name, category)')
+        .select('course_id, courses(id, name, category, start_date)')
         .eq('user_id', user.id)
         .eq('role', 'tutor');
 
@@ -190,11 +200,16 @@ export function BulkSendTab() {
         return;
       }
 
-      const courseMap = new Map<string, { id: string; name: string; category?: string }>();
+      const courseMap = new Map<string, { id: string; name: string; category?: string; start_date?: string | null }>();
       userCourses.forEach(userCourse => {
-        const course = userCourse.courses as { id: string; name: string; category?: string } | null;
+        const course = userCourse.courses as { id: string; name: string; category?: string; start_date?: string | null } | null;
         if (course) {
-          courseMap.set(course.id, { id: course.id, name: course.name, category: course.category });
+          courseMap.set(course.id, {
+            id: course.id,
+            name: course.name,
+            category: course.category,
+            start_date: course.start_date,
+          });
         }
       });
 
@@ -202,9 +217,8 @@ export function BulkSendTab() {
 
       const { data: studentCourses, error: studentCoursesError } = await supabase
         .from('student_courses')
-        .select('student_id, course_id, last_access, students(id, full_name, email, moodle_user_id, current_risk_level, last_access)')
-        .in('course_id', courseIds)
-        .neq('enrollment_status', 'suspenso');
+        .select('student_id, course_id, enrollment_status, last_access, students(id, full_name, email, moodle_user_id, current_risk_level, last_access)')
+        .in('course_id', courseIds);
 
       if (studentCoursesError) throw studentCoursesError;
 
@@ -215,7 +229,29 @@ export function BulkSendTab() {
         return;
       }
 
+      const now = new Date();
       const studentMap = new Map<string, StudentOption>();
+      const statusMap = new Map<string, { validStatuses: Set<string>; allStatuses: Set<string> }>();
+
+      const resolveEnrollmentStatus = (statusEntry?: { validStatuses: Set<string>; allStatuses: Set<string> }): string => {
+        if (!statusEntry) return 'inativo';
+
+        const validStatuses = statusEntry.validStatuses;
+        const allStatuses = statusEntry.allStatuses;
+
+        if (validStatuses.size > 0) {
+          if (validStatuses.has('suspenso')) return 'suspenso';
+          if (validStatuses.has('concluido')) return 'concluido';
+          if (validStatuses.has('ativo')) return 'ativo';
+          return 'inativo';
+        }
+
+        if (allStatuses.has('concluido')) return 'concluido';
+        if (allStatuses.has('ativo')) return 'ativo';
+        if (allStatuses.has('suspenso')) return 'suspenso';
+        return 'inativo';
+      };
+
       studentCourses.forEach(studentCourse => {
         const student = studentCourse.students as {
           id: string;
@@ -228,6 +264,23 @@ export function BulkSendTab() {
 
         if (!student) return;
 
+        const course = courseMap.get(studentCourse.course_id);
+        const enrollmentStatus = ((studentCourse as { enrollment_status?: string | null }).enrollment_status || 'ativo').toLowerCase();
+        const isValidCourse = !course?.start_date || new Date(course.start_date) <= now;
+
+        if (!statusMap.has(student.id)) {
+          statusMap.set(student.id, {
+            validStatuses: isValidCourse ? new Set([enrollmentStatus]) : new Set<string>(),
+            allStatuses: new Set([enrollmentStatus]),
+          });
+        } else {
+          const current = statusMap.get(student.id)!;
+          current.allStatuses.add(enrollmentStatus);
+          if (isValidCourse) {
+            current.validStatuses.add(enrollmentStatus);
+          }
+        }
+
         if (!studentMap.has(student.id)) {
           studentMap.set(student.id, {
             id: student.id,
@@ -236,20 +289,27 @@ export function BulkSendTab() {
             moodle_user_id: student.moodle_user_id,
             current_risk_level: student.current_risk_level,
             last_access: student.last_access,
+            enrollment_status: 'ativo',
             courses: [],
           });
         }
 
-        const course = courseMap.get(studentCourse.course_id);
         if (course) {
           studentMap.get(student.id)?.courses.push({
             course_id: course.id,
             course_name: course.name,
             category: course.category || undefined,
             last_access: studentCourse.last_access,
+            start_date: course.start_date,
+            enrollment_status: enrollmentStatus,
           });
         }
       });
+
+      const studentsWithStatus = Array.from(studentMap.values()).map(student => ({
+        ...student,
+        enrollment_status: resolveEnrollmentStatus(statusMap.get(student.id)),
+      }));
 
       const studentIds = Array.from(new Set(studentCourses.map(studentCourse => studentCourse.student_id)));
 
@@ -261,10 +321,9 @@ export function BulkSendTab() {
           .in('student_id', studentIds),
         supabase
           .from('student_activities')
-          .select('student_id, course_id')
+          .select('student_id, course_id, submitted_at, completed_at, status, hidden')
           .in('course_id', courseIds)
           .in('student_id', studentIds)
-          .is('completed_at', null)
           .eq('hidden', false),
       ]);
 
@@ -281,11 +340,17 @@ export function BulkSendTab() {
 
       const nextPendingLookup: Record<string, number> = {};
       (pendingActivities || []).forEach(activity => {
+        const isSubmitted = Boolean(activity.submitted_at);
+        const isCompleted = Boolean(activity.completed_at) || ['completed', 'concluida', 'finalizada'].includes(String(activity.status || '').toLowerCase());
+        const isPending = !isSubmitted && !isCompleted;
+
+        if (!isPending) return;
+
         const key = buildStudentCourseKey(activity.student_id, activity.course_id);
         nextPendingLookup[key] = (nextPendingLookup[key] || 0) + 1;
       });
 
-      setStudents(Array.from(studentMap.values()).sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR')));
+      setStudents(studentsWithStatus.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR')));
       setGradeLookup(nextGradeLookup);
       setPendingLookup(nextPendingLookup);
     } catch (error) {
@@ -414,9 +479,15 @@ export function BulkSendTab() {
         if (!matchesCourse) return false;
       }
 
+      if (filterRiskStatus !== 'todos') {
+        if (normalizeRiskLevel(student.current_risk_level) !== filterRiskStatus) {
+          return false;
+        }
+      }
+
       return true;
     });
-  }, [students, searchQuery, filterSchool, filterCourse, filterClass, filterUC]);
+  }, [students, searchQuery, filterSchool, filterCourse, filterClass, filterUC, filterRiskStatus]);
 
   const selectedStudents = useMemo(
     () => students.filter(student => selectedStudentIds.has(student.id)),
@@ -564,14 +635,40 @@ export function BulkSendTab() {
     if (!user || !moodleSession || selectedStudents.length === 0 || !messageContent.trim()) return;
     if (!validateMessageContext(messageContent, 'A mensagem')) return;
 
+    if (hasActiveJobs) {
+      toast.error('Ja existe um envio em andamento ou na fila. Aguarde a finalizacao para evitar duplicidade.');
+      return;
+    }
+
     setIsSending(true);
 
     try {
+      const normalizedMessage = messageContent.trim();
+
+      const { data: existingJob, error: existingJobError } = await supabase
+        .from('bulk_message_jobs')
+        .select('id, status, created_at')
+        .eq('user_id', user.id)
+        .eq('message_content', normalizedMessage)
+        .eq('total_recipients', selectedStudents.length)
+        .in('status', ['pending', 'processing'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingJobError) throw existingJobError;
+
+      if (existingJob) {
+        toast.error('Envio semelhante ja existe na fila/processamento. Evite duplicar o disparo.');
+        await fetchRecentJobs();
+        return;
+      }
+
       const { data: job, error: jobErr } = await supabase
         .from('bulk_message_jobs')
         .insert({
           user_id: user.id,
-          message_content: messageContent.trim(),
+          message_content: normalizedMessage,
           total_recipients: selectedStudents.length,
           status: 'pending',
         })
@@ -595,19 +692,31 @@ export function BulkSendTab() {
       const { error: invokeErr } = await supabase.functions.invoke('bulk-message-send', {
         body: { job_id: job.id, moodleUrl: moodleSession.moodleUrl, token: moodleSession.moodleToken },
       });
-      if (invokeErr) throw invokeErr;
+      if (invokeErr) {
+        await supabase
+          .from('bulk_message_jobs')
+          .update({
+            status: 'failed',
+            error_message: `Falha ao iniciar processamento: ${invokeErr.message}`,
+            completed_at: new Date().toISOString(),
+          })
+          .eq('id', job.id)
+          .eq('user_id', user.id);
+
+        throw invokeErr;
+      }
 
       toast.success(`Envio em massa iniciado para ${selectedStudents.length} alunos`);
       setSelectedStudentIds(new Set());
       setMessageContent('');
-      fetchRecentJobs();
+      await fetchRecentJobs();
     } catch (err) {
       console.error(err);
       toast.error('Erro ao iniciar envio em massa');
     } finally {
       setIsSending(false);
     }
-  }, [buildStudentVariableData, fetchRecentJobs, messageContent, moodleSession, selectedStudents, user, validateMessageContext]);
+  }, [buildStudentVariableData, fetchRecentJobs, hasActiveJobs, messageContent, moodleSession, selectedStudents, user, validateMessageContext]);
 
   const getStatusBadge = (status: string) => {
     const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -648,7 +757,7 @@ export function BulkSendTab() {
           </CardHeader>
           <CardContent className="flex-1 flex flex-col gap-3 min-h-0 pt-0">
             {/* Filters */}
-            <div className="grid grid-cols-2 gap-2 shrink-0">
+            <div className="grid grid-cols-2 gap-2 shrink-0 md:grid-cols-3">
               <Select value={filterSchool} onValueChange={handleSchoolChange}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue placeholder="Escola" />
@@ -683,6 +792,16 @@ export function BulkSendTab() {
                 <SelectContent>
                   <SelectItem value="todos">Todas UCs</SelectItem>
                   {filterOptions.ucs.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={filterRiskStatus} onValueChange={setFilterRiskStatus}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue placeholder="Status de risco" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(riskLevelLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -746,6 +865,9 @@ export function BulkSendTab() {
                         <p className="text-sm truncate">{s.full_name}</p>
                         <p className="text-[10px] text-muted-foreground truncate">
                           {s.courses.map(c => c.course_name).join(', ')}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          Risco: {formatRiskLevel(s.current_risk_level)}
                         </p>
                       </div>
                     </button>

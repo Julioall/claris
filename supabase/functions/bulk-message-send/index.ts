@@ -21,6 +21,40 @@ import type { BulkMessageSendPayload } from './payload.ts'
 const BATCH_SIZE = 5
 const DELAY_BETWEEN_BATCHES_MS = 1000
 
+async function notifyBulkMessageResult(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  payload: {
+    jobId: string
+    status: 'completed' | 'failed'
+    sentCount: number
+    failedCount: number
+    totalRecipients: number
+  },
+) {
+  const title = payload.status === 'completed'
+    ? 'Envio em massa concluído'
+    : 'Envio em massa finalizado com falhas'
+
+  const description = payload.status === 'completed'
+    ? `Foram enviadas ${payload.sentCount} de ${payload.totalRecipients} mensagens.`
+    : `Envio concluído com ${payload.sentCount} sucessos e ${payload.failedCount} falhas.`
+
+  await db.from('activity_feed').insert({
+    user_id: userId,
+    event_type: 'bulk_message_job',
+    title,
+    description,
+    metadata: {
+      job_id: payload.jobId,
+      status: payload.status,
+      sent_count: payload.sentCount,
+      failed_count: payload.failedCount,
+      total_recipients: payload.totalRecipients,
+    },
+  })
+}
+
 const handleBulkMessageSend = async ({ body, user }: AuthenticatedHandlerContext<BulkMessageSendPayload>) => {
   const userId = user.id
   const { jobId, moodleUrl, token } = body
@@ -46,6 +80,13 @@ const handleBulkMessageSend = async ({ body, user }: AuthenticatedHandlerContext
 
   if (!recipients || recipients.length === 0) {
     await finalizeJob(db, jobId, 'completed', 0, 0, new Date().toISOString())
+    await notifyBulkMessageResult(db, userId, {
+      jobId,
+      status: 'completed',
+      sentCount: 0,
+      failedCount: 0,
+      totalRecipients: 0,
+    })
     return jsonResponse({ success: true, sent: 0 })
   }
 
@@ -92,6 +133,13 @@ const handleBulkMessageSend = async ({ body, user }: AuthenticatedHandlerContext
   // Mark complete
   const finalStatus = failedCount === recipients.length ? 'failed' : 'completed'
   await finalizeJob(db, jobId, finalStatus, sentCount, failedCount, new Date().toISOString())
+  await notifyBulkMessageResult(db, userId, {
+    jobId,
+    status: finalStatus,
+    sentCount,
+    failedCount,
+    totalRecipients: recipients.length,
+  })
 
   return jsonResponse({ success: true, sent: sentCount, failed: failedCount })
 }
