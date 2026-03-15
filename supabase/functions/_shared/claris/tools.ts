@@ -208,6 +208,30 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'get_notifications',
+      description:
+        'Lê notificações internas do sistema para o tutor/monitor (activity_feed), ordenadas da mais recente para a mais antiga. Use quando o usuário pedir notificações, alertas ou avisos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          event_type: {
+            type: 'string',
+            description: 'Filtra por tipo de evento específico (ex.: claris_notification, bulk_message_job).',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de notificações. Padrão: 10. Máximo: 50.',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'notify_user',
       description:
         'Cria uma notificação interna para o tutor/monitor no sistema (activity_feed). Use para alertas importantes, confirmações de ações ou situações que exigem acompanhamento.',

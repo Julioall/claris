@@ -17,6 +17,7 @@ import {
 import { callMoodleApi } from '../moodle/mod.ts'
 
 export interface ToolCallArgs {
+  event_type?: string
   title?: string
   description?: string
   severity?: 'info' | 'warning' | 'critical'
@@ -75,6 +76,8 @@ export async function executeToolCall(
       return confirmSingleStudentMessageSend(userId, args, context, supabase)
     case 'list_message_templates':
       return listMessageTemplates(userId, args, supabase)
+    case 'get_notifications':
+      return getNotifications(userId, args, supabase)
     case 'notify_user':
       return notifyUser(userId, args, supabase)
     case 'prepare_bulk_message_send':
@@ -801,6 +804,28 @@ async function notifyUser(userId: string, args: ToolCallArgs, supabase: Supabase
     title,
     severity,
   }
+}
+
+async function getNotifications(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 10, 50)
+
+  let query = supabase
+    .from('activity_feed')
+    .select('id, title, description, event_type, created_at, metadata')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (args.event_type) {
+    query = query.eq('event_type', args.event_type)
+  }
+
+  const { data, error } = await query
+  if (error) {
+    return { error: 'Falha ao listar notificações.' }
+  }
+
+  return data ?? []
 }
 
 // ---------------------------------------------------------------------------
