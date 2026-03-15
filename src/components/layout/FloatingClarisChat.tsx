@@ -93,11 +93,11 @@ const INITIAL_MESSAGE: ChatMessage = {
 const CLARIS_HISTORY_STORAGE_PREFIX = 'claris_chat_history';
 const CLARIS_WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
 const GENERIC_QUICK_SUGGESTIONS = [
-  'Liste os alunos em risco e priorize quem devo contatar hoje.',
-  'Quais atividades estão aguardando correção neste momento?',
-  'Mostre um resumo geral da minha operação hoje.',
-  'Liste as tarefas pendentes mais urgentes.',
-  'Quais alunos devo acompanhar com mais atenção nesta semana?',
+  'Alunos em risco — quem contatar hoje?',
+  'Atividades aguardando correção',
+  'Resumo geral da operação',
+  'Pendências mais urgentes',
+  'Alunos para acompanhar esta semana',
 ];
 
 const ROUTE_QUICK_SUGGESTIONS: Array<{ match: RegExp; suggestions: string[] }> = [
