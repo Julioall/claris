@@ -1000,37 +1000,21 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                 </div>
               ))}
               {shouldShowIcebreakers && (
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between gap-2 px-1">
-                    <span className="text-[11px] font-medium text-muted-foreground">Quebra-gelos da Claris</span>
-                    <button
+                <div className="flex flex-wrap justify-center gap-2 pt-3">
+                  {contextualSuggestions.map((suggestion) => (
+                    <Button
+                      key={suggestion}
                       type="button"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      onClick={() => setIsIcebreakersOpen((prev) => !prev)}
-                      aria-label="Alternar quebra-gelos da Claris"
-                      aria-expanded={isIcebreakersOpen}
+                      variant="outline"
+                      size="sm"
+                      className="h-auto max-w-[340px] rounded-full border-border/70 bg-background px-4 py-2.5 text-center text-xs leading-4 text-foreground/90 shadow-sm hover:bg-muted"
+                      onClick={() => handleSend(suggestion)}
+                      disabled={isSending}
                     >
-                      {isIcebreakersOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                  {isIcebreakersOpen && (
-                    <div className="flex flex-wrap gap-2">
-                      {contextualSuggestions.map((suggestion) => (
-                        <Button
-                          key={suggestion}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-auto max-w-[280px] rounded-[20px] border-border/70 bg-background px-3 py-2 text-left text-xs leading-4 text-foreground/90 shadow-sm hover:bg-muted sm:max-w-[320px]"
-                          onClick={() => handleSend(suggestion)}
-                          disabled={isSending}
-                        >
-                          <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="line-clamp-2 min-w-0 break-words">{suggestion}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/60" />
+                      <span>{suggestion}</span>
+                    </Button>
+                  ))}
                 </div>
               )}
               <div ref={scrollEndRef} />
