@@ -149,10 +149,11 @@ async function getDashboardSummary(userId: string, supabase: Supabase) {
   const uniqueStudents = new Map<string, string>()
   for (const sc of studentCourses ?? []) {
     if (sc.student_id && !uniqueStudents.has(sc.student_id)) {
+      const students = sc.students as { current_risk_level?: string | null } | { current_risk_level?: string | null }[] | null
+      const studentRecord = Array.isArray(students) ? students[0] : students
       uniqueStudents.set(
         sc.student_id,
-        // deno-lint-ignore no-explicit-any
-        (sc.students as any)?.current_risk_level ?? 'normal',
+        studentRecord?.current_risk_level ?? 'normal',
       )
     }
   }
