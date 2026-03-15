@@ -115,7 +115,7 @@ export default function Messages() {
         </TabsList>
 
         {/* Conversations Tab */}
-        <TabsContent value="conversas" className="flex-1 min-h-0 mt-0">
+        <TabsContent value="conversas" className="flex-1 min-h-0 mt-0 overflow-hidden">
           {error && (
             <Card className="border-destructive/50 mb-4 shrink-0">
               <CardContent className="pt-4">
@@ -133,7 +133,7 @@ export default function Messages() {
             </Card>
           )}
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 flex-1 min-h-0 border rounded-lg overflow-hidden h-full">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 min-h-0 border rounded-lg overflow-hidden h-full">
             {/* Conversation list */}
             <div className="lg:col-span-1 flex flex-col border-r bg-card min-h-0 overflow-hidden">
               <div className="p-3 border-b shrink-0">

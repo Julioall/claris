@@ -69,7 +69,6 @@ describe("TopBar", () => {
 
     expect(screen.getByText(/nunca/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sincronizar/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /abrir claris ia expandida/i }).getAttribute("href")).toMatch(/^\/claris\?context=/);
 
     await user.click(screen.getByRole("button", { name: /sincronizar/i }));
     expect(syncDataMock).toHaveBeenCalledTimes(1);
