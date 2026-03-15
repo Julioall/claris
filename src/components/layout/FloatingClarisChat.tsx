@@ -500,13 +500,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     }
   }, [messages]);
 
-  useEffect(() => {
-    if (shouldShowIcebreakers) {
-      setIsIcebreakersOpen(true);
-    } else {
-      setIsIcebreakersOpen(false);
-    }
-  }, [shouldShowIcebreakers]);
+  // icebreaker toggle removed — always visible when no messages
 
   useEffect(() => {
     let isMounted = true;
