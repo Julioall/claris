@@ -70,6 +70,35 @@ async function getLocalSupabaseStatusWithRetry() {
   fail('O stack local do Supabase nao ficou pronto a tempo para o smoke test.')
 }
 
+async function waitForEdgeFunctions(status) {
+  const maxAttempts = 20
+  const testUrl = `${status.FUNCTIONS_URL}/moodle-auth`
+  const testBody = { moodleUrl: 'https://example.com', username: 'warmup', password: 'warmup' }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const response = await fetch(testUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: status.PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify(testBody),
+      })
+
+      if (response.status !== 502) {
+        return
+      }
+    } catch {
+      // Network error while the runtime is still initialising; retry below.
+    }
+
+    await sleep(2000)
+  }
+
+  fail('Edge Functions nao ficaram prontas a tempo para o smoke test.')
+}
+
 async function requestJson(url, {
   acceptStatuses = [200],
   body,
@@ -426,6 +455,9 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
 async function main() {
   log('Lendo status do stack local do Supabase...')
   const status = await getLocalSupabaseStatusWithRetry()
+
+  log('Aguardando Edge Functions ficarem prontas...')
+  await waitForEdgeFunctions(status)
 
   log('Executando contratos HTTP sem autenticacao...')
   await runUnauthenticatedContractChecks(status)

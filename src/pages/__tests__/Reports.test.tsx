@@ -94,6 +94,21 @@ const activitiesResponse = [
   },
 ];
 
+const courseTotalsResponse = [
+  {
+    student_id: 'student-1',
+    course_id: 'course-1',
+    grade_raw: 18,
+    grade_percentage: 90,
+  },
+  {
+    student_id: 'student-2',
+    course_id: 'course-1',
+    grade_raw: null,
+    grade_percentage: null,
+  },
+];
+
 describe('Reports page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -144,6 +159,16 @@ describe('Reports page', () => {
         };
       }
 
+      if (table === 'student_course_grades') {
+        return {
+          select: () => ({
+            in: () => ({
+              range: vi.fn().mockResolvedValue({ data: courseTotalsResponse, error: null }),
+            }),
+          }),
+        };
+      }
+
       throw new Error(`Unexpected table: ${table}`);
     });
   });
@@ -182,7 +207,7 @@ describe('Reports page', () => {
     expect(jsonToSheetMock).toHaveBeenCalledWith([
       {
         Aluno: 'Ana Silva',
-        Matematica: 70,
+        Matematica: 18,
         'Matematica - Status': 'Corrigida',
       },
       {
@@ -200,7 +225,7 @@ describe('Reports page', () => {
     expect(jsonToSheetMock).toHaveBeenCalledWith([
       {
         Aluno: 'Ana Silva',
-        Matematica: 70,
+        Matematica: 18,
         'Matematica - Status': 'Corrigida',
       },
     ]);

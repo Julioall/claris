@@ -228,19 +228,3 @@ export async function upsertStudentCourseGrades(
 
   return total
 }
-
-export async function listVisibleActivityGrades(
-  supabase: AppSupabaseClient,
-  courseId: string,
-  studentIds: string[],
-): Promise<Array<Pick<Tables<'student_activities'>, 'grade' | 'grade_max' | 'student_id'>>> {
-  const { data, error } = await supabase
-    .from('student_activities')
-    .select('student_id, grade, grade_max')
-    .eq('course_id', courseId)
-    .eq('hidden', false)
-    .in('student_id', studentIds)
-
-  if (error) throw error
-  return data ?? []
-}

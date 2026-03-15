@@ -1,15 +1,20 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
-import type { AppSupabaseClient } from '../_shared/db/mod.ts'
 import {
   findCourseByMoodleCourseId,
   listCourseEnrollmentsWithMoodleUserId,
-  listVisibleActivityGrades,
   upsertStudentActivities,
   upsertStudentCourseGrades,
 } from '../_shared/domain/moodle-sync/repository.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 import { parseNullableNumber, parseNullablePercentage } from '../_shared/validation/mod.ts'
+
+function readOptionalText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+
+  const trimmedValue = value.trim()
+  return trimmedValue.length > 0 ? trimmedValue : null
+}
 
 export async function syncGrades(moodleUrl: string, token: string, courseId: number): Promise<Response> {
   const supabase = createServiceClient()
@@ -25,8 +30,8 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
   console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`)
 
   const activityGradeRecords: Record<string, unknown>[] = []
+  const courseGradeRecords: Record<string, unknown>[] = []
   const now = new Date().toISOString()
-  const enrolledStudentIds = enrolledStudents.map((e) => e.student_id)
 
   for (const enrollment of enrolledStudents) {
     const moodleUserId = parseInt(enrollment.moodle_user_id, 10)
@@ -39,6 +44,28 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
 
       if (gradesData.usergrades?.[0]) {
         const gradeItems = gradesData.usergrades[0].gradeitems || []
+        const courseGradeItem = gradeItems.find((item: Record<string, unknown>) => item?.itemtype === 'course') || null
+
+        const courseGradeRaw = parseNullableNumber(courseGradeItem?.graderaw)
+        const courseGradeMax = parseNullableNumber(courseGradeItem?.grademax)
+        const courseGradePercentage = parseNullablePercentage(courseGradeItem?.percentageformatted)
+        const courseGradeFormatted = readOptionalText(courseGradeItem?.gradeformatted)
+        const courseLetterGrade = readOptionalText(
+          courseGradeItem?.lettergrade ??
+          courseGradeItem?.lettergradeformatted,
+        )
+
+        courseGradeRecords.push({
+          student_id: enrollment.student_id,
+          course_id: gradesCourse.id,
+          grade_raw: courseGradeRaw,
+          grade_max: courseGradeMax,
+          grade_percentage: courseGradePercentage,
+          grade_formatted: courseGradeFormatted,
+          letter_grade: courseLetterGrade,
+          last_sync: now,
+          updated_at: now,
+        })
 
         for (const item of gradeItems) {
           if (!item || item.itemtype === 'course' || item.itemtype === 'category') continue
@@ -104,63 +131,20 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
     }
   }
 
-  // Recalculate course totals
-  const gradesCount = await recalculateCourseTotals(supabase, gradesCourse.id, enrolledStudentIds, now)
-
-  return jsonResponse({ success: true, gradesCount, activityGradesCount })
-}
-
-async function recalculateCourseTotals(
-  supabase: AppSupabaseClient,
-  courseId: string,
-  studentIds: string[],
-  now: string
-): Promise<number> {
-  const visibleActivities = await listVisibleActivityGrades(supabase, courseId, studentIds)
-
-  const totalsByStudent = new Map<string, { raw: number; max: number }>()
-  for (const sid of studentIds) totalsByStudent.set(sid, { raw: 0, max: 0 })
-
-  for (const activity of visibleActivities) {
-    if (activity.grade === null || activity.grade_max === null || activity.grade_max <= 0) continue
-    const current = totalsByStudent.get(activity.student_id) || { raw: 0, max: 0 }
-    current.raw += activity.grade
-    current.max += activity.grade_max
-    totalsByStudent.set(activity.student_id, current)
-  }
-
-  const gradeRecords = studentIds.map((studentId: string) => {
-    const totals = totalsByStudent.get(studentId) || { raw: 0, max: 0 }
-    const hasGrade = totals.max > 0
-    const normalizedGrade = hasGrade ? (totals.raw / totals.max) * 100 : null
-
-    return {
-      student_id: studentId,
-      course_id: courseId,
-      grade_raw: normalizedGrade,
-      grade_max: hasGrade ? 100 : null,
-      grade_percentage: normalizedGrade,
-      grade_formatted: hasGrade ? `${normalizedGrade!.toFixed(1)} / 100` : null,
-      letter_grade: null,
-      last_sync: now,
-      updated_at: now,
-    }
-  })
-
   let gradesCount = 0
-  if (gradeRecords.length > 0) {
+  if (courseGradeRecords.length > 0) {
     const BATCH_SIZE = 100
-    for (let i = 0; i < gradeRecords.length; i += BATCH_SIZE) {
-      const batch = gradeRecords.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < courseGradeRecords.length; i += BATCH_SIZE) {
+      const batch = courseGradeRecords.slice(i, i + BATCH_SIZE)
       try {
         gradesCount += await upsertStudentCourseGrades(supabase, batch, batch.length)
       } catch (error) {
-        console.error(`Error upserting grade batch:`, error)
+        console.error(`Error upserting course grade batch:`, error)
       }
     }
   }
 
-  return gradesCount
+  return jsonResponse({ success: true, gradesCount, activityGradesCount })
 }
 
 export async function debugGrades(
