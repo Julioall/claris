@@ -5,6 +5,7 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { SyncProgressDialog } from '@/components/sync/SyncProgressDialog';
 import { CourseSelectorDialog } from '@/components/sync/CourseSelectorDialog';
+import { FloatingClarisChat } from '@/components/layout/FloatingClarisChat';
 
 export function AppLayout() {
   const { 
@@ -55,6 +56,8 @@ export function AppLayout() {
         onClose={closeSyncProgress}
         summary={syncProgress.summary}
       />
+
+      <FloatingClarisChat />
     </SidebarProvider>
   );
 }
