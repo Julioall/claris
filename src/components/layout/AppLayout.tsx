@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { AppSidebar } from './AppSidebar';
 import { TopBar } from './TopBar';
 import { SidebarProvider } from '@/components/ui/sidebar';
@@ -8,6 +8,7 @@ import { CourseSelectorDialog } from '@/components/sync/CourseSelectorDialog';
 import { FloatingClarisChat } from '@/components/layout/FloatingClarisChat';
 
 export function AppLayout() {
+  const location = useLocation();
   const { 
     isAuthenticated, 
     syncProgress, 
@@ -22,6 +23,8 @@ export function AppLayout() {
   if (!isAuthenticated) {
     return <Outlet />;
   }
+
+  const shouldHideFloatingClaris = location.pathname === '/claris';
 
   return (
     <SidebarProvider>
@@ -56,8 +59,7 @@ export function AppLayout() {
         onClose={closeSyncProgress}
         summary={syncProgress.summary}
       />
-
-      <FloatingClarisChat />
+      {!shouldHideFloatingClaris && <FloatingClarisChat />}
     </SidebarProvider>
   );
 }

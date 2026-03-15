@@ -12,6 +12,9 @@ const selectMock = vi.fn();
 const eqMock = vi.fn();
 const maybeSingleMock = vi.fn();
 const upsertMock = vi.fn();
+const invokeMock = vi.fn();
+const getUserMock = vi.fn();
+const signOutMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
@@ -20,6 +23,13 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (...args: unknown[]) => fromMock(...args),
+    functions: {
+      invoke: (...args: unknown[]) => invokeMock(...args),
+    },
+    auth: {
+      getUser: (...args: unknown[]) => getUserMock(...args),
+      signOut: (...args: unknown[]) => signOutMock(...args),
+    },
   },
 }));
 
@@ -53,6 +63,9 @@ describe("Settings page", () => {
 
     maybeSingleMock.mockResolvedValue({ data: null, error: null });
     upsertMock.mockResolvedValue({ error: null });
+    invokeMock.mockResolvedValue({ data: { latencyMs: 123 }, error: null });
+    getUserMock.mockResolvedValue({ data: { user: { id: 'u-1' } }, error: null });
+    signOutMock.mockResolvedValue({ error: null });
     eqMock.mockReturnValue({ maybeSingle: maybeSingleMock });
     selectMock.mockReturnValue({ eq: eqMock });
     fromMock.mockImplementation(() => ({
@@ -70,6 +83,9 @@ describe("Settings page", () => {
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
     expect(screen.getByTestId("data-cleanup-card")).toBeInTheDocument();
     expect(screen.getByTestId("grade-debug-card")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /claris ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /testar conexao/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /salvar claris ia/i })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(fromMock).toHaveBeenCalledWith("user_sync_preferences");
@@ -123,5 +139,44 @@ describe("Settings page", () => {
 
     await user.click(screen.getByRole("button", { name: /sair da conta/i }));
     expect(logoutMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("validates claris connection test input", async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await user.click(screen.getByRole("button", { name: /testar conexao/i }));
+
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/dados incompletos/i),
+        variant: "destructive",
+      }),
+    );
+  });
+
+  it("tests claris connection through edge function proxy", async () => {
+    const user = userEvent.setup();
+    render(<Settings />);
+
+    await user.type(screen.getByLabelText(/modelo/i), "gpt-4o-mini");
+    await user.type(screen.getByLabelText(/chave api/i), "sk-test");
+
+    await user.click(screen.getByRole("button", { name: /testar conexao/i }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("claris-llm-test", expect.objectContaining({
+        body: expect.objectContaining({
+          provider: "openai",
+          model: "gpt-4o-mini",
+        }),
+      }));
+    });
+
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/conexao validada/i),
+      }),
+    );
   });
 });

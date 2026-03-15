@@ -23,6 +23,7 @@ import PendingTasks from "@/pages/PendingTasks";
 import Messages from "@/pages/Messages";
 import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
+import Claris from "@/pages/Claris";
 import NotFound from "@/pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -54,6 +55,7 @@ function AppRoutes() {
         <Route path="/alunos/:id" element={<StudentProfile />} />
         <Route path="/pendencias" element={<PendingTasks />} />
         <Route path="/mensagens" element={<Messages />} />
+        <Route path="/claris" element={<Claris />} />
         <Route path="/relatorios" element={<Reports />} />
         <Route path="/configuracoes" element={<Settings />} />
       </Route>

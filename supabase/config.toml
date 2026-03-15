@@ -71,3 +71,9 @@ verify_jwt = false
 
 [functions.generate-recurring-tasks]
 verify_jwt = false
+
+[functions.claris-llm-test]
+verify_jwt = false
+
+[functions.claris-chat]
+verify_jwt = false

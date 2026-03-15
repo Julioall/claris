@@ -289,6 +289,44 @@ export type Database = {
           },
         ]
       }
+      claris_conversations: {
+        Row: {
+          created_at: string
+          id: string
+          last_context_route: string | null
+          messages: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_context_route?: string | null
+          messages?: Json
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_context_route?: string | null
+          messages?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claris_conversations_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           category: string | null
@@ -1095,6 +1133,7 @@ export type Database = {
       }
       user_sync_preferences: {
         Row: {
+          claris_llm_settings: Json
           created_at: string
           enabled_temperatures: Json
           entity_last_sync: Json
@@ -1110,6 +1149,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          claris_llm_settings?: Json
           created_at?: string
           enabled_temperatures?: Json
           entity_last_sync?: Json
@@ -1125,6 +1165,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          claris_llm_settings?: Json
           created_at?: string
           enabled_temperatures?: Json
           entity_last_sync?: Json

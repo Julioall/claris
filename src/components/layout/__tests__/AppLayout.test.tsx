@@ -39,11 +39,16 @@ vi.mock("@/components/sync/SyncProgressDialog", () => ({
   ),
 }));
 
-function renderPage() {
+vi.mock("@/components/layout/FloatingClarisChat", () => ({
+  FloatingClarisChat: () => <div data-testid="floating-claris-chat" />,
+}));
+
+function renderPage(initialEntry = "/") {
   return render(
-    <MemoryRouter initialEntries={["/"]}>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route element={<AppLayout />}>
+          <Route path="/claris" element={<div>Claris Page</div>} />
           <Route path="/" element={<div>Layout Child</div>} />
         </Route>
       </Routes>
@@ -81,6 +86,14 @@ describe("AppLayout", () => {
     expect(screen.getByText("Layout Child")).toBeInTheDocument();
     expect(screen.getByTestId("course-selector-dialog")).toHaveTextContent("open:true");
     expect(screen.getByTestId("sync-progress-dialog")).toHaveTextContent("open:true");
+    expect(screen.getByTestId("floating-claris-chat")).toBeInTheDocument();
+  });
+
+  it("hides floating chat on the dedicated claris route", () => {
+    renderPage("/claris");
+
+    expect(screen.getByText("Claris Page")).toBeInTheDocument();
+    expect(screen.queryByTestId("floating-claris-chat")).not.toBeInTheDocument();
   });
 
   it("renders only outlet content when not authenticated", () => {

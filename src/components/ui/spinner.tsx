@@ -8,7 +8,7 @@ interface SpinnerProps {
 export function Spinner({ className, onAccent = false }: SpinnerProps) {
   return (
     <svg
-      viewBox="0 0 80 80"
+      viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={cn(
@@ -18,25 +18,18 @@ export function Spinner({ className, onAccent = false }: SpinnerProps) {
       )}
       aria-hidden="true"
     >
-      <g>
-        <circle
-          cx="40"
-          cy="40"
-          r="20"
-          stroke="currentColor"
-          strokeWidth="3"
-          opacity="0.15"
-        />
-
-        <path
-          d="M40 20 A20 20 0 0 1 60 40"
-          stroke="currentColor"
-          strokeWidth="3"
-          strokeLinecap="round"
-        />
-
-        <circle cx="40" cy="40" r="6" fill="currentColor" opacity="0.9" />
-      </g>
+      <path
+        d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.95"
+      />
+      <path d="M20 3v4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+      <path d="M22 5h-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+      <path d="M4 17v2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
+      <path d="M5 18H3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity="0.5" />
     </svg>
   );
 }

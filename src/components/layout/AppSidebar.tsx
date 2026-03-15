@@ -7,7 +7,8 @@ import {
   LogOut,
   BookOpen,
   Building2,
-  MessageSquare
+  MessageSquare,
+  Sparkles
 } from 'lucide-react';
 import { ClarisIcon } from '@/components/ui/claris-logo';
 import { NavLink } from '@/components/NavLink';
@@ -35,6 +36,7 @@ const mainNavItems = [
   { title: 'Alunos', url: '/alunos', icon: Users },
   { title: 'Pendências', url: '/pendencias', icon: ClipboardList },
   { title: 'Mensagens', url: '/mensagens', icon: MessageSquare },
+  { title: 'Claris IA', url: '/claris', icon: Sparkles },
   { title: 'Relatórios', url: '/relatorios', icon: FileSpreadsheet },
 ];
 

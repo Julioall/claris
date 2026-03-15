@@ -55,12 +55,17 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Meus Cursos")).toBeInTheDocument();
     expect(screen.getByText("Escolas")).toBeInTheDocument();
     expect(screen.getByText("Alunos")).toBeInTheDocument();
+    expect(screen.getByText("Claris IA")).toBeInTheDocument();
     expect(screen.getByText("Relatórios")).toBeInTheDocument();
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
     expect(screen.getByText("julio")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /meus cursos/i })).toHaveAttribute(
       "href",
       "/meus-cursos",
+    );
+    expect(screen.getByRole("link", { name: /claris ia/i })).toHaveAttribute(
+      "href",
+      "/claris",
     );
   });
 

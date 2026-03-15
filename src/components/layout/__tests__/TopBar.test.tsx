@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { TopBar } from "@/components/layout/TopBar";
 
 const useAuthMock = vi.fn();
@@ -39,10 +40,15 @@ describe("TopBar", () => {
 
   it("shows sync controls and triggers sync action", async () => {
     const user = userEvent.setup();
-    render(<TopBar />);
+    render(
+      <MemoryRouter>
+        <TopBar />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText(/nunca/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sincronizar/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /abrir claris ia expandida/i }).getAttribute("href")).toMatch(/^\/claris\?context=/);
 
     await user.click(screen.getByRole("button", { name: /sincronizar/i }));
     expect(syncDataMock).toHaveBeenCalledTimes(1);
@@ -50,7 +56,11 @@ describe("TopBar", () => {
 
   it("toggles edit mode via switch", async () => {
     const user = userEvent.setup();
-    render(<TopBar />);
+    render(
+      <MemoryRouter>
+        <TopBar />
+      </MemoryRouter>,
+    );
 
     await user.click(screen.getByRole("switch"));
 
@@ -67,7 +77,11 @@ describe("TopBar", () => {
       isOfflineMode: true,
     });
 
-    render(<TopBar />);
+    render(
+      <MemoryRouter>
+        <TopBar />
+      </MemoryRouter>,
+    );
 
     expect(screen.getByText(/modo offline/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /sincronizar/i })).not.toBeInTheDocument();

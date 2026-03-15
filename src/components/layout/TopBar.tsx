@@ -1,4 +1,5 @@
-import { RefreshCw, Search, Bell, Pencil, WifiOff } from 'lucide-react';
+import { RefreshCw, Search, Bell, Pencil, Sparkles, WifiOff } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/contexts/AuthContext';
@@ -10,6 +11,7 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 export function TopBar() {
+  const location = useLocation();
   const {
     syncData,
     lastSync,
@@ -63,6 +65,13 @@ export function TopBar() {
             <span className="hidden sm:inline">Sincronizar</span>
           </Button>
         )}
+
+        <Button variant="outline" size="sm" className="gap-2" asChild>
+          <Link to={`/claris?context=${encodeURIComponent(location.pathname)}`} aria-label="Abrir Claris IA expandida">
+            <Sparkles className="h-4 w-4" />
+            <span className="hidden sm:inline">Claris IA</span>
+          </Link>
+        </Button>
 
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">
