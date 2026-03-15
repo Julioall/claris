@@ -1054,14 +1054,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     return (
       <div className="flex h-full min-h-[calc(100vh-12rem)] w-full flex-col lg:flex-row">
         <aside className="flex w-full shrink-0 flex-col border-b border-border/60 bg-muted/20 lg:w-[320px] lg:border-b-0 lg:border-r">
-          <div className="min-h-0 flex-1 overflow-hidden px-4 py-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Clock3 className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-semibold">Conversas</p>
-                <p className="text-xs text-muted-foreground">Histórico sincronizado entre dispositivos</p>
-              </div>
-            </div>
+           <div className="min-h-0 flex-1 overflow-hidden px-4 py-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seus Chats</p>
 
             <ScrollArea className="h-[240px] lg:h-full pr-2">
               {isHydratingConversations ? (
@@ -1069,9 +1063,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                   <Spinner className="h-5 w-5" />
                 </div>
               ) : visibleConversations.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/70 bg-background/80 px-3 py-4 text-sm text-muted-foreground">
-                  Ainda não há conversas iniciadas.
-                </div>
+                <div />
               ) : (
                 <div className="space-y-2">
                   {visibleConversations.map((conversation) => (
