@@ -14,7 +14,8 @@ import {
   GraduationCap,
   Eye,
   EyeOff,
-  RefreshCw
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,11 +37,15 @@ import { getCourseEffectiveEndDate } from '@/lib/course-dates';
 
 export default function CoursePanel() {
   const { id } = useParams<{ id: string }>();
-  const { course, students, activities, stats, isLoading, error, toggleActivityVisibility } = useCoursePanel(id);
+  const { course, students, activities, activitySubmissions = [], stats, isLoading, error, toggleActivityVisibility } = useCoursePanel(id);
   const { user, isEditMode } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [isAttendanceEnabled, setIsAttendanceEnabled] = useState(false);
   const [isLoadingAttendanceFlag, setIsLoadingAttendanceFlag] = useState(true);
+  const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
+
+  const activeStudentIds = new Set(students.map(student => student.id));
+  const studentsById = new Map(students.map(student => [student.id, student]));
 
   const formatDate = (date: string | null | undefined) => {
     if (!date) return '-';
@@ -50,6 +55,32 @@ export default function CoursePanel() {
   const formatDateTime = (date: string | null | undefined) => {
     if (!date) return '-';
     return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
+  };
+
+  const toggleActivityExpansion = (moodleActivityId: string) => {
+    setExpandedActivities(prev => ({
+      ...prev,
+      [moodleActivityId]: !prev[moodleActivityId],
+    }));
+  };
+
+  const getSubmissionStatus = (submission: {
+    grade: number | null;
+    status: string | null;
+    completed_at: string | null;
+    submitted_at?: string | null;
+  }) => {
+    const hasGrade = submission.grade !== null;
+    if (hasGrade) return 'corrigido';
+
+    const hasSubmission = Boolean(
+      submission.submitted_at ||
+      submission.completed_at ||
+      submission.status === 'completed' ||
+      submission.status === 'complete_pass'
+    );
+
+    return hasSubmission ? 'pendente-correcao' : 'pendente-envio';
   };
 
   useEffect(() => {
@@ -384,12 +415,26 @@ export default function CoursePanel() {
                 return (
                   <div className="divide-y">
                     {visibleActivities.map((activity) => {
-                      // Determine status tag logic:
-                      // Quiz: never show pendente/corrigido (auto-graded)
-                      // Assign/Forum: show "Corrigido" if graded, "Pendente" if not
-                      const isQuiz = activity.activity_type === 'quiz';
-                      const isGraded = activity.grade !== null && activity.grade_max !== null;
-                      const isCompleted = activity.status === 'completed' || activity.status === 'complete_pass';
+                      const isAssign = activity.activity_type === 'assign' || activity.activity_type === 'assignment';
+                      const activitySubmissionsForAssign = isAssign
+                        ? activitySubmissions
+                            .filter(submission =>
+                              submission.moodle_activity_id === activity.moodle_activity_id &&
+                              activeStudentIds.has(submission.student_id)
+                            )
+                            .sort((a, b) => {
+                              const studentA = studentsById.get(a.student_id)?.full_name || '';
+                              const studentB = studentsById.get(b.student_id)?.full_name || '';
+                              return studentA.localeCompare(studentB, 'pt-BR');
+                            })
+                        : [];
+                      const pendingSubmissionCount = activitySubmissionsForAssign.filter(
+                        submission => getSubmissionStatus(submission) === 'pendente-envio'
+                      ).length;
+                      const pendingCorrectionCount = activitySubmissionsForAssign.filter(
+                        submission => getSubmissionStatus(submission) === 'pendente-correcao'
+                      ).length;
+                      const isExpanded = Boolean(expandedActivities[activity.moodle_activity_id]);
 
                       return (
                         <div 
@@ -422,6 +467,13 @@ export default function CoursePanel() {
                                   <span>Prazo: {formatDate(activity.due_date)}</span>
                                 )}
                               </div>
+                              {isAssign && (
+                                <div className="text-xs text-muted-foreground">
+                                  <span>Pendente de Envio: {pendingSubmissionCount}</span>
+                                  <span className="mx-2">•</span>
+                                  <span>Pendente de Correção: {pendingCorrectionCount}</span>
+                                </div>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-3">
@@ -453,33 +505,74 @@ export default function CoursePanel() {
                                 </div>
                               )}
 
-                              {/* Status tag display - no grades shown */}
-                              <div className="text-right">
-                                {isQuiz ? (
-                                  isCompleted ? (
-                                    <Badge className="bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30">
-                                      <CheckCircle2 className="h-3 w-3 mr-1" />
-                                      Concluído
-                                    </Badge>
-                                  ) : null
-                                ) : isGraded ? (
-                                  <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">
-                                    <CheckCircle2 className="h-3 w-3 mr-1" />
-                                    Corrigido
-                                  </Badge>
-                                ) : isCompleted ? (
-                                  <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
-                                    <Clock className="h-3 w-3 mr-1" />
-                                    Aguardando correção
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="secondary">
-                                    Pendente
-                                  </Badge>
-                                )}
-                              </div>
+                              {isAssign && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 px-2"
+                                  onClick={() => toggleActivityExpansion(activity.moodle_activity_id)}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronUp className="h-4 w-4 mr-1" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4 mr-1" />
+                                  )}
+                                  Alunos ({activitySubmissionsForAssign.length})
+                                </Button>
+                              )}
                             </div>
                           </div>
+
+                          {isAssign && isExpanded && (
+                            <div className="mt-3 rounded-md border bg-muted/20">
+                              {activitySubmissionsForAssign.length === 0 ? (
+                                <div className="p-3 text-sm text-muted-foreground">
+                                  Nenhum aluno encontrado para esta atividade.
+                                </div>
+                              ) : (
+                                <div className="divide-y">
+                                  {activitySubmissionsForAssign.map(submission => {
+                                    const submissionStatus = getSubmissionStatus(submission);
+                                    const student = studentsById.get(submission.student_id);
+                                    const studentName = student?.full_name || 'Aluno não identificado';
+
+                                    return (
+                                      <div
+                                        key={submission.id}
+                                        className="flex items-center justify-between gap-3 px-3 py-2.5"
+                                      >
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-medium truncate">{studentName}</p>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                          {submissionStatus === 'corrigido' && submission.grade !== null && (
+                                            <span className="text-xs text-muted-foreground">
+                                              Nota: {submission.grade.toFixed(1)}
+                                              {submission.grade_max !== null ? ` / ${submission.grade_max}` : ''}
+                                            </span>
+                                          )}
+
+                                          {submissionStatus === 'corrigido' ? (
+                                            <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30">
+                                              Corrigido
+                                            </Badge>
+                                          ) : submissionStatus === 'pendente-correcao' ? (
+                                            <Badge className="bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                                              Pendente de Correção
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="secondary">
+                                              Pendente de Envio
+                                            </Badge>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}

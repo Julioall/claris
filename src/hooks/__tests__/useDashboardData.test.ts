@@ -11,7 +11,6 @@ const userCoursesEqRoleMock = vi.fn();
 
 const studentCoursesSelectMock = vi.fn();
 const studentCoursesInMock = vi.fn();
-const studentCoursesNeqMock = vi.fn();
 
 const pendingTasksSelectMock = vi.fn();
 const pendingTasksInMock = vi.fn();
@@ -44,8 +43,6 @@ const missedActivitiesEqHiddenMock = vi.fn();
 const uncorrectedActivitiesInCourseMock = vi.fn();
 const uncorrectedActivitiesInStudentMock = vi.fn();
 const uncorrectedActivitiesEqTypeMock = vi.fn();
-const uncorrectedActivitiesNotDueMock = vi.fn();
-const uncorrectedActivitiesLtDueMock = vi.fn();
 const uncorrectedActivitiesIsGradedMock = vi.fn();
 const uncorrectedActivitiesEqHiddenMock = vi.fn();
 const uncorrectedActivitiesNotSubmittedMock = vi.fn();
@@ -118,11 +115,11 @@ describe("useDashboardData", () => {
     });
 
     studentCoursesSelectMock.mockReturnValue({ in: studentCoursesInMock });
-    studentCoursesInMock.mockReturnValue({ neq: studentCoursesNeqMock });
-    studentCoursesNeqMock.mockResolvedValue({
+    studentCoursesInMock.mockResolvedValue({
       data: [
         { student_id: "s-1", enrollment_status: "ativo" },
         { student_id: "s-2", enrollment_status: "ativo" },
+        { student_id: "s-3", enrollment_status: "suspenso" },
       ],
       error: null,
     });
@@ -242,9 +239,7 @@ describe("useDashboardData", () => {
 
     uncorrectedActivitiesInCourseMock.mockReturnValue({ in: uncorrectedActivitiesInStudentMock });
     uncorrectedActivitiesInStudentMock.mockReturnValue({ eq: uncorrectedActivitiesEqTypeMock });
-    uncorrectedActivitiesEqTypeMock.mockReturnValue({ not: uncorrectedActivitiesNotDueMock });
-    uncorrectedActivitiesNotDueMock.mockReturnValue({ lt: uncorrectedActivitiesLtDueMock });
-    uncorrectedActivitiesLtDueMock.mockReturnValue({ is: uncorrectedActivitiesIsGradedMock });
+    uncorrectedActivitiesEqTypeMock.mockReturnValue({ is: uncorrectedActivitiesIsGradedMock });
     uncorrectedActivitiesIsGradedMock.mockReturnValue({ eq: uncorrectedActivitiesEqHiddenMock });
     uncorrectedActivitiesEqHiddenMock.mockReturnValue({ not: uncorrectedActivitiesNotSubmittedMock });
     uncorrectedActivitiesNotSubmittedMock.mockResolvedValue({
@@ -260,6 +255,24 @@ describe("useDashboardData", () => {
             id: "s-2",
             full_name: "Bruno",
             current_risk_level: "critico",
+          },
+          courses: {
+            id: "c-1",
+            name: "Curso 1",
+            short_name: "CUR-1",
+          },
+        },
+        {
+          id: "act-2",
+          student_id: "s-1",
+          course_id: "c-1",
+          activity_name: "Estudo dirigido",
+          due_date: isoDaysFromNow(2),
+          submitted_at: isoDaysFromNow(-1),
+          students: {
+            id: "s-1",
+            full_name: "Ana",
+            current_risk_level: "risco",
           },
           courses: {
             id: "c-1",
@@ -304,6 +317,8 @@ describe("useDashboardData", () => {
       overdue_tasks: 0,
       activities_to_review: 0,
       missed_assignments: 0,
+      pending_submission_assignments: 0,
+      pending_correction_assignments: 0,
       students_at_risk: 0,
       new_at_risk_this_week: 0,
     });
@@ -324,18 +339,23 @@ describe("useDashboardData", () => {
     expect(result.current.summary).toEqual({
       pending_tasks: 2,
       overdue_tasks: 1,
-      activities_to_review: 1,
+      activities_to_review: 2,
       missed_assignments: 1,
+      pending_submission_assignments: 1,
+      pending_correction_assignments: 2,
       students_at_risk: 2,
       new_at_risk_this_week: 2,
     });
+
+    expect(missedActivitiesInStudentMock).toHaveBeenCalledWith("student_id", ["s-1", "s-2"]);
+    expect(uncorrectedActivitiesInStudentMock).toHaveBeenCalledWith("student_id", ["s-1", "s-2"]);
 
     expect(result.current.pendingTasks).toHaveLength(2);
     expect(result.current.overdueTasks.map((task) => task.id)).toEqual(["pt-1"]);
     expect(result.current.upcomingTasks.map((task) => task.id)).toEqual(["pt-2"]);
     expect(result.current.criticalStudents.map((student) => student.id)).toEqual(["s-2", "s-1"]);
     expect(result.current.criticalStudents[0].pending_tasks_count).toBe(1);
-    expect(result.current.activitiesToReview).toHaveLength(1);
+    expect(result.current.activitiesToReview).toHaveLength(2);
     expect(result.current.activitiesToReview[0]).toMatchObject({
       id: "act-1",
       activity_name: "Trabalho final",

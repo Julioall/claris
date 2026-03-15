@@ -35,6 +35,8 @@ describe("WeeklyIndicators", () => {
           overdue_tasks: 2,
           activities_to_review: 5,
           missed_assignments: 2,
+          pending_submission_assignments: 2,
+          pending_correction_assignments: 5,
           students_at_risk: 4,
           new_at_risk_this_week: 3,
         }}
@@ -44,7 +46,7 @@ describe("WeeklyIndicators", () => {
     expect(screen.getByText(/sinais do monitoramento/i)).toBeInTheDocument();
     expect(screen.getAllByTestId("stat-card")).toHaveLength(5);
     expect(screen.getByText(/exigem atenção/i)).toBeInTheDocument();
-    expect(screen.getByText(/entregues sem nota/i)).toBeInTheDocument();
+    expect(screen.getByText(/envio pendente: 2 • correção pendente: 5/i)).toBeInTheDocument();
     expect(screen.getByText("trend:3")).toBeInTheDocument();
   });
 
@@ -56,6 +58,8 @@ describe("WeeklyIndicators", () => {
           overdue_tasks: 0,
           activities_to_review: 0,
           missed_assignments: 0,
+          pending_submission_assignments: 0,
+          pending_correction_assignments: 0,
           students_at_risk: 0,
           new_at_risk_this_week: 0,
         }}

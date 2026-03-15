@@ -16,6 +16,8 @@ interface StudentActivity {
   percentage: number | null;
   status: string | null;
   completed_at: string | null;
+  submitted_at?: string | null;
+  graded_at?: string | null;
   due_date: string | null;
   hidden: boolean;
 }
@@ -50,6 +52,7 @@ export function useCoursePanel(courseId: string | undefined) {
   const [course, setCourse] = useState<Course | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
   const [activities, setActivities] = useState<StudentActivity[]>([]);
+  const [activitySubmissions, setActivitySubmissions] = useState<StudentActivity[]>([]);
   const [stats, setStats] = useState<CourseStats>(defaultStats);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +130,10 @@ export function useCoursePanel(courseId: string | undefined) {
 
       if (activitiesError) throw activitiesError;
 
-      const uniqueActivities = activitiesData?.reduce((acc, activity) => {
+      const activityRecords = (activitiesData as StudentActivity[]) || [];
+      setActivitySubmissions(activityRecords);
+
+      const uniqueActivities = activityRecords.reduce((acc, activity) => {
         if (!acc.find(a => a.moodle_activity_id === activity.moodle_activity_id)) {
           acc.push(activity);
         }
@@ -219,6 +225,7 @@ export function useCoursePanel(courseId: string | undefined) {
     course,
     students,
     activities,
+    activitySubmissions,
     stats,
     isLoading,
     error,

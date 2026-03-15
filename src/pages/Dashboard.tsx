@@ -36,6 +36,8 @@ export default function Dashboard() {
     overdue_tasks: 0,
     activities_to_review: 0,
     missed_assignments: 0,
+    pending_submission_assignments: 0,
+    pending_correction_assignments: 0,
     students_at_risk: 0,
     new_at_risk_this_week: 0,
   };

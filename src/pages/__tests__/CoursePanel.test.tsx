@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CoursePanel from "@/pages/CoursePanel";
 
@@ -63,7 +64,7 @@ describe("CoursePanel page", () => {
       activities: [
         {
           id: "act-1",
-          moodle_activity_id: 321,
+          moodle_activity_id: "321",
           activity_name: "Atividade 1",
           activity_type: "assignment",
           due_date: "2026-03-10T00:00:00.000Z",
@@ -71,6 +72,53 @@ describe("CoursePanel page", () => {
           grade: null,
           grade_max: null,
           status: "pending",
+        },
+      ],
+      activitySubmissions: [
+        {
+          id: "sub-1",
+          student_id: "s-1",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: 9.5,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-09T00:00:00.000Z",
+          submitted_at: "2026-03-09T00:00:00.000Z",
+        },
+        {
+          id: "sub-2",
+          student_id: "s-2",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-10T00:00:00.000Z",
+          submitted_at: "2026-03-10T00:00:00.000Z",
+        },
+        {
+          id: "sub-3",
+          student_id: "s-3",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: 10,
+          status: "pending",
+          completed_at: null,
+          submitted_at: null,
         },
       ],
       stats: {
@@ -142,5 +190,140 @@ describe("CoursePanel page", () => {
     expect(screen.getByText(/alunos matriculados/i)).toBeInTheDocument();
     expect(screen.getByText(/distribui/i)).toBeInTheDocument();
     expect(screen.getByText("15/03/2026")).toBeInTheDocument();
+  });
+
+  it("expands assignment activity with per-student statuses", async () => {
+    const user = userEvent.setup();
+
+    useCoursePanelMock.mockReturnValue({
+      course: {
+        id: "c-1",
+        name: "Curso de Matematica",
+        category: "Exatas",
+        last_sync: "2026-02-20T00:00:00.000Z",
+        start_date: "2026-01-01T00:00:00.000Z",
+        end_date: "2026-12-31T00:00:00.000Z",
+        effective_end_date: "2026-03-15T12:00:00.000Z",
+        moodle_course_id: "123",
+      },
+      students: [
+        {
+          id: "s-1",
+          full_name: "Ana Silva",
+          email: "ana@example.com",
+          current_risk_level: "atencao",
+          last_access: "2026-02-19T00:00:00.000Z",
+          avatar_url: null,
+        },
+        {
+          id: "s-2",
+          full_name: "Bruno Souza",
+          email: "bruno@example.com",
+          current_risk_level: "normal",
+          last_access: "2026-02-18T00:00:00.000Z",
+          avatar_url: null,
+        },
+        {
+          id: "s-3",
+          full_name: "Carla Dias",
+          email: "carla@example.com",
+          current_risk_level: "risco",
+          last_access: "2026-02-17T00:00:00.000Z",
+          avatar_url: null,
+        },
+      ],
+      activities: [
+        {
+          id: "act-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: null,
+          status: "pending",
+        },
+      ],
+      activitySubmissions: [
+        {
+          id: "sub-1",
+          student_id: "s-1",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: 9.5,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-09T00:00:00.000Z",
+          submitted_at: "2026-03-09T00:00:00.000Z",
+        },
+        {
+          id: "sub-2",
+          student_id: "s-2",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-10T00:00:00.000Z",
+          submitted_at: "2026-03-10T00:00:00.000Z",
+        },
+        {
+          id: "sub-3",
+          student_id: "s-3",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: 10,
+          status: "pending",
+          completed_at: null,
+          submitted_at: null,
+        },
+      ],
+      stats: {
+        totalStudents: 3,
+        atRiskStudents: 1,
+        totalActivities: 1,
+        completionRate: 50,
+        riskDistribution: {
+          normal: 1,
+          atencao: 1,
+          risco: 1,
+          critico: 0,
+        },
+      },
+      isLoading: false,
+      error: null,
+      toggleActivityVisibility: toggleActivityVisibilityMock,
+    });
+
+    renderPage();
+
+    await user.click(screen.getByRole("tab", { name: /atividades \(1\)/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /alunos \(3\)/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /alunos \(3\)/i }));
+
+    expect(screen.getByText("Ana Silva")).toBeInTheDocument();
+    expect(screen.getByText(/nota: 9.5 \/ 10/i)).toBeInTheDocument();
+    expect(screen.getByText("Bruno Souza")).toBeInTheDocument();
+    expect(screen.getByText("Carla Dias")).toBeInTheDocument();
+    expect(screen.getByText("Pendente de Correção")).toBeInTheDocument();
+    expect(screen.getByText("Pendente de Envio")).toBeInTheDocument();
   });
 });

@@ -34,7 +34,9 @@ export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
         <StatCard
           title="Atividades para corrigir"
           value={summary.activities_to_review}
-          subtitle={summary.activities_to_review > 0 ? 'entregues sem nota' : 'fila zerada'}
+          subtitle={summary.activities_to_review > 0
+            ? `Envio pendente: ${summary.pending_submission_assignments} • Correção pendente: ${summary.pending_correction_assignments}`
+            : 'fila zerada'}
           icon={ClipboardCheck}
           variant={summary.activities_to_review > 0 ? 'warning' : 'success'}
         />

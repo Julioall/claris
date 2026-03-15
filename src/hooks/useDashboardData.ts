@@ -54,6 +54,8 @@ const EMPTY_SUMMARY: WeeklySummary = {
   overdue_tasks: 0,
   activities_to_review: 0,
   missed_assignments: 0,
+  pending_submission_assignments: 0,
+  pending_correction_assignments: 0,
   students_at_risk: 0,
   new_at_risk_this_week: 0,
 };
@@ -131,14 +133,26 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         return;
       }
 
-      // Get students in courses (excluding suspended)
+      // Get students in courses and defensively exclude any suspended enrollment
       const { data: studentCourses } = await supabase
         .from('student_courses')
         .select('student_id, enrollment_status')
-        .in('course_id', courseIds)
-        .neq('enrollment_status', 'suspenso');
+        .in('course_id', courseIds);
 
-      const studentIds = [...new Set(studentCourses?.map(sc => sc.student_id) || [])];
+      const normalizeEnrollmentStatus = (status: string | null | undefined) =>
+        (status || '').trim().toLowerCase();
+
+      const suspendedStudentIds = new Set(
+        (studentCourses || [])
+          .filter(sc => normalizeEnrollmentStatus(sc.enrollment_status) === 'suspenso')
+          .map(sc => sc.student_id)
+      );
+
+      const studentIds = [...new Set(
+        (studentCourses || [])
+          .filter(sc => !suspendedStudentIds.has(sc.student_id))
+          .map(sc => sc.student_id)
+      )];
 
       const feedFilter = studentIds.length > 0
         ? `user_id.eq.${user.id},student_id.in.(${studentIds.join(',')})`
@@ -241,8 +255,6 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
           .in('course_id', courseIds)
           .in('student_id', studentIds)
           .eq('activity_type', 'assign')
-          .not('due_date', 'is', null)
-          .lt('due_date', nowIso)
           .is('graded_at', null)
           .eq('hidden', false)
           .not('submitted_at', 'is', null),
@@ -279,6 +291,8 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         overdue_tasks: overdueTasksCount,
         activities_to_review: uncorrectedActivities?.length || 0,
         missed_assignments: missedAssignmentsCount || 0,
+        pending_submission_assignments: missedAssignmentsCount || 0,
+        pending_correction_assignments: uncorrectedActivities?.length || 0,
         students_at_risk: atRiskStudents?.length || 0,
         new_at_risk_this_week: newAtRisk || 0,
       });

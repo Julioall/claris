@@ -271,6 +271,10 @@ export const mockActivityFeed: ActivityFeedItem[] = [
 export const mockWeeklySummary: WeeklySummary = {
   pending_tasks: mockPendingTasks.filter(t => t.status !== 'resolvida').length,
   overdue_tasks: mockPendingTasks.filter(t => Boolean(t.due_date) && new Date(t.due_date as string) < new Date() && t.status !== 'resolvida').length,
+  activities_to_review: 0,
+  missed_assignments: 0,
+  pending_submission_assignments: 0,
+  pending_correction_assignments: 0,
   students_at_risk: mockStudents.filter(s => ['risco', 'critico'].includes(s.current_risk_level)).length,
   new_at_risk_this_week: 1,
 };
