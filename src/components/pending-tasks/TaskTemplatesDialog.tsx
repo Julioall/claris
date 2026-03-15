@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -83,7 +83,7 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
     },
   });
 
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     if (!user) return;
     setIsLoading(true);
     try {
@@ -99,11 +99,11 @@ export function TaskTemplatesDialog({ open, onOpenChange }: TaskTemplatesDialogP
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user]);
 
   useEffect(() => {
     if (open) fetchTemplates();
-  }, [open, user]);
+  }, [open, fetchTemplates]);
 
   const onSubmit = async (data: FormData) => {
     if (!user) return;

@@ -182,6 +182,7 @@ function getStoredColorTheme(): string {
   }
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function applyColorTheme(themeId: string, isDark: boolean) {
   const theme = COLOR_THEMES.find(t => t.id === themeId);
   if (!theme) return;

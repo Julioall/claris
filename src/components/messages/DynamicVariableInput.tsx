@@ -13,6 +13,7 @@ export interface DynamicVariable {
   example: string;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const DYNAMIC_VARIABLES: DynamicVariable[] = [
   { key: 'nome_aluno', label: 'Nome do Aluno', description: 'Nome completo do aluno', category: 'Aluno', example: 'Joao Silva' },
   { key: 'email_aluno', label: 'Email do Aluno', description: 'Email do aluno', category: 'Aluno', example: 'joao@email.com' },
@@ -297,6 +298,7 @@ export function DynamicVariableInput({
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function resolveVariables(
   template: string,
   data: Record<string, string | number | undefined | null>,

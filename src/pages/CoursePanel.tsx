@@ -84,10 +84,12 @@ export default function CoursePanel() {
   };
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadAttendanceFlag = async () => {
       if (!user || !id) {
-        setIsAttendanceEnabled(false);
-        setIsLoadingAttendanceFlag(false);
+        if (!cancelled) setIsAttendanceEnabled(false);
+        if (!cancelled) setIsLoadingAttendanceFlag(false);
         return;
       }
 
@@ -101,16 +103,17 @@ export default function CoursePanel() {
           .maybeSingle();
 
         if (error) throw error;
-        setIsAttendanceEnabled(!!data);
+        if (!cancelled) setIsAttendanceEnabled(!!data);
       } catch (err) {
         console.error('Error loading attendance flag:', err);
-        setIsAttendanceEnabled(false);
+        if (!cancelled) setIsAttendanceEnabled(false);
       } finally {
-        setIsLoadingAttendanceFlag(false);
+        if (!cancelled) setIsLoadingAttendanceFlag(false);
       }
     };
 
     loadAttendanceFlag();
+    return () => { cancelled = true; };
   }, [id, user]);
 
   const toggleAttendance = async () => {

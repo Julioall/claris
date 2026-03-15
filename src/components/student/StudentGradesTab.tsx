@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, GraduationCap } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent } from '@/components/ui/card';
@@ -43,7 +43,7 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
   const [openCourses, setOpenCourses] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  const fetchGrades = async () => {
+  const fetchGrades = useCallback(async () => {
     setIsLoading(true);
     try {
       const [gradesResponse, activitiesResponse] = await Promise.all([
@@ -113,11 +113,11 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [studentId]);
 
   useEffect(() => {
     fetchGrades();
-  }, [studentId]);
+  }, [fetchGrades]);
 
   const formatLastSync = (date: string | null) => {
     if (!date) return 'Nunca';

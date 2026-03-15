@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RefreshCw, Search, Bell, Pencil, WifiOff, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,7 +88,7 @@ export function TopBar() {
     window.localStorage.setItem(storageKey, nowIso);
   };
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     if (!user?.id) {
       setNotifications([]);
       return;
@@ -112,11 +112,11 @@ export function TopBar() {
     } finally {
       setIsLoadingNotifications(false);
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     fetchNotifications();
-  }, [user?.id]);
+  }, [fetchNotifications]);
 
   const unreadCount = useMemo(() => {
     if (notifications.length === 0) return 0;
