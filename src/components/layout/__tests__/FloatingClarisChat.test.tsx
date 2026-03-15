@@ -149,6 +149,17 @@ describe('FloatingClarisChat', () => {
     expect(screen.getByLabelText(/mensagem para claris ia/i)).toBeInTheDocument();
   });
 
+  it('uses the remaining panel height for the floating message area', async () => {
+    localStorage.setItem(WIDGET_OPEN_STORAGE_KEY, 'true');
+    renderFloatingClarisChat();
+
+    const scrollArea = screen.getByTestId('floating-chat-scroll-area');
+
+    expect(scrollArea).toHaveClass('flex-1');
+    expect(scrollArea).toHaveClass('min-h-0');
+    expect(scrollArea).not.toHaveClass('h-[320px]');
+  });
+
   it('replies asking for configuration when not configured', async () => {
     invokeMock.mockResolvedValue({ data: { reply: 'ok' }, error: null });
     setClarisConfigured(false);

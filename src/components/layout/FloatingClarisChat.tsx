@@ -92,6 +92,8 @@ const INITIAL_MESSAGE: ChatMessage = {
 
 const CLARIS_HISTORY_STORAGE_PREFIX = 'claris_chat_history';
 const CLARIS_WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
+const CHAT_MORPH_DURATION_MS = 360;
+const CHAT_CONTENT_DELAY_MS = 120;
 const GENERIC_QUICK_SUGGESTIONS = [
   'Alunos em risco — quem contatar hoje?',
   'Atividades aguardando correção',
@@ -417,6 +419,8 @@ interface ClarisConversationThread {
   isLocalOnly?: boolean;
 }
 
+type FloatingChatVisualState = 'closed' | 'opening' | 'open' | 'closing';
+
 export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatProps) {
   const auth = useAuth() as { moodleSession?: { moodleUrl: string; moodleToken: string } | null; user?: { id: string } | null };
   const navigate = useNavigate();
@@ -428,11 +432,12 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const contextFromQuery = new URLSearchParams(location.search).get('context')?.trim() ?? '';
   const activeRouteContext = contextFromQuery || location.pathname;
 
-  const [isOpen, setIsOpen] = useState(() => {
-    if (!isFloating) return true;
-    return localStorage.getItem(CLARIS_WIDGET_OPEN_STORAGE_KEY) === 'true';
+  const [visualState, setVisualState] = useState<FloatingChatVisualState>(() => {
+    if (!isFloating) return 'open';
+    return localStorage.getItem(CLARIS_WIDGET_OPEN_STORAGE_KEY) === 'true' ? 'open' : 'closed';
   });
   const [isChatVisible, setIsChatVisible] = useState(() => !isFloating || localStorage.getItem(CLARIS_WIDGET_OPEN_STORAGE_KEY) === 'true');
+  const [isContentVisible, setIsContentVisible] = useState(() => !isFloating || localStorage.getItem(CLARIS_WIDGET_OPEN_STORAGE_KEY) === 'true');
   const [inputValue, setInputValue] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [conversations, setConversations] = useState<ClarisConversationThread[]>([]);
@@ -445,6 +450,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const [editingConversationError, setEditingConversationError] = useState('');
   const [_isIcebreakersOpen, _setIsIcebreakersOpen] = useState(true);
   const scrollEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isOpen = visualState === 'opening' || visualState === 'open';
 
   const canSend = useMemo(() => inputValue.trim().length > 0 && !isSending, [inputValue, isSending]);
   const activeConversation = useMemo(
@@ -457,7 +464,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     [suggestionsRoute],
   );
   const activeConversationHasMessages = (activeConversation?.history.length ?? 0) > 0;
-  const shouldShowIcebreakers = !isHydratingConversations && !activeConversationHasMessages;
+  const shouldShowIcebreakers = !isFloating && !isHydratingConversations && !activeConversationHasMessages;
   const visibleConversations = useMemo(
     () => conversations.filter((conversation) => conversation.history.length > 0),
     [conversations],
@@ -476,23 +483,90 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   useEffect(() => {
     if (!isFloating) return;
 
-    if (isOpen) {
+    if (visualState === 'opening') {
       setIsChatVisible(true);
       const configured = localStorage.getItem(CLARIS_CONFIGURED_STORAGE_KEY) === 'true';
       setIsConfigured(configured);
-      return;
+      const timeoutId = window.setTimeout(() => setVisualState('open'), CHAT_MORPH_DURATION_MS);
+      return () => window.clearTimeout(timeoutId);
     }
 
-    const timeoutId = window.setTimeout(() => setIsChatVisible(false), 180);
-    return () => window.clearTimeout(timeoutId);
-  }, [isFloating, isOpen]);
+    if (visualState === 'closing') {
+      const timeoutId = window.setTimeout(() => {
+        setVisualState('closed');
+        setIsChatVisible(false);
+      }, CHAT_MORPH_DURATION_MS);
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    if (visualState === 'open') {
+      setIsChatVisible(true);
+      const configured = localStorage.getItem(CLARIS_CONFIGURED_STORAGE_KEY) === 'true';
+      setIsConfigured(configured);
+    }
+  }, [isFloating, visualState]);
 
   useEffect(() => {
     if (!isFloating) {
-      setIsOpen(true);
+      setIsContentVisible(true);
+      return;
+    }
+
+    if (visualState === 'opening') {
+      const timeoutId = window.setTimeout(() => setIsContentVisible(true), CHAT_CONTENT_DELAY_MS);
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    if (visualState === 'closing' || visualState === 'closed') {
+      setIsContentVisible(false);
+    }
+  }, [isFloating, visualState]);
+
+  useEffect(() => {
+    if (!isFloating) {
+      setVisualState('open');
       setIsChatVisible(true);
+      setIsContentVisible(true);
     }
   }, [isFloating]);
+
+  useEffect(() => {
+    if (!isFloating || visualState !== 'open') return;
+
+    const timeoutId = window.setTimeout(() => {
+      inputRef.current?.focus();
+    }, 40);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isFloating, visualState]);
+
+  useEffect(() => {
+    if (!isFloating) return;
+
+    const isExpanded = visualState === 'open' || visualState === 'opening';
+    if (!isExpanded) return;
+
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setVisualState('closing');
+      }
+    };
+
+    window.addEventListener('keydown', handleEscapeKey);
+    return () => window.removeEventListener('keydown', handleEscapeKey);
+  }, [isFloating, visualState]);
+
+  const openFloatingChat = () => {
+    if (!isFloating) return;
+    if (visualState === 'open' || visualState === 'opening') return;
+    setVisualState('opening');
+  };
+
+  const closeFloatingChat = () => {
+    if (!isFloating) return;
+    if (visualState === 'closed' || visualState === 'closing') return;
+    setVisualState('closing');
+  };
 
   useEffect(() => {
     if (scrollEndRef.current) {
@@ -899,21 +973,20 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const chatPanel = (
     <div
       className={cn(
-        'overflow-hidden bg-card',
-        isFloating
-          ? 'w-full max-w-full rounded-xl border shadow-xl sm:w-[360px]'
-          : 'flex h-full min-h-[calc(100vh-12rem)] w-full flex-col',
+        'flex h-full w-full flex-col overflow-hidden bg-card',
+        isFloating ? 'min-h-0' : 'min-h-[calc(100vh-12rem)]',
       )}
     >
           <div
             className={cn(
-              'flex flex-1 min-h-0 flex-col transition-all duration-200 ease-out',
-              isFloating && !isOpen ? 'translate-y-2 scale-95 opacity-0 pointer-events-none' : 'translate-y-0 scale-100 opacity-100'
+              'flex flex-1 min-h-0 flex-col transition-all duration-300',
+              isFloating && !isContentVisible ? 'translate-y-2 scale-[0.985] opacity-0 pointer-events-none' : 'translate-y-0 scale-100 opacity-100'
             )}
+            style={isFloating ? { transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' } : undefined}
           >
-          <div className="flex items-center justify-between border-b px-3 py-2">
+          <div className="shrink-0 flex items-center justify-between border-b border-primary/60 bg-primary px-3 py-2 text-primary-foreground">
             <div className="flex items-center gap-2">
-              <ClarisIcon className="h-5 w-5 text-primary" />
+              <ClarisIcon className="h-6 w-6 text-primary-foreground" />
               <span className="text-sm font-semibold">Claris IA</span>
             </div>
             <div className="flex items-center gap-1">
@@ -935,7 +1008,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-8 w-8 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                   onClick={() => navigate(`/claris?context=${encodeURIComponent(location.pathname)}`)}
                   aria-label="Abrir chat expandido da Claris IA"
                 >
@@ -947,8 +1020,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
-                  onClick={() => setIsOpen(false)}
+                  className="h-8 w-8 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
+                  onClick={closeFloatingChat}
                   aria-label="Fechar chat"
                 >
                   <X className="h-4 w-4" />
@@ -957,7 +1030,10 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
             </div>
           </div>
 
-          <ScrollArea className={cn('px-3 py-3', isFloating ? 'h-[320px]' : 'h-[calc(100vh-18rem)] min-h-[360px]')}>
+          <ScrollArea
+            data-testid={isFloating ? 'floating-chat-scroll-area' : undefined}
+            className={cn('px-3 py-3', isFloating ? 'min-h-0 flex-1' : 'min-h-[360px] flex-1')}
+          >
             <div className="space-y-2" data-testid="message-list">
               {messages.map((message) => (
                 <div
@@ -1015,7 +1091,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
             </div>
           </ScrollArea>
 
-          <div className="border-t p-2">
+          <div className="shrink-0 border-t p-2">
             <form
               className="flex items-center gap-2"
               onSubmit={(event) => {
@@ -1024,6 +1100,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
               }}
             >
               <Input
+                ref={inputRef}
                 value={inputValue}
                 onChange={(event) => setInputValue(event.target.value)}
                 placeholder="Digite sua mensagem..."
@@ -1188,21 +1265,39 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   }
 
   return (
-    <div className="fixed inset-x-2 bottom-4 z-50 flex flex-col items-end gap-2 sm:left-auto sm:right-4 sm:inset-x-auto">
-      {isChatVisible && chatPanel}
-
-      {!isOpen && (
-        <Button
-          type="button"
-          size="icon"
-          className="h-14 w-14 rounded-full shadow-lg [&_svg]:h-12 [&_svg]:w-12"
-          onClick={() => setIsOpen(true)}
-          aria-label="Abrir chat da Claris IA"
+    <div className="fixed inset-x-2 bottom-4 z-50 hidden flex-col items-end gap-2 md:flex md:left-auto md:right-4 md:inset-x-auto">
+      <div
+        className={cn(
+          'relative origin-bottom-right overflow-hidden border transition-[width,height,border-radius,transform,opacity,box-shadow] duration-[360ms] will-change-transform',
+          isOpen
+            ? 'h-[520px] w-full max-w-full rounded-2xl bg-card shadow-xl sm:w-[360px]'
+            : 'h-14 w-14 rounded-full border-primary bg-primary text-primary-foreground shadow-lg',
+        )}
+        style={{ transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
+        role={!isOpen ? 'button' : undefined}
+        tabIndex={!isOpen ? 0 : undefined}
+        aria-label={!isOpen ? 'Abrir chat da Claris IA' : undefined}
+        onClick={!isOpen ? openFloatingChat : undefined}
+        onKeyDown={!isOpen ? (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openFloatingChat();
+          }
+        } : undefined}
+      >
+        <div
+          className={cn(
+            'pointer-events-none absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-200',
+            !isOpen ? 'opacity-100' : 'opacity-0',
+          )}
+          aria-hidden={isOpen}
         >
-          <ClarisIcon className="h-full w-full" />
+          <Spinner className="h-[42px] w-[42px] text-primary-foreground" />
           <MessageCircle className="sr-only" />
-        </Button>
-      )}
+        </div>
+
+        {isChatVisible && chatPanel}
+      </div>
     </div>
   );
 }

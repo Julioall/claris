@@ -12,7 +12,7 @@ interface LogoProps {
 function ClarisSparklesSymbol({ className }: LogoProps) {
   return (
     <svg
-      viewBox="0 0 120 120"
+      viewBox="36 28 48 51"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
@@ -69,7 +69,7 @@ export function ClarisLogo({ className }: LogoProps) {
       aria-label="Claris"
       role="img"
     >
-      <g transform="translate(8 8) scale(0.7)">
+      <svg x="8" y="8" width="64" height="64" viewBox="36 28 48 51" fill="none" aria-hidden="true">
         <path
           d="M60 30
        L64 48
@@ -106,9 +106,9 @@ export function ClarisLogo({ className }: LogoProps) {
        Z"
           fill="currentColor"
         />
-      </g>
+      </svg>
       <text
-        x="70"
+        x="80"
         y="50"
         fontFamily="Inter, Arial, sans-serif"
         fontSize="32"
