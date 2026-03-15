@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, Clock3, Expand, MessageCircle, MoreHorizontal, Pencil, Plus, Sparkles, Send, Trash2, X } from 'lucide-react';
+import { Check, Expand, MessageCircle, MoreHorizontal, Pencil, Plus, Sparkles, Send, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -93,36 +93,36 @@ const INITIAL_MESSAGE: ChatMessage = {
 const CLARIS_HISTORY_STORAGE_PREFIX = 'claris_chat_history';
 const CLARIS_WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
 const GENERIC_QUICK_SUGGESTIONS = [
-  'Liste os alunos em risco e priorize quem devo contatar hoje.',
-  'Quais atividades estão aguardando correção neste momento?',
-  'Mostre um resumo geral da minha operação hoje.',
-  'Liste as tarefas pendentes mais urgentes.',
-  'Quais alunos devo acompanhar com mais atenção nesta semana?',
+  'Alunos em risco — quem contatar hoje?',
+  'Atividades aguardando correção',
+  'Resumo geral da operação',
+  'Pendências mais urgentes',
+  'Alunos para acompanhar esta semana',
 ];
 
 const ROUTE_QUICK_SUGGESTIONS: Array<{ match: RegExp; suggestions: string[] }> = [
   {
     match: /\/alunos(?:\/|$)/,
     suggestions: [
-      'Liste os alunos em risco com o último acesso de cada um.',
-      'Quais alunos tiveram maior piora de engajamento esta semana?',
-      'Monte um plano rápido de acompanhamento para os 5 alunos mais críticos.',
+      'Alunos em risco com último acesso',
+      'Piora de engajamento esta semana',
+      'Plano de acompanhamento — 5 mais críticos',
     ],
   },
   {
     match: /\/pendencias(?:\/|$)/,
     suggestions: [
-      'Liste as pendências abertas por prioridade e prazo.',
-      'Quais pendências estão atrasadas e precisam de ação hoje?',
-      'Resuma as pendências por curso para eu distribuir atendimento.',
+      'Pendências por prioridade e prazo',
+      'Pendências atrasadas — ação hoje',
+      'Resumo por curso para distribuir',
     ],
   },
   {
     match: /\/mensagens(?:\/|$)/,
     suggestions: [
-      'Liste templates recomendados para contato com alunos em risco.',
-      'Prepare um rascunho de mensagem de acompanhamento para alunos críticos.',
-      'Mostre alunos que precisam de contato e sugira ordem de envio.',
+      'Templates para alunos em risco',
+      'Rascunho de acompanhamento',
+      'Alunos que precisam de contato',
     ],
   },
 ];
@@ -443,7 +443,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingConversationTitle, setEditingConversationTitle] = useState('');
   const [editingConversationError, setEditingConversationError] = useState('');
-  const [isIcebreakersOpen, setIsIcebreakersOpen] = useState(true);
+  const [_isIcebreakersOpen, _setIsIcebreakersOpen] = useState(true);
   const scrollEndRef = useRef<HTMLDivElement>(null);
 
   const canSend = useMemo(() => inputValue.trim().length > 0 && !isSending, [inputValue, isSending]);
@@ -500,13 +500,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     }
   }, [messages]);
 
-  useEffect(() => {
-    if (shouldShowIcebreakers) {
-      setIsIcebreakersOpen(true);
-    } else {
-      setIsIcebreakersOpen(false);
-    }
-  }, [shouldShowIcebreakers]);
+  // icebreaker toggle removed — always visible when no messages
 
   useEffect(() => {
     let isMounted = true;
@@ -1000,37 +994,21 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                 </div>
               ))}
               {shouldShowIcebreakers && (
-                <div className="space-y-2 pt-2">
-                  <div className="flex items-center justify-between gap-2 px-1">
-                    <span className="text-[11px] font-medium text-muted-foreground">Quebra-gelos da Claris</span>
-                    <button
+                <div className="flex flex-wrap justify-center gap-2 pt-3">
+                  {contextualSuggestions.map((suggestion) => (
+                    <Button
+                      key={suggestion}
                       type="button"
-                      className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      onClick={() => setIsIcebreakersOpen((prev) => !prev)}
-                      aria-label="Alternar quebra-gelos da Claris"
-                      aria-expanded={isIcebreakersOpen}
+                      variant="outline"
+                      size="sm"
+                      className="h-auto max-w-[340px] rounded-full border-border/70 bg-background px-4 py-2.5 text-center text-xs leading-4 text-foreground/90 shadow-sm hover:bg-muted"
+                      onClick={() => handleSend(suggestion)}
+                      disabled={isSending}
                     >
-                      {isIcebreakersOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                  {isIcebreakersOpen && (
-                    <div className="flex flex-wrap gap-2">
-                      {contextualSuggestions.map((suggestion) => (
-                        <Button
-                          key={suggestion}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-auto max-w-[280px] rounded-[20px] border-border/70 bg-background px-3 py-2 text-left text-xs leading-4 text-foreground/90 shadow-sm hover:bg-muted sm:max-w-[320px]"
-                          onClick={() => handleSend(suggestion)}
-                          disabled={isSending}
-                        >
-                          <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span className="line-clamp-2 min-w-0 break-words">{suggestion}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  )}
+                      <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/60" />
+                      <span>{suggestion}</span>
+                    </Button>
+                  ))}
                 </div>
               )}
               <div ref={scrollEndRef} />
@@ -1070,14 +1048,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     return (
       <div className="flex h-full min-h-[calc(100vh-12rem)] w-full flex-col lg:flex-row">
         <aside className="flex w-full shrink-0 flex-col border-b border-border/60 bg-muted/20 lg:w-[320px] lg:border-b-0 lg:border-r">
-          <div className="min-h-0 flex-1 overflow-hidden px-4 py-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Clock3 className="h-4 w-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-semibold">Conversas</p>
-                <p className="text-xs text-muted-foreground">Histórico sincronizado entre dispositivos</p>
-              </div>
-            </div>
+           <div className="min-h-0 flex-1 overflow-hidden px-4 py-4">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seus Chats</p>
 
             <ScrollArea className="h-[240px] lg:h-full pr-2">
               {isHydratingConversations ? (
@@ -1085,9 +1057,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                   <Spinner className="h-5 w-5" />
                 </div>
               ) : visibleConversations.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border/70 bg-background/80 px-3 py-4 text-sm text-muted-foreground">
-                  Ainda não há conversas iniciadas.
-                </div>
+                <div />
               ) : (
                 <div className="space-y-2">
                   {visibleConversations.map((conversation) => (
