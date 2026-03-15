@@ -66,13 +66,6 @@ export function TopBar() {
           </Button>
         )}
 
-        <Button variant="outline" size="sm" className="gap-2" asChild>
-          <Link to={`/claris?context=${encodeURIComponent(location.pathname)}`} aria-label="Abrir Claris IA expandida">
-            <Sparkles className="h-4 w-4" />
-            <span className="hidden sm:inline">Claris IA</span>
-          </Link>
-        </Button>
-
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-4 w-4" />
