@@ -57,7 +57,7 @@ interface ExtendedAuthContextType extends AuthContextType {
 
 const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'actim_session';
+const STORAGE_KEY = 'session';
 
 const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   syncIntervalHours: {

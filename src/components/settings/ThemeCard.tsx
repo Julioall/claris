@@ -171,7 +171,7 @@ const COLOR_THEMES: ColorTheme[] = [
   },
 ];
 
-const STORAGE_KEY = 'actim-color-theme';
+const STORAGE_KEY = 'color-theme';
 
 function getStoredColorTheme(): string {
   try {

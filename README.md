@@ -1,4 +1,4 @@
-# ACTiM
+# Claris
 
 Fluxo local padrao com Docker Compose para subir frontend + Supabase local.
 

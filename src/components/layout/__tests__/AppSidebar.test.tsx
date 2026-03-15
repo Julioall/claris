@@ -51,7 +51,7 @@ describe("AppSidebar", () => {
   it("renders navigation and user info when expanded", () => {
     renderSidebar();
 
-    expect(screen.getByAltText("ACTiM")).toBeInTheDocument();
+    expect(screen.getByText("Claris")).toBeInTheDocument();
     expect(screen.getByText("Meus Cursos")).toBeInTheDocument();
     expect(screen.getByText("Escolas")).toBeInTheDocument();
     expect(screen.getByText("Alunos")).toBeInTheDocument();

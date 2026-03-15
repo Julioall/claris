@@ -208,12 +208,10 @@ describe('Reports page', () => {
       {
         Aluno: 'Ana Silva',
         Matematica: 18,
-        'Matematica - Status': 'Corrigida',
       },
       {
         Aluno: 'Bruno Souza (Suspenso)',
         Matematica: '',
-        'Matematica - Status': 'Aguardando correção',
       },
     ]);
     expect(toastSuccessMock).toHaveBeenCalledWith('Relatório gerado com sucesso');
@@ -226,7 +224,6 @@ describe('Reports page', () => {
       {
         Aluno: 'Ana Silva',
         Matematica: 18,
-        'Matematica - Status': 'Corrigida',
       },
     ]);
     expect(toastErrorMock).not.toHaveBeenCalled();

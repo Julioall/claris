@@ -87,10 +87,10 @@ type ExcelCell = XLSXType.CellObject & {
 type UnitLifecycleStatus = ReturnType<typeof getCourseLifecycleStatus>;
 
 const BORDER_STYLE: ExcelStyle = {
-  top: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
-  bottom: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
-  left: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
-  right: { style: 'thin', color: { rgb: 'FFD9D9D9' } },
+  top: { style: 'thin', color: { rgb: 'FFB0B0B0' } },
+  bottom: { style: 'thin', color: { rgb: 'FFB0B0B0' } },
+  left: { style: 'thin', color: { rgb: 'FFB0B0B0' } },
+  right: { style: 'thin', color: { rgb: 'FFB0B0B0' } },
 };
 
 const HEADER_CELL_STYLE: ExcelStyle = {
@@ -128,34 +128,32 @@ const simplifyUnitName = (unitName: string) => {
 };
 
 const getGradeCellStyle = (grade: number) => {
+  const base = {
+    alignment: { vertical: 'center', horizontal: 'center' },
+    border: BORDER_STYLE,
+  };
+
   if (grade >= 60) {
     return {
-      fill: {
-        patternType: 'solid',
-        fgColor: { rgb: 'FFC6EFCE' },
-      },
+      ...base,
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFC6EFCE' } },
+      font: { color: { rgb: 'FF006100' } },
     };
   }
 
-  if (grade >= 40 && grade < 60) {
+  if (grade >= 40) {
     return {
-      fill: {
-        patternType: 'solid',
-        fgColor: { rgb: 'FFFFEB9C' },
-      },
+      ...base,
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFFFEB9C' } },
+      font: { color: { rgb: 'FF9C6500' } },
     };
   }
 
-  if (grade < 40) {
-    return {
-      fill: {
-        patternType: 'solid',
-        fgColor: { rgb: 'FFFFC7CE' },
-      },
-    };
-  }
-
-  return null;
+  return {
+    ...base,
+    fill: { patternType: 'solid', fgColor: { rgb: 'FFFFC7CE' } },
+    font: { color: { rgb: 'FF9C0006' } },
+  };
 };
 
 const REPORT_ACTIVITY_STATUS_LABELS: Record<ReportActivityStatus, string> = {
@@ -489,7 +487,6 @@ export default function Reports() {
         return {
           ...unit,
           headerName,
-          statusHeaderName: `${headerName} - Status`,
           status: getCourseLifecycleStatus(unit, now),
         };
       });
@@ -516,7 +513,6 @@ export default function Reports() {
           selectedUnitsWithHeader.forEach(unit => {
             if (unit.status === 'nao_iniciada') {
               row[unit.headerName] = '-';
-              row[unit.statusHeaderName] = getReportActivityStatusLabel('nao_iniciada');
               gradePercentagesByUnitHeader.set(unit.headerName, null);
               return;
             }
@@ -532,7 +528,6 @@ export default function Reports() {
             };
 
             row[unit.headerName] = summary?.grade === null || summary?.grade === undefined ? '' : summary.grade;
-            row[unit.statusHeaderName] = getReportActivityStatusLabel(summary?.status || 'sem_atividades');
             gradePercentagesByUnitHeader.set(unit.headerName, summary?.gradePercentage ?? null);
           });
 
@@ -561,10 +556,9 @@ export default function Reports() {
 
       worksheet['!cols'] = [
         { wch: 32 },
-        ...selectedUnitsWithHeader.flatMap(unit => ([
-          { wch: Math.max(18, Math.min(42, unit.headerName.length + 4)) },
-          { wch: Math.max(20, Math.min(28, unit.statusHeaderName.length + 4)) },
-        ])),
+        ...selectedUnitsWithHeader.map(unit => (
+          { wch: Math.max(18, Math.min(42, unit.headerName.length + 4)) }
+        )),
       ];
 
       const worksheetRange = worksheet['!ref'] ? XLSX.utils.decode_range(worksheet['!ref']) : null;
@@ -600,13 +594,12 @@ export default function Reports() {
               ...suspendedStyle,
             };
 
-            const isGradeColumn = !isStudentColumn && colIndex % 2 === 1;
+            const isGradeColumn = !isStudentColumn;
 
             if (isGradeColumn && typeof cell.v === 'number') {
               if (!isSuspendedRow) {
-                // Each unit occupies 2 columns (grade + status); column 1 is "Aluno".
-                // Unit index = (colIndex - 1) / 2 (integer division).
-                const selectedUnitIndex = Math.floor((colIndex - 1) / 2);
+                // Each unit occupies 1 column; column 0 is "Aluno".
+                const selectedUnitIndex = colIndex - 1;
                 const selectedUnit = selectedUnitsWithHeader[selectedUnitIndex];
                 const gradePercentage = selectedUnit
                   ? reportRows[rowIndex - 1]?.gradePercentagesByUnitHeader.get(selectedUnit.headerName) ?? null
@@ -705,8 +698,8 @@ export default function Reports() {
         if (a.hidden) return false;
         if (a.activity_type === 'quiz') return false;
 
-        // Must not be completed/graded/submitted
-        const isCompleted = a.status === 'completed' || a.status === 'complete_pass' || a.completed_at || a.graded_at || a.submitted_at;
+        // Exclude fully completed/graded; submitted-but-ungraded activities are included as 'Pendente de Correção'
+        const isCompleted = a.status === 'completed' || a.status === 'complete_pass' || a.completed_at || a.graded_at;
         if (isCompleted) return false;
 
         // Check if the activity's unit period has started
@@ -761,18 +754,13 @@ export default function Reports() {
         const studentName = studentsById.get(studentId) || 'Desconhecido';
         for (const act of activities) {
           const unitName = unitNameMap.get(act.course_id) || 'N/A';
-          const unitEnd = unitEndDateMap.get(act.course_id);
-          const isOverdue = act.due_date
-            ? new Date(act.due_date) < now
-            : unitEnd ? new Date(unitEnd) < now : false;
 
           rows.push({
             'Aluno': studentName,
             'Unidade Curricular': unitName,
             'Atividade': act.activity_name,
             'Tipo': act.activity_type || '-',
-            'Prazo': act.due_date ? new Date(act.due_date).toLocaleDateString('pt-BR') : '-',
-            'Status': isOverdue ? 'Atrasada' : 'Pendente',
+            'Status': act.submitted_at ? 'Pendente de Correção' : 'Pendente de Envio',
           });
         }
       }
@@ -781,25 +769,21 @@ export default function Reports() {
       const summaryRows = sortedStudents.map(([studentId, activities]) => ({
         'Aluno': studentsById.get(studentId) || 'Desconhecido',
         'Atividades Pendentes': activities.length,
-        'Atrasadas': activities.filter(a => {
-          const unitEnd = unitEndDateMap.get(a.course_id);
-          return a.due_date
-            ? new Date(a.due_date) < now
-            : unitEnd ? new Date(unitEnd) < now : false;
-        }).length,
+        'Pendente de Envio': activities.filter(a => !a.submitted_at).length,
+        'Pendente de Correção': activities.filter(a => !!a.submitted_at).length,
       }));
 
       const workbook = XLSX.utils.book_new();
 
       // Summary sheet
       const summaryWs = XLSX.utils.json_to_sheet(summaryRows) as ExcelWorksheet;
-      summaryWs['!cols'] = [{ wch: 32 }, { wch: 22 }, { wch: 14 }];
+      summaryWs['!cols'] = [{ wch: 32 }, { wch: 20 }, { wch: 18 }, { wch: 22 }];
       applyBasicStyles(XLSX, summaryWs);
       XLSX.utils.book_append_sheet(workbook, summaryWs, 'Resumo');
 
       // Detail sheet
       const detailWs = XLSX.utils.json_to_sheet(rows) as ExcelWorksheet;
-      detailWs['!cols'] = [{ wch: 32 }, { wch: 28 }, { wch: 36 }, { wch: 10 }, { wch: 14 }, { wch: 12 }];
+      detailWs['!cols'] = [{ wch: 32 }, { wch: 28 }, { wch: 36 }, { wch: 10 }, { wch: 22 }];
       applyPendingStyles(XLSX, detailWs);
       XLSX.utils.book_append_sheet(workbook, detailWs, 'Detalhamento');
 
@@ -1003,7 +987,7 @@ function applyPendingStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
   const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
   if (!range) return;
 
-  const STATUS_COL = 5; // 'Status' column index
+  const STATUS_COL = 4; // 'Status' column index (Aluno, UC, Atividade, Tipo, Status)
 
   for (let r = range.s.r; r <= range.e.r; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
@@ -1017,11 +1001,11 @@ function applyPendingStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
         const base = c === 0 ? STUDENT_CELL_STYLE : BODY_CELL_STYLE;
         cell.s = { ...(cell.s || {}), ...base };
 
-        if (c === STATUS_COL && cell.v === 'Atrasada') {
+        if (c === STATUS_COL && cell.v === 'Pendente de Correção') {
           cell.s = {
             ...(cell.s || {}),
-            fill: { patternType: 'solid', fgColor: { rgb: 'FFFFC7CE' } },
-            font: { bold: true, color: { rgb: 'FF9C0006' } },
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFFCE5B6' } },
+            font: { bold: true, color: { rgb: 'FF7D5A00' } },
           };
         }
       }

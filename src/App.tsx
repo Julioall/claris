@@ -63,7 +63,7 @@ function AppRoutes() {
 function ColorThemeApplier({ children }: { children: React.ReactNode }) {
   const { resolvedTheme } = useTheme();
   useEffect(() => {
-    const stored = localStorage.getItem('actim-color-theme') || 'slate';
+    const stored = localStorage.getItem('color-theme') || 'slate';
     applyColorTheme(stored, resolvedTheme === 'dark');
   }, [resolvedTheme]);
   return <>{children}</>;

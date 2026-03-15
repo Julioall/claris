@@ -122,7 +122,7 @@ describe("AuthContext", () => {
       },
     });
     expect(encryptSessionDataMock).toHaveBeenCalled();
-    expect(sessionStorage.getItem("actim_session")).toBe("encrypted-session");
+    expect(sessionStorage.getItem("session")).toBe("encrypted-session");
     expect(authRef?.isAuthenticated).toBe(true);
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: expect.stringMatching(/login realizado com sucesso/i) }),
@@ -271,7 +271,7 @@ describe("AuthContext", () => {
 
     expect(signOutMock).toHaveBeenCalled();
     expect(authRef?.isAuthenticated).toBe(false);
-    expect(sessionStorage.getItem("actim_session")).toBeNull();
+    expect(sessionStorage.getItem("session")).toBeNull();
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: expect.stringMatching(/logout realizado/i) }),
     );

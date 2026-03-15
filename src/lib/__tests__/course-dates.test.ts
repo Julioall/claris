@@ -59,6 +59,35 @@ describe('withEffectiveCourseDates', () => {
     expect(courses[1].effective_end_date).toBe('2026-12-20T00:00:00.000Z');
   });
 
+  it('keeps inferring sequence even when one unit has divergent module end date', () => {
+    const courses = withEffectiveCourseDates([
+      {
+        id: 'uc-1',
+        category: 'Senai > Escola A > Curso X > Turma 3',
+        start_date: '2026-01-10T00:00:00.000Z',
+        end_date: '2026-12-20T00:00:00.000Z',
+      },
+      {
+        id: 'uc-2',
+        category: 'Senai > Escola A > Curso X > Turma 3',
+        start_date: '2026-03-15T00:00:00.000Z',
+        end_date: '2025-12-20T00:00:00.000Z',
+      },
+      {
+        id: 'uc-3',
+        category: 'Senai > Escola A > Curso X > Turma 3',
+        start_date: '2026-05-20T00:00:00.000Z',
+        end_date: '2026-12-20T00:00:00.000Z',
+      },
+    ]);
+
+    expect(courses.map(course => course.effective_end_date)).toEqual([
+      '2026-03-15T00:00:00.000Z',
+      '2026-05-20T00:00:00.000Z',
+      '2026-12-20T00:00:00.000Z',
+    ]);
+  });
+
   it('falls back to the next start date when the current unit has no declared end date', () => {
     const courses = withEffectiveCourseDates([
       {

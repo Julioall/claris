@@ -46,13 +46,24 @@ function getSortableStartDate(date?: string | null): number {
   return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
 }
 
-function hasSharedModuleEndDate<T extends CourseDateLike>(courses: T[]): boolean {
+function hasModuleEndDatePattern<T extends CourseDateLike>(courses: T[]): boolean {
   if (courses.length < 2) return false;
 
-  const endDates = courses.map(course => course.end_date?.trim() || null);
-  if (endDates.some(endDate => !endDate)) return false;
+  const endDates = courses
+    .map(course => course.end_date?.trim() || null)
+    .filter((endDate): endDate is string => Boolean(endDate));
 
-  return new Set(endDates).size === 1;
+  if (endDates.length < 2) return false;
+
+  const endDateFrequency = endDates.reduce<Map<string, number>>((acc, endDate) => {
+    acc.set(endDate, (acc.get(endDate) || 0) + 1);
+    return acc;
+  }, new Map());
+
+  const dominantCount = Math.max(...Array.from(endDateFrequency.values()));
+  const requiredMajority = Math.ceil(endDates.length * 0.6);
+
+  return dominantCount >= requiredMajority;
 }
 
 export function withEffectiveCourseDates<T extends CourseDateLike>(
@@ -81,7 +92,7 @@ export function withEffectiveCourseDates<T extends CourseDateLike>(
       return left.index - right.index;
     });
 
-    const moduleBasedEndDate = hasSharedModuleEndDate(sortedGroup.map(item => item.course));
+    const moduleBasedEndDate = hasModuleEndDatePattern(sortedGroup.map(item => item.course));
 
     sortedGroup.forEach((item, index) => {
       const rawEndDate = item.course.end_date?.trim() || null;

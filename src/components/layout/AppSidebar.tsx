@@ -9,6 +9,7 @@ import {
   Building2,
   MessageSquare
 } from 'lucide-react';
+import { ClarisIcon } from '@/components/ui/claris-logo';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -51,15 +52,11 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-accent/40 p-1 overflow-hidden">
-            <img
-              src="/icon-no-bg.png"
-              alt="ACTiM"
-              className="h-full w-full object-contain"
-            />
+            <ClarisIcon className="h-full w-full text-sidebar-foreground" />
           </div>
           {!isCollapsed && (
             <div className="flex flex-col">
-              <span className="font-semibold text-sidebar-foreground">ACTiM</span>
+              <span className="font-semibold text-sidebar-foreground">Claris</span>
               <span className="text-xs text-sidebar-foreground/60">Central de Tutoria</span>
             </div>
           )}

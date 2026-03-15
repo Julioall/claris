@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, Eye, EyeOff, Settings } from 'lucide-react';
+import { ClarisLogo } from '@/components/ui/claris-logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,11 +39,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-accent/20 p-4">
       <div className="w-full max-w-md space-y-6 animate-fade-in">
         <div className="text-center space-y-2">
-          <img
-            src="/logo.png"
-            alt="ACTiM"
-            className="mx-auto w-64 max-w-full h-auto"
-          />
+          <ClarisLogo className="mx-auto w-48 text-[hsl(var(--primary))]" />
         </div>
 
         <Card className="border-0 shadow-lg">

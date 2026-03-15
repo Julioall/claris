@@ -1,8 +1,8 @@
-# ACTiM - Documentação Completa
+# Claris - Documentação Completa
 
 ## Visão Geral
 
-O **ACTiM** é uma aplicação web desenvolvida para tutores e monitores acompanharem alunos e cursos do Moodle, com todos os registros de acompanhamento sendo persistidos no Supabase.
+O **Claris** é uma aplicação web desenvolvida para tutores e monitores acompanharem alunos e cursos do Moodle, com todos os registros de acompanhamento sendo persistidos no Supabase.
 
 ### Objetivo Principal
 
