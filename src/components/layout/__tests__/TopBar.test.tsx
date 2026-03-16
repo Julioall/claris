@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TopBar } from "@/components/layout/TopBar";
 
 const useAuthMock = vi.fn();
@@ -15,6 +16,10 @@ const limitMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
+}));
+
+vi.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => ({ isAdmin: false, role: null, permissions: [], canAccessAdminSection: () => false }),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -34,6 +39,19 @@ vi.mock("@/components/ui/tooltip", () => ({
     <div>{children}</div>
   ),
 }));
+
+vi.mock("@/components/support/SupportButton", () => ({
+  SupportButton: () => <button type="button">Suporte</button>,
+}));
+
+function createWrapper() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
+  );
+}
 
 describe("TopBar", () => {
   beforeEach(() => {
@@ -57,11 +75,7 @@ describe("TopBar", () => {
   });
 
   it("shows last sync info and loads notifications", async () => {
-    render(
-      <MemoryRouter>
-        <TopBar />
-      </MemoryRouter>,
-    );
+    render(<TopBar />, { wrapper: createWrapper() });
 
     expect(screen.getByText(/nunca/i)).toBeInTheDocument();
 
@@ -72,11 +86,7 @@ describe("TopBar", () => {
 
   it("toggles edit mode via switch", async () => {
     const user = userEvent.setup();
-    render(
-      <MemoryRouter>
-        <TopBar />
-      </MemoryRouter>,
-    );
+    render(<TopBar />, { wrapper: createWrapper() });
 
     await user.click(screen.getByRole("switch"));
 
@@ -92,11 +102,7 @@ describe("TopBar", () => {
       isOfflineMode: true,
     });
 
-    render(
-      <MemoryRouter>
-        <TopBar />
-      </MemoryRouter>,
-    );
+    render(<TopBar />, { wrapper: createWrapper() });
 
     expect(screen.getByText(/modo offline/i)).toBeInTheDocument();
   });
@@ -118,11 +124,7 @@ describe("TopBar", () => {
       error: null,
     });
 
-    render(
-      <MemoryRouter>
-        <TopBar />
-      </MemoryRouter>,
-    );
+    render(<TopBar />, { wrapper: createWrapper() });
 
     const notificationButton = screen.getByRole("button", { name: /notificações/i });
     expect(notificationButton).toBeInTheDocument();

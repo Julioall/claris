@@ -6,6 +6,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
+import { AdminRoute } from "@/components/admin/AdminRoute";
 import { Spinner } from "@/components/ui/spinner";
 import { ThemeProvider, useTheme } from "next-themes";
 import { applyColorTheme } from "@/components/settings/ThemeCard";
@@ -25,6 +27,15 @@ import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
 import Claris from "@/pages/Claris";
 import NotFound from "@/pages/NotFound";
+
+// Admin Pages
+import AdminDashboard from "@/pages/admin/AdminDashboard";
+import AdminConfiguracoes from "@/pages/admin/AdminConfiguracoes";
+import AdminUsuarios from "@/pages/admin/AdminUsuarios";
+import AdminMetricas from "@/pages/admin/AdminMetricas";
+import AdminLogsErros from "@/pages/admin/AdminLogsErros";
+import AdminSuporte from "@/pages/admin/AdminSuporte";
+import AdminConversasClaris from "@/pages/admin/AdminConversasClaris";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +69,15 @@ function AppRoutes() {
         <Route path="/claris" element={<Claris />} />
         <Route path="/relatorios" element={<Reports />} />
         <Route path="/configuracoes" element={<Settings />} />
+      </Route>
+      <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/configuracoes" element={<AdminConfiguracoes />} />
+        <Route path="/admin/usuarios" element={<AdminUsuarios />} />
+        <Route path="/admin/metricas" element={<AdminMetricas />} />
+        <Route path="/admin/logs-erros" element={<AdminLogsErros />} />
+        <Route path="/admin/suporte" element={<AdminSuporte />} />
+        <Route path="/admin/conversas-claris" element={<AdminConversasClaris />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
