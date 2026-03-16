@@ -8,6 +8,7 @@
     "branch-protection:edge-smoke:apply": "node scripts/require-edge-smoke-check.mjs apply",
     "dev": "vite",
     "build": "vite build",
+    "build:github-pages": "vite build && node scripts/prepare-github-pages.mjs",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",

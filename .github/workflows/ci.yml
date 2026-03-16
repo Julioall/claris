@@ -7,6 +7,7 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -41,9 +42,55 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - name: Set GitHub Pages base path
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        shell: bash
+        run: |
+          repo_name="${GITHUB_REPOSITORY#*/}"
+          owner_name="${GITHUB_REPOSITORY_OWNER,,}"
+          repo_name_lower="${repo_name,,}"
+
+          if [ "$repo_name_lower" = "${owner_name}.github.io" ]; then
+            echo "VITE_BASE_PATH=/" >> "$GITHUB_ENV"
+          else
+            echo "VITE_BASE_PATH=/${repo_name}/" >> "$GITHUB_ENV"
+          fi
+      - name: Build application
+        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+        run: npm run build
+      - name: Build GitHub Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: npm run build:github-pages
+      - name: Upload GitHub Pages artifact
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  deploy-pages:
+    name: Deploy GitHub Pages
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs:
+      - lint
+      - test
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-pages
+      cancel-in-progress: true
+    environment: github-pages
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

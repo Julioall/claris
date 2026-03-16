@@ -78,6 +78,15 @@ Alternativamente:
 node scripts/smoke-edge-functions.mjs
 ```
 
+Em push para `main` com mudancas relevantes de `supabase/**`, `.env` ou scripts de deploy, o workflow [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) usa esse smoke como gate e, se ele passar, faz o deploy remoto do Supabase aplicando `db push --include-all` e publicando o conjunto remoto padrao de Edge Functions.
+
+Secrets necessarios no GitHub Actions para esse deploy remoto:
+
+- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_PASSWORD`
+
+O workflow resolve automaticamente o projeto remoto a partir de `VITE_SUPABASE_PROJECT_ID` em `.env`.
+
 ## Tornar o smoke obrigatório na main
 
 O check esperado para proteção da branch principal é o job `Smoke test local Edge Functions` do workflow [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml).
@@ -117,6 +126,10 @@ docker compose down
 ## CI/CD
 
 O repositorio utiliza GitHub Actions (`.github/workflows/ci.yml`) para rodar lint, testes e build automaticamente em cada push ou pull request para a branch `main`.
+
+Em push para `main`, o mesmo workflow tambem publica a aplicacao no GitHub Pages. O build de deploy calcula automaticamente o subcaminho do repositorio e gera um `404.html` a partir do `index.html` para manter o roteamento do React Router funcionando em refresh e links diretos.
+
+Se for a primeira publicacao do repositorio no GitHub Pages, confirme em **Settings -> Pages** que a fonte de deploy esta como **GitHub Actions**.
 
 ## Supabase Remoto
 

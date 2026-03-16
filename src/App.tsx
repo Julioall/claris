@@ -74,6 +74,10 @@ function ColorThemeApplier({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+const routerBasename = import.meta.env.BASE_URL === "/"
+  ? "/"
+  : import.meta.env.BASE_URL.replace(/\/$/, "");
+
 const App = () => (
   <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
     <ColorThemeApplier>
@@ -82,7 +86,7 @@ const App = () => (
           <TooltipProvider>
             <Toaster />
             <Sonner />
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <BrowserRouter basename={routerBasename} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
               <AppRoutes />
             </BrowserRouter>
           </TooltipProvider>
