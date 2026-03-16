@@ -634,25 +634,15 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const chatPanel = (
     <div className={cn('flex h-full w-full flex-col overflow-hidden', isFloating ? 'bg-card' : 'bg-background')}>
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between border-b px-4 py-2.5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary">
-            <ClarisIcon className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Claris IA</span>
-        </div>
+      <div className="shrink-0 flex items-center justify-between border-b px-4 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Claris IA</span>
         <div className="flex items-center gap-1">
-          {!isFloating && (
-            <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-full text-xs" onClick={createNewConversation}>
-              <Plus className="h-3.5 w-3.5" /> Nova conversa
-            </Button>
-          )}
           {isFloating && (
             <>
-              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/claris?context=${encodeURIComponent(location.pathname)}`)} aria-label="Expandir chat">
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/claris?context=${encodeURIComponent(location.pathname)}`)} aria-label="Expandir chat">
                 <Expand className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={closeFloatingChat} aria-label="Fechar chat">
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={closeFloatingChat} aria-label="Fechar chat">
                 <X className="h-4 w-4" />
               </Button>
             </>
