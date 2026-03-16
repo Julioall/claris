@@ -118,6 +118,58 @@ docker compose down
 
 O repositorio utiliza GitHub Actions (`.github/workflows/ci.yml`) para rodar lint, testes e build automaticamente em cada push ou pull request para a branch `main`.
 
+## Supabase Remoto
+
+O fluxo local sobe um Supabase isolado com migrations e Edge Functions locais. Isso nao atualiza automaticamente o projeto Supabase remoto usado por previews do Lovable.
+
+Quando houver mudancas de schema ou de Edge Functions que precisem refletir no projeto remoto, sincronize manualmente o projeto correto.
+
+### Migrations remotas
+
+No PowerShell do Windows, prefira `npm.cmd` por causa da `ExecutionPolicy`.
+
+Antes de sincronizar o projeto remoto, autentique a Supabase CLI com `npm.cmd exec --yes --package supabase@latest -- supabase login` ou exporte `SUPABASE_ACCESS_TOKEN` no ambiente.
+
+```powershell
+npm.cmd exec --yes --package supabase@latest -- supabase link --project-ref <project-ref>
+npm.cmd exec --yes --package supabase@latest -- supabase db push --include-all
+```
+
+### Deploy remoto das Edge Functions
+
+As Edge Functions expostas ao navegador usam tratamento de CORS no runtime compartilhado e continuam validando autenticacao dentro da function. Para que o preflight do browser chegue ate esse handler, o deploy remoto deve usar `--no-verify-jwt`.
+
+Deploy apenas das functions da Claris:
+
+```powershell
+npm.cmd run supabase:functions:deploy:claris -- --project-ref <project-ref>
+```
+
+Deploy do conjunto remoto padrao versionado no repositorio:
+
+```powershell
+npm.cmd run supabase:functions:deploy -- --project-ref <project-ref>
+```
+
+Se o projeto ja estiver previamente linkado, reutilize o link atual:
+
+```powershell
+npm.cmd run supabase:functions:deploy -- --skip-link claris-llm-test claris-chat
+```
+
+### Validacao rapida do preflight
+
+Depois do deploy remoto, valide o preflight da function antes de retestar no Lovable:
+
+```powershell
+curl.exe -i -X OPTIONS "https://<project-ref>.supabase.co/functions/v1/claris-llm-test" ^
+  -H "Origin: https://<seu-preview>.lovable.app" ^
+  -H "Access-Control-Request-Method: POST" ^
+  -H "Access-Control-Request-Headers: authorization,apikey,content-type,x-client-info"
+```
+
+O retorno esperado e `200` ou `204`, com `Access-Control-Allow-Origin` presente na resposta.
+
 ### GITHUB_TOKEN
 
 O `GITHUB_TOKEN` e um token de acesso temporario **gerado automaticamente pelo GitHub** para cada execucao de workflow. Voce **nao precisa criar nem configurar** nenhum segredo manualmente para usa-lo.
