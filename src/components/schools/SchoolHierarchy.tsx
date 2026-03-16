@@ -294,32 +294,36 @@ export function SchoolHierarchy({
               value={schoolKey}
               className="border rounded-lg bg-card overflow-hidden"
             >
-              <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
-                <div className="flex items-center justify-between w-full pr-2">
-                  <div className="flex items-center gap-3">
-                    <Building2 className="h-5 w-5 text-primary" />
-                    <div className="text-left">
-                      <p className="font-semibold">{school.name}</p>
-                      <p className="text-xs text-muted-foreground font-normal">
-                        {courseKeys.length} curso{courseKeys.length !== 1 ? 's' : ''}
-                      </p>
+              <div className="flex items-center gap-2 px-4 py-3 hover:bg-muted/50">
+                <div className="flex-1">
+                  <AccordionTrigger className="py-0 hover:no-underline">
+                    <div className="flex items-center justify-between w-full pr-2">
+                      <div className="flex items-center gap-3">
+                        <Building2 className="h-5 w-5 text-primary" />
+                        <div className="text-left">
+                          <p className="font-semibold">{school.name}</p>
+                          <p className="text-xs text-muted-foreground font-normal">
+                            {courseKeys.length} curso{courseKeys.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <StatsDisplay stats={school.stats} />
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <AttendanceBulkToggleButton
-                      courses={schoolCourses}
-                      onToggleAttendanceMultiple={onToggleAttendanceMultiple}
-                      level="escola"
-                    />
-                    <IgnoreAllButton 
-                      courses={schoolCourses} 
-                      onToggleIgnoreMultiple={onToggleIgnoreMultiple}
-                      level="escola"
-                    />
-                    <StatsDisplay stats={school.stats} />
-                  </div>
+                  </AccordionTrigger>
                 </div>
-              </AccordionTrigger>
+                <div className="flex items-center gap-2">
+                  <AttendanceBulkToggleButton
+                    courses={schoolCourses}
+                    onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                    level="escola"
+                  />
+                  <IgnoreAllButton 
+                    courses={schoolCourses} 
+                    onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                    level="escola"
+                  />
+                </div>
+              </div>
               <AccordionContent className="px-4 pb-4">
                 <Accordion 
                   type="multiple" 
@@ -337,32 +341,36 @@ export function SchoolHierarchy({
                         value={courseKey}
                         className="border rounded-lg bg-muted/30 overflow-hidden"
                       >
-                        <AccordionTrigger className="px-4 py-2.5 hover:no-underline hover:bg-muted/50">
-                          <div className="flex items-center justify-between w-full pr-2">
-                            <div className="flex items-center gap-3">
-                              <GraduationCap className="h-4 w-4 text-primary/80" />
-                              <div className="text-left">
-                                <p className="font-medium text-sm">{courseNode.name}</p>
-                                <p className="text-xs text-muted-foreground font-normal">
-                                  {classKeys.length} turma{classKeys.length !== 1 ? 's' : ''}
-                                </p>
+                        <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-muted/50">
+                          <div className="flex-1">
+                            <AccordionTrigger className="py-0 hover:no-underline">
+                              <div className="flex items-center justify-between w-full pr-2">
+                                <div className="flex items-center gap-3">
+                                  <GraduationCap className="h-4 w-4 text-primary/80" />
+                                  <div className="text-left">
+                                    <p className="font-medium text-sm">{courseNode.name}</p>
+                                    <p className="text-xs text-muted-foreground font-normal">
+                                      {classKeys.length} turma{classKeys.length !== 1 ? 's' : ''}
+                                    </p>
+                                  </div>
+                                </div>
+                                <StatsDisplay stats={courseNode.stats} />
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <AttendanceBulkToggleButton
-                                courses={courseCourses}
-                                onToggleAttendanceMultiple={onToggleAttendanceMultiple}
-                                level="curso"
-                              />
-                              <IgnoreAllButton 
-                                courses={courseCourses} 
-                                onToggleIgnoreMultiple={onToggleIgnoreMultiple}
-                                level="curso"
-                              />
-                              <StatsDisplay stats={courseNode.stats} />
-                            </div>
+                            </AccordionTrigger>
                           </div>
-                        </AccordionTrigger>
+                          <div className="flex items-center gap-2">
+                            <AttendanceBulkToggleButton
+                              courses={courseCourses}
+                              onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                              level="curso"
+                            />
+                            <IgnoreAllButton 
+                              courses={courseCourses} 
+                              onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                              level="curso"
+                            />
+                          </div>
+                        </div>
                         <AccordionContent className="px-4 pb-3">
                           <Accordion 
                             type="multiple" 
@@ -378,32 +386,36 @@ export function SchoolHierarchy({
                                   value={classKey}
                                   className="border rounded-lg bg-background overflow-hidden"
                                 >
-                                  <AccordionTrigger className="px-3 py-2 hover:no-underline hover:bg-muted/30">
-                                    <div className="flex items-center justify-between w-full pr-2">
-                                      <div className="flex items-center gap-2">
-                                        <Users2 className="h-4 w-4 text-muted-foreground" />
-                                        <div className="text-left">
-                                          <p className="font-medium text-sm">{classNode.name}</p>
-                                          <p className="text-xs text-muted-foreground font-normal">
-                                            {classNode.courses.length} disciplina{classNode.courses.length !== 1 ? 's' : ''}
-                                          </p>
+                                  <div className="flex items-center gap-2 px-3 py-2 hover:bg-muted/30">
+                                    <div className="flex-1">
+                                      <AccordionTrigger className="py-0 hover:no-underline">
+                                        <div className="flex items-center justify-between w-full pr-2">
+                                          <div className="flex items-center gap-2">
+                                            <Users2 className="h-4 w-4 text-muted-foreground" />
+                                            <div className="text-left">
+                                              <p className="font-medium text-sm">{classNode.name}</p>
+                                              <p className="text-xs text-muted-foreground font-normal">
+                                                {classNode.courses.length} disciplina{classNode.courses.length !== 1 ? 's' : ''}
+                                              </p>
+                                            </div>
+                                          </div>
+                                          <StatsDisplay stats={classNode.stats} showCourses />
                                         </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <AttendanceBulkToggleButton
-                                          courses={classNode.courses}
-                                          onToggleAttendanceMultiple={onToggleAttendanceMultiple}
-                                          level="turma"
-                                        />
-                                        <IgnoreAllButton 
-                                          courses={classNode.courses} 
-                                          onToggleIgnoreMultiple={onToggleIgnoreMultiple}
-                                          level="turma"
-                                        />
-                                        <StatsDisplay stats={classNode.stats} showCourses />
-                                      </div>
+                                      </AccordionTrigger>
                                     </div>
-                                  </AccordionTrigger>
+                                    <div className="flex items-center gap-2">
+                                      <AttendanceBulkToggleButton
+                                        courses={classNode.courses}
+                                        onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                                        level="turma"
+                                      />
+                                      <IgnoreAllButton 
+                                        courses={classNode.courses} 
+                                        onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                                        level="turma"
+                                      />
+                                    </div>
+                                  </div>
                                   <AccordionContent className="px-3 pb-3">
                                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-2">
                                       {classNode.courses.map(course => (
@@ -438,32 +450,36 @@ export function SchoolHierarchy({
             value="uncategorized"
             className="border rounded-lg bg-card overflow-hidden"
           >
-            <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
-              <div className="flex items-center justify-between w-full pr-2">
-                <div className="flex items-center gap-3">
-                  <BookOpen className="h-5 w-5 text-muted-foreground" />
-                  <div className="text-left">
-                    <p className="font-semibold">Sem categoria</p>
-                    <p className="text-xs text-muted-foreground font-normal">
-                      {hierarchy.uncategorized.length} curso{hierarchy.uncategorized.length !== 1 ? 's' : ''}
-                    </p>
+            <div className="flex items-center gap-2 px-4 py-3 hover:bg-muted/50">
+              <div className="flex-1">
+                <AccordionTrigger className="py-0 hover:no-underline">
+                  <div className="flex items-center justify-between w-full pr-2">
+                    <div className="flex items-center gap-3">
+                      <BookOpen className="h-5 w-5 text-muted-foreground" />
+                      <div className="text-left">
+                        <p className="font-semibold">Sem categoria</p>
+                        <p className="text-xs text-muted-foreground font-normal">
+                          {hierarchy.uncategorized.length} curso{hierarchy.uncategorized.length !== 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <StatsDisplay stats={calculateStats(hierarchy.uncategorized)} />
                   </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <AttendanceBulkToggleButton
-                    courses={hierarchy.uncategorized}
-                    onToggleAttendanceMultiple={onToggleAttendanceMultiple}
-                    level="escola"
-                  />
-                  <IgnoreAllButton 
-                    courses={hierarchy.uncategorized} 
-                    onToggleIgnoreMultiple={onToggleIgnoreMultiple}
-                    level="escola"
-                  />
-                  <StatsDisplay stats={calculateStats(hierarchy.uncategorized)} />
-                </div>
+                </AccordionTrigger>
               </div>
-            </AccordionTrigger>
+              <div className="flex items-center gap-2">
+                <AttendanceBulkToggleButton
+                  courses={hierarchy.uncategorized}
+                  onToggleAttendanceMultiple={onToggleAttendanceMultiple}
+                  level="escola"
+                />
+                <IgnoreAllButton 
+                  courses={hierarchy.uncategorized} 
+                  onToggleIgnoreMultiple={onToggleIgnoreMultiple}
+                  level="escola"
+                />
+              </div>
+            </div>
             <AccordionContent className="px-4 pb-4">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 pt-2">
                 {hierarchy.uncategorized.map(course => (

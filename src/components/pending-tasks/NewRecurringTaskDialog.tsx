@@ -318,7 +318,7 @@ export function NewRecurringTaskDialog({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Padrão de Recorrência *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value ?? ''}>
                     <FormControl>
                       <SelectTrigger>
                         <SelectValue />
@@ -429,7 +429,7 @@ export function NewRecurringTaskDialog({
                   <FormLabel>Curso *</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
-                    value={field.value}
+                    value={field.value ?? ''}
                     disabled={isLoadingCourses}
                   >
                     <FormControl>
@@ -458,7 +458,7 @@ export function NewRecurringTaskDialog({
                   <FormLabel>Aluno (Opcional)</FormLabel>
                   <Select 
                     onValueChange={field.onChange} 
-                    value={field.value}
+                    value={field.value ?? ''}
                     disabled={!selectedCourseId || isLoadingStudents}
                   >
                     <FormControl>
@@ -494,7 +494,7 @@ export function NewRecurringTaskDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Tipo</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />
@@ -519,7 +519,7 @@ export function NewRecurringTaskDialog({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Prioridade</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value ?? ''}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue />

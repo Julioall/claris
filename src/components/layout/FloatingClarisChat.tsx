@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
 import { fetchGlobalAppSettings } from '@/lib/global-app-settings';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database, Json } from '@/integrations/supabase/types';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -66,14 +67,9 @@ interface ClarisChatHistoryItem { role: ChatRole; content: string; }
 
 interface ClarisChatFunctionResponse { reply?: unknown; uiActions?: unknown; richBlocks?: unknown; }
 
-// ---- DB row shape (not in generated types) ----
-interface ClarisConversationRow {
-  id: string;
-  title: string;
-  messages: unknown;
-  updated_at: string;
-  last_context_route: string | null;
-}
+type ClarisConversationRow = Database['public']['Tables']['claris_conversations']['Row'];
+type ClarisConversationInsert = Database['public']['Tables']['claris_conversations']['Insert'];
+type ClarisConversationUpdate = Database['public']['Tables']['claris_conversations']['Update'];
 
 // ---- Constants ----
 
@@ -337,39 +333,52 @@ interface ClarisConversationThread {
 
 type FloatingChatVisualState = 'closed' | 'opening' | 'open' | 'closing';
 
-// ---- Supabase helpers with type casts ----
+// ---- Supabase helpers ----
 
 async function fetchConversations(userId: string) {
-  const { data, error } = await (supabase.from as any)('claris_conversations')
+  const { data, error } = await supabase
+    .from('claris_conversations')
     .select('id, title, messages, updated_at, last_context_route')
     .eq('user_id', userId)
     .order('updated_at', { ascending: false })
     .limit(30);
   if (error) throw error;
-  return (data ?? []) as ClarisConversationRow[];
+  return data ?? [];
 }
 
-async function insertConversation(userId: string, title: string, messages: unknown[], lastContextRoute: string) {
-  const { data, error } = await (supabase.from as any)('claris_conversations')
-    .insert({ user_id: userId, title, messages, last_context_route: lastContextRoute })
+async function insertConversation(userId: string, title: string, messages: Json, lastContextRoute: string) {
+  const payload: ClarisConversationInsert = {
+    user_id: userId,
+    title,
+    messages,
+    last_context_route: lastContextRoute,
+  };
+
+  const { data, error } = await supabase
+    .from('claris_conversations')
+    .insert(payload)
     .select('id, title, messages, updated_at, last_context_route')
     .single();
   if (error) throw error;
-  return data as ClarisConversationRow;
+  return data;
 }
 
-async function updateConversation(id: string, userId: string, fields: Record<string, unknown>) {
-  await (supabase.from as any)('claris_conversations')
+async function updateConversation(id: string, userId: string, fields: ClarisConversationUpdate) {
+  const { error } = await supabase
+    .from('claris_conversations')
     .update(fields)
     .eq('id', id)
     .eq('user_id', userId);
+  if (error) throw error;
 }
 
 async function deleteConversationRow(id: string, userId: string) {
-  await (supabase.from as any)('claris_conversations')
+  const { error } = await supabase
+    .from('claris_conversations')
     .delete()
     .eq('id', id)
     .eq('user_id', userId);
+  if (error) throw error;
 }
 
 // ---- Main component ----
@@ -747,13 +756,14 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                     {editingConversationId === conv.id ? (
                       <div className="space-y-1.5">
                         <Input value={editingConversationTitle} onChange={(e) => { setEditingConversationTitle(e.target.value); if (editingConversationError) setEditingConversationError(''); }}
+                          aria-label="Renomear conversa"
                           autoFocus onFocus={(e) => e.currentTarget.select()}
                           onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveConversationRename(); } if (e.key === 'Escape') { e.preventDefault(); cancelRenameConversation(); } }}
                           className="h-7 text-xs" />
-                        {editingConversationError && <p className="text-[11px] text-destructive">{editingConversationError}</p>}
+                        {editingConversationError && <p role="alert" className="text-[11px] text-destructive">{editingConversationError}</p>}
                         <div className="flex justify-end gap-1">
-                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={cancelRenameConversation}><X className="h-3 w-3" /></Button>
-                          <Button type="button" variant="outline" size="icon" className="h-6 w-6" onClick={() => void saveConversationRename()}><Check className="h-3 w-3" /></Button>
+                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={cancelRenameConversation} aria-label="Cancelar renomear conversa"><X className="h-3 w-3" /></Button>
+                          <Button type="button" variant="outline" size="icon" className="h-6 w-6" onClick={() => void saveConversationRename()} aria-label="Salvar renomear conversa"><Check className="h-3 w-3" /></Button>
                         </div>
                       </div>
                     ) : (
