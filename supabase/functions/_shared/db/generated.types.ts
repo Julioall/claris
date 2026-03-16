@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -7,31 +7,6 @@
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       activity_feed: {
@@ -91,6 +66,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      app_settings: {
+        Row: {
+          claris_llm_settings: Json
+          created_at: string
+          moodle_connection_service: string
+          moodle_connection_url: string
+          risk_threshold_days: Json
+          singleton_id: string
+          updated_at: string
+        }
+        Insert: {
+          claris_llm_settings?: Json
+          created_at?: string
+          moodle_connection_service?: string
+          moodle_connection_url?: string
+          risk_threshold_days?: Json
+          singleton_id?: string
+          updated_at?: string
+        }
+        Update: {
+          claris_llm_settings?: Json
+          created_at?: string
+          moodle_connection_service?: string
+          moodle_connection_url?: string
+          risk_threshold_days?: Json
+          singleton_id?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       attendance_course_settings: {
         Row: {
@@ -1095,36 +1100,6 @@ export type Database = {
           },
         ]
       }
-      app_settings: {
-        Row: {
-          claris_llm_settings: Json
-          created_at: string
-          moodle_connection_service: string
-          moodle_connection_url: string
-          risk_threshold_days: Json
-          singleton_id: string
-          updated_at: string
-        }
-        Insert: {
-          claris_llm_settings?: Json
-          created_at?: string
-          moodle_connection_service?: string
-          moodle_connection_url?: string
-          risk_threshold_days?: Json
-          singleton_id?: string
-          updated_at?: string
-        }
-        Update: {
-          claris_llm_settings?: Json
-          created_at?: string
-          moodle_connection_service?: string
-          moodle_connection_url?: string
-          risk_threshold_days?: Json
-          singleton_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
       user_ignored_courses: {
         Row: {
           course_id: string
@@ -1273,6 +1248,8 @@ export type Database = {
           risk_reasons: string[]
         }[]
       }
+      is_application_admin: { Args: never; Returns: boolean }
+      resolve_current_app_user_id: { Args: never; Returns: string }
       update_course_students_risk: {
         Args: { p_course_id: string }
         Returns: number
@@ -1440,9 +1417,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       bulk_message_status: [

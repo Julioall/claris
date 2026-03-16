@@ -31,6 +31,8 @@ O container `supabase` executa automaticamente:
 
 - `supabase start` (stack local)
 - `supabase migration up --local --include-all` (migrations pendentes)
+- `supabase gen types typescript --local --schema public` para regenerar [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts)
+- sincronizacao de [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts) para [supabase/functions/_shared/db/generated.types.ts](supabase/functions/_shared/db/generated.types.ts)
 - carregamento das Edge Functions locais em `supabase/functions/` (ex.: `moodle-api`)
 
 ## Validacao rapida

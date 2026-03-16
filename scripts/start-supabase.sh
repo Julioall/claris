@@ -35,6 +35,28 @@ run_supabase() {
   supabase "$@" --workdir "$WORKDIR"
 }
 
+generate_app_database_types() {
+  target_file="${WORKDIR}/src/integrations/supabase/types.ts"
+  temp_file="${target_file}.tmp"
+
+  mkdir -p "$(dirname "${target_file}")"
+
+  if ! run_supabase gen types typescript --local --schema public > "${temp_file}"; then
+    rm -f "${temp_file}"
+    log "Failed to generate application Supabase types."
+    return 1
+  fi
+
+  if [ -f "${target_file}" ] && cmp -s "${temp_file}" "${target_file}"; then
+    rm -f "${temp_file}"
+    log "Application Supabase types already in sync."
+    return 0
+  fi
+
+  mv "${temp_file}" "${target_file}"
+  log "Application Supabase types regenerated from local schema."
+}
+
 sync_edge_database_types() {
   source_file="${WORKDIR}/src/integrations/supabase/types.ts"
   target_file="${WORKDIR}/supabase/functions/_shared/db/generated.types.ts"
@@ -93,8 +115,6 @@ prepare_workdir_alias
 
 log "Using workdir: ${WORKDIR}"
 cd "${WORKDIR}"
-log "Syncing generated Supabase types into Edge Functions..."
-sync_edge_database_types
 log "Starting Supabase local stack from ${WORKDIR}..."
 run_supabase start
 
@@ -103,6 +123,12 @@ wait_for_api
 
 log "Applying pending migrations..."
 run_supabase migration up --local --include-all
+
+log "Generating Supabase application types from local schema..."
+generate_app_database_types
+
+log "Syncing generated Supabase types into Edge Functions..."
+sync_edge_database_types
 
 log "Supabase stack is running at ${SUPABASE_API_URL}."
 while :; do
