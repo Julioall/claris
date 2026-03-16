@@ -27,9 +27,9 @@ const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
 async function readStoredSettings(userId: string): Promise<SettingsJson> {
   const supabase = createServiceClient()
   const { data, error } = await supabase
-    .from('user_sync_preferences')
+    .from('app_settings')
     .select('claris_llm_settings')
-    .eq('user_id', userId)
+    .eq('singleton_id', 'global')
     .maybeSingle()
 
   if (error || !data) return {}
@@ -56,7 +56,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
   const isConfigured = Boolean(storedSettings.configured) && Boolean(model) && Boolean(baseUrl) && Boolean(apiKey)
 
   if (!isConfigured) {
-    return errorResponse('Claris IA not configured for this user.', 400)
+    return errorResponse('Claris IA not configured globally.', 400)
   }
 
   const systemPrompt = [

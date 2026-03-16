@@ -3,6 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Settings from "@/pages/Settings";
 
+const ADMIN_MOODLE_USERNAME = "04112637225";
+const ADMIN_EMAIL = "julioalves@fieg.com.br";
+
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
 const toastMock = vi.fn();
@@ -42,29 +45,29 @@ vi.mock("@/components/settings/DataCleanupCard", () => ({
   DataCleanupCard: () => <div data-testid="data-cleanup-card" />,
 }));
 
-vi.mock("@/components/settings/GradeDebugCard", () => ({
-  GradeDebugCard: () => <div data-testid="grade-debug-card" />,
-}));
+const setAuthUser = (overrides?: { moodle_username?: string; email?: string }) => {
+  useAuthMock.mockReturnValue({
+    user: {
+      id: "u-1",
+      full_name: "Julio Tutor",
+      moodle_username: overrides?.moodle_username ?? "julio",
+      email: overrides?.email ?? "julio@example.com",
+    },
+    logout: logoutMock,
+    lastSync: "2026-02-20T12:00:00.000Z",
+    syncData: syncDataMock,
+    isSyncing: false,
+    isOfflineMode: false,
+    courses: [],
+  });
+};
 
 describe("Settings page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
     logoutMock.mockResolvedValue(undefined);
-    useAuthMock.mockReturnValue({
-      user: {
-        id: "u-1",
-        full_name: "Julio Tutor",
-        moodle_username: "julio",
-        email: "julio@example.com",
-      },
-      logout: logoutMock,
-      lastSync: "2026-02-20T12:00:00.000Z",
-      syncData: syncDataMock,
-      isSyncing: false,
-      isOfflineMode: false,
-      courses: [],
-    });
+    setAuthUser();
 
     maybeSingleMock.mockResolvedValue({ data: null, error: null });
     upsertMock.mockResolvedValue({ error: null });
@@ -79,25 +82,43 @@ describe("Settings page", () => {
     }));
   });
 
-  it("renders profile information and settings cards", async () => {
+  it("shows only profile/theme/sync for common users", async () => {
     render(<Settings />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: /configuracoes/i }),
     ).toBeInTheDocument();
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
-    expect(screen.getByTestId("data-cleanup-card")).toBeInTheDocument();
-    expect(screen.getByTestId("grade-debug-card")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /claris ia/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /testar conexao/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /salvar claris ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sincronizacao geral inicial/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /claris ia/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /salvar configuracoes/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("data-cleanup-card")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fromMock).toHaveBeenCalledWith("user_sync_preferences");
+      expect(fromMock).toHaveBeenCalledWith("app_settings");
     });
   });
 
+  it("shows admin cards for configured admin user", async () => {
+    setAuthUser({ moodle_username: ADMIN_MOODLE_USERNAME, email: ADMIN_EMAIL });
+    render(<Settings />);
+
+    await waitFor(() => {
+      expect(fromMock).toHaveBeenCalledWith("app_settings");
+    });
+
+    expect(screen.getByRole("heading", { name: /conexao moodle/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /salvar conexao moodle/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /claris ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /testar conexao/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /salvar claris ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /sincronizacao geral inicial/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /salvar configuracoes/i })).toBeInTheDocument();
+    expect(screen.getByTestId("data-cleanup-card")).toBeInTheDocument();
+  });
+
   it("validates risk thresholds before saving", async () => {
+    setAuthUser({ moodle_username: ADMIN_MOODLE_USERNAME, email: ADMIN_EMAIL });
     const user = userEvent.setup();
     render(<Settings />);
 
@@ -126,6 +147,7 @@ describe("Settings page", () => {
   });
 
   it("saves sync settings and allows logout", async () => {
+    setAuthUser({ moodle_username: ADMIN_MOODLE_USERNAME, email: ADMIN_EMAIL });
     const user = userEvent.setup();
     render(<Settings />);
 
@@ -149,7 +171,7 @@ describe("Settings page", () => {
     expect(logoutMock).toHaveBeenCalledTimes(1);
   });
 
-  it("triggers initial general sync from settings", async () => {
+  it("triggers initial general sync from settings for any user", async () => {
     const user = userEvent.setup();
     render(<Settings />);
 
@@ -158,6 +180,7 @@ describe("Settings page", () => {
   });
 
   it("validates claris connection test input", async () => {
+    setAuthUser({ moodle_username: ADMIN_MOODLE_USERNAME, email: ADMIN_EMAIL });
     const user = userEvent.setup();
     render(<Settings />);
 
@@ -172,6 +195,7 @@ describe("Settings page", () => {
   });
 
   it("tests claris connection through edge function proxy", async () => {
+    setAuthUser({ moodle_username: ADMIN_MOODLE_USERNAME, email: ADMIN_EMAIL });
     const user = userEvent.setup();
     render(<Settings />);
 

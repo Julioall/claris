@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DataCleanupCard } from '@/components/settings/DataCleanupCard';
-import { GradeDebugCard } from '@/components/settings/GradeDebugCard';
 import { ThemeCard } from '@/components/settings/ThemeCard';
 import { supabase } from '@/integrations/supabase/client';
 import { Label } from '@/components/ui/label';
@@ -18,9 +17,16 @@ import {
   DEFAULT_CLARIS_LLM_SETTINGS,
   isClarisSettingsConfigured,
   normalizeBaseUrl,
-  parseClarisLlmSettings,
   type ClarisLlmSettings,
 } from '@/lib/claris-settings';
+import {
+  DEFAULT_GLOBAL_APP_SETTINGS,
+  DEFAULT_MOODLE_SERVICE,
+  DEFAULT_MOODLE_URL,
+  GLOBAL_APP_SETTINGS_ID,
+  fetchGlobalAppSettings,
+  normalizeRiskThresholdDays,
+} from '@/lib/global-app-settings';
 
 type RiskLevelThreshold = 'atencao' | 'risco' | 'critico';
 
@@ -47,11 +53,8 @@ const DEFAULT_SYNC_SETTINGS: SyncSettings = {
   },
 };
 
-const normalizeRiskThresholdDays = (value: RiskThresholdDays): RiskThresholdDays => ({
-  atencao: Math.max(1, Math.floor(value.atencao)),
-  risco: Math.max(1, Math.floor(value.risco)),
-  critico: Math.max(1, Math.floor(value.critico)),
-});
+const ADMIN_MOODLE_USERNAME = '04112637225';
+const ADMIN_EMAIL = 'julioalves@fieg.com.br';
 
 export default function Settings() {
   const { user, logout, lastSync, syncData, isSyncing, isOfflineMode, courses } = useAuth();
@@ -64,6 +67,8 @@ export default function Settings() {
   const [isSavingClarisSettings, setIsSavingClarisSettings] = useState(false);
   const [isTestingClarisConnection, setIsTestingClarisConnection] = useState(false);
   const storedClarisApiKeyRef = useRef('');
+  const [moodleConnectionUrl, setMoodleConnectionUrl] = useState(DEFAULT_MOODLE_URL);
+  const [moodleConnectionService, setMoodleConnectionService] = useState(DEFAULT_MOODLE_SERVICE);
 
   const recalculateAllStudentsRisk = async () => {
     const isMissingRpcError = (error: { code?: string | null; message?: string } | null) =>
@@ -185,56 +190,40 @@ export default function Settings() {
   };
 
   useEffect(() => {
-    if (!user) return;
-
     const loadSyncSettings = async () => {
       setIsLoadingSyncSettings(true);
       try {
-        const { data, error } = await supabase
-          .from('user_sync_preferences')
-          .select('selected_keys, include_empty_courses, include_finished, sync_interval_hours, risk_threshold_days, claris_llm_settings')
-          .eq('user_id', user.id)
-          .maybeSingle();
+        const data = await fetchGlobalAppSettings(supabase);
+        const loadedSettings: SyncSettings = {
+          riskThresholdDays: normalizeRiskThresholdDays(data.riskThresholdDays),
+        };
 
-        if (error) {
-          console.error('Error loading sync settings:', error);
-          return;
-        }
+        setSyncSettings(loadedSettings);
+        setLastSavedRiskThresholdDays(loadedSettings.riskThresholdDays);
 
-        if (data) {
-          const rawRiskThreshold = asObject(data.risk_threshold_days);
-
-          const loadedSettings: SyncSettings = {
-            riskThresholdDays: normalizeRiskThresholdDays({
-              atencao: Number(rawRiskThreshold.atencao ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.atencao),
-              risco: Number(rawRiskThreshold.risco ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.risco),
-              critico: Number(rawRiskThreshold.critico ?? DEFAULT_SYNC_SETTINGS.riskThresholdDays.critico),
-            }),
-          };
-
-          setSyncSettings(loadedSettings);
-          setLastSavedRiskThresholdDays(loadedSettings.riskThresholdDays);
-
-          const loadedClarisSettings = parseClarisLlmSettings(data.claris_llm_settings);
-          storedClarisApiKeyRef.current = loadedClarisSettings.apiKey;
-          setHasStoredClarisApiKey(loadedClarisSettings.apiKey.trim().length > 0);
-          setClarisSettings({ ...loadedClarisSettings, apiKey: '' });
-          localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(loadedClarisSettings.configured));
-        } else {
-          setSyncSettings(DEFAULT_SYNC_SETTINGS);
-          setLastSavedRiskThresholdDays(DEFAULT_SYNC_SETTINGS.riskThresholdDays);
-          storedClarisApiKeyRef.current = '';
-          setHasStoredClarisApiKey(false);
-          setClarisSettings(DEFAULT_CLARIS_LLM_SETTINGS);
-          localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, 'false');
-        }
+        storedClarisApiKeyRef.current = data.clarisSettings.apiKey;
+        setHasStoredClarisApiKey(data.clarisSettings.apiKey.trim().length > 0);
+        setClarisSettings({ ...data.clarisSettings, apiKey: '' });
+        setMoodleConnectionUrl(data.moodleConnectionUrl || DEFAULT_MOODLE_URL);
+        setMoodleConnectionService(data.moodleConnectionService || DEFAULT_MOODLE_SERVICE);
+        localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(data.clarisSettings.configured));
+      } catch (error) {
+        console.error('Error loading global app settings:', error);
+        setSyncSettings(DEFAULT_SYNC_SETTINGS);
+        setLastSavedRiskThresholdDays(DEFAULT_SYNC_SETTINGS.riskThresholdDays);
+        storedClarisApiKeyRef.current = '';
+        setHasStoredClarisApiKey(false);
+        setClarisSettings(DEFAULT_CLARIS_LLM_SETTINGS);
+        setMoodleConnectionUrl(DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionUrl);
+        setMoodleConnectionService(DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionService);
+        localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, 'false');
       } finally {
         setIsLoadingSyncSettings(false);
       }
     };
 
     loadSyncSettings();
-  }, [user]);
+  }, []);
 
   const formatDate = (date: string | null) => {
     if (!date) return 'Nunca';
@@ -242,8 +231,6 @@ export default function Settings() {
   };
 
   const saveSyncSettings = async () => {
-    if (!user) return;
-
     const normalizedRiskThresholdDays = normalizeRiskThresholdDays(syncSettings.riskThresholdDays);
     const atencaoDays = normalizedRiskThresholdDays.atencao;
     const riscoDays = normalizedRiskThresholdDays.risco;
@@ -266,13 +253,13 @@ export default function Settings() {
         lastSavedRiskThresholdDays.critico !== criticoDays;
 
       const syncPreferencesPayload = {
-        user_id: user.id,
+        singleton_id: GLOBAL_APP_SETTINGS_ID,
         risk_threshold_days: { ...normalizedRiskThresholdDays },
       };
 
       const { error } = await supabase
-        .from('user_sync_preferences')
-        .upsert(syncPreferencesPayload, { onConflict: 'user_id' });
+        .from('app_settings')
+        .upsert(syncPreferencesPayload, { onConflict: 'singleton_id' });
 
       if (error) throw error;
 
@@ -337,9 +324,46 @@ export default function Settings() {
     }));
   };
 
-  const saveClarisSettings = async () => {
-    if (!user) return;
+  const isAdmin =
+    user?.moodle_username?.trim() === ADMIN_MOODLE_USERNAME ||
+    user?.email?.trim().toLowerCase() === ADMIN_EMAIL;
 
+  const saveMoodleConnectionSettings = () => {
+    if (!isAdmin) return;
+
+    const urlToSave = moodleConnectionUrl.trim() || DEFAULT_MOODLE_URL;
+    const serviceToSave = moodleConnectionService.trim() || DEFAULT_MOODLE_SERVICE;
+
+    void (async () => {
+      try {
+        const { error } = await supabase
+          .from('app_settings')
+          .upsert({
+            singleton_id: GLOBAL_APP_SETTINGS_ID,
+            moodle_connection_url: urlToSave,
+            moodle_connection_service: serviceToSave,
+          }, { onConflict: 'singleton_id' });
+
+        if (error) throw error;
+
+        setMoodleConnectionUrl(urlToSave);
+        setMoodleConnectionService(serviceToSave);
+        toast({
+          title: 'Configuracao do Moodle salva',
+          description: 'URL e servico atualizados com sucesso para todos os usuarios.',
+        });
+      } catch (error) {
+        console.error('Error saving Moodle connection settings:', error);
+        toast({
+          title: 'Erro ao salvar Moodle',
+          description: 'Nao foi possivel salvar a conexao global do Moodle.',
+          variant: 'destructive',
+        });
+      }
+    })();
+  };
+
+  const saveClarisSettings = async () => {
     const effectiveApiKey = clarisSettings.apiKey.trim().length > 0
       ? clarisSettings.apiKey.trim()
       : storedClarisApiKeyRef.current;
@@ -361,11 +385,11 @@ export default function Settings() {
     setIsSavingClarisSettings(true);
     try {
       const { error } = await supabase
-        .from('user_sync_preferences')
+        .from('app_settings')
         .upsert({
-          user_id: user.id,
+          singleton_id: GLOBAL_APP_SETTINGS_ID,
           claris_llm_settings: payload,
-        }, { onConflict: 'user_id' });
+        }, { onConflict: 'singleton_id' });
 
       if (error) throw error;
 
@@ -377,8 +401,8 @@ export default function Settings() {
       toast({
         title: 'Configuracao da Claris IA salva',
         description: payload.configured
-          ? 'Conexao registrada. A integracao completa com LLM sera habilitada na proxima fase.'
-          : 'Dados salvos. Complete os campos para ativar a Claris IA.',
+          ? 'Conexao global registrada para todos os usuarios.'
+          : 'Dados globais salvos. Complete os campos para ativar a Claris IA.'
       });
     } catch (err) {
       console.error('Error saving Claris settings:', err);
@@ -476,89 +500,6 @@ export default function Settings() {
       </div>
 
       <div className="space-y-6">
-        <ThemeCard />
-      </div>
-
-      <div className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Bot className="h-5 w-5" />
-              Claris IA
-            </CardTitle>
-            <CardDescription>Configure a conexao da Claris com seu provedor LLM</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="claris-provider">Provider</Label>
-                <Input
-                  id="claris-provider"
-                  value={clarisSettings.provider}
-                  onChange={(e) => updateClarisField('provider', e.target.value)}
-                  placeholder="openai"
-                  disabled={isSavingClarisSettings}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="claris-model">Modelo</Label>
-                <Input
-                  id="claris-model"
-                  value={clarisSettings.model}
-                  onChange={(e) => updateClarisField('model', e.target.value)}
-                  placeholder="gpt-4o-mini"
-                  disabled={isSavingClarisSettings}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="claris-base-url">Endpoint/Base URL</Label>
-              <Input
-                id="claris-base-url"
-                value={clarisSettings.baseUrl}
-                onChange={(e) => updateClarisField('baseUrl', e.target.value)}
-                placeholder="https://api.openai.com/v1"
-                disabled={isSavingClarisSettings}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="claris-api-key">Chave API</Label>
-              <Input
-                id="claris-api-key"
-                type="password"
-                value={clarisSettings.apiKey}
-                onChange={(e) => updateClarisField('apiKey', e.target.value)}
-                placeholder={hasStoredClarisApiKey ? '•••••••••••• (chave ja salva)' : 'sk-...'}
-                disabled={isSavingClarisSettings}
-              />
-              <p className="text-xs text-muted-foreground">
-                Por seguranca, a chave salva nao e exibida. Preencha apenas se quiser substituir a atual.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Button
-                variant="outline"
-                onClick={testClarisConnection}
-                disabled={isTestingClarisConnection || isSavingClarisSettings}
-                className="sm:flex-1"
-              >
-                <PlugZap className="mr-2 h-4 w-4" />
-                {isTestingClarisConnection ? 'Testando...' : 'Testar conexao'}
-              </Button>
-              <Button
-                onClick={saveClarisSettings}
-                disabled={isSavingClarisSettings}
-                className="sm:flex-1"
-              >
-                {isSavingClarisSettings ? 'Salvando...' : 'Salvar Claris IA'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -581,112 +522,241 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
-              Sincronizacao
-            </CardTitle>
-            <CardDescription>Sincronizacao geral para carga inicial da plataforma (quando ainda nao houver dados)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <Clock className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">Ultima sincronizacao:</span>
-                <span className="font-medium">{formatDate(lastSync)}</span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-sm">
-                <Globe className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">URL do Moodle:</span>
-                <span className="font-medium">https://ead.fieg.com.br</span>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="rounded-md border p-3 bg-muted/30">
-              <p className="text-sm text-muted-foreground">
-                Use este botao apenas no inicio, quando ainda nao houver dados sincronizados. Para uso diario, prefira os botoes incrementais nas telas de Alunos e Unidades Curriculares.
-              </p>
-            </div>
-
-            <Button
-              variant="outline"
-              onClick={syncData}
-              disabled={isOfflineMode || isSyncing || courses.length > 0}
-              className="w-full"
-            >
-              {isSyncing ? 'Sincronizando...' : 'Sincronizacao geral inicial'}
-            </Button>
-
-            {courses.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                A sincronizacao geral inicial fica disponivel apenas quando ainda nao houver dados na plataforma.
-              </p>
-            )}
-
-            <Separator />
-
-            <div className="space-y-3">
-              <div className="text-sm font-medium">Dias sem acesso para classificar risco</div>
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
-                  <Label className="text-sm">Atencao</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={String(syncSettings.riskThresholdDays.atencao)}
-                    onChange={(e) => updateRiskThresholdDays('atencao', e.target.value)}
-                    disabled={isLoadingSyncSettings}
-                    className="w-[120px]"
-                  />
-                </div>
-                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
-                  <Label className="text-sm">Risco</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={String(syncSettings.riskThresholdDays.risco)}
-                    onChange={(e) => updateRiskThresholdDays('risco', e.target.value)}
-                    disabled={isLoadingSyncSettings}
-                    className="w-[120px]"
-                  />
-                </div>
-                <div className="flex items-center justify-between rounded-md border p-3 gap-3">
-                  <Label className="text-sm">Critico</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    step={1}
-                    value={String(syncSettings.riskThresholdDays.critico)}
-                    onChange={(e) => updateRiskThresholdDays('critico', e.target.value)}
-                    disabled={isLoadingSyncSettings}
-                    className="w-[120px]"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Use valores crescentes: atencao menor que risco, e risco menor que critico.
-              </p>
-            </div>
-
-            <Button onClick={saveSyncSettings} variant="outline" className="w-full" disabled={isLoadingSyncSettings || isSavingSyncSettings}>
-              Salvar configuracoes
-            </Button>
-          </CardContent>
-        </Card>
+        <ThemeCard />
       </div>
 
-      <div className="space-y-6">
-        <DataCleanupCard />
-      </div>
-      <GradeDebugCard />
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <RefreshCw className="h-5 w-5" />
+            Sincronizacao
+          </CardTitle>
+          <CardDescription>Sincronizacao geral para carga inicial da plataforma (quando ainda nao houver dados)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">Ultima sincronizacao:</span>
+              <span className="font-medium">{formatDate(lastSync)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              <Globe className="h-4 w-4 text-muted-foreground" />
+              <span className="text-muted-foreground">URL do Moodle:</span>
+              <span className="font-medium">{moodleConnectionUrl}</span>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="rounded-md border p-3 bg-muted/30">
+            <p className="text-sm text-muted-foreground">
+              Use este botao apenas no inicio, quando ainda nao houver dados sincronizados. Para uso diario, prefira os botoes incrementais nas telas de Alunos e Unidades Curriculares.
+            </p>
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={syncData}
+            disabled={isOfflineMode || isSyncing || courses.length > 0}
+            className="w-full"
+          >
+            {isSyncing ? 'Sincronizando...' : 'Sincronizacao geral inicial'}
+          </Button>
+
+          {courses.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              A sincronizacao geral inicial fica disponivel apenas quando ainda nao houver dados na plataforma.
+            </p>
+          )}
+
+          {isAdmin && (
+            <>
+              <Separator />
+
+              <div className="space-y-3">
+                <div className="text-sm font-medium">Dias sem acesso para classificar risco</div>
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                    <Label className="text-sm">Atencao</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={String(syncSettings.riskThresholdDays.atencao)}
+                      onChange={(e) => updateRiskThresholdDays('atencao', e.target.value)}
+                      disabled={isLoadingSyncSettings}
+                      className="w-[120px]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                    <Label className="text-sm">Risco</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={String(syncSettings.riskThresholdDays.risco)}
+                      onChange={(e) => updateRiskThresholdDays('risco', e.target.value)}
+                      disabled={isLoadingSyncSettings}
+                      className="w-[120px]"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between rounded-md border p-3 gap-3">
+                    <Label className="text-sm">Critico</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={String(syncSettings.riskThresholdDays.critico)}
+                      onChange={(e) => updateRiskThresholdDays('critico', e.target.value)}
+                      disabled={isLoadingSyncSettings}
+                      className="w-[120px]"
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use valores crescentes: atencao menor que risco, e risco menor que critico.
+                </p>
+              </div>
+
+              <Button onClick={saveSyncSettings} variant="outline" className="w-full" disabled={isLoadingSyncSettings || isSavingSyncSettings}>
+                Salvar configuracoes
+              </Button>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {isAdmin && (
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Globe className="h-5 w-5" />
+                Conexao Moodle
+              </CardTitle>
+              <CardDescription>URL e servico do Moodle para autenticacao</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="moodle-url">URL do Moodle</Label>
+                <Input
+                  id="moodle-url"
+                  type="url"
+                  value={moodleConnectionUrl}
+                  onChange={(e) => setMoodleConnectionUrl(e.target.value)}
+                  placeholder="https://moodle.exemplo.com"
+                />
+                <p className="text-xs text-muted-foreground">
+                  A URL precisa estar acessivel pelo Supabase. Enderecos internos, hosts locais ou sem DNS publico podem falhar no login.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="moodle-service">Nome do Servico Web</Label>
+                <Input
+                  id="moodle-service"
+                  type="text"
+                  value={moodleConnectionService}
+                  onChange={(e) => setMoodleConnectionService(e.target.value)}
+                  placeholder="moodle_mobile_app"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Geralmente e "moodle_mobile_app". Consulte o administrador do Moodle se nao funcionar.
+                </p>
+              </div>
+
+              <Button onClick={saveMoodleConnectionSettings} variant="outline" className="w-full">
+                Salvar conexao Moodle
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Claris IA
+              </CardTitle>
+              <CardDescription>Configure a conexao da Claris com seu provedor LLM</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="claris-provider">Provider</Label>
+                  <Input
+                    id="claris-provider"
+                    value={clarisSettings.provider}
+                    onChange={(e) => updateClarisField('provider', e.target.value)}
+                    placeholder="openai"
+                    disabled={isSavingClarisSettings}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="claris-model">Modelo</Label>
+                  <Input
+                    id="claris-model"
+                    value={clarisSettings.model}
+                    onChange={(e) => updateClarisField('model', e.target.value)}
+                    placeholder="gpt-4o-mini"
+                    disabled={isSavingClarisSettings}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="claris-base-url">Endpoint/Base URL</Label>
+                <Input
+                  id="claris-base-url"
+                  value={clarisSettings.baseUrl}
+                  onChange={(e) => updateClarisField('baseUrl', e.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  disabled={isSavingClarisSettings}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="claris-api-key">Chave API</Label>
+                <Input
+                  id="claris-api-key"
+                  type="password"
+                  value={clarisSettings.apiKey}
+                  onChange={(e) => updateClarisField('apiKey', e.target.value)}
+                  placeholder={hasStoredClarisApiKey ? '•••••••••••• (chave ja salva)' : 'sk-...'}
+                  disabled={isSavingClarisSettings}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Por seguranca, a chave salva nao e exibida. Preencha apenas se quiser substituir a atual.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  variant="outline"
+                  onClick={testClarisConnection}
+                  disabled={isTestingClarisConnection || isSavingClarisSettings}
+                  className="sm:flex-1"
+                >
+                  <PlugZap className="mr-2 h-4 w-4" />
+                  {isTestingClarisConnection ? 'Testando...' : 'Testar conexao'}
+                </Button>
+                <Button
+                  onClick={saveClarisSettings}
+                  disabled={isSavingClarisSettings}
+                  className="sm:flex-1"
+                >
+                  {isSavingClarisSettings ? 'Salvando...' : 'Salvar Claris IA'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <DataCleanupCard />
+        </div>
+      )}
 
       <Card className="border-destructive/30">
         <CardHeader>

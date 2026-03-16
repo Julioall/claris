@@ -26,9 +26,9 @@ const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
 async function readStoredSettings(userId: string): Promise<SettingsJson> {
   const supabase = createServiceClient()
   const { data, error } = await supabase
-    .from('user_sync_preferences')
+    .from('app_settings')
     .select('claris_llm_settings')
-    .eq('user_id', userId)
+    .eq('singleton_id', 'global')
     .maybeSingle()
 
   if (error || !data) return {}

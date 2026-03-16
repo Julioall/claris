@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Check, Expand, MessageCircle, MoreHorizontal, Pencil, Plus, Sparkles, Send, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ClarisIcon } from '@/components/ui/claris-logo';
 import { cn } from '@/lib/utils';
 import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
+import { fetchGlobalAppSettings } from '@/lib/global-app-settings';
 import { supabase } from '@/integrations/supabase/client';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -63,6 +64,7 @@ interface ChatMessage {
   id: string;
   role: ChatRole;
   content: string;
+  isSystem?: boolean;
   actions?: ChatAction[];
   richBlocks?: ChatRichBlock[];
 }
@@ -458,6 +460,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
     [conversations, activeConversationId],
   );
+  const activeConversationTitle = activeConversation?.title ?? '';
   const suggestionsRoute = activeConversation?.lastContextRoute || activeRouteContext;
   const contextualSuggestions = useMemo(
     () => buildContextualSuggestions(suggestionsRoute),
@@ -470,10 +473,23 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     [conversations],
   );
 
-  useEffect(() => {
-    const configured = localStorage.getItem(CLARIS_CONFIGURED_STORAGE_KEY) === 'true';
-    setIsConfigured(configured);
+  const refreshGlobalClarisConfiguration = useCallback(async () => {
+    try {
+      const appSettings = await fetchGlobalAppSettings(supabase);
+      const configured = Boolean(appSettings.clarisSettings.configured);
+      localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(configured));
+      setIsConfigured(configured);
+      return configured;
+    } catch {
+      const configured = localStorage.getItem(CLARIS_CONFIGURED_STORAGE_KEY) === 'true';
+      setIsConfigured(configured);
+      return configured;
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshGlobalClarisConfiguration();
+  }, [refreshGlobalClarisConfiguration]);
 
   useEffect(() => {
     if (!isFloating) return;
@@ -485,8 +501,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
 
     if (visualState === 'opening') {
       setIsChatVisible(true);
-      const configured = localStorage.getItem(CLARIS_CONFIGURED_STORAGE_KEY) === 'true';
-      setIsConfigured(configured);
+      void refreshGlobalClarisConfiguration();
       const timeoutId = window.setTimeout(() => setVisualState('open'), CHAT_MORPH_DURATION_MS);
       return () => window.clearTimeout(timeoutId);
     }
@@ -501,10 +516,9 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
 
     if (visualState === 'open') {
       setIsChatVisible(true);
-      const configured = localStorage.getItem(CLARIS_CONFIGURED_STORAGE_KEY) === 'true';
-      setIsConfigured(configured);
+      void refreshGlobalClarisConfiguration();
     }
-  }, [isFloating, visualState]);
+  }, [isFloating, refreshGlobalClarisConfiguration, visualState]);
 
   useEffect(() => {
     if (!isFloating) {
@@ -684,19 +698,21 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     localStorage.setItem(historyStorageKey, JSON.stringify(historyToPersist));
 
     const nextTitle = deriveConversationTitle(historyToPersist);
+    const shouldAutoTitle = activeConversationTitle.trim().toLowerCase() === 'nova conversa';
+    const titleToPersist = shouldAutoTitle ? nextTitle : (activeConversationTitle || nextTitle);
     const nowIso = new Date().toISOString();
     setConversations((prev) => {
-      const updated = prev.map((conversation) =>
-        conversation.id === activeConversationId
-          ? {
-              ...conversation,
-              title: nextTitle,
-              history: historyToPersist,
-              updatedAt: nowIso,
-              lastContextRoute: activeRouteContext,
-            }
-          : conversation,
-      );
+      const updated = prev.map((conversation) => {
+        if (conversation.id !== activeConversationId) return conversation;
+
+        return {
+          ...conversation,
+          title: titleToPersist,
+          history: historyToPersist,
+          updatedAt: nowIso,
+          lastContextRoute: activeRouteContext,
+        };
+      });
       return [...updated].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     });
 
@@ -705,7 +721,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
         .from('claris_conversations')
         .insert({
           user_id: userId,
-          title: nextTitle,
+          title: titleToPersist,
           messages: historyToPersist,
           last_context_route: activeRouteContext,
         })
@@ -732,13 +748,13 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     void supabase
       .from('claris_conversations')
       .update({
-        title: nextTitle,
+        title: titleToPersist,
         messages: historyToPersist,
         last_context_route: activeRouteContext,
       })
       .eq('id', activeConversationId)
       .eq('user_id', userId);
-  }, [activeConversationId, activeRouteContext, historyStorageKey, isHydratingConversations, messages, userId]);
+  }, [activeConversationId, activeConversationTitle, activeRouteContext, historyStorageKey, isHydratingConversations, messages, userId]);
 
   const selectConversation = (conversationId: string) => {
     const selected = conversations.find((conversation) => conversation.id === conversationId);
@@ -914,7 +930,9 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       setInputValue('');
     }
 
-    if (!isConfigured) {
+    const clarisConfigured = isConfigured || await refreshGlobalClarisConfiguration();
+
+    if (!clarisConfigured) {
       const assistantMessage: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -1132,129 +1150,129 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
           <div className="min-h-0 flex-1 px-4 py-4">
 
             <ScrollArea className="h-[240px] lg:h-full pr-2">
-              {isHydratingConversations ? (
-                <div className="flex items-center justify-center py-8">
-                  <Spinner className="h-5 w-5" />
-                </div>
-              ) : visibleConversations.length === 0 ? (
-                <div />
-              ) : (
-                <div className="space-y-2">
-                  {visibleConversations.map((conversation) => (
-                    <div
-                      key={conversation.id}
-                      className={cn(
-                        'w-full rounded-xl border px-3 py-2 transition-colors',
-                        activeConversationId === conversation.id
-                          ? 'border-primary/40 bg-primary/10'
-                          : 'border-border/70 bg-background/80 hover:bg-background',
-                      )}
-                    >
-                      {editingConversationId === conversation.id ? (
-                        <div className="space-y-2">
-                          <Input
-                            value={editingConversationTitle}
-                            onChange={(event) => {
-                              setEditingConversationTitle(event.target.value);
-                              if (editingConversationError) {
-                                setEditingConversationError('');
-                              }
-                            }}
-                            autoFocus
-                            onFocus={(event) => event.currentTarget.select()}
-                            onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
-                                event.preventDefault();
-                                void saveConversationRename();
-                              }
-                              if (event.key === 'Escape') {
-                                event.preventDefault();
-                                cancelRenameConversation();
-                              }
-                            }}
-                            aria-label={`Renomear conversa ${conversation.title}`}
-                            className="h-8"
-                          />
-                          {editingConversationError && (
-                            <p className="text-[11px] text-destructive" role="alert">
-                              {editingConversationError}
-                            </p>
-                          )}
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={cancelRenameConversation}
-                              aria-label={`Cancelar renomear conversa ${conversation.title}`}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => void saveConversationRename()}
-                              aria-label={`Salvar renomear conversa ${conversation.title}`}
-                            >
-                              <Check className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-start gap-2">
-                          <button
+            {isHydratingConversations ? (
+              <div className="flex items-center justify-center py-8">
+                <Spinner className="h-5 w-5" />
+              </div>
+            ) : visibleConversations.length === 0 ? (
+              <div />
+            ) : (
+              <div className="space-y-2">
+                {visibleConversations.map((conversation) => (
+                  <div
+                    key={conversation.id}
+                    className={cn(
+                      'w-full rounded-xl border px-3 py-2 transition-colors',
+                      activeConversationId === conversation.id
+                        ? 'border-primary/40 bg-primary/10'
+                        : 'border-border/70 bg-background/80 hover:bg-background',
+                    )}
+                  >
+                    {editingConversationId === conversation.id ? (
+                      <div className="space-y-2">
+                        <Input
+                          value={editingConversationTitle}
+                          onChange={(event) => {
+                            setEditingConversationTitle(event.target.value);
+                            if (editingConversationError) {
+                              setEditingConversationError('');
+                            }
+                          }}
+                          autoFocus
+                          onFocus={(event) => event.currentTarget.select()}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              void saveConversationRename();
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              cancelRenameConversation();
+                            }
+                          }}
+                          aria-label={`Renomear conversa ${conversation.title}`}
+                          className="h-8"
+                        />
+                        {editingConversationError && (
+                          <p className="text-[11px] text-destructive" role="alert">
+                            {editingConversationError}
+                          </p>
+                        )}
+                        <div className="flex justify-end gap-1">
+                          <Button
                             type="button"
-                            className="min-w-0 flex-1 text-left"
-                            onClick={() => selectConversation(conversation.id)}
-                            aria-label={`Abrir conversa ${conversation.title}`}
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={cancelRenameConversation}
+                            aria-label={`Cancelar renomear conversa ${conversation.title}`}
                           >
-                            <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                              <span className="font-semibold uppercase tracking-wide truncate">{conversation.title}</span>
-                            </div>
-                            <div className="line-clamp-2 text-sm break-words text-foreground/90">
-                              {conversation.history[conversation.history.length - 1]?.content ?? 'Sem mensagens ainda'}
-                            </div>
-                          </button>
-
-                          <div className="flex items-center gap-1">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  aria-label={`Mais opções da conversa ${conversation.title}`}
-                                >
-                                  <MoreHorizontal className="h-3.5 w-3.5" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => startRenameConversation(conversation.id, conversation.title)}>
-                                  <Pencil className="mr-2 h-3.5 w-3.5" />
-                                  Renomear
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-destructive focus:text-destructive"
-                                  onSelect={() => {
-                                    void deleteConversation(conversation.id);
-                                  }}
-                                >
-                                  <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                  Excluir
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => void saveConversationRename()}
+                            aria-label={`Salvar renomear conversa ${conversation.title}`}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-2">
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 text-left"
+                          onClick={() => selectConversation(conversation.id)}
+                          aria-label={`Abrir conversa ${conversation.title}`}
+                        >
+                          <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                            <span className="font-semibold uppercase tracking-wide truncate">{conversation.title}</span>
+                          </div>
+                          <div className="line-clamp-2 text-sm break-words text-foreground/90">
+                            {conversation.history[conversation.history.length - 1]?.content ?? 'Sem mensagens ainda'}
+                          </div>
+                        </button>
+
+                        <div className="flex items-center gap-1">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label={`Mais opções da conversa ${conversation.title}`}
+                              >
+                                <MoreHorizontal className="h-3.5 w-3.5" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => startRenameConversation(conversation.id, conversation.title)}>
+                                <Pencil className="mr-2 h-3.5 w-3.5" />
+                                Renomear
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onSelect={() => {
+                                  void deleteConversation(conversation.id);
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-3.5 w-3.5" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             </ScrollArea>
           </div>
         </aside>

@@ -8,6 +8,7 @@ import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
 const invokeMock = vi.fn();
 const fromMock = vi.fn();
 const WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
+let clarisConfiguredGlobal = false;
 let conversationsStore: Array<{
   id: string;
   user_id: string;
@@ -38,6 +39,7 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 function setClarisConfigured(value: boolean) {
+  clarisConfiguredGlobal = value;
   localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, value ? 'true' : 'false');
 }
 
@@ -47,9 +49,37 @@ beforeEach(() => {
   invokeMock.mockReset();
   fromMock.mockReset();
   localStorage.clear();
+  clarisConfiguredGlobal = false;
   conversationsStore = [];
 
   fromMock.mockImplementation((table: string) => {
+    if (table === 'app_settings') {
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: {
+                singleton_id: 'global',
+                moodle_connection_url: 'https://moodle.example.com',
+                moodle_connection_service: 'moodle_mobile_app',
+                risk_threshold_days: { atencao: 7, risco: 14, critico: 30 },
+                claris_llm_settings: clarisConfiguredGlobal
+                  ? {
+                      provider: 'openai',
+                      model: 'gpt-4o-mini',
+                      baseUrl: 'https://api.openai.com/v1',
+                      apiKey: 'sk-test',
+                      configured: true,
+                    }
+                  : {},
+              },
+              error: null,
+            }),
+          }),
+        }),
+      };
+    }
+
     if (table !== 'claris_conversations') {
       throw new Error(`Unexpected table: ${table}`);
     }
@@ -483,7 +513,7 @@ describe('FloatingClarisChat', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Conversa antiga')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /mais opções da conversa/i }).length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getAllByRole('button', { name: /mais opções da conversa/i })[0]);
@@ -521,7 +551,7 @@ describe('FloatingClarisChat', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Conversa para Enter')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /mais opções da conversa/i }).length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getAllByRole('button', { name: /mais opções da conversa/i })[0]);
@@ -557,7 +587,7 @@ describe('FloatingClarisChat', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Conversa para Esc')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /mais opções da conversa/i }).length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getAllByRole('button', { name: /mais opções da conversa/i })[0]);
@@ -595,7 +625,7 @@ describe('FloatingClarisChat', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Conversa para validação')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /mais opções da conversa/i }).length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getAllByRole('button', { name: /mais opções da conversa/i })[0]);
@@ -634,7 +664,7 @@ describe('FloatingClarisChat', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Conversa para excluir')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: /mais opções da conversa/i }).length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getAllByRole('button', { name: /mais opções da conversa/i })[0]);

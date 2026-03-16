@@ -1095,6 +1095,36 @@ export type Database = {
           },
         ]
       }
+      app_settings: {
+        Row: {
+          claris_llm_settings: Json
+          created_at: string
+          moodle_connection_service: string
+          moodle_connection_url: string
+          risk_threshold_days: Json
+          singleton_id: string
+          updated_at: string
+        }
+        Insert: {
+          claris_llm_settings?: Json
+          created_at?: string
+          moodle_connection_service?: string
+          moodle_connection_url?: string
+          risk_threshold_days?: Json
+          singleton_id?: string
+          updated_at?: string
+        }
+        Update: {
+          claris_llm_settings?: Json
+          created_at?: string
+          moodle_connection_service?: string
+          moodle_connection_url?: string
+          risk_threshold_days?: Json
+          singleton_id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_ignored_courses: {
         Row: {
           course_id: string

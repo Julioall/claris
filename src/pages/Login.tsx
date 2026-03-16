@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Settings } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { ClarisLogo } from '@/components/ui/claris-logo';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+import {
+  DEFAULT_MOODLE_SERVICE,
+  DEFAULT_MOODLE_URL,
+  fetchGlobalAppSettings,
+} from '@/lib/global-app-settings';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,9 +21,6 @@ export default function Login() {
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [moodleUrl, setMoodleUrl] = useState('https://ead.fieg.com.br');
-  const [serviceName, setServiceName] = useState('moodle_mobile_app');
-  const [showAdvanced, setShowAdvanced] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
 
@@ -30,7 +33,18 @@ export default function Login() {
       return;
     }
 
-    const success = await login(username, password, moodleUrl, serviceName);
+    let storedUrl = DEFAULT_MOODLE_URL;
+    let storedService = DEFAULT_MOODLE_SERVICE;
+
+    try {
+      const appSettings = await fetchGlobalAppSettings(supabase);
+      storedUrl = appSettings.moodleConnectionUrl || DEFAULT_MOODLE_URL;
+      storedService = appSettings.moodleConnectionService || DEFAULT_MOODLE_SERVICE;
+    } catch (error) {
+      console.error('Error loading global Moodle connection settings:', error);
+    }
+
+    const success = await login(username, password, storedUrl, storedService);
     if (success) {
       navigate('/');
     }
@@ -92,53 +106,6 @@ export default function Login() {
                   </Button>
                 </div>
               </div>
-
-              <div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                >
-                  <Settings className="h-3 w-3 mr-1" />
-                      {showAdvanced ? 'Ocultar configurações' : 'Configurações avançadas'}
-                </Button>
-              </div>
-
-              {showAdvanced && (
-                <div className="space-y-4 rounded-lg border border-border/50 bg-muted/30 p-3 animate-fade-in">
-                  <div className="space-y-2">
-                    <Label htmlFor="moodleUrl">URL do Moodle</Label>
-                    <Input
-                      id="moodleUrl"
-                      type="url"
-                      placeholder="https://moodle.exemplo.com"
-                      value={moodleUrl}
-                      onChange={(e) => setMoodleUrl(e.target.value)}
-                      className="bg-background"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      A URL precisa estar acessivel pelo Supabase. Enderecos internos, hosts locais ou sem DNS publico podem falhar no login.
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                        <Label htmlFor="serviceName">Nome do Serviço Web</Label>
-                    <Input
-                      id="serviceName"
-                      type="text"
-                      placeholder="moodle_mobile_app"
-                      value={serviceName}
-                      onChange={(e) => setServiceName(e.target.value)}
-                      className="bg-background"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                          Geralmente é "moodle_mobile_app". Consulte o administrador do Moodle se não funcionar.
-                    </p>
-                  </div>
-                </div>
-              )}
 
               {error && (
                 <p className="text-sm text-destructive">{error}</p>
