@@ -78,7 +78,7 @@ Alternativamente:
 node scripts/smoke-edge-functions.mjs
 ```
 
-Em push para `main` com mudancas relevantes de `supabase/**`, `.env` ou scripts de deploy, o workflow [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) usa esse smoke como gate e, se ele passar, faz o deploy remoto do Supabase aplicando `db push --include-all` e publicando o conjunto remoto padrao de Edge Functions.
+Em push para `main` com mudancas relevantes de `supabase/**`, `.env` ou scripts de deploy, o workflow [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) roda o smoke local. Se ele concluir com sucesso, o workflow dedicado [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml) dispara o deploy remoto do Supabase aplicando `db push --include-all` e publicando o conjunto remoto padrao de Edge Functions.
 
 Secrets necessarios no GitHub Actions para esse deploy remoto:
 
@@ -86,6 +86,8 @@ Secrets necessarios no GitHub Actions para esse deploy remoto:
 - `SUPABASE_PASSWORD`
 
 O workflow resolve automaticamente o projeto remoto a partir de `VITE_SUPABASE_PROJECT_ID` em `.env`.
+
+Tambem e possivel disparar manualmente o deploy remoto via `workflow_dispatch` no workflow [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml).
 
 ## Tornar o smoke obrigatório na main
 
