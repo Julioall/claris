@@ -634,8 +634,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const chatPanel = (
     <div className={cn('flex h-full w-full flex-col overflow-hidden', isFloating ? 'bg-card' : 'bg-background')}>
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between border-b px-4 py-2">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Claris IA</span>
+      <div className="shrink-0 flex min-h-11 items-center justify-between border-b px-4 py-2.5 sm:min-h-[45px] sm:py-3">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground p-1.5">Claris IA</span>
         <div className="flex items-center gap-1">
           {isFloating && (
             <>
@@ -726,7 +726,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       <div className="flex h-full w-full flex-col lg:flex-row">
         {/* Sidebar */}
         <aside className="flex w-full shrink-0 flex-col border-b border-border/40 bg-muted/30 lg:w-[280px] lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between border-b px-4 py-2">
+          <div className="flex min-h-11 items-center justify-between border-b px-4 py-2.5 sm:min-h-[45px] sm:py-3">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seus Chats</span>
             <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={createNewConversation} aria-label="Nova conversa">
               <Plus className="h-4 w-4" />
@@ -734,7 +734,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
           </div>
 
           <ScrollArea className="flex-1 min-h-0">
-            <div className="p-2 space-y-0.5">
+            <div className="table min-w-full">
+              <div className="w-full max-w-full p-2 space-y-0.5 lg:max-w-[278px]">
               {isHydratingConversations ? (
                 <div className="flex items-center justify-center py-8"><Spinner className="h-5 w-5" /></div>
               ) : visibleConversations.length === 0 ? null : (
@@ -761,7 +762,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                         <span className="flex-1 truncate text-sm text-foreground/90">{conv.title}</span>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()} aria-label="Mais opções da conversa">
                               <MoreHorizontal className="h-3.5 w-3.5" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -779,6 +780,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                   </div>
                 ))
               )}
+              </div>
             </div>
           </ScrollArea>
         </aside>
