@@ -726,7 +726,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       <div className="flex h-full w-full flex-col lg:flex-row">
         {/* Sidebar */}
         <aside className="flex w-full shrink-0 flex-col border-b border-border/40 bg-muted/30 lg:w-[280px] lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between border-b px-4 py-2.5">
+          <div className="flex items-center justify-between border-b px-4 py-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seus Chats</span>
             <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={createNewConversation} aria-label="Nova conversa">
               <Plus className="h-4 w-4" />
