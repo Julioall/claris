@@ -21,7 +21,8 @@ import Schools from "@/pages/Schools";
 import CoursePanel from "@/pages/CoursePanel";
 import Students from "@/pages/Students";
 import StudentProfile from "@/pages/StudentProfile";
-import PendingTasks from "@/pages/PendingTasks";
+import Tarefas from "@/pages/Tarefas";
+import Agenda from "@/pages/Agenda";
 import Messages from "@/pages/Messages";
 import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
@@ -64,7 +65,8 @@ function AppRoutes() {
         <Route path="/cursos/:id" element={<CoursePanel />} />
         <Route path="/alunos" element={<Students />} />
         <Route path="/alunos/:id" element={<StudentProfile />} />
-        <Route path="/pendencias" element={<PendingTasks />} />
+        <Route path="/tarefas" element={<Tarefas />} />
+        <Route path="/agenda" element={<Agenda />} />
         <Route path="/mensagens" element={<Messages />} />
         <Route path="/claris" element={<Claris />} />
         <Route path="/relatorios" element={<Reports />} />

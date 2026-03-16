@@ -7,9 +7,9 @@ import {
   AlertTriangle,
   Plus,
   Edit,
-  CheckCircle2,
+  CheckSquare,
   MessageSquare,
-  ClipboardList,
+  Construction,
   History,
   GraduationCap
 } from 'lucide-react';
@@ -19,12 +19,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RiskBadge } from '@/components/ui/RiskBadge';
-import { PriorityBadge } from '@/components/ui/PriorityBadge';
-import { StatusBadge } from '@/components/ui/StatusBadge';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { StudentGradesTab } from '@/components/student/StudentGradesTab';
 import { ChatWindow } from '@/components/chat/ChatWindow';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const riskReasonLabels: Record<string, string> = {
@@ -36,20 +34,14 @@ const riskReasonLabels: Record<string, string> = {
 
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState('pendencias');
+  const [activeTab, setActiveTab] = useState('tarefas');
   
   const { 
     student, 
-    pendingTasks, 
     notes, 
-    stats, 
     isLoading, 
     error 
   } = useStudentProfile(id);
-
-  const formatDate = (date: string) => {
-    return format(new Date(date), "dd/MM/yyyy", { locale: ptBR });
-  };
 
   const formatTime = (date: string) => {
     return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
@@ -78,8 +70,6 @@ export default function StudentProfile() {
     );
   }
 
-  const openTasks = pendingTasks.filter(t => t.status !== 'resolvida');
- 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Back button */}
@@ -119,7 +109,7 @@ export default function StudentProfile() {
       </div>
 
       {/* Quick stats */}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-1">
         <Card>
           <CardContent className="pt-4">
             <div className="flex items-center gap-3">
@@ -133,21 +123,6 @@ export default function StudentProfile() {
             </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-lg bg-risk-risco-bg flex items-center justify-center">
-                <ClipboardList className="h-5 w-5 text-risk-risco" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Pendências</p>
-                <p className="font-medium">{stats.pendingTasksCount} abertas</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
       </div>
 
       {/* Risk reasons */}
@@ -174,14 +149,9 @@ export default function StudentProfile() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start">
-          <TabsTrigger value="pendencias" className="gap-2">
-            <ClipboardList className="h-4 w-4" />
-            Pendências
-            {openTasks.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {openTasks.length}
-              </Badge>
-            )}
+          <TabsTrigger value="tarefas" className="gap-2">
+            <CheckSquare className="h-4 w-4" />
+            Tarefas
           </TabsTrigger>
           <TabsTrigger value="notas" className="gap-2">
             <GraduationCap className="h-4 w-4" />
@@ -206,58 +176,15 @@ export default function StudentProfile() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Pendências */}
-        <TabsContent value="pendencias" className="mt-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <h3 className="font-medium">Pendências e Atividades</h3>
-            <Button size="sm" variant="outline">
-              <Plus className="h-4 w-4 mr-2" />
-              Criar pendência
-            </Button>
+        {/* Tarefas */}
+        <TabsContent value="tarefas" className="mt-4">
+          <div className="text-center py-8 text-muted-foreground">
+            <Construction className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="font-medium">Módulo de Tarefas em construção</p>
+            <p className="text-sm mt-1">
+              As tarefas deste aluno estarão disponíveis quando o novo módulo for implementado.
+            </p>
           </div>
-          
-          {pendingTasks.length > 0 ? (
-            <div className="space-y-2">
-              {pendingTasks.map(task => (
-                <Card key={task.id} className="card-interactive">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium">{task.title}</p>
-                          <Badge variant="outline" className="text-xs">
-                            {task.task_type === 'moodle' ? 'Moodle' : 'Interna'}
-                          </Badge>
-                        </div>
-                        {task.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-2">
-                          <StatusBadge status={task.status} size="sm" />
-                          <PriorityBadge priority={task.priority} size="sm" />
-                          {task.due_date && (
-                            <span className="text-xs text-muted-foreground">
-                              Prazo: {formatDate(task.due_date)}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex gap-1">
-                        <Button size="sm" variant="ghost">
-                          <CheckCircle2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <ClipboardList className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>Nenhuma pendência registrada</p>
-            </div>
-          )}
         </TabsContent>
 
         {/* Notas (Grades) */}

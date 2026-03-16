@@ -17,48 +17,25 @@ interface StudentProfile {
   updated_at: string | null;
 }
 
-interface PendingTask {
-  id: string;
-  student_id: string;
-  course_id: string | null;
-  title: string;
-  description: string | null;
-  task_type: 'moodle' | 'interna';
-  status: 'aberta' | 'em_andamento' | 'resolvida';
-  priority: 'baixa' | 'media' | 'alta' | 'urgente';
-  due_date: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
 interface Note {
   id: string;
   student_id: string;
   user_id: string;
   content: string;
-  pending_task_id: string | null;
   created_at: string | null;
   updated_at: string | null;
 }
 
 interface StudentProfileData {
   student: StudentProfile | null;
-  pendingTasks: PendingTask[];
   notes: Note[];
-  stats: {
-    pendingTasksCount: number;
-  };
 }
 
 export function useStudentProfile(studentId: string | undefined) {
   const { user } = useAuth();
   const [data, setData] = useState<StudentProfileData>({
     student: null,
-    pendingTasks: [],
     notes: [],
-    stats: {
-      pendingTasksCount: 0,
-    },
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,15 +67,6 @@ export function useStudentProfile(studentId: string | undefined) {
         return;
       }
 
-      // Fetch pending tasks
-      const { data: pendingTasks, error: tasksError } = await supabase
-        .from('pending_tasks')
-        .select('*')
-        .eq('student_id', studentId)
-        .order('due_date', { ascending: true });
-
-      if (tasksError) throw tasksError;
-
       // Fetch notes
       const { data: notes, error: notesError } = await supabase
         .from('notes')
@@ -108,18 +76,12 @@ export function useStudentProfile(studentId: string | undefined) {
 
       if (notesError) throw notesError;
 
-      // Calculate stats
-      const openTasksCount = (pendingTasks || []).filter(t => t.status !== 'resolvida').length;
       setData({
         student: {
           ...student,
           current_risk_level: student.current_risk_level as RiskLevel,
         } as StudentProfile,
-        pendingTasks: (pendingTasks || []) as PendingTask[],
         notes: (notes || []) as Note[],
-        stats: {
-          pendingTasksCount: openTasksCount,
-        },
       });
     } catch (err) {
       console.error('Error fetching student profile:', err);
