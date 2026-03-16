@@ -292,13 +292,12 @@ function RichBlocksView({ blocks }: { blocks: ChatRichBlock[] }) {
 
 function AssistantMessage({ message, isSending, onAction }: { message: ChatMessage; isSending: boolean; onAction: (value: string, action: ChatAction) => void }) {
   return (
-    <div className="flex gap-3 py-4 px-2">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary">
-        <ClarisIcon className="h-4 w-4 text-primary-foreground" />
-      </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-2 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_a]:text-primary [&_a]:underline">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+    <div className="flex justify-start py-2 px-2">
+      <div className="max-w-[85%] space-y-1">
+        <div className="rounded-2xl rounded-bl-md bg-muted px-4 py-2.5">
+          <div className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-2 [&_code]:rounded [&_code]:bg-background/50 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_a]:text-primary [&_a]:underline">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
         </div>
         {message.richBlocks && message.richBlocks.length > 0 && <RichBlocksView blocks={message.richBlocks} />}
         {message.actions && message.actions.length > 0 && (
