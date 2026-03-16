@@ -292,13 +292,12 @@ function RichBlocksView({ blocks }: { blocks: ChatRichBlock[] }) {
 
 function AssistantMessage({ message, isSending, onAction }: { message: ChatMessage; isSending: boolean; onAction: (value: string, action: ChatAction) => void }) {
   return (
-    <div className="flex gap-3 py-4 px-2">
-      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary">
-        <ClarisIcon className="h-4 w-4 text-primary-foreground" />
-      </div>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-2 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_a]:text-primary [&_a]:underline">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+    <div className="flex justify-start py-2 px-2">
+      <div className="max-w-[85%] space-y-1">
+        <div className="rounded-2xl rounded-bl-md bg-muted px-4 py-2.5">
+          <div className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-2 [&_code]:rounded [&_code]:bg-background/50 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_a]:text-primary [&_a]:underline">
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          </div>
         </div>
         {message.richBlocks && message.richBlocks.length > 0 && <RichBlocksView blocks={message.richBlocks} />}
         {message.actions && message.actions.length > 0 && (
@@ -635,25 +634,15 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const chatPanel = (
     <div className={cn('flex h-full w-full flex-col overflow-hidden', isFloating ? 'bg-card' : 'bg-background')}>
       {/* Header */}
-      <div className="shrink-0 flex items-center justify-between border-b px-4 py-2.5">
-        <div className="flex items-center gap-2.5">
-          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary">
-            <ClarisIcon className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-sm font-semibold text-foreground">Claris IA</span>
-        </div>
+      <div className="shrink-0 flex items-center justify-between border-b px-4 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Claris IA</span>
         <div className="flex items-center gap-1">
-          {!isFloating && (
-            <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-full text-xs" onClick={createNewConversation}>
-              <Plus className="h-3.5 w-3.5" /> Nova conversa
-            </Button>
-          )}
           {isFloating && (
             <>
-              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/claris?context=${encodeURIComponent(location.pathname)}`)} aria-label="Expandir chat">
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/claris?context=${encodeURIComponent(location.pathname)}`)} aria-label="Expandir chat">
                 <Expand className="h-4 w-4" />
               </Button>
-              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={closeFloatingChat} aria-label="Fechar chat">
+              <Button type="button" variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={closeFloatingChat} aria-label="Fechar chat">
                 <X className="h-4 w-4" />
               </Button>
             </>
@@ -677,14 +666,13 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
             )}
 
             {isSending && (
-              <div className="flex gap-3 py-4 px-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary">
-                  <ClarisIcon className="h-4 w-4 text-primary-foreground" />
-                </div>
-                <div className="flex items-center gap-1.5 pt-1">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '0ms' }} />
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '150ms' }} />
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '300ms' }} />
+              <div className="flex justify-start py-2 px-2">
+                <div className="rounded-2xl rounded-bl-md bg-muted px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '0ms' }} />
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '150ms' }} />
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '300ms' }} />
+                  </div>
                 </div>
               </div>
             )}
@@ -738,7 +726,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       <div className="flex h-full w-full flex-col lg:flex-row">
         {/* Sidebar */}
         <aside className="flex w-full shrink-0 flex-col border-b border-border/40 bg-muted/30 lg:w-[280px] lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between border-b px-4 py-2.5">
+          <div className="flex items-center justify-between border-b px-4 py-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seus Chats</span>
             <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={createNewConversation} aria-label="Nova conversa">
               <Plus className="h-4 w-4" />
@@ -752,7 +740,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
               ) : visibleConversations.length === 0 ? null : (
                 visibleConversations.map((conv) => (
                   <div key={conv.id} className={cn(
-                    'group rounded-lg px-3 py-2 transition-colors cursor-pointer',
+                    'group rounded-md px-2.5 py-1.5 transition-colors cursor-pointer',
                     activeConversationId === conv.id ? 'bg-muted' : 'hover:bg-muted/50'
                   )}>
                     {editingConversationId === conv.id ? (
