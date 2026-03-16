@@ -666,14 +666,13 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
             )}
 
             {isSending && (
-              <div className="flex gap-3 py-4 px-2">
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary">
-                  <ClarisIcon className="h-4 w-4 text-primary-foreground" />
-                </div>
-                <div className="flex items-center gap-1.5 pt-1">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '0ms' }} />
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '150ms' }} />
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '300ms' }} />
+              <div className="flex justify-start py-2 px-2">
+                <div className="rounded-2xl rounded-bl-md bg-muted px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '0ms' }} />
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '150ms' }} />
+                    <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '300ms' }} />
+                  </div>
                 </div>
               </div>
             )}
