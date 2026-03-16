@@ -740,7 +740,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
               ) : visibleConversations.length === 0 ? null : (
                 visibleConversations.map((conv) => (
                   <div key={conv.id} className={cn(
-                    'group rounded-lg px-3 py-2 transition-colors cursor-pointer',
+                    'group rounded-md px-2.5 py-1.5 transition-colors cursor-pointer',
                     activeConversationId === conv.id ? 'bg-muted' : 'hover:bg-muted/50'
                   )}>
                     {editingConversationId === conv.id ? (
