@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Expand, MessageCircle, MoreHorizontal, Pencil, Plus, Sparkles, Send, Trash2, X } from 'lucide-react';
+import { Check, Expand, MessageCircle, MoreHorizontal, Pencil, Plus, Send, Sparkles, Trash2, X } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import ReactMarkdown from 'react-markdown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,8 +19,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-type ChatRole = 'assistant' | 'user';
+// ---- Types ----
 
+type ChatRole = 'assistant' | 'user';
 type ChatActionKind = 'quick_reply';
 
 interface ChatAction {
@@ -30,12 +32,7 @@ interface ChatAction {
   jobId?: string;
 }
 
-// ---- Rich blocks ----
-
-interface RichColumn {
-  key: string;
-  label: string;
-}
+interface RichColumn { key: string; label: string; }
 
 interface DataTableBlock {
   type: 'data_table';
@@ -46,11 +43,7 @@ interface DataTableBlock {
   rows: Record<string, string>[];
 }
 
-interface StatCard {
-  label: string;
-  value: string;
-  variant: 'default' | 'warning' | 'danger';
-}
+interface StatCard { label: string; value: string; variant: 'default' | 'warning' | 'danger'; }
 
 interface StatCardsBlock {
   type: 'stat_cards';
@@ -69,16 +62,20 @@ interface ChatMessage {
   richBlocks?: ChatRichBlock[];
 }
 
-interface ClarisChatHistoryItem {
-  role: ChatRole;
-  content: string;
+interface ClarisChatHistoryItem { role: ChatRole; content: string; }
+
+interface ClarisChatFunctionResponse { reply?: unknown; uiActions?: unknown; richBlocks?: unknown; }
+
+// ---- DB row shape (not in generated types) ----
+interface ClarisConversationRow {
+  id: string;
+  title: string;
+  messages: unknown;
+  updated_at: string;
+  last_context_route: string | null;
 }
 
-interface ClarisChatFunctionResponse {
-  reply?: unknown;
-  uiActions?: unknown;
-  richBlocks?: unknown;
-}
+// ---- Constants ----
 
 const CLARIS_PLACEHOLDER_REPLY =
   'Ainda estou em desenvolvimento, mas em breve estarei aqui para te ajudar no acompanhamento dos nossos alunos com orientações e insights em tempo real.';
@@ -89,13 +86,14 @@ const CLARIS_NOT_CONFIGURED_REPLY =
 const INITIAL_MESSAGE: ChatMessage = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Olá! Eu sou a Claris IA. Em breve estarei disponível para conversar com você por aqui.',
+  content: 'Olá! Sou a **Claris IA**. Como posso te ajudar hoje?',
 };
 
 const CLARIS_HISTORY_STORAGE_PREFIX = 'claris_chat_history';
 const CLARIS_WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
 const CHAT_MORPH_DURATION_MS = 360;
 const CHAT_CONTENT_DELAY_MS = 120;
+
 const GENERIC_QUICK_SUGGESTIONS = [
   'Alunos em risco — quem contatar hoje?',
   'Atividades aguardando correção',
@@ -105,45 +103,17 @@ const GENERIC_QUICK_SUGGESTIONS = [
 ];
 
 const ROUTE_QUICK_SUGGESTIONS: Array<{ match: RegExp; suggestions: string[] }> = [
-  {
-    match: /\/alunos(?:\/|$)/,
-    suggestions: [
-      'Alunos em risco com último acesso',
-      'Piora de engajamento esta semana',
-      'Plano de acompanhamento — 5 mais críticos',
-    ],
-  },
-  {
-    match: /\/pendencias(?:\/|$)/,
-    suggestions: [
-      'Pendências por prioridade e prazo',
-      'Pendências atrasadas — ação hoje',
-      'Resumo por curso para distribuir',
-    ],
-  },
-  {
-    match: /\/mensagens(?:\/|$)/,
-    suggestions: [
-      'Templates para alunos em risco',
-      'Rascunho de acompanhamento',
-      'Alunos que precisam de contato',
-    ],
-  },
+  { match: /\/alunos(?:\/|$)/, suggestions: ['Alunos em risco com último acesso', 'Piora de engajamento esta semana', 'Plano de acompanhamento — 5 mais críticos'] },
+  { match: /\/pendencias(?:\/|$)/, suggestions: ['Pendências por prioridade e prazo', 'Pendências atrasadas — ação hoje', 'Resumo por curso para distribuir'] },
+  { match: /\/mensagens(?:\/|$)/, suggestions: ['Templates para alunos em risco', 'Rascunho de acompanhamento', 'Alunos que precisam de contato'] },
 ];
 
-const CLEAR_HISTORY_COMMANDS = new Set([
-  '/limpar',
-  '/limparhistorico',
-  '/limpar-historico',
-  '/clear',
-]);
+const CLEAR_HISTORY_COMMANDS = new Set(['/limpar', '/limparhistorico', '/limpar-historico', '/clear']);
+
+// ---- Helpers ----
 
 function normalizeCommand(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, '');
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, '');
 }
 
 function isClearHistoryCommand(value: string) {
@@ -154,155 +124,89 @@ function isClearHistoryCommand(value: string) {
 
 function parseStoredHistory(raw: string | null): ClarisChatHistoryItem[] {
   if (!raw) return [];
-
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
-
     return parsed
-      .filter((item): item is ClarisChatHistoryItem => (
-        item !== null
-        && typeof item === 'object'
-        && (item as { role?: unknown }).role !== undefined
+      .filter((item): item is ClarisChatHistoryItem =>
+        item !== null && typeof item === 'object'
         && ((item as { role?: unknown }).role === 'assistant' || (item as { role?: unknown }).role === 'user')
-        && typeof (item as { content?: unknown }).content === 'string'
-      ))
+        && typeof (item as { content?: unknown }).content === 'string')
       .slice(-40);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
-function clearStoredHistory(historyStorageKey: string) {
-  localStorage.removeItem(historyStorageKey);
-}
+function clearStoredHistory(key: string) { localStorage.removeItem(key); }
 
-function buildContextualSuggestions(routeContext: string): string[] {
-  const contextual = ROUTE_QUICK_SUGGESTIONS.find((entry) => entry.match.test(routeContext))?.suggestions ?? [];
+function buildContextualSuggestions(route: string): string[] {
+  const contextual = ROUTE_QUICK_SUGGESTIONS.find((e) => e.match.test(route))?.suggestions ?? [];
   return [...contextual, ...GENERIC_QUICK_SUGGESTIONS].slice(0, 6);
 }
 
 function parseHistoryFromJson(raw: unknown): ClarisChatHistoryItem[] {
   if (!Array.isArray(raw)) return [];
-
   return raw
-    .filter((item): item is ClarisChatHistoryItem => (
-      item !== null
-      && typeof item === 'object'
+    .filter((item): item is ClarisChatHistoryItem =>
+      item !== null && typeof item === 'object'
       && ((item as { role?: unknown }).role === 'assistant' || (item as { role?: unknown }).role === 'user')
-      && typeof (item as { content?: unknown }).content === 'string'
-    ))
+      && typeof (item as { content?: unknown }).content === 'string')
     .slice(-40);
 }
 
 function historyToChatMessages(history: ClarisChatHistoryItem[]): ChatMessage[] {
-  return history.map((item, index) => ({
-    id: `history-${index}-${Date.now()}`,
-    role: item.role,
-    content: item.content,
-  }));
+  return history.map((item, i) => ({ id: `history-${i}-${Date.now()}`, role: item.role, content: item.content }));
 }
 
 function deriveConversationTitle(history: ClarisChatHistoryItem[]): string {
-  const firstUserMessage = history.find((item) => item.role === 'user')?.content.trim();
-  if (firstUserMessage && firstUserMessage.length > 0) {
-    return firstUserMessage.length > 64 ? `${firstUserMessage.slice(0, 61)}...` : firstUserMessage;
-  }
+  const first = history.find((i) => i.role === 'user')?.content.trim();
+  if (first && first.length > 0) return first.length > 64 ? `${first.slice(0, 61)}...` : first;
   return 'Nova conversa';
 }
 
 function parseUiActions(raw: unknown): ChatAction[] {
   if (!Array.isArray(raw)) return [];
-
   const parsed: ChatAction[] = [];
-
-  for (let index = 0; index < raw.length; index += 1) {
-    const item = raw[index];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-
-    const record = item as Record<string, unknown>;
-    const id = typeof record.id === 'string' && record.id.trim()
-      ? record.id.trim()
-      : `action-${index}-${Date.now()}`;
-    const label = typeof record.label === 'string' ? record.label.trim() : '';
-    const value = typeof record.value === 'string' ? record.value.trim() : '';
-    const kind: ChatActionKind | null = record.kind === 'quick_reply' ? 'quick_reply' : null;
-    const jobId = typeof record.job_id === 'string' && record.job_id.trim().length > 0
-      ? record.job_id.trim()
-      : undefined;
-
+    const r = item as Record<string, unknown>;
+    const id = typeof r.id === 'string' && r.id.trim() ? r.id.trim() : `action-${i}-${Date.now()}`;
+    const label = typeof r.label === 'string' ? r.label.trim() : '';
+    const value = typeof r.value === 'string' ? r.value.trim() : '';
+    const kind: ChatActionKind | null = r.kind === 'quick_reply' ? 'quick_reply' : null;
+    const jobId = typeof r.job_id === 'string' && r.job_id.trim().length > 0 ? r.job_id.trim() : undefined;
     if (!label || !value || !kind) continue;
-
     parsed.push({ id, label, value, kind, jobId });
-
     if (parsed.length >= 6) break;
   }
-
   return parsed;
 }
 
 function parseRichBlocks(raw: unknown): ChatRichBlock[] {
   if (!Array.isArray(raw)) return [];
-
   const result: ChatRichBlock[] = [];
-
   for (const item of raw) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
     const r = item as Record<string, unknown>;
-
     if (r.type === 'data_table') {
-      const columns = Array.isArray(r.columns)
-        ? r.columns.filter((c): c is RichColumn =>
-            c !== null && typeof c === 'object' && typeof c.key === 'string' && typeof c.label === 'string')
-        : [];
-
-      const rows = Array.isArray(r.rows)
-        ? r.rows.filter((row): row is Record<string, string> =>
-            row !== null && typeof row === 'object' && !Array.isArray(row))
-        : [];
-
-      result.push({
-        type: 'data_table',
-        tool: typeof r.tool === 'string' ? r.tool : '',
-        title: typeof r.title === 'string' ? r.title : '',
-        empty_message: typeof r.empty_message === 'string' ? r.empty_message : 'Nenhum resultado.',
-        columns,
-        rows,
-      });
+      const columns = Array.isArray(r.columns) ? r.columns.filter((c): c is RichColumn => c !== null && typeof c === 'object' && typeof c.key === 'string' && typeof c.label === 'string') : [];
+      const rows = Array.isArray(r.rows) ? r.rows.filter((row): row is Record<string, string> => row !== null && typeof row === 'object' && !Array.isArray(row)) : [];
+      result.push({ type: 'data_table', tool: typeof r.tool === 'string' ? r.tool : '', title: typeof r.title === 'string' ? r.title : '', empty_message: typeof r.empty_message === 'string' ? r.empty_message : 'Nenhum resultado.', columns, rows });
     } else if (r.type === 'stat_cards') {
-      const stats = Array.isArray(r.stats)
-        ? r.stats.filter((s): s is StatCard =>
-            s !== null && typeof s === 'object'
-            && typeof s.label === 'string' && typeof s.value === 'string')
-        : [];
-
-      result.push({
-        type: 'stat_cards',
-        title: typeof r.title === 'string' ? r.title : '',
-        stats,
-      });
+      const stats = Array.isArray(r.stats) ? r.stats.filter((s): s is StatCard => s !== null && typeof s === 'object' && typeof s.label === 'string' && typeof s.value === 'string') : [];
+      result.push({ type: 'stat_cards', title: typeof r.title === 'string' ? r.title : '', stats });
     }
   }
-
   return result;
 }
 
 // ---- Block renderers ----
 
 const RISK_COLORS: Record<string, string> = {
-  'Crítico':  'text-destructive font-semibold',
-  'Risco':    'text-orange-500 font-medium',
-  'Atenção':  'text-yellow-600 font-medium',
-  'Normal':   'text-green-600',
-  'Inativo':  'text-muted-foreground',
+  'Crítico': 'text-destructive font-semibold', 'Risco': 'text-orange-500 font-medium',
+  'Atenção': 'text-yellow-600 font-medium', 'Normal': 'text-green-600', 'Inativo': 'text-muted-foreground',
 };
-
-const PRIORITY_COLORS: Record<string, string> = {
-  alta:  'text-destructive font-semibold',
-  media: 'text-orange-500',
-  media_alta: 'text-orange-500',
-  baixa: 'text-muted-foreground',
-};
+const PRIORITY_COLORS: Record<string, string> = { alta: 'text-destructive font-semibold', media: 'text-orange-500', media_alta: 'text-orange-500', baixa: 'text-muted-foreground' };
 
 function cellClass(col: RichColumn, value: string): string {
   if (col.key === 'risco') return RISK_COLORS[value] ?? '';
@@ -315,49 +219,35 @@ function cellClass(col: RichColumn, value: string): string {
 
 function DataTableBlockView({ block }: { block: DataTableBlock }) {
   const visibleCols = block.columns.filter((c) => c.key !== 'id');
-
-  // Pick 2 "primary" cols (first two) and the rest as secondary
   const primaryCols = visibleCols.slice(0, 2);
   const secondaryCols = visibleCols.slice(2);
 
   if (block.rows.length === 0) {
     return (
-      <div className="mt-1.5 rounded-md border text-xs overflow-hidden">
-        <div className="bg-primary/10 px-2.5 py-1.5 font-semibold text-primary">{block.title}</div>
-        <div className="px-2.5 py-2 text-muted-foreground">{block.empty_message}</div>
+      <div className="mt-2 rounded-lg border border-border/60 text-xs overflow-hidden">
+        <div className="bg-muted/60 px-3 py-2 font-semibold text-foreground">{block.title}</div>
+        <div className="px-3 py-2 text-muted-foreground">{block.empty_message}</div>
       </div>
     );
   }
 
   return (
-    <div className="mt-1.5 rounded-md border text-xs overflow-hidden">
-      <div className="bg-primary/10 px-2.5 py-1.5 font-semibold text-primary">{block.title}</div>
-      <div className="divide-y">
+    <div className="mt-2 rounded-lg border border-border/60 text-xs overflow-hidden">
+      <div className="bg-muted/60 px-3 py-2 font-semibold text-foreground">{block.title}</div>
+      <div className="divide-y divide-border/40">
         {block.rows.map((row, i) => (
-          <div key={i} className="px-2.5 py-1.5 hover:bg-muted/50">
-            {/* Primary row */}
+          <div key={i} className="px-3 py-2 hover:bg-muted/30 transition-colors">
             <div className="flex items-center justify-between gap-2">
               {primaryCols.map((col) => (
-                <span
-                  key={col.key}
-                  className={cn('truncate', cellClass(col, row[col.key] ?? ''))}
-                  title={row[col.key] ?? '—'}
-                >
-                  {row[col.key] ?? '—'}
-                </span>
+                <span key={col.key} className={cn('truncate', cellClass(col, row[col.key] ?? ''))} title={row[col.key] ?? '—'}>{row[col.key] ?? '—'}</span>
               ))}
             </div>
-            {/* Secondary row */}
             {secondaryCols.length > 0 && (
-              <div className="flex flex-wrap gap-x-2.5 gap-y-0.5 mt-0.5 text-muted-foreground">
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-muted-foreground">
                 {secondaryCols.map((col) => {
                   const val = row[col.key] ?? '—';
                   if (val === '—') return null;
-                  return (
-                    <span key={col.key} className={cn(cellClass(col, val))}>
-                      {col.label}: <span className="text-foreground/80">{val}</span>
-                    </span>
-                  );
+                  return <span key={col.key} className={cn(cellClass(col, val))}>{col.label}: <span className="text-foreground/80">{val}</span></span>;
                 })}
               </div>
             )}
@@ -369,24 +259,18 @@ function DataTableBlockView({ block }: { block: DataTableBlock }) {
 }
 
 const VARIANT_STYLES: Record<string, string> = {
-  default: 'bg-muted',
+  default: 'bg-muted/50',
   warning: 'bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200',
-  danger:  'bg-red-50 border-red-200 text-red-900 dark:bg-red-950/40 dark:text-red-200',
+  danger: 'bg-red-50 border-red-200 text-red-900 dark:bg-red-950/40 dark:text-red-200',
 };
 
 function StatCardsBlockView({ block }: { block: StatCardsBlock }) {
   return (
-    <div className="mt-1.5 rounded-md border text-xs overflow-hidden">
-      <div className="bg-primary/10 px-2.5 py-1.5 font-semibold text-primary">{block.title}</div>
-      <div className="grid grid-cols-2 gap-px bg-border p-px">
+    <div className="mt-2 rounded-lg border border-border/60 text-xs overflow-hidden">
+      <div className="bg-muted/60 px-3 py-2 font-semibold text-foreground">{block.title}</div>
+      <div className="grid grid-cols-2 gap-px bg-border/40 p-px">
         {block.stats.map((stat, i) => (
-          <div
-            key={i}
-            className={cn(
-              'flex flex-col px-2.5 py-2 rounded',
-              VARIANT_STYLES[stat.variant] ?? VARIANT_STYLES.default,
-            )}
-          >
+          <div key={i} className={cn('flex flex-col px-3 py-2.5 rounded', VARIANT_STYLES[stat.variant] ?? VARIANT_STYLES.default)}>
             <span className="text-muted-foreground leading-tight">{stat.label}</span>
             <span className="text-base font-bold leading-tight mt-0.5">{stat.value}</span>
           </div>
@@ -398,19 +282,50 @@ function StatCardsBlockView({ block }: { block: StatCardsBlock }) {
 
 function RichBlocksView({ blocks }: { blocks: ChatRichBlock[] }) {
   return (
-    <div className="mt-1 space-y-1.5">
-      {blocks.map((block, i) =>
-        block.type === 'data_table'
-          ? <DataTableBlockView key={i} block={block} />
-          : <StatCardsBlockView key={i} block={block} />,
-      )}
+    <div className="mt-2 space-y-2">
+      {blocks.map((block, i) => block.type === 'data_table' ? <DataTableBlockView key={i} block={block} /> : <StatCardsBlockView key={i} block={block} />)}
     </div>
   );
 }
 
-interface FloatingClarisChatProps {
-  variant?: 'floating' | 'page';
+// ---- Message bubble (GPT-style) ----
+
+function AssistantMessage({ message, isSending, onAction }: { message: ChatMessage; isSending: boolean; onAction: (value: string, action: ChatAction) => void }) {
+  return (
+    <div className="flex gap-3 py-4 px-2">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary">
+        <ClarisIcon className="h-4 w-4 text-primary-foreground" />
+      </div>
+      <div className="min-w-0 flex-1 space-y-1">
+        <div className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-2 [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_a]:text-primary [&_a]:underline">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
+        {message.richBlocks && message.richBlocks.length > 0 && <RichBlocksView blocks={message.richBlocks} />}
+        {message.actions && message.actions.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {message.actions.map((action) => (
+              <Button key={action.id} type="button" variant="outline" size="sm" className="h-8 rounded-full text-xs" disabled={isSending} onClick={() => onAction(action.value, action)}>
+                {action.label}
+              </Button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
+
+function UserMessage({ message }: { message: ChatMessage }) {
+  return (
+    <div className="flex justify-end py-4 px-2">
+      <div className="max-w-[80%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+        <p className="whitespace-pre-wrap break-words">{message.content}</p>
+      </div>
+    </div>
+  );
+}
+
+// ---- Conversation thread type ----
 
 interface ClarisConversationThread {
   id: string;
@@ -422,6 +337,45 @@ interface ClarisConversationThread {
 }
 
 type FloatingChatVisualState = 'closed' | 'opening' | 'open' | 'closing';
+
+// ---- Supabase helpers with type casts ----
+
+async function fetchConversations(userId: string) {
+  const { data, error } = await (supabase.from as any)('claris_conversations')
+    .select('id, title, messages, updated_at, last_context_route')
+    .eq('user_id', userId)
+    .order('updated_at', { ascending: false })
+    .limit(30);
+  if (error) throw error;
+  return (data ?? []) as ClarisConversationRow[];
+}
+
+async function insertConversation(userId: string, title: string, messages: unknown[], lastContextRoute: string) {
+  const { data, error } = await (supabase.from as any)('claris_conversations')
+    .insert({ user_id: userId, title, messages, last_context_route: lastContextRoute })
+    .select('id, title, messages, updated_at, last_context_route')
+    .single();
+  if (error) throw error;
+  return data as ClarisConversationRow;
+}
+
+async function updateConversation(id: string, userId: string, fields: Record<string, unknown>) {
+  await (supabase.from as any)('claris_conversations')
+    .update(fields)
+    .eq('id', id)
+    .eq('user_id', userId);
+}
+
+async function deleteConversationRow(id: string, userId: string) {
+  await (supabase.from as any)('claris_conversations')
+    .delete()
+    .eq('id', id)
+    .eq('user_id', userId);
+}
+
+// ---- Main component ----
+
+export interface FloatingClarisChatProps { variant?: 'floating' | 'page'; }
 
 export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatProps) {
   const auth = useAuth() as { moodleSession?: { moodleUrl: string; moodleToken: string } | null; user?: { id: string } | null };
@@ -450,28 +404,18 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
   const [editingConversationTitle, setEditingConversationTitle] = useState('');
   const [editingConversationError, setEditingConversationError] = useState('');
-  const [_isIcebreakersOpen, _setIsIcebreakersOpen] = useState(true);
   const scrollEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const isOpen = visualState === 'opening' || visualState === 'open';
 
   const canSend = useMemo(() => inputValue.trim().length > 0 && !isSending, [inputValue, isSending]);
-  const activeConversation = useMemo(
-    () => conversations.find((conversation) => conversation.id === activeConversationId) ?? null,
-    [conversations, activeConversationId],
-  );
+  const activeConversation = useMemo(() => conversations.find((c) => c.id === activeConversationId) ?? null, [conversations, activeConversationId]);
   const activeConversationTitle = activeConversation?.title ?? '';
   const suggestionsRoute = activeConversation?.lastContextRoute || activeRouteContext;
-  const contextualSuggestions = useMemo(
-    () => buildContextualSuggestions(suggestionsRoute),
-    [suggestionsRoute],
-  );
+  const contextualSuggestions = useMemo(() => buildContextualSuggestions(suggestionsRoute), [suggestionsRoute]);
   const activeConversationHasMessages = (activeConversation?.history.length ?? 0) > 0;
-  const shouldShowIcebreakers = !isFloating && !isHydratingConversations && !activeConversationHasMessages;
-  const visibleConversations = useMemo(
-    () => conversations.filter((conversation) => conversation.history.length > 0),
-    [conversations],
-  );
+  const shouldShowIcebreakers = !isHydratingConversations && !activeConversationHasMessages;
+  const visibleConversations = useMemo(() => conversations.filter((c) => c.history.length > 0), [conversations]);
 
   const refreshGlobalClarisConfiguration = useCallback(async () => {
     try {
@@ -487,9 +431,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     }
   }, []);
 
-  useEffect(() => {
-    void refreshGlobalClarisConfiguration();
-  }, [refreshGlobalClarisConfiguration]);
+  useEffect(() => { void refreshGlobalClarisConfiguration(); }, [refreshGlobalClarisConfiguration]);
 
   useEffect(() => {
     if (!isFloating) return;
@@ -498,266 +440,115 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
 
   useEffect(() => {
     if (!isFloating) return;
-
     if (visualState === 'opening') {
       setIsChatVisible(true);
       void refreshGlobalClarisConfiguration();
-      const timeoutId = window.setTimeout(() => setVisualState('open'), CHAT_MORPH_DURATION_MS);
-      return () => window.clearTimeout(timeoutId);
+      const t = window.setTimeout(() => setVisualState('open'), CHAT_MORPH_DURATION_MS);
+      return () => window.clearTimeout(t);
     }
-
     if (visualState === 'closing') {
-      const timeoutId = window.setTimeout(() => {
-        setVisualState('closed');
-        setIsChatVisible(false);
-      }, CHAT_MORPH_DURATION_MS);
-      return () => window.clearTimeout(timeoutId);
+      const t = window.setTimeout(() => { setVisualState('closed'); setIsChatVisible(false); }, CHAT_MORPH_DURATION_MS);
+      return () => window.clearTimeout(t);
     }
-
-    if (visualState === 'open') {
-      setIsChatVisible(true);
-      void refreshGlobalClarisConfiguration();
-    }
+    if (visualState === 'open') { setIsChatVisible(true); void refreshGlobalClarisConfiguration(); }
   }, [isFloating, refreshGlobalClarisConfiguration, visualState]);
 
   useEffect(() => {
-    if (!isFloating) {
-      setIsContentVisible(true);
-      return;
-    }
-
+    if (!isFloating) { setIsContentVisible(true); return; }
     if (visualState === 'opening') {
-      const timeoutId = window.setTimeout(() => setIsContentVisible(true), CHAT_CONTENT_DELAY_MS);
-      return () => window.clearTimeout(timeoutId);
+      const t = window.setTimeout(() => setIsContentVisible(true), CHAT_CONTENT_DELAY_MS);
+      return () => window.clearTimeout(t);
     }
-
-    if (visualState === 'closing' || visualState === 'closed') {
-      setIsContentVisible(false);
-    }
+    if (visualState === 'closing' || visualState === 'closed') setIsContentVisible(false);
   }, [isFloating, visualState]);
 
-  useEffect(() => {
-    if (!isFloating) {
-      setVisualState('open');
-      setIsChatVisible(true);
-      setIsContentVisible(true);
-    }
-  }, [isFloating]);
+  useEffect(() => { if (!isFloating) { setVisualState('open'); setIsChatVisible(true); setIsContentVisible(true); } }, [isFloating]);
 
   useEffect(() => {
     if (!isFloating || visualState !== 'open') return;
-
-    const timeoutId = window.setTimeout(() => {
-      inputRef.current?.focus();
-    }, 40);
-
-    return () => window.clearTimeout(timeoutId);
+    const t = window.setTimeout(() => inputRef.current?.focus(), 40);
+    return () => window.clearTimeout(t);
   }, [isFloating, visualState]);
 
   useEffect(() => {
     if (!isFloating) return;
-
     const isExpanded = visualState === 'open' || visualState === 'opening';
     if (!isExpanded) return;
-
-    const handleEscapeKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setVisualState('closing');
-      }
-    };
-
-    window.addEventListener('keydown', handleEscapeKey);
-    return () => window.removeEventListener('keydown', handleEscapeKey);
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setVisualState('closing'); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, [isFloating, visualState]);
 
-  const openFloatingChat = () => {
-    if (!isFloating) return;
-    if (visualState === 'open' || visualState === 'opening') return;
-    setVisualState('opening');
-  };
+  const openFloatingChat = () => { if (!isFloating || visualState === 'open' || visualState === 'opening') return; setVisualState('opening'); };
+  const closeFloatingChat = () => { if (!isFloating || visualState === 'closed' || visualState === 'closing') return; setVisualState('closing'); };
 
-  const closeFloatingChat = () => {
-    if (!isFloating) return;
-    if (visualState === 'closed' || visualState === 'closing') return;
-    setVisualState('closing');
-  };
+  useEffect(() => { if (scrollEndRef.current) scrollEndRef.current.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
 
-  useEffect(() => {
-    if (scrollEndRef.current) {
-      scrollEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  // icebreaker toggle removed — always visible when no messages
-
+  // ---- Hydrate conversations ----
   useEffect(() => {
     let isMounted = true;
-
-    const hydrateConversations = async () => {
+    const hydrate = async () => {
       setIsHydratingConversations(true);
-
       const localHistory = parseStoredHistory(localStorage.getItem(historyStorageKey));
       let fallbackThread: ClarisConversationThread | null = null;
       if (localHistory.length > 0) {
-        fallbackThread = {
-          id: `local-${Date.now()}`,
-          title: deriveConversationTitle(localHistory),
-          history: localHistory,
-          updatedAt: new Date().toISOString(),
-          lastContextRoute: activeRouteContext,
-          isLocalOnly: true,
-        };
+        fallbackThread = { id: `local-${Date.now()}`, title: deriveConversationTitle(localHistory), history: localHistory, updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true };
       }
-
       try {
-        const { data, error } = await supabase
-          .from('claris_conversations')
-          .select('id, title, messages, updated_at, last_context_route')
-          .eq('user_id', userId)
-          .order('updated_at', { ascending: false })
-          .limit(30);
-
-        if (error) throw error;
-
-        const remoteConversations: ClarisConversationThread[] = (data ?? []).map((row) => {
+        const rows = await fetchConversations(userId);
+        const remote: ClarisConversationThread[] = rows.map((row) => {
           const history = parseHistoryFromJson(row.messages);
-          return {
-            id: row.id,
-            title: row.title || deriveConversationTitle(history),
-            history,
-            updatedAt: row.updated_at,
-            lastContextRoute: row.last_context_route || activeRouteContext,
-          };
+          return { id: row.id, title: row.title || deriveConversationTitle(history), history, updatedAt: row.updated_at, lastContextRoute: row.last_context_route || activeRouteContext };
         });
-
         if (!isMounted) return;
-
-        if (remoteConversations.length > 0) {
-          const selected = remoteConversations[0];
-          setConversations(remoteConversations);
+        if (remote.length > 0) {
+          const selected = remote[0];
+          setConversations(remote);
           setActiveConversationId(selected.id);
           setMessages([INITIAL_MESSAGE, ...historyToChatMessages(selected.history)]);
           localStorage.setItem(historyStorageKey, JSON.stringify(selected.history));
         } else if (fallbackThread) {
-          setConversations([fallbackThread]);
-          setActiveConversationId(fallbackThread.id);
+          setConversations([fallbackThread]); setActiveConversationId(fallbackThread.id);
           setMessages([INITIAL_MESSAGE, ...historyToChatMessages(fallbackThread.history)]);
         } else {
-          const emptyThread: ClarisConversationThread = {
-            id: `local-${Date.now()}`,
-            title: 'Nova conversa',
-            history: [],
-            updatedAt: new Date().toISOString(),
-            lastContextRoute: activeRouteContext,
-            isLocalOnly: true,
-          };
-          setConversations([emptyThread]);
-          setActiveConversationId(emptyThread.id);
-          setMessages([INITIAL_MESSAGE]);
+          const empty: ClarisConversationThread = { id: `local-${Date.now()}`, title: 'Nova conversa', history: [], updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true };
+          setConversations([empty]); setActiveConversationId(empty.id); setMessages([INITIAL_MESSAGE]);
         }
       } catch {
         if (!isMounted) return;
-
-        if (fallbackThread) {
-          setConversations([fallbackThread]);
-          setActiveConversationId(fallbackThread.id);
-          setMessages([INITIAL_MESSAGE, ...historyToChatMessages(fallbackThread.history)]);
-        } else {
-          const emptyThread: ClarisConversationThread = {
-            id: `local-${Date.now()}`,
-            title: 'Nova conversa',
-            history: [],
-            updatedAt: new Date().toISOString(),
-            lastContextRoute: activeRouteContext,
-            isLocalOnly: true,
-          };
-          setConversations([emptyThread]);
-          setActiveConversationId(emptyThread.id);
-          setMessages([INITIAL_MESSAGE]);
-        }
-      } finally {
-        if (isMounted) setIsHydratingConversations(false);
-      }
+        if (fallbackThread) { setConversations([fallbackThread]); setActiveConversationId(fallbackThread.id); setMessages([INITIAL_MESSAGE, ...historyToChatMessages(fallbackThread.history)]); }
+        else { const empty: ClarisConversationThread = { id: `local-${Date.now()}`, title: 'Nova conversa', history: [], updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true }; setConversations([empty]); setActiveConversationId(empty.id); setMessages([INITIAL_MESSAGE]); }
+      } finally { if (isMounted) setIsHydratingConversations(false); }
     };
-
-    hydrateConversations();
-
-    return () => {
-      isMounted = false;
-    };
+    hydrate();
+    return () => { isMounted = false; };
   }, [activeRouteContext, historyStorageKey, userId]);
 
+  // ---- Persist conversation ----
   useEffect(() => {
     if (isHydratingConversations || !activeConversationId) return;
-
-    const historyToPersist = messages
-      .filter((message) => message.id !== 'welcome')
-      .map(({ role, content }) => ({ role, content }))
-      .slice(-40);
-
+    const historyToPersist = messages.filter((m) => m.id !== 'welcome').map(({ role, content }) => ({ role, content })).slice(-40);
     localStorage.setItem(historyStorageKey, JSON.stringify(historyToPersist));
-
     const nextTitle = deriveConversationTitle(historyToPersist);
     const shouldAutoTitle = activeConversationTitle.trim().toLowerCase() === 'nova conversa';
     const titleToPersist = shouldAutoTitle ? nextTitle : (activeConversationTitle || nextTitle);
     const nowIso = new Date().toISOString();
     setConversations((prev) => {
-      const updated = prev.map((conversation) => {
-        if (conversation.id !== activeConversationId) return conversation;
-
-        return {
-          ...conversation,
-          title: titleToPersist,
-          history: historyToPersist,
-          updatedAt: nowIso,
-          lastContextRoute: activeRouteContext,
-        };
-      });
+      const updated = prev.map((c) => c.id !== activeConversationId ? c : { ...c, title: titleToPersist, history: historyToPersist, updatedAt: nowIso, lastContextRoute: activeRouteContext });
       return [...updated].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     });
-
     if (activeConversationId.startsWith('local-')) {
-      void supabase
-        .from('claris_conversations')
-        .insert({
-          user_id: userId,
-          title: titleToPersist,
-          messages: historyToPersist,
-          last_context_route: activeRouteContext,
-        })
-        .select('id, title, messages, updated_at, last_context_route')
-        .single()
-        .then(({ data, error }) => {
-          if (error || !data) return;
-          setConversations((prev) => prev.map((conversation) =>
-            conversation.id === activeConversationId
-              ? {
-                  id: data.id,
-                  title: data.title,
-                  history: parseHistoryFromJson(data.messages),
-                  updatedAt: data.updated_at,
-                  lastContextRoute: data.last_context_route || activeRouteContext,
-                }
-              : conversation,
-          ));
-          setActiveConversationId(data.id);
-        });
+      void insertConversation(userId, titleToPersist, historyToPersist, activeRouteContext).then((data) => {
+        setConversations((prev) => prev.map((c) => c.id === activeConversationId ? { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updated_at, lastContextRoute: data.last_context_route || activeRouteContext } : c));
+        setActiveConversationId(data.id);
+      }).catch(() => {});
       return;
     }
-
-    void supabase
-      .from('claris_conversations')
-      .update({
-        title: titleToPersist,
-        messages: historyToPersist,
-        last_context_route: activeRouteContext,
-      })
-      .eq('id', activeConversationId)
-      .eq('user_id', userId);
+    void updateConversation(activeConversationId, userId, { title: titleToPersist, messages: historyToPersist, last_context_route: activeRouteContext });
   }, [activeConversationId, activeConversationTitle, activeRouteContext, historyStorageKey, isHydratingConversations, messages, userId]);
 
-  const selectConversation = (conversationId: string) => {
-    const selected = conversations.find((conversation) => conversation.id === conversationId);
+  const selectConversation = (id: string) => {
+    const selected = conversations.find((c) => c.id === id);
     if (!selected) return;
     setActiveConversationId(selected.id);
     setMessages([INITIAL_MESSAGE, ...historyToChatMessages(selected.history)]);
@@ -765,516 +556,243 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   };
 
   const createNewConversation = async () => {
-    const reusableEmptyConversation = conversations.find((conversation) => conversation.history.length === 0);
-    if (reusableEmptyConversation) {
-      setActiveConversationId(reusableEmptyConversation.id);
-      setMessages([INITIAL_MESSAGE]);
-      setInputValue('');
-      return;
-    }
-
-    const localConversation: ClarisConversationThread = {
-      id: `local-${Date.now()}`,
-      title: 'Nova conversa',
-      history: [],
-      updatedAt: new Date().toISOString(),
-      lastContextRoute: activeRouteContext,
-      isLocalOnly: true,
-    };
-
+    const reusable = conversations.find((c) => c.history.length === 0);
+    if (reusable) { setActiveConversationId(reusable.id); setMessages([INITIAL_MESSAGE]); setInputValue(''); return; }
+    const localConv: ClarisConversationThread = { id: `local-${Date.now()}`, title: 'Nova conversa', history: [], updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true };
     try {
-      const { data, error } = await supabase
-        .from('claris_conversations')
-        .insert({
-          user_id: userId,
-          title: 'Nova conversa',
-          messages: [],
-          last_context_route: activeRouteContext,
-        })
-        .select('id, title, messages, updated_at, last_context_route')
-        .single();
-
-      if (error) throw error;
-
-      const created: ClarisConversationThread = {
-        id: data.id,
-        title: data.title,
-        history: parseHistoryFromJson(data.messages),
-        updatedAt: data.updated_at,
-        lastContextRoute: data.last_context_route || activeRouteContext,
-      };
-
-      setConversations((prev) => [created, ...prev]);
-      setActiveConversationId(created.id);
+      const data = await insertConversation(userId, 'Nova conversa', [], activeRouteContext);
+      const created: ClarisConversationThread = { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updated_at, lastContextRoute: data.last_context_route || activeRouteContext };
+      setConversations((prev) => [created, ...prev]); setActiveConversationId(created.id);
     } catch {
-      setConversations((prev) => [localConversation, ...prev]);
-      setActiveConversationId(localConversation.id);
+      setConversations((prev) => [localConv, ...prev]); setActiveConversationId(localConv.id);
     }
-
-    clearStoredHistory(historyStorageKey);
-    setMessages([INITIAL_MESSAGE]);
-    setInputValue('');
+    clearStoredHistory(historyStorageKey); setMessages([INITIAL_MESSAGE]); setInputValue('');
   };
 
-  const startRenameConversation = (conversationId: string, currentTitle: string) => {
-    setEditingConversationId(conversationId);
-    setEditingConversationTitle(currentTitle);
-    setEditingConversationError('');
-  };
-
-  const cancelRenameConversation = () => {
-    setEditingConversationId(null);
-    setEditingConversationTitle('');
-    setEditingConversationError('');
-  };
+  const startRenameConversation = (id: string, title: string) => { setEditingConversationId(id); setEditingConversationTitle(title); setEditingConversationError(''); };
+  const cancelRenameConversation = () => { setEditingConversationId(null); setEditingConversationTitle(''); setEditingConversationError(''); };
 
   const saveConversationRename = async () => {
     if (!editingConversationId) return;
     const nextTitle = editingConversationTitle.trim();
-    if (!nextTitle) {
-      setEditingConversationError('O título não pode ficar vazio.');
-      return;
-    }
-
+    if (!nextTitle) { setEditingConversationError('O título não pode ficar vazio.'); return; }
     setEditingConversationError('');
-
-    setConversations((prev) => prev.map((conversation) =>
-      conversation.id === editingConversationId
-        ? { ...conversation, title: nextTitle, updatedAt: new Date().toISOString() }
-        : conversation,
-    ));
-
-    if (!editingConversationId.startsWith('local-')) {
-      await supabase
-        .from('claris_conversations')
-        .update({ title: nextTitle })
-        .eq('id', editingConversationId)
-        .eq('user_id', userId);
-    }
-
+    setConversations((prev) => prev.map((c) => c.id === editingConversationId ? { ...c, title: nextTitle, updatedAt: new Date().toISOString() } : c));
+    if (!editingConversationId.startsWith('local-')) await updateConversation(editingConversationId, userId, { title: nextTitle });
     cancelRenameConversation();
   };
 
-  const deleteConversation = async (conversationId: string) => {
-    const conversation = conversations.find((item) => item.id === conversationId);
-    if (!conversation) return;
-
-    const confirmed = window.confirm(`Deseja excluir a conversa "${conversation.title}"? Esta ação não pode ser desfeita.`);
+  const deleteConversation = async (id: string) => {
+    const conv = conversations.find((c) => c.id === id);
+    if (!conv) return;
+    const confirmed = window.confirm(`Deseja excluir a conversa "${conv.title}"?`);
     if (!confirmed) return;
-
-    const remaining = conversations.filter((item) => item.id !== conversationId);
+    const remaining = conversations.filter((c) => c.id !== id);
     setConversations(remaining);
-
-    if (!conversationId.startsWith('local-')) {
-      await supabase
-        .from('claris_conversations')
-        .delete()
-        .eq('id', conversationId)
-        .eq('user_id', userId);
+    if (!id.startsWith('local-')) await deleteConversationRow(id, userId);
+    if (activeConversationId === id) {
+      if (remaining.length > 0) { const next = [...remaining].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]; setActiveConversationId(next.id); setMessages([INITIAL_MESSAGE, ...historyToChatMessages(next.history)]); }
+      else await createNewConversation();
     }
-
-    if (activeConversationId === conversationId) {
-      if (remaining.length > 0) {
-        const nextConversation = [...remaining].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-        setActiveConversationId(nextConversation.id);
-        setMessages([INITIAL_MESSAGE, ...historyToChatMessages(nextConversation.history)]);
-      } else {
-        await createNewConversation();
-      }
-    }
-
-    if (editingConversationId === conversationId) {
-      cancelRenameConversation();
-    }
+    if (editingConversationId === id) cancelRenameConversation();
   };
 
   const clearConversation = () => {
     clearStoredHistory(historyStorageKey);
-    setMessages([
-      INITIAL_MESSAGE,
-      {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: 'Histórico da conversa limpo com sucesso.',
-      },
-    ]);
+    setMessages([INITIAL_MESSAGE, { id: `assistant-${Date.now()}`, role: 'assistant', content: 'Histórico da conversa limpo com sucesso.' }]);
     setInputValue('');
   };
 
   const handleSend = async (messageOverride?: string, action?: ChatAction) => {
-    const sourceMessage = messageOverride ?? inputValue;
-    const trimmedMessage = sourceMessage.trim();
-    if (!trimmedMessage) return;
-
-    if (isClearHistoryCommand(trimmedMessage)) {
-      clearConversation();
-      return;
-    }
-
-    // Capture history BEFORE the new message is added (exclude welcome message)
-    const history = messages
-      .filter((m) => m.id !== 'welcome')
-      .map(({ role, content }) => ({ role, content }));
-
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: trimmedMessage,
-    };
-
-    setMessages((prev) => ([
-      ...prev.map((message): ChatMessage => ({ ...message, actions: undefined })),
-      userMessage,
-    ]));
-    if (!messageOverride) {
-      setInputValue('');
-    }
-
+    const source = messageOverride ?? inputValue;
+    const trimmed = source.trim();
+    if (!trimmed) return;
+    if (isClearHistoryCommand(trimmed)) { clearConversation(); return; }
+    const history = messages.filter((m) => m.id !== 'welcome').map(({ role, content }) => ({ role, content }));
+    const userMsg: ChatMessage = { id: `user-${Date.now()}`, role: 'user', content: trimmed };
+    setMessages((prev) => [...prev.map((m): ChatMessage => ({ ...m, actions: undefined })), userMsg]);
+    if (!messageOverride) setInputValue('');
     const clarisConfigured = isConfigured || await refreshGlobalClarisConfiguration();
-
-    if (!clarisConfigured) {
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: CLARIS_NOT_CONFIGURED_REPLY,
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-      return;
-    }
-
+    if (!clarisConfigured) { setMessages((prev) => [...prev, { id: `assistant-${Date.now()}`, role: 'assistant', content: CLARIS_NOT_CONFIGURED_REPLY }]); return; }
     setIsSending(true);
     try {
       const { data, error } = await supabase.functions.invoke('claris-chat', {
-        body: {
-          message: trimmedMessage,
-          history,
-          moodleUrl: moodleSession?.moodleUrl,
-          moodleToken: moodleSession?.moodleToken,
-          action: action ? {
-            kind: action.kind,
-            value: action.value,
-            jobId: action.jobId,
-          } : undefined,
-        },
+        body: { message: trimmed, history, moodleUrl: moodleSession?.moodleUrl, moodleToken: moodleSession?.moodleToken, action: action ? { kind: action.kind, value: action.value, jobId: action.jobId } : undefined },
       });
-
       if (error) throw error;
-
       const typedData = (data ?? {}) as ClarisChatFunctionResponse;
-      const assistantReply = typeof typedData.reply === 'string' && typedData.reply.trim().length > 0
-        ? typedData.reply
-        : CLARIS_PLACEHOLDER_REPLY;
+      const reply = typeof typedData.reply === 'string' && typedData.reply.trim().length > 0 ? typedData.reply : CLARIS_PLACEHOLDER_REPLY;
       const uiActions = parseUiActions(typedData.uiActions);
       const richBlocks = parseRichBlocks(typedData.richBlocks);
-
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: assistantReply,
-        actions: uiActions.length > 0 ? uiActions : undefined,
-        richBlocks: richBlocks.length > 0 ? richBlocks : undefined,
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => [...prev, { id: `assistant-${Date.now()}`, role: 'assistant', content: reply, actions: uiActions.length > 0 ? uiActions : undefined, richBlocks: richBlocks.length > 0 ? richBlocks : undefined }]);
     } catch {
-      const assistantMessage: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: 'assistant',
-        content: 'Não consegui me conectar ao modelo agora. Verifique as configurações da Claris IA e tente novamente.',
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
-    } finally {
-      setIsSending(false);
-    }
+      setMessages((prev) => [...prev, { id: `assistant-${Date.now()}`, role: 'assistant', content: 'Não consegui me conectar ao modelo agora. Verifique as configurações da Claris IA e tente novamente.' }]);
+    } finally { setIsSending(false); }
   };
 
+  // ---- Chat panel (GPT-style) ----
+
   const chatPanel = (
-    <div
-      className={cn(
-        'flex h-full w-full flex-col overflow-hidden bg-card',
-        isFloating ? 'min-h-0' : 'min-h-[calc(100vh-12rem)]',
-      )}
-    >
-          <div
-            className={cn(
-              'flex flex-1 min-h-0 flex-col transition-all duration-300',
-              isFloating && !isContentVisible ? 'translate-y-2 scale-[0.985] opacity-0 pointer-events-none' : 'translate-y-0 scale-100 opacity-100'
-            )}
-            style={isFloating ? { transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' } : undefined}
-          >
-          <div className="shrink-0 flex items-center justify-between border-b border-primary/60 bg-primary px-3 py-2 text-primary-foreground">
-            <div className="flex items-center gap-2">
-              <ClarisIcon className="h-6 w-6 text-primary-foreground" />
-              <span className="text-sm font-semibold">Claris IA</span>
-            </div>
-            <div className="flex items-center gap-1">
-              {!isFloating && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={createNewConversation}
-                  aria-label="Nova conversa"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Nova conversa
-                </Button>
-              )}
-              {isFloating && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-                  onClick={() => navigate(`/claris?context=${encodeURIComponent(location.pathname)}`)}
-                  aria-label="Abrir chat expandido da Claris IA"
-                >
-                  <Expand className="h-4 w-4" />
-                </Button>
-              )}
-              {isFloating && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
-                  onClick={closeFloatingChat}
-                  aria-label="Fechar chat"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+    <div className={cn('flex h-full w-full flex-col overflow-hidden', isFloating ? 'bg-card' : 'bg-background')}>
+      {/* Header */}
+      <div className="shrink-0 flex items-center justify-between border-b px-4 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary">
+            <ClarisIcon className="h-4 w-4 text-primary-foreground" />
           </div>
-
-          <ScrollArea
-            data-testid={isFloating ? 'floating-chat-scroll-area' : undefined}
-            className={cn('px-3 py-3', isFloating ? 'min-h-0 flex-1' : 'min-h-[360px] flex-1')}
-          >
-            <div className="space-y-2" data-testid="message-list">
-              {messages.map((message) => (
-                <div
-                  data-testid="chat-message"
-                  key={message.id}
-                  className={cn(
-                    'max-w-full min-w-0 break-words whitespace-pre-wrap rounded-lg px-3 py-2 text-sm sm:max-w-[90%]',
-                    message.role === 'assistant'
-                      ? 'bg-muted text-foreground'
-                      : 'ml-auto bg-primary text-primary-foreground'
-                  )}
-                >
-                  {message.content}
-                  {message.role === 'assistant' && message.richBlocks && message.richBlocks.length > 0 && (
-                    <RichBlocksView blocks={message.richBlocks} />
-                  )}
-                  {message.role === 'assistant' && message.actions && message.actions.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {message.actions.map((action) => (
-                        <Button
-                          key={action.id}
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-8"
-                          disabled={isSending}
-                          onClick={() => handleSend(action.value, action)}
-                        >
-                          {action.label}
-                        </Button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {shouldShowIcebreakers && (
-                <div className="flex flex-wrap justify-center gap-2 pt-3">
-                  {contextualSuggestions.map((suggestion) => (
-                    <Button
-                      key={suggestion}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-auto max-w-[340px] rounded-full border-border/70 bg-background px-4 py-2.5 text-center text-xs leading-4 text-foreground/90 shadow-sm hover:bg-muted"
-                      onClick={() => handleSend(suggestion)}
-                      disabled={isSending}
-                    >
-                      <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/60" />
-                      <span>{suggestion}</span>
-                    </Button>
-                  ))}
-                </div>
-              )}
-              <div ref={scrollEndRef} />
-            </div>
-          </ScrollArea>
-
-          <div className="shrink-0 border-t p-2">
-            <form
-              className="flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                handleSend();
-              }}
-            >
-              <Input
-                ref={inputRef}
-                value={inputValue}
-                onChange={(event) => setInputValue(event.target.value)}
-                placeholder="Digite sua mensagem..."
-                aria-label="Mensagem para Claris IA"
-                disabled={isSending}
-              />
-              {isFloating && (
-                <Button type="button" variant="ghost" size="icon" onClick={createNewConversation} aria-label="Nova conversa">
-                  <Plus className="h-4 w-4" />
-                </Button>
-              )}
-              <Button type="submit" size="icon" disabled={!canSend} aria-label="Enviar mensagem">
-                {isSending ? <Spinner className="h-4 w-4" onAccent /> : <Send className="h-4 w-4" />}
-              </Button>
-            </form>
-          </div>
-          </div>
+          <span className="text-sm font-semibold text-foreground">Claris IA</span>
         </div>
-  );
+        <div className="flex items-center gap-1">
+          {!isFloating && (
+            <Button type="button" variant="outline" size="sm" className="gap-1.5 rounded-full text-xs" onClick={createNewConversation}>
+              <Plus className="h-3.5 w-3.5" /> Nova conversa
+            </Button>
+          )}
+          {isFloating && (
+            <>
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={() => navigate(`/claris?context=${encodeURIComponent(location.pathname)}`)} aria-label="Expandir chat">
+                <Expand className="h-4 w-4" />
+              </Button>
+              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={closeFloatingChat} aria-label="Fechar chat">
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
-  if (!isFloating) {
-    return (
-      <div className="flex h-full min-h-[calc(100vh-12rem)] w-full flex-col lg:flex-row">
-        <aside className="flex w-full shrink-0 flex-col border-b border-border/60 bg-muted/20 lg:w-[320px] lg:border-b-0 lg:border-r">
-          <div className="border-b px-3 py-2">
-            <span className="text-sm font-semibold">Seus Chats</span>
-          </div>
+      {/* Transition wrapper */}
+      <div className={cn(
+        'flex flex-1 min-h-0 flex-col transition-all duration-300',
+        isFloating && !isContentVisible ? 'translate-y-2 scale-[0.985] opacity-0 pointer-events-none' : 'translate-y-0 scale-100 opacity-100'
+      )} style={isFloating ? { transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' } : undefined}>
 
-          <div className="min-h-0 flex-1 px-4 py-4">
+        {/* Messages */}
+        <ScrollArea data-testid={isFloating ? 'floating-chat-scroll-area' : undefined} className="flex-1 min-h-0">
+          <div className={cn('mx-auto w-full', isFloating ? 'max-w-full px-1' : 'max-w-3xl px-4')} data-testid="message-list">
+            {messages.map((message) =>
+              message.role === 'assistant'
+                ? <AssistantMessage key={message.id} message={message} isSending={isSending} onAction={(v, a) => handleSend(v, a)} />
+                : <UserMessage key={message.id} message={message} />
+            )}
 
-            <ScrollArea className="h-[240px] lg:h-full pr-2">
-            {isHydratingConversations ? (
-              <div className="flex items-center justify-center py-8">
-                <Spinner className="h-5 w-5" />
+            {isSending && (
+              <div className="flex gap-3 py-4 px-2">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary">
+                  <ClarisIcon className="h-4 w-4 text-primary-foreground" />
+                </div>
+                <div className="flex items-center gap-1.5 pt-1">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '0ms' }} />
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '150ms' }} />
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/40" style={{ animationDelay: '300ms' }} />
+                </div>
               </div>
-            ) : visibleConversations.length === 0 ? (
-              <div />
-            ) : (
-              <div className="space-y-2">
-                {visibleConversations.map((conversation) => (
-                  <div
-                    key={conversation.id}
-                    className={cn(
-                      'w-full rounded-xl border px-3 py-2 transition-colors',
-                      activeConversationId === conversation.id
-                        ? 'border-primary/40 bg-primary/10'
-                        : 'border-border/70 bg-background/80 hover:bg-background',
-                    )}
-                  >
-                    {editingConversationId === conversation.id ? (
-                      <div className="space-y-2">
-                        <Input
-                          value={editingConversationTitle}
-                          onChange={(event) => {
-                            setEditingConversationTitle(event.target.value);
-                            if (editingConversationError) {
-                              setEditingConversationError('');
-                            }
-                          }}
-                          autoFocus
-                          onFocus={(event) => event.currentTarget.select()}
-                          onKeyDown={(event) => {
-                            if (event.key === 'Enter') {
-                              event.preventDefault();
-                              void saveConversationRename();
-                            }
-                            if (event.key === 'Escape') {
-                              event.preventDefault();
-                              cancelRenameConversation();
-                            }
-                          }}
-                          aria-label={`Renomear conversa ${conversation.title}`}
-                          className="h-8"
-                        />
-                        {editingConversationError && (
-                          <p className="text-[11px] text-destructive" role="alert">
-                            {editingConversationError}
-                          </p>
-                        )}
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={cancelRenameConversation}
-                            aria-label={`Cancelar renomear conversa ${conversation.title}`}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => void saveConversationRename()}
-                            aria-label={`Salvar renomear conversa ${conversation.title}`}
-                          >
-                            <Check className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-start gap-2">
-                        <button
-                          type="button"
-                          className="min-w-0 flex-1 text-left"
-                          onClick={() => selectConversation(conversation.id)}
-                          aria-label={`Abrir conversa ${conversation.title}`}
-                        >
-                          <div className="mb-1 flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                            <span className="font-semibold uppercase tracking-wide truncate">{conversation.title}</span>
-                          </div>
-                          <div className="line-clamp-2 text-sm break-words text-foreground/90">
-                            {conversation.history[conversation.history.length - 1]?.content ?? 'Sem mensagens ainda'}
-                          </div>
-                        </button>
+            )}
 
-                        <div className="flex items-center gap-1">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                aria-label={`Mais opções da conversa ${conversation.title}`}
-                              >
-                                <MoreHorizontal className="h-3.5 w-3.5" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onSelect={() => startRenameConversation(conversation.id, conversation.title)}>
-                                <Pencil className="mr-2 h-3.5 w-3.5" />
-                                Renomear
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onSelect={() => {
-                                  void deleteConversation(conversation.id);
-                                }}
-                              >
-                                <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                Excluir
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+            {shouldShowIcebreakers && (
+              <div className={cn('flex flex-wrap justify-center gap-2 py-6', isFloating ? 'px-2' : 'px-4')}>
+                {contextualSuggestions.map((suggestion) => (
+                  <Button key={suggestion} type="button" variant="outline" size="sm" className="h-auto max-w-[340px] rounded-full border-border/60 px-4 py-2.5 text-center text-xs leading-4 shadow-sm hover:bg-muted/80 transition-colors" onClick={() => handleSend(suggestion)} disabled={isSending}>
+                    <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/50" />
+                    <span>{suggestion}</span>
+                  </Button>
                 ))}
               </div>
             )}
-            </ScrollArea>
+
+            <div ref={scrollEndRef} />
           </div>
+        </ScrollArea>
+
+        {/* Input area */}
+        <div className={cn('shrink-0 border-t', isFloating ? 'p-2' : 'px-4 py-3')}>
+          <form className={cn('mx-auto flex items-center gap-2', !isFloating && 'max-w-3xl')} onSubmit={(e) => { e.preventDefault(); handleSend(); }}>
+            <div className="relative flex-1">
+              <Input
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                placeholder="Mensagem para Claris IA..."
+                aria-label="Mensagem para Claris IA"
+                disabled={isSending}
+                className="rounded-full bg-muted/50 border-border/60 pr-10 focus-visible:ring-1"
+              />
+            </div>
+            {isFloating && (
+              <Button type="button" variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={createNewConversation} aria-label="Nova conversa">
+                <Plus className="h-4 w-4" />
+              </Button>
+            )}
+            <Button type="submit" size="icon" disabled={!canSend} className="h-9 w-9 shrink-0 rounded-full" aria-label="Enviar mensagem">
+              {isSending ? <Spinner className="h-4 w-4" onAccent /> : <Send className="h-4 w-4" />}
+            </Button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ---- Page variant with sidebar ----
+  if (!isFloating) {
+    return (
+      <div className="flex h-full w-full flex-col lg:flex-row">
+        {/* Sidebar */}
+        <aside className="flex w-full shrink-0 flex-col border-b border-border/40 bg-muted/30 lg:w-[280px] lg:border-b-0 lg:border-r">
+          <div className="flex items-center justify-between border-b px-4 py-2.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Seus Chats</span>
+            <Button type="button" variant="ghost" size="icon" className="h-7 w-7" onClick={createNewConversation} aria-label="Nova conversa">
+              <Plus className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="p-2 space-y-0.5">
+              {isHydratingConversations ? (
+                <div className="flex items-center justify-center py-8"><Spinner className="h-5 w-5" /></div>
+              ) : visibleConversations.length === 0 ? null : (
+                visibleConversations.map((conv) => (
+                  <div key={conv.id} className={cn(
+                    'group rounded-lg px-3 py-2 transition-colors cursor-pointer',
+                    activeConversationId === conv.id ? 'bg-muted' : 'hover:bg-muted/50'
+                  )}>
+                    {editingConversationId === conv.id ? (
+                      <div className="space-y-1.5">
+                        <Input value={editingConversationTitle} onChange={(e) => { setEditingConversationTitle(e.target.value); if (editingConversationError) setEditingConversationError(''); }}
+                          autoFocus onFocus={(e) => e.currentTarget.select()}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveConversationRename(); } if (e.key === 'Escape') { e.preventDefault(); cancelRenameConversation(); } }}
+                          className="h-7 text-xs" />
+                        {editingConversationError && <p className="text-[11px] text-destructive">{editingConversationError}</p>}
+                        <div className="flex justify-end gap-1">
+                          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={cancelRenameConversation}><X className="h-3 w-3" /></Button>
+                          <Button type="button" variant="outline" size="icon" className="h-6 w-6" onClick={() => void saveConversationRename()}><Check className="h-3 w-3" /></Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2" onClick={() => selectConversation(conv.id)}>
+                        <MessageCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                        <span className="flex-1 truncate text-sm text-foreground/90">{conv.title}</span>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button type="button" variant="ghost" size="icon" className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                              <MoreHorizontal className="h-3.5 w-3.5" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => startRenameConversation(conv.id, conv.title)}>
+                              <Pencil className="mr-2 h-3.5 w-3.5" /> Renomear
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => { void deleteConversation(conv.id); }}>
+                              <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
         </aside>
 
         <div className="flex min-h-0 flex-1">{chatPanel}</div>
@@ -1282,38 +800,25 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     );
   }
 
+  // ---- Floating variant ----
   return (
     <div className="fixed inset-x-2 bottom-4 z-50 hidden flex-col items-end gap-2 md:flex md:left-auto md:right-4 md:inset-x-auto">
       <div
         className={cn(
           'relative origin-bottom-right overflow-hidden border transition-[width,height,border-radius,transform,opacity,box-shadow] duration-[360ms] will-change-transform',
-          isOpen
-            ? 'h-[520px] w-full max-w-full rounded-2xl bg-card shadow-xl sm:w-[360px]'
-            : 'h-14 w-14 rounded-full border-primary bg-primary text-primary-foreground shadow-lg',
+          isOpen ? 'h-[520px] w-full max-w-full rounded-2xl bg-card shadow-xl sm:w-[380px]' : 'h-14 w-14 rounded-full border-primary bg-primary text-primary-foreground shadow-lg',
         )}
         style={{ transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)' }}
         role={!isOpen ? 'button' : undefined}
         tabIndex={!isOpen ? 0 : undefined}
         aria-label={!isOpen ? 'Abrir chat da Claris IA' : undefined}
         onClick={!isOpen ? openFloatingChat : undefined}
-        onKeyDown={!isOpen ? (event) => {
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openFloatingChat();
-          }
-        } : undefined}
+        onKeyDown={!isOpen ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFloatingChat(); } } : undefined}
       >
-        <div
-          className={cn(
-            'pointer-events-none absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-200',
-            !isOpen ? 'opacity-100' : 'opacity-0',
-          )}
-          aria-hidden={isOpen}
-        >
-          <Spinner className="h-[42px] w-[42px] text-primary-foreground" />
+        <div className={cn('pointer-events-none absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-200', !isOpen ? 'opacity-100' : 'opacity-0')} aria-hidden={isOpen}>
+          <ClarisIcon className="h-7 w-7 text-primary-foreground" />
           <MessageCircle className="sr-only" />
         </div>
-
         {isChatVisible && chatPanel}
       </div>
     </div>
