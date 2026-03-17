@@ -280,12 +280,7 @@ async function getDashboardSummary(userId: string, supabase: Supabase) {
 // ---------------------------------------------------------------------------
 
 async function getStudentsAtRisk(userId: string, args: ToolCallArgs, supabase: Supabase) {
-  const riskLevels = args.risk_levels ?? ['atencao', 'risco', 'critico']
-  const limit = Math.min(args.limit ?? 10, 50)
-
-  const courseIds = await getUserCourseIds(userId, supabase)
-  const studentIds = await getStudentIdsInCourses(courseIds, supabase)
-  if (studentIds.length === 0) return []
+  const riskLevels = (args.risk_levels ?? ['atencao', 'risco', 'critico']) as ('normal' | 'atencao' | 'risco' | 'critico' | 'inativo' | null)[]
 
   const { data } = await supabase
     .from('students')
