@@ -16,6 +16,49 @@ import {
 } from '../domain/bulk-messaging/repository.ts'
 import { callMoodleApi } from '../moodle/mod.ts'
 
+// ---------------------------------------------------------------------------
+// AI action audit helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Writes an immutable audit row to claris_ai_actions.
+ * Failures are swallowed so that a logging error never aborts the actual tool.
+ * The arg payload is capped at 4 KB to avoid storing excessive data.
+ */
+async function auditAiAction(
+  userId: string,
+  toolName: string,
+  args: ToolCallArgs,
+  resultSummary: string,
+  supabase: Supabase,
+): Promise<void> {
+  try {
+    // Sanitise args: remove potentially large free-text fields
+    const safeArgs: Partial<ToolCallArgs> = { ...args }
+    if (safeArgs.body && safeArgs.body.length > 500) {
+      safeArgs.body = safeArgs.body.slice(0, 500) + '…'
+    }
+    if (safeArgs.description && safeArgs.description.length > 500) {
+      safeArgs.description = safeArgs.description.slice(0, 500) + '…'
+    }
+    if (safeArgs.message && safeArgs.message.length > 500) {
+      safeArgs.message = safeArgs.message.slice(0, 500) + '…'
+    }
+
+    const serialised = JSON.stringify(safeArgs)
+    const capped = serialised.length > 4096 ? serialised.slice(0, 4096) + '…}' : serialised
+
+    await supabase.from('claris_ai_actions').insert({
+      user_id: userId,
+      tool_name: toolName,
+      tool_args: JSON.parse(capped) as Record<string, unknown>,
+      result_summary: resultSummary.slice(0, 500),
+    })
+  } catch {
+    // Intentionally silent — audit must never break the main flow.
+  }
+}
+
 export interface ToolCallArgs {
   event_type?: string
   title?: string
@@ -705,6 +748,7 @@ async function cancelBulkMessageSend(
     return { error: 'Falha ao cancelar o job de envio.' }
   }
 
+  await auditAiAction(userId, 'cancel_bulk_message_send', args, `bulk message job cancelled: id=${jobId}`, supabase)
   return {
     success: true,
     cancelled: true,
@@ -1443,7 +1487,9 @@ async function confirmBulkMessageSend(
     }
   }
 
-  return runBulkMessageJob(jobId, userId, context.moodleUrl, context.moodleToken, supabase)
+  const result = await runBulkMessageJob(jobId, userId, context.moodleUrl, context.moodleToken, supabase)
+  await auditAiAction(userId, 'confirm_bulk_message_send', args, `bulk message job dispatched: id=${jobId}`, supabase)
+  return result
 }
 
 // ---------------------------------------------------------------------------
@@ -1475,9 +1521,11 @@ async function createTask(userId: string, args: ToolCallArgs, supabase: Supabase
     .single()
 
   if (error || !data) {
+    await auditAiAction(userId, 'create_task', args, 'error: falha ao criar tarefa', supabase)
     return { error: 'Falha ao criar tarefa.' }
   }
 
+  await auditAiAction(userId, 'create_task', args, `task created: id=${data.id} title="${data.title}"`, supabase)
   return { success: true, created: true, task: data }
 }
 
@@ -1510,6 +1558,7 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
   if (error) return { error: 'Falha ao atualizar tarefa.' }
   if (!data) return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
 
+  await auditAiAction(userId, 'update_task', args, `task updated: id=${data.id}`, supabase)
   return { success: true, updated: true, task: data }
 }
 
@@ -1545,6 +1594,7 @@ async function changeTaskStatus(userId: string, args: ToolCallArgs, supabase: Su
   if (error) return { error: 'Falha ao alterar status da tarefa.' }
   if (!data) return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
 
+  await auditAiAction(userId, 'change_task_status', args, `task status changed: id=${data.id} status=${data.status}`, supabase)
   return { success: true, task_id: data.id, title: data.title, new_status: data.status }
 }
 
@@ -1612,9 +1662,11 @@ async function createEvent(userId: string, args: ToolCallArgs, supabase: Supabas
     .single()
 
   if (error || !data) {
+    await auditAiAction(userId, 'create_event', args, 'error: falha ao criar evento', supabase)
     return { error: 'Falha ao criar evento.' }
   }
 
+  await auditAiAction(userId, 'create_event', args, `event created: id=${data.id} title="${data.title}"`, supabase)
   return {
     success: true,
     created: true,
@@ -1650,6 +1702,7 @@ async function updateEvent(userId: string, args: ToolCallArgs, supabase: Supabas
   if (error) return { error: 'Falha ao atualizar evento.' }
   if (!data) return { error: 'Evento não encontrado ou sem permissão de acesso.' }
 
+  await auditAiAction(userId, 'update_event', args, `event updated: id=${data.id}`, supabase)
   return {
     success: true,
     updated: true,
@@ -1678,6 +1731,7 @@ async function deleteEvent(userId: string, args: ToolCallArgs, supabase: Supabas
 
   if (error) return { error: 'Falha ao remover evento.' }
 
+  await auditAiAction(userId, 'delete_event', args, `event deleted: id=${eventId} title="${existing.title}"`, supabase)
   return {
     success: true,
     deleted: true,

@@ -304,7 +304,14 @@ function AssistantMessage({ message, isSending, onAction }: { message: ChatMessa
       <div className="max-w-[85%] space-y-1">
         <div className="rounded-2xl rounded-bl-md bg-muted px-4 py-2.5">
           <div className="prose prose-sm dark:prose-invert max-w-none break-words text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_pre]:my-2 [&_code]:rounded [&_code]:bg-background/50 [&_code]:px-1 [&_code]:py-0.5 [&_code]:text-xs [&_a]:text-primary [&_a]:underline">
-            <ReactMarkdown>{message.content}</ReactMarkdown>
+            <ReactMarkdown
+              urlTransform={(url) => {
+                // Allow only safe protocols; strip everything else to prevent XSS via
+                // javascript:, data:, vbscript: and similar dangerous URL schemes.
+                const safe = /^(https?|mailto):/i;
+                return safe.test(url) ? url : '';
+              }}
+            >{message.content}</ReactMarkdown>
           </div>
         </div>
         {message.richBlocks && message.richBlocks.length > 0 && <RichBlocksView blocks={message.richBlocks} />}
