@@ -41,8 +41,7 @@ export default function AdminDashboard() {
   const { data: errorCount } = useQuery({
     queryKey: ['admin-error-count'],
     queryFn: async () => {
-      const { count } = await supabase
-        .from('app_error_logs')
+      const { count } = await (supabase.from as Function)('app_error_logs')
         .select('*', { count: 'exact', head: true })
         .eq('resolved', false);
       return count ?? 0;
