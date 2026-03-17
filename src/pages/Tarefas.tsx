@@ -85,7 +85,7 @@ export default function Tarefas() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <Tabs value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
           <TabsList>
             {STATUS_TABS.map(tab => (
