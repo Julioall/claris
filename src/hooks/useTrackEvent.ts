@@ -29,13 +29,13 @@ export function useTrackEvent() {
     async (eventType: UsageEventType, options: TrackEventOptions = {}) => {
       try {
         const { route, resource, metadata = {} } = options;
-        await (supabase.from as Function)('app_usage_events').insert({
+        await supabase.from('app_usage_events' as never).insert({
           user_id: user?.id ?? null,
           event_type: eventType,
           route: route ?? location.pathname,
           resource: resource ?? null,
           metadata,
-        });
+        } as never);
       } catch {
         // Tracking failures are silent to avoid disrupting the user experience
       }

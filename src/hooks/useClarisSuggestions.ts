@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const fromAny = (table: string) => (supabase.from as Function)(table) as any;
+const fromAny = (table: string) => supabase.from(table as never) as any;
 
 export type SuggestionType =
   | 'task_followup' | 'weekly_message' | 'correction_followup' | 'alignment_event'

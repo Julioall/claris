@@ -44,7 +44,7 @@ export function SupportButton({ className, size = 'icon', showLabel = false }: S
 
     setIsSubmitting(true);
     try {
-      const { error } = await (supabase.from as Function)('support_tickets').insert({
+      const { error } = await supabase.from('support_tickets' as never).insert({
         user_id: user?.id ?? null,
         type,
         title: title.trim(),
@@ -54,7 +54,7 @@ export function SupportButton({ className, size = 'icon', showLabel = false }: S
           userAgent: navigator.userAgent,
           url: window.location.href,
         },
-      });
+      } as never);
 
       if (error) throw error;
 
