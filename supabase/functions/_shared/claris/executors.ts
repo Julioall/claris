@@ -75,6 +75,8 @@ export interface ToolCallArgs {
   action_type?: 'create_task' | 'create_event' | 'open_chat'
   action_payload?: Record<string, unknown>
   expires_in_hours?: number
+  // Platform help
+  topic?: string
 }
 
 export interface ToolExecutionContext {
@@ -161,6 +163,9 @@ export async function executeToolCall(
     // Phase 4 – Proactive intelligence engines
     case 'run_proactive_engines':
       return runProactiveEngines(userId, supabase)
+    // Platform help / documentation
+    case 'get_platform_help':
+      return getPlatformHelp(userId, args)
     default:
       return { error: `Unknown tool: ${toolName}` }
   }
@@ -2266,5 +2271,32 @@ async function runProactiveEngines(userId: string, supabase: Supabase) {
   return {
     success: true,
     ...result,
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns platform documentation from the knowledge base.
+ * Supports optional topic filtering for targeted help.
+ */
+async function getPlatformHelp(_userId: string, args: ToolCallArgs) {
+  const { findSections, listTopics } = await import('./knowledge-base.ts')
+
+  const sections = findSections(args.topic)
+
+  if (sections.length === 0) {
+    return {
+      found: false,
+      available_topics: listTopics(),
+      message:
+        'Não encontrei documentação para o tópico informado. Veja os tópicos disponíveis e tente novamente com um deles.',
+    }
+  }
+
+  return {
+    found: true,
+    topic: args.topic ?? 'all',
+    sections: sections.map((s) => ({ id: s.id, title: s.title, content: s.content })),
   }
 }

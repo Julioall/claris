@@ -928,4 +928,24 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
       },
     },
   },
+  // Platform help / documentation
+  {
+    type: 'function',
+    function: {
+      name: 'get_platform_help',
+      description:
+        'Retorna documentação e guias sobre a plataforma Claris: como usar cada seção, fluxos de trabalho recomendados, níveis de risco, rotina de tutores, perguntas frequentes e como a Claris IA pode ajudar. Use sempre que o usuário perguntar como usar a plataforma, onde encontrar algo, qual fluxo seguir, tirar dúvidas ou pedir ajuda sobre funcionalidades.',
+      parameters: {
+        type: 'object',
+        properties: {
+          topic: {
+            type: 'string',
+            description:
+              'Tópico específico sobre o qual o usuário quer ajuda. Exemplos: "navegação", "risco", "tarefas", "agenda", "mensagens", "claris ia", "rotina semanal", "faq", "automações", "permissões". Use "all" ou omita para retornar toda a documentação.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ]

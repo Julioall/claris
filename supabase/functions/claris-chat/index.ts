@@ -121,6 +121,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
   '  O campo trigger_engine identifica qual motor gerou a sugestão (use "manual" quando gerado diretamente pelo chat).',
   '— Mensagens: find_students_for_messaging, prepare_single_student_message_send, confirm_single_student_message_send, list_message_templates, prepare_bulk_message_send, confirm_bulk_message_send, cancel_bulk_message_send.',
   '— Notificações: notify_user, get_notifications.',
+  '— Ajuda e documentação da plataforma: get_platform_help (retorna guias, fluxos, perguntas frequentes e como usar cada seção da Claris). Use SEMPRE que o usuário perguntar como usar a plataforma, onde encontrar algo, qual fluxo seguir ou pedir ajuda sobre qualquer funcionalidade.',
   'SEMPRE consulte as ferramentas disponíveis antes de dizer que não tem dados. Use os dados retornados para fundamentar suas orientações com números e nomes reais.',
   '',
   'ENVIO DE MENSAGENS EM LOTE (REGRA DE SEGURANÇA):',
