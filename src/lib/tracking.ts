@@ -11,7 +11,7 @@ export async function trackEvent(
   options: { route?: string; metadata?: Record<string, unknown> } = {},
 ): Promise<void> {
   try {
-    await supabase.from('app_usage_events').insert({
+    await (supabase.from as Function)('app_usage_events').insert({
       user_id: userId ?? null,
       event_type: eventType,
       route: options.route ?? (typeof window !== 'undefined' ? window.location.pathname : null),
