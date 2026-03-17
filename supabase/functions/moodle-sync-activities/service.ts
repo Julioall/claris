@@ -10,6 +10,7 @@ import {
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 
 const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
+const COMPLETION_FETCH_POOL_SIZE = 8
 
 export async function syncActivities(moodleUrl: string, token: string, courseId: number): Promise<Response> {
   const supabase = createServiceClient()
@@ -52,13 +53,10 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
 
   const BATCH_SIZE = 500
   let activitiesCount = 0
-  for (let i = 0; i < activityRecords.length; i += BATCH_SIZE) {
-    const batch = activityRecords.slice(i, i + BATCH_SIZE)
-    try {
-      activitiesCount += await upsertStudentActivities(supabase, batch, batch.length)
-    } catch (error) {
-      console.error(`Error upserting activity batch ${i / BATCH_SIZE}:`, error)
-    }
+  try {
+    activitiesCount = await upsertStudentActivities(supabase, activityRecords, BATCH_SIZE)
+  } catch (error) {
+    console.error('Error upserting activities:', error)
   }
 
   console.log(`Upserted ${activitiesCount} activity records`)
@@ -278,30 +276,46 @@ async function fetchCompletionStatuses(
 
   if (!students?.length) return result
 
-  for (const student of students) {
-    const moodleUserId = parseInt(student.moodle_user_id, 10)
-    if (isNaN(moodleUserId)) continue
+  for (let i = 0; i < students.length; i += COMPLETION_FETCH_POOL_SIZE) {
+    const batch = students.slice(i, i + COMPLETION_FETCH_POOL_SIZE)
 
-    try {
-      const completionData = await callMoodleApi(
-        moodleUrl, token, 
-        'core_completion_get_activities_completion_status',
-        { courseid: courseId, userid: moodleUserId }
-      )
-
-      const activityMap = new Map<string, { state: number; timecompleted: number | null }>()
-      if (completionData?.statuses) {
-        for (const s of completionData.statuses) {
-          activityMap.set(String(s.cmid), {
-            state: s.state ?? 0,
-            timecompleted: s.timecompleted ?? null,
-          })
+    const settled = await Promise.allSettled(
+      batch.map(async (student) => {
+        const moodleUserId = parseInt(student.moodle_user_id, 10)
+        if (isNaN(moodleUserId)) {
+          return { studentId: student.id, activityMap: new Map<string, { state: number; timecompleted: number | null }>() }
         }
+
+        try {
+          const completionData = await callMoodleApi(
+            moodleUrl,
+            token,
+            'core_completion_get_activities_completion_status',
+            { courseid: courseId, userid: moodleUserId }
+          )
+
+          const activityMap = new Map<string, { state: number; timecompleted: number | null }>()
+          if (completionData?.statuses) {
+            for (const s of completionData.statuses) {
+              activityMap.set(String(s.cmid), {
+                state: s.state ?? 0,
+                timecompleted: s.timecompleted ?? null,
+              })
+            }
+          }
+
+          return { studentId: student.id, activityMap }
+        } catch (err) {
+          console.warn(`Completion API failed for student ${moodleUserId} in course ${courseId}:`, err)
+          return { studentId: student.id, activityMap: new Map<string, { state: number; timecompleted: number | null }>() }
+        }
+      })
+    )
+
+    for (const item of settled) {
+      if (item.status === 'fulfilled') {
+        result.set(item.value.studentId, item.value.activityMap)
       }
-      result.set(student.id, activityMap)
-    } catch (err) {
-      console.warn(`Completion API failed for student ${moodleUserId} in course ${courseId}:`, err)
-      // Fallback: no completion data for this student
     }
   }
 

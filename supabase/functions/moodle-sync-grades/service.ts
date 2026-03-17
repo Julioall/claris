@@ -9,6 +9,8 @@ import {
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 import { parseNullableNumber, parseNullablePercentage } from '../_shared/validation/mod.ts'
 
+const GRADE_FETCH_POOL_SIZE = 8
+
 function readOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null
 
@@ -75,16 +77,22 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
   const courseGradeRecords: Record<string, unknown>[] = []
   const now = new Date().toISOString()
 
-  for (const enrollment of enrolledStudents) {
-    const moodleUserId = parseInt(enrollment.moodle_user_id, 10)
+  for (let i = 0; i < enrolledStudents.length; i += GRADE_FETCH_POOL_SIZE) {
+    const batch = enrolledStudents.slice(i, i + GRADE_FETCH_POOL_SIZE)
 
-    try {
-      const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
-        courseid: courseId,
-        userid: moodleUserId,
-      })
+    const settled = await Promise.allSettled(
+      batch.map(async (enrollment) => {
+        const moodleUserId = parseInt(enrollment.moodle_user_id, 10)
 
-      if (gradesData.usergrades?.[0]) {
+        const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
+          courseid: courseId,
+          userid: moodleUserId,
+        })
+
+        if (!gradesData.usergrades?.[0]) {
+          return { courseGradeRecord: null, activityRecords: [] as Record<string, unknown>[] }
+        }
+
         const gradeItems = gradesData.usergrades[0].gradeitems || []
         const courseGradeItem = gradeItems.find((item: Record<string, unknown>) => item?.itemtype === 'course') || null
 
@@ -97,7 +105,7 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
           courseGradeItem?.lettergradeformatted,
         )
 
-        courseGradeRecords.push({
+        const courseGradeRecord = {
           student_id: enrollment.student_id,
           course_id: gradesCourse.id,
           grade_raw: courseGradeRaw,
@@ -107,7 +115,9 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
           letter_grade: courseLetterGrade,
           last_sync: now,
           updated_at: now,
-        })
+        }
+
+        const activityRecords: Record<string, unknown>[] = []
 
         for (const item of gradeItems) {
           if (!item || item.itemtype === 'course' || item.itemtype === 'category') continue
@@ -124,13 +134,11 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             itemPercentage = parseNullablePercentage(item.percentageformatted)
           }
 
-          // Derive timestamps from gradebook
           const gradedAtRaw = item.gradedategraded
           const submittedAtRaw = item.gradedatesubmitted
           const gradedAt = gradedAtRaw && gradedAtRaw > 0 ? new Date(gradedAtRaw * 1000).toISOString() : null
           const submittedAt = submittedAtRaw && submittedAtRaw > 0 ? new Date(submittedAtRaw * 1000).toISOString() : null
 
-          // Derive status from available data
           let activityStatus = 'pending'
           if (itemGradeRaw !== null && gradedAt) {
             activityStatus = 'graded'
@@ -138,7 +146,7 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             activityStatus = 'submitted'
           }
 
-          activityGradeRecords.push({
+          activityRecords.push({
             student_id: enrollment.student_id,
             course_id: gradesCourse.id,
             moodle_activity_id: cmid,
@@ -155,36 +163,39 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             updated_at: now,
           })
         }
+
+        return { courseGradeRecord, activityRecords }
+      })
+    )
+
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        if (result.value.courseGradeRecord) {
+          courseGradeRecords.push(result.value.courseGradeRecord)
+        }
+        activityGradeRecords.push(...result.value.activityRecords)
+      } else {
+        console.error(`Error fetching grades for course ${courseId}:`, result.reason)
       }
-    } catch (gradeErr) {
-      console.error(`Error fetching grades for student ${moodleUserId}:`, gradeErr)
     }
   }
 
   // Batch upsert activity grades
   let activityGradesCount = 0
   if (activityGradeRecords.length > 0) {
-    const BATCH_SIZE = 200
-    for (let i = 0; i < activityGradeRecords.length; i += BATCH_SIZE) {
-      const batch = activityGradeRecords.slice(i, i + BATCH_SIZE)
-      try {
-        activityGradesCount += await upsertStudentActivities(supabase, batch, batch.length)
-      } catch (error) {
-        console.error(`Error upserting activity grade batch:`, error)
-      }
+    try {
+      activityGradesCount = await upsertStudentActivities(supabase, activityGradeRecords, 200)
+    } catch (error) {
+      console.error('Error upserting activity grades:', error)
     }
   }
 
   let gradesCount = 0
   if (courseGradeRecords.length > 0) {
-    const BATCH_SIZE = 100
-    for (let i = 0; i < courseGradeRecords.length; i += BATCH_SIZE) {
-      const batch = courseGradeRecords.slice(i, i + BATCH_SIZE)
-      try {
-        gradesCount += await upsertStudentCourseGrades(supabase, batch, batch.length)
-      } catch (error) {
-        console.error(`Error upserting course grade batch:`, error)
-      }
+    try {
+      gradesCount = await upsertStudentCourseGrades(supabase, courseGradeRecords, 100)
+    } catch (error) {
+      console.error('Error upserting course grades:', error)
     }
   }
 

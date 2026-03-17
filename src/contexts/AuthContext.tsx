@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { User, AuthContextType, Course } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -27,12 +27,6 @@ interface SyncProgress {
   steps: SyncStep[];
   currentStep: string | null;
   isComplete: boolean;
-  summary?: {
-    courses: number;
-    students: number;
-    activities: number;
-    grades: number;
-  };
 }
 
 type SyncEntity = 'courses' | 'students' | 'activities' | 'grades';
@@ -67,11 +61,9 @@ const STORAGE_KEY = 'session';
 const initialSteps: SyncStep[] = [
   { id: 'courses', label: 'Sincronizar cursos', icon: 'courses', status: 'pending' },
   { id: 'students', label: 'Sincronizar alunos', icon: 'students', status: 'pending' },
-  { id: 'activities', label: 'Sincronizar atividades', icon: 'activities', status: 'pending' },
-  { id: 'grades', label: 'Sincronizar notas', icon: 'grades', status: 'pending' },
 ];
 
-const BATCH_DELAY_MS = 450;
+const BATCH_DELAY_MS = 120;
 
 const STEP_FUNCTION_MAP: Record<Exclude<SyncEntity, 'courses'>, string> = {
   students: 'moodle-sync-students',
@@ -80,9 +72,9 @@ const STEP_FUNCTION_MAP: Record<Exclude<SyncEntity, 'courses'>, string> = {
 };
 
 const STEP_BATCH_CONFIG: Record<Exclude<SyncEntity, 'courses'>, { batchSize: number; timeoutMs: number }> = {
-  students: { batchSize: 2, timeoutMs: 22000 },
-  activities: { batchSize: 1, timeoutMs: 26000 },
-  grades: { batchSize: 1, timeoutMs: 26000 },
+  students: { batchSize: 5, timeoutMs: 22000 },
+  activities: { batchSize: 2, timeoutMs: 26000 },
+  grades: { batchSize: 2, timeoutMs: 26000 },
 };
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -136,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     currentStep: null,
     isComplete: false,
   });
+  const deepSyncInProgressRef = useRef(false);
 
   const resetAuthState = useCallback(() => {
     setUser(null);
@@ -231,6 +224,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSyncProgress(prev => ({ ...prev, isOpen: false }));
   }, []);
 
+  const createSystemNotification = useCallback(async (
+    userId: string,
+    payload: {
+      title: string;
+      description?: string;
+      eventType?: string;
+      severity?: 'info' | 'warning' | 'critical';
+      metadata?: Record<string, unknown>;
+    },
+  ) => {
+    if (!userId) return;
+
+    try {
+      const { title, description, eventType = 'sync_finish', severity = 'info', metadata = {} } = payload;
+      await supabase.from('activity_feed').insert({
+        user_id: userId,
+        event_type: eventType,
+        title,
+        description: description || null,
+        metadata: {
+          severity,
+          ...metadata,
+        },
+      });
+    } catch (notificationError) {
+      console.warn('Falha ao registrar notificação do sistema:', notificationError);
+    }
+  }, []);
+
   const resolveSessionContext = useCallback(async (): Promise<{ user: User; session: MoodleSession } | null> => {
     let userToUse = user;
     let sessionToUse = moodleSession;
@@ -250,14 +272,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { user: userToUse, session: sessionToUse };
   }, [moodleSession, user]);
 
-  const invokeMoodleWithTimeout = useCallback(async (functionName: string, body: Record<string, unknown>, timeoutMs = 25000) => {
+  const resolveEdgeAccessToken = useCallback(async () => {
+    const { data: { session: currentSession } } = await supabase.auth.getSession();
+    return currentSession?.access_token || SUPABASE_PUBLISHABLE_KEY;
+  }, []);
+
+  const invokeMoodleWithTimeout = useCallback(async (
+    functionName: string,
+    body: Record<string, unknown>,
+    timeoutMs = 25000,
+    accessTokenOverride?: string,
+  ) => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      // Get the current session token for authenticated edge function calls
-      const { data: { session: currentSession } } = await supabase.auth.getSession();
-      const accessToken = currentSession?.access_token || SUPABASE_PUBLISHABLE_KEY;
+      const accessToken = accessTokenOverride || await resolveEdgeAccessToken();
 
       const response = await fetch(`${SUPABASE_FUNCTIONS_BASE_URL}/${functionName}`, {
         method: 'POST',
@@ -297,7 +327,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       throw err;
     }
-  }, []);
+  }, [resolveEdgeAccessToken]);
 
   const resolveCoursesByIds = useCallback(async (courseIds: string[]): Promise<Course[]> => {
     const uniqueIds = Array.from(new Set(courseIds.filter(Boolean)));
@@ -338,6 +368,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionToUse: MoodleSession,
     options?: {
       onProgress?: (processedCourses: number) => void;
+      accessToken?: string;
     },
   ): Promise<{ totalCount: number; succeeded: boolean; errorCount: number }> => {
     const { batchSize, timeoutMs } = STEP_BATCH_CONFIG[entity];
@@ -361,7 +392,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               moodleUrl: sessionToUse.moodleUrl,
               token: sessionToUse.moodleToken,
               courseId: parsedCourseId,
-            }, timeoutMs);
+            }, timeoutMs, options?.accessToken);
 
             if (error || data?.error) {
               console.warn(`${entity} sync failed for course ${course.moodle_course_id}:`, error || data?.error);
@@ -730,14 +761,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     const { session: sessionToUse } = context;
-    const enabledEntities: SyncEntity[] = initialSteps.map(step => step.id as SyncEntity);
-    const entitiesToSync = enabledEntities;
+    const initialPhaseEntities: SyncEntity[] = ['courses', 'students'];
+    const deepPhaseEntities: CourseScopedSyncEntity[] = ['activities', 'grades'];
 
     setIsSyncing(true);
     setSyncProgress({
       isOpen: true,
       steps: initialSteps
-        .filter(step => enabledEntities.includes(step.id as SyncEntity))
+        .filter(step => initialPhaseEntities.includes(step.id as SyncEntity))
         .map(step => ({ ...step, status: 'pending' as const })),
       currentStep: null,
       isComplete: false,
@@ -749,29 +780,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     let syncedCourses = courses.filter(course => courseIds.includes(course.id));
     let totalStudents = 0;
-    let totalActivities = 0;
-    let totalGrades = 0;
     let riskUpdateResult: {
       failedCount: number;
       updatedCount: number;
       missingRpc: boolean;
       usedFallback: boolean;
     } | null = null;
+    let edgeAccessToken: string | null = null;
 
     try {
+      edgeAccessToken = await resolveEdgeAccessToken();
+
       await invokeMoodleWithTimeout('moodle-sync-courses', {
         action: 'link_selected_courses',
         userId: sessionToUse.moodleUserId,
         selectedCourseIds: courseIds,
-      }, 30000);
+      }, 30000, edgeAccessToken);
 
-      if (entitiesToSync.includes('courses')) {
+      if (initialPhaseEntities.includes('courses')) {
         updateStep('courses', { status: 'in_progress', count: 0, total: 1 });
         const { data, error } = await invokeMoodleWithTimeout('moodle-sync-courses', {
           moodleUrl: sessionToUse.moodleUrl,
           token: sessionToUse.moodleToken,
           userId: sessionToUse.moodleUserId,
-        }, 30000);
+        }, 30000, edgeAccessToken);
 
         if (error || data?.error) {
           updateStep('courses', {
@@ -790,9 +822,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      if (entitiesToSync.includes('students')) {
+      if (initialPhaseEntities.includes('students')) {
         updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
         const result = await runBatchedEntitySync('students', syncedCourses, sessionToUse, {
+          accessToken: edgeAccessToken,
           onProgress: (processedCourses) => {
             updateStep('students', { count: processedCourses, total: syncedCourses.length });
           },
@@ -805,37 +838,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      if (entitiesToSync.includes('activities')) {
-        updateStep('activities', { status: 'in_progress', count: 0, total: syncedCourses.length });
-        const result = await runBatchedEntitySync('activities', syncedCourses, sessionToUse, {
-          onProgress: (processedCourses) => {
-            updateStep('activities', { count: processedCourses, total: syncedCourses.length });
-          },
-        });
-        totalActivities = result.totalCount;
-        updateStep('activities', {
-          status: result.succeeded ? 'completed' : 'error',
-          count: totalActivities,
-          errorMessage: result.errorCount > 0 ? `${result.errorCount} cursos com erro` : undefined,
-        });
-      }
-
-      if (entitiesToSync.includes('grades')) {
-        updateStep('grades', { status: 'in_progress', count: 0, total: syncedCourses.length });
-        const result = await runBatchedEntitySync('grades', syncedCourses, sessionToUse, {
-          onProgress: (processedCourses) => {
-            updateStep('grades', { count: processedCourses, total: syncedCourses.length });
-          },
-        });
-        totalGrades = result.totalCount;
-        updateStep('grades', {
-          status: result.succeeded ? 'completed' : 'error',
-          count: totalGrades,
-          errorMessage: result.errorCount > 0 ? `${result.errorCount} cursos com erro` : undefined,
-        });
-      }
-
-      if ((entitiesToSync.includes('courses') || entitiesToSync.includes('students')) && courseIds.length > 0) {
+      if ((initialPhaseEntities.includes('courses') || initialPhaseEntities.includes('students')) && courseIds.length > 0) {
         riskUpdateResult = await recalculateRiskForCourses(courseIds);
       }
 
@@ -844,25 +847,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSyncProgress(prev => ({
         ...prev,
         isComplete: true,
-        summary: {
-          courses: syncedCourses.length,
-          students: totalStudents,
-          activities: totalActivities,
-          grades: totalGrades,
-        },
       }));
 
       toast({
-        title: 'Sincronizacao concluida',
-        description: `${syncedCourses.length} cursos, ${totalStudents} alunos, ${totalActivities} atividades e ${totalGrades} notas sincronizados.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
+        title: 'Sincronização inicial concluída',
+        description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados. Atividades e notas continuarao em segundo plano.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
       });
 
       void trackEvent(context.user.id, 'sync_finish', {
         metadata: {
           courses: syncedCourses.length,
           students: totalStudents,
-          activities: totalActivities,
-          grades: totalGrades,
+          activities: 0,
+          grades: 0,
         },
       });
 
@@ -881,11 +878,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           variant: 'destructive',
         });
       }
+
+      if (deepPhaseEntities.length > 0 && !deepSyncInProgressRef.current) {
+        deepSyncInProgressRef.current = true;
+        const syncOwnerId = context.user.id;
+
+        await createSystemNotification(syncOwnerId, {
+          title: 'Sincronização em segundo plano iniciada',
+          description: 'As atividades e notas restantes serão sincronizadas em segundo plano.',
+          eventType: 'sync_start',
+          severity: 'info',
+          metadata: {
+            sync_phase: 'deep',
+            courses: syncedCourses.length,
+          },
+        });
+
+        void (async () => {
+          let deepActivities = 0;
+          let deepGrades = 0;
+
+          try {
+            if (deepPhaseEntities.includes('activities')) {
+              const activitiesResult = await runBatchedEntitySync('activities', syncedCourses, sessionToUse, {
+                accessToken: edgeAccessToken || undefined,
+              });
+              deepActivities = activitiesResult.totalCount;
+            }
+
+            if (deepPhaseEntities.includes('grades')) {
+              const gradesResult = await runBatchedEntitySync('grades', syncedCourses, sessionToUse, {
+                accessToken: edgeAccessToken || undefined,
+              });
+              deepGrades = gradesResult.totalCount;
+            }
+
+            setLastSync(new Date().toISOString());
+            toast({
+              title: 'Sincronização concluída',
+              description: `${deepActivities} atividades e ${deepGrades} notas sincronizadas em segundo plano.`,
+            });
+            await createSystemNotification(syncOwnerId, {
+              title: 'Sincronização concluída',
+              description: `${deepActivities} atividades e ${deepGrades} notas foram sincronizadas em segundo plano.`,
+              eventType: 'sync_finish',
+              severity: 'info',
+              metadata: {
+                sync_phase: 'deep',
+                activities: deepActivities,
+                grades: deepGrades,
+                courses: syncedCourses.length,
+              },
+            });
+          } catch (deepErr) {
+            console.error('Background deep sync error:', deepErr);
+            toast({
+              title: 'Erro na sincronização profunda',
+              description: 'Nao foi possivel concluir a sincronização em segundo plano de atividades e notas.',
+              variant: 'destructive',
+            });
+            await createSystemNotification(syncOwnerId, {
+              title: 'Falha na sincronização em segundo plano',
+              description: 'Não foi possível concluir a sincronização em segundo plano de atividades e notas.',
+              eventType: 'sync_error',
+              severity: 'warning',
+              metadata: {
+                sync_phase: 'deep',
+                courses: syncedCourses.length,
+              },
+            });
+          } finally {
+            deepSyncInProgressRef.current = false;
+          }
+        })();
+      }
     } catch (err) {
       console.error('Sync error:', err);
       toast({
-        title: 'Erro na sincronizacao',
-        description: 'Ocorreu um erro durante a sincronizacao. Tente novamente.',
+        title: 'Erro na sincronização',
+        description: 'Ocorreu um erro durante a sincronização. Tente novamente.',
         variant: 'destructive',
       });
       void trackEvent(context.user.id, 'sync_error');
@@ -897,7 +968,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [courses, invokeMoodleWithTimeout, recalculateRiskForCourses, resolveSessionContext, runBatchedEntitySync, updateStep]);
+  }, [courses, createSystemNotification, invokeMoodleWithTimeout, recalculateRiskForCourses, resolveEdgeAccessToken, resolveSessionContext, runBatchedEntitySync, updateStep]);
 
   const syncEntitiesIncremental = useCallback(async (
     courseIds: string[],
@@ -936,8 +1007,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setIsSyncing(true);
     try {
+      const accessToken = await resolveEdgeAccessToken();
+
       for (const entity of entities) {
-        const result = await runBatchedEntitySync(entity, selectedCourses, sessionToUse);
+        const result = await runBatchedEntitySync(entity, selectedCourses, sessionToUse, { accessToken });
         summary[entity] = result.totalCount;
       }
 
@@ -954,7 +1027,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (entities.includes('grades')) parts.push(`${summary.grades} notas`);
 
       toast({
-        title: labels?.successTitle || 'Sincronizacao incremental concluida',
+        title: labels?.successTitle || 'Sincronização incremental concluída',
         description: `${selectedCourses.length} curso(s): ${parts.join(', ')} atualizados.`,
       });
 
@@ -962,7 +1035,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       console.error('Incremental sync error:', err);
       toast({
-        title: 'Erro na sincronizacao incremental',
+        title: 'Erro na sincronização incremental',
         description: 'Nao foi possivel atualizar os dados solicitados.',
         variant: 'destructive',
       });
@@ -970,7 +1043,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSyncing(false);
     }
-  }, [recalculateRiskForCourses, resolveCoursesByIds, resolveSessionContext, runBatchedEntitySync]);
+  }, [recalculateRiskForCourses, resolveCoursesByIds, resolveEdgeAccessToken, resolveSessionContext, runBatchedEntitySync]);
 
   const syncStudentsIncremental = useCallback(async (courseIds: string[]) => {
     await syncEntitiesIncremental(courseIds, ['students'], {

@@ -22,12 +22,6 @@ interface SyncProgressDialogProps {
   currentStep: string | null;
   isComplete: boolean;
   onClose: () => void;
-  summary?: {
-    courses: number;
-    students: number;
-    activities: number;
-    grades: number;
-  };
 }
 
 const iconMap = {
@@ -44,7 +38,6 @@ export function SyncProgressDialog({
   currentStep,
   isComplete,
   onClose,
-  summary,
 }: SyncProgressDialogProps) {
   const getStepProgress = (step: SyncStep) => {
     if (step.status === 'completed') return 100;
@@ -147,30 +140,6 @@ export function SyncProgressDialog({
             );
           })}
         </div>
-
-        {isComplete && summary && (
-          <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <h4 className="text-sm font-medium">Resumo da sincronização</h4>
-            <div className="grid grid-cols-4 gap-2 text-center">
-              <div>
-                <p className="text-2xl font-bold text-primary">{summary.courses}</p>
-                <p className="text-xs text-muted-foreground">Cursos</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-primary">{summary.students}</p>
-                <p className="text-xs text-muted-foreground">Alunos</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-primary">{summary.activities}</p>
-                <p className="text-xs text-muted-foreground">Atividades</p>
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-primary">{summary.grades}</p>
-                <p className="text-xs text-muted-foreground">Notas</p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {isComplete && (
           <div className="flex justify-end pt-2">
