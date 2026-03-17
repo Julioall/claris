@@ -5,6 +5,10 @@ services:
       dockerfile: Dockerfile.supabase-runner
       args:
         SUPABASE_CLI_VERSION: 2.75.0
+      cache_from:
+        - type=gha
+      cache_to:
+        - type=gha,mode=max
     container_name: moodle-monitor-supabase
     network_mode: host
     environment:
