@@ -51,13 +51,17 @@ Deno.serve(async (req: Request): Promise<Response> => {
       .maybeSingle()
 
     // Store raw webhook event
-    await db.from('app_service_webhook_events').insert({
-      instance_id: instance?.id ?? null,
-      evolution_instance_name: evolutionInstanceName,
-      event_type: eventType,
-      payload,
-      processed: false,
-    })
+    const { data: webhookEvent } = await db
+      .from('app_service_webhook_events')
+      .insert({
+        instance_id: instance?.id ?? null,
+        evolution_instance_name: evolutionInstanceName,
+        event_type: eventType,
+        payload,
+        processed: false,
+      })
+      .select('id')
+      .single()
 
     // React to connection update events
     if (eventType === 'connection.update' || eventType === 'CONNECTION_UPDATE') {
@@ -110,12 +114,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
       })
     }
 
-    // Mark webhook as processed
-    await db
-      .from('app_service_webhook_events')
-      .update({ processed: true, processed_at: new Date().toISOString() })
-      .eq('evolution_instance_name', evolutionInstanceName)
-      .eq('processed', false)
+    // Mark this specific webhook event as processed
+    if (webhookEvent?.id) {
+      await db
+        .from('app_service_webhook_events')
+        .update({ processed: true, processed_at: new Date().toISOString() })
+        .eq('id', webhookEvent.id)
+    }
 
     return jsonResponse({ received: true })
   } catch (error) {

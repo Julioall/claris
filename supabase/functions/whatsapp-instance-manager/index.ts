@@ -160,17 +160,24 @@ async function handleCreate(
     }
   }
 
-  const instanceName = body.evolution_instance_name ?? `claris-${scope === 'personal' ? userId.slice(0, 8) : 'shared'}-${Date.now()}`
+  const randomSuffix = Math.random().toString(36).slice(2, 10)
+  const instanceName = body.evolution_instance_name ?? `claris-${scope === 'personal' ? 'personal' : 'shared'}-${randomSuffix}`
   const displayName = body.name ?? (scope === 'personal' ? 'WhatsApp Pessoal' : 'WhatsApp Compartilhado')
 
   // Create in Evolution API
   let evolutionData: Record<string, unknown> = {}
+  let externalId: string | null = null
   try {
     evolutionData = (await evolutionRequest('/instance/create', 'POST', {
       instanceName,
       qrcode: true,
       integration: 'WHATSAPP-BAILEYS',
     })) as Record<string, unknown>
+    const evoInstance = evolutionData.instance
+    if (evoInstance && typeof evoInstance === 'object') {
+      const instanceObj = evoInstance as Record<string, unknown>
+      externalId = typeof instanceObj.instanceId === 'string' ? instanceObj.instanceId : null
+    }
   } catch (err) {
     console.error('Evolution API create failed:', err)
     // Continue – instance will be in draft state
@@ -186,7 +193,7 @@ async function handleCreate(
       scope,
       owner_user_id: scope === 'personal' ? userId : null,
       evolution_instance_name: instanceName,
-      external_id: (evolutionData?.instance as Record<string, unknown>)?.instanceId as string ?? null,
+      external_id: externalId,
       connection_status: 'draft',
       operational_status: 'draft',
       health_status: 'healthy',
@@ -306,14 +313,18 @@ async function handleStatus(
     )) as Record<string, unknown>
 
     // Map Evolution states to our statuses
-    const state = (evolutionStatus?.instance as Record<string, unknown>)?.state as string
-    if (state === 'open') {
-      connectionStatus = 'connected'
-      healthStatus = 'healthy'
-    } else if (state === 'close') {
-      connectionStatus = 'disconnected'
-    } else if (state === 'connecting') {
-      connectionStatus = 'pending_connection'
+    const evoInstance = evolutionStatus.instance
+    if (evoInstance && typeof evoInstance === 'object') {
+      const instanceObj = evoInstance as Record<string, unknown>
+      const state = typeof instanceObj.state === 'string' ? instanceObj.state : ''
+      if (state === 'open') {
+        connectionStatus = 'connected'
+        healthStatus = 'healthy'
+      } else if (state === 'close') {
+        connectionStatus = 'disconnected'
+      } else if (state === 'connecting') {
+        connectionStatus = 'pending_connection'
+      }
     }
   } catch (err) {
     console.error('Evolution status error:', err)
@@ -661,6 +672,37 @@ async function handleToggleBlock(
 // Main handler
 // ---------------------------------------------------------------------------
 
+async function handleSetActive(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+  body: RequestBody,
+  active: boolean
+): Promise<Response> {
+  if (!body.instance_id) return errorResponse('instance_id required', 400)
+
+  const { data: instance } = await db
+    .from('app_service_instances')
+    .select('id, scope, owner_user_id')
+    .eq('id', body.instance_id)
+    .maybeSingle()
+
+  if (!instance) return errorResponse('Instance not found', 404)
+
+  if (instance.scope === 'shared') {
+    const admin = await isAdmin(db, userId)
+    if (!admin) return errorResponse('Forbidden', 403)
+  } else if (instance.owner_user_id !== userId) {
+    return errorResponse('Forbidden', 403)
+  }
+
+  await db
+    .from('app_service_instances')
+    .update({ is_active: active, updated_by_user_id: userId })
+    .eq('id', body.instance_id)
+
+  return jsonResponse({ success: true, is_active: active })
+}
+
 const handler = async ({ body, user }: AuthenticatedHandlerContext<RequestBody>): Promise<Response> => {
   const db = createServiceClient()
   const userId = user.id
@@ -680,6 +722,8 @@ const handler = async ({ body, user }: AuthenticatedHandlerContext<RequestBody>)
       return handleToggleBlock(db, userId, { ...body, blocked: true })
     case 'unblock':
       return handleToggleBlock(db, userId, { ...body, blocked: false })
+    case 'activate':
+      return handleSetActive(db, userId, body, true)
     default:
       return errorResponse(`Unknown action: ${action}`, 400)
   }
