@@ -39,6 +39,26 @@ export interface ToolCallArgs {
   student_status?: 'ativo' | 'concluido' | 'suspenso' | 'inativo'
   category?: string
   job_id?: string
+  // Task fields
+  task_id?: string
+  priority?: 'low' | 'medium' | 'high' | 'urgent'
+  due_date?: string
+  entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
+  entity_id?: string
+  origin_reason?: string
+  tags?: string[]
+  // Calendar/event fields
+  event_id?: string
+  start_at?: string
+  end_at?: string
+  all_day?: boolean
+  location?: string
+  type?: 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'other'
+  related_entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
+  related_entity_id?: string
+  ia_source?: 'manual' | 'ia' | 'sugestao_confirmada'
+  start_date?: string
+  end_date?: string
 }
 
 export interface ToolExecutionContext {
@@ -86,6 +106,24 @@ export async function executeToolCall(
       return confirmBulkMessageSend(userId, args, context, supabase)
     case 'cancel_bulk_message_send':
       return cancelBulkMessageSend(userId, args, supabase)
+    // Task management
+    case 'create_task':
+      return createTask(userId, args, supabase)
+    case 'update_task':
+      return updateTask(userId, args, supabase)
+    case 'change_task_status':
+      return changeTaskStatus(userId, args, supabase)
+    case 'list_tasks':
+      return listTasks(userId, args, supabase)
+    // Calendar / agenda management
+    case 'create_event':
+      return createEvent(userId, args, supabase)
+    case 'update_event':
+      return updateEvent(userId, args, supabase)
+    case 'delete_event':
+      return deleteEvent(userId, args, supabase)
+    case 'list_events':
+      return listEvents(userId, args, supabase)
     default:
       return { error: `Unknown tool: ${toolName}` }
   }
@@ -1369,4 +1407,284 @@ async function confirmBulkMessageSend(
   }
 
   return runBulkMessageJob(jobId, userId, context.moodleUrl, context.moodleToken, supabase)
+}
+
+// ---------------------------------------------------------------------------
+// Task management executors
+// ---------------------------------------------------------------------------
+
+async function createTask(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const title = (args.title ?? '').trim()
+  if (!title) {
+    return { error: 'Campo title é obrigatório para criar uma tarefa.' }
+  }
+
+  const insert: Record<string, unknown> = {
+    title,
+    created_by: userId,
+    assigned_to: userId,
+    suggested_by_ai: true,
+    status: 'todo',
+    priority: args.priority ?? 'medium',
+  }
+
+  if (args.description) insert.description = args.description.trim()
+  if (args.due_date) insert.due_date = args.due_date
+  if (args.entity_type) insert.entity_type = args.entity_type
+  if (args.entity_id) insert.entity_id = args.entity_id
+  if (args.origin_reason) insert.origin_reason = args.origin_reason.trim()
+  if (args.tags && args.tags.length > 0) insert.tags = args.tags
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert(insert)
+    .select('id, title, status, priority, due_date, origin_reason, entity_type, entity_id, tags')
+    .single()
+
+  if (error || !data) {
+    return { error: 'Falha ao criar tarefa.' }
+  }
+
+  return {
+    success: true,
+    created: true,
+    task: data,
+  }
+}
+
+async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const taskId = (args.task_id ?? '').trim()
+  if (!taskId) {
+    return { error: 'Campo task_id é obrigatório para atualizar uma tarefa.' }
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (args.title) updates.title = args.title.trim()
+  if (args.description !== undefined) updates.description = args.description?.trim() ?? null
+  if (args.priority) updates.priority = args.priority
+  if (args.due_date !== undefined) updates.due_date = args.due_date || null
+  if (args.origin_reason !== undefined) updates.origin_reason = args.origin_reason?.trim() ?? null
+  if (args.tags) updates.tags = args.tags
+
+  if (Object.keys(updates).length === 0) {
+    return { error: 'Nenhum campo informado para atualização.' }
+  }
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .update(updates)
+    .eq('id', taskId)
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .select('id, title, status, priority, due_date, origin_reason, tags')
+    .maybeSingle()
+
+  if (error) {
+    return { error: 'Falha ao atualizar tarefa.' }
+  }
+
+  if (!data) {
+    return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
+  }
+
+  return {
+    success: true,
+    updated: true,
+    task: data,
+  }
+}
+
+async function changeTaskStatus(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const taskId = (args.task_id ?? '').trim()
+  const status = (args.status ?? '').trim()
+
+  if (!taskId) return { error: 'Campo task_id é obrigatório.' }
+  if (!status) return { error: 'Campo status é obrigatório.' }
+
+  const validStatuses = ['todo', 'in_progress', 'done']
+  if (!validStatuses.includes(status)) {
+    return { error: `Status inválido. Use: ${validStatuses.join(', ')}.` }
+  }
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ status })
+    .eq('id', taskId)
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .select('id, title, status')
+    .maybeSingle()
+
+  if (error) {
+    return { error: 'Falha ao alterar status da tarefa.' }
+  }
+
+  if (!data) {
+    return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
+  }
+
+  return {
+    success: true,
+    task_id: data.id,
+    title: data.title,
+    new_status: data.status,
+  }
+}
+
+async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 10, 50)
+
+  let query = supabase
+    .from('tasks')
+    .select('id, title, description, status, priority, due_date, entity_type, entity_id, origin_reason, tags, created_at')
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (args.status) {
+    query = query.eq('status', args.status)
+  } else {
+    query = query.in('status', ['todo', 'in_progress'])
+  }
+
+  if (args.priority) query = query.eq('priority', args.priority)
+  if (args.entity_type) query = query.eq('entity_type', args.entity_type)
+
+  const { data, error } = await query
+  if (error) return { error: 'Falha ao listar tarefas.' }
+
+  return data ?? []
+}
+
+// ---------------------------------------------------------------------------
+// Calendar / agenda executors
+// ---------------------------------------------------------------------------
+
+async function createEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const title = (args.title ?? '').trim()
+  const startAt = (args.start_at ?? '').trim()
+
+  if (!title) return { error: 'Campo title é obrigatório para criar um evento.' }
+  if (!startAt) return { error: 'Campo start_at é obrigatório para criar um evento.' }
+
+  const insert: Record<string, unknown> = {
+    title,
+    start_at: startAt,
+    owner: userId,
+    type: args.type ?? 'manual',
+    external_source: 'manual',
+    all_day: args.all_day ?? false,
+    ia_source: args.ia_source ?? 'ia',
+  }
+
+  if (args.description) insert.description = args.description.trim()
+  if (args.end_at) insert.end_at = args.end_at
+  if (args.location) insert.location = args.location.trim()
+  if (args.related_entity_type) insert.related_entity_type = args.related_entity_type
+  if (args.related_entity_id) insert.related_entity_id = args.related_entity_id
+  if (args.tags && args.tags.length > 0) insert.tags = args.tags
+
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .insert(insert)
+    .select('id, title, start_at, end_at, type, all_day, location, ia_source, related_entity_type, related_entity_id, tags')
+    .single()
+
+  if (error || !data) {
+    return { error: 'Falha ao criar evento.' }
+  }
+
+  return {
+    success: true,
+    created: true,
+    event: data,
+  }
+}
+
+async function updateEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const eventId = (args.event_id ?? '').trim()
+  if (!eventId) return { error: 'Campo event_id é obrigatório para atualizar um evento.' }
+
+  const updates: Record<string, unknown> = {}
+  if (args.title) updates.title = args.title.trim()
+  if (args.description !== undefined) updates.description = args.description?.trim() ?? null
+  if (args.start_at) updates.start_at = args.start_at
+  if (args.end_at !== undefined) updates.end_at = args.end_at || null
+  if (args.all_day !== undefined) updates.all_day = args.all_day
+  if (args.location !== undefined) updates.location = args.location?.trim() ?? null
+  if (args.tags) updates.tags = args.tags
+
+  if (Object.keys(updates).length === 0) {
+    return { error: 'Nenhum campo informado para atualização.' }
+  }
+
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .update(updates)
+    .eq('id', eventId)
+    .eq('owner', userId)
+    .select('id, title, start_at, end_at, type, all_day, location, tags')
+    .maybeSingle()
+
+  if (error) return { error: 'Falha ao atualizar evento.' }
+  if (!data) return { error: 'Evento não encontrado ou sem permissão de acesso.' }
+
+  return {
+    success: true,
+    updated: true,
+    event: data,
+  }
+}
+
+async function deleteEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const eventId = (args.event_id ?? '').trim()
+  if (!eventId) return { error: 'Campo event_id é obrigatório para remover um evento.' }
+
+  const { data: existing } = await supabase
+    .from('calendar_events')
+    .select('id, title')
+    .eq('id', eventId)
+    .eq('owner', userId)
+    .maybeSingle()
+
+  if (!existing) return { error: 'Evento não encontrado ou sem permissão de acesso.' }
+
+  const { error } = await supabase
+    .from('calendar_events')
+    .delete()
+    .eq('id', eventId)
+    .eq('owner', userId)
+
+  if (error) return { error: 'Falha ao remover evento.' }
+
+  return {
+    success: true,
+    deleted: true,
+    event_id: eventId,
+    title: existing.title,
+  }
+}
+
+async function listEvents(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 10, 50)
+  const now = new Date()
+  const startDate = args.start_date ? `${args.start_date}T00:00:00` : now.toISOString()
+  const defaultEnd = new Date(now)
+  defaultEnd.setDate(defaultEnd.getDate() + 7)
+  const endDate = args.end_date ? `${args.end_date}T23:59:59` : defaultEnd.toISOString()
+
+  let query = supabase
+    .from('calendar_events')
+    .select('id, title, description, start_at, end_at, type, all_day, location, related_entity_type, related_entity_id, tags, ia_source')
+    .eq('owner', userId)
+    .gte('start_at', startDate)
+    .lte('start_at', endDate)
+    .order('start_at', { ascending: true })
+    .limit(limit)
+
+  if (args.type) query = query.eq('type', args.type)
+
+  const { data, error } = await query
+  if (error) return { error: 'Falha ao listar eventos.' }
+
+  return data ?? []
 }

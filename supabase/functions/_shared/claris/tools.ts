@@ -355,4 +355,321 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
       },
     },
   },
+  // -------------------------------------------------------------------------
+  // Task management tools
+  // -------------------------------------------------------------------------
+  {
+    type: 'function',
+    function: {
+      name: 'create_task',
+      description:
+        'Cria uma tarefa de acompanhamento ou pendência para o tutor/monitor. Use quando o usuário pedir para criar uma tarefa, lembrete ou acompanhamento de aluno/UC/turma. Para tarefas de baixo risco (lembretes pessoais, rascunhos), pode criar diretamente. Para ações que impactam terceiros, peça confirmação antes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Título objetivo da tarefa.',
+          },
+          description: {
+            type: 'string',
+            description: 'Descrição detalhada da tarefa, contexto e próximo passo esperado.',
+          },
+          priority: {
+            type: 'string',
+            enum: ['low', 'medium', 'high', 'urgent'],
+            description: 'Prioridade da tarefa. Padrão: medium.',
+          },
+          due_date: {
+            type: 'string',
+            description: 'Data limite (YYYY-MM-DD). Opcional.',
+          },
+          entity_type: {
+            type: 'string',
+            enum: ['student', 'course', 'uc', 'class', 'custom'],
+            description: 'Tipo de entidade relacionada (aluno, curso, UC, turma). Opcional.',
+          },
+          entity_id: {
+            type: 'string',
+            description: 'ID da entidade relacionada (ex.: student_id, course_id). Opcional.',
+          },
+          origin_reason: {
+            type: 'string',
+            description: 'Motivo que originou esta tarefa (ex.: "aluno com baixa participação na semana 3").',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags para categorização (ex.: ["aluno", "recuperacao", "uc"]).',
+          },
+        },
+        required: ['title'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_task',
+      description:
+        'Atualiza campos de uma tarefa existente (título, descrição, prioridade, prazo, etc.). Use quando o usuário pedir para editar ou modificar uma tarefa.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'ID da tarefa a ser atualizada.',
+          },
+          title: {
+            type: 'string',
+            description: 'Novo título da tarefa.',
+          },
+          description: {
+            type: 'string',
+            description: 'Nova descrição da tarefa.',
+          },
+          priority: {
+            type: 'string',
+            enum: ['low', 'medium', 'high', 'urgent'],
+            description: 'Nova prioridade.',
+          },
+          due_date: {
+            type: 'string',
+            description: 'Nova data limite (YYYY-MM-DD).',
+          },
+          origin_reason: {
+            type: 'string',
+            description: 'Motivo atualizado da tarefa.',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Novas tags para a tarefa.',
+          },
+        },
+        required: ['task_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'change_task_status',
+      description:
+        'Altera o status de uma tarefa (todo → in_progress → done). Use quando o usuário marcar uma tarefa como concluída, em andamento ou quiser reabrir.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'ID da tarefa.',
+          },
+          status: {
+            type: 'string',
+            enum: ['todo', 'in_progress', 'done'],
+            description: 'Novo status da tarefa.',
+          },
+        },
+        required: ['task_id', 'status'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_tasks',
+      description:
+        'Lista as tarefas criadas pelo tutor/monitor, com filtros opcionais. Use quando o usuário pedir para ver suas tarefas, pendências ou checklist de trabalho.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['todo', 'in_progress', 'done'],
+            description: 'Filtrar por status. Sem filtro retorna todo e in_progress.',
+          },
+          priority: {
+            type: 'string',
+            enum: ['low', 'medium', 'high', 'urgent'],
+            description: 'Filtrar por prioridade.',
+          },
+          entity_type: {
+            type: 'string',
+            enum: ['student', 'course', 'uc', 'class', 'custom'],
+            description: 'Filtrar por tipo de entidade vinculada.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de tarefas. Padrão: 10. Máximo: 50.',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  // -------------------------------------------------------------------------
+  // Agenda / calendar tools
+  // -------------------------------------------------------------------------
+  {
+    type: 'function',
+    function: {
+      name: 'create_event',
+      description:
+        'Cria um evento na agenda do tutor/monitor (web aula, alinhamento, reunião, entrega, etc.). Para eventos pessoais e lembretes, pode criar diretamente. Para eventos compartilhados que impactam terceiros, peça confirmação antes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Título do evento.',
+          },
+          description: {
+            type: 'string',
+            description: 'Descrição ou pauta do evento.',
+          },
+          start_at: {
+            type: 'string',
+            description: 'Data/hora de início em ISO 8601 (ex.: 2026-03-20T14:00:00-03:00).',
+          },
+          end_at: {
+            type: 'string',
+            description: 'Data/hora de término em ISO 8601. Opcional.',
+          },
+          all_day: {
+            type: 'boolean',
+            description: 'Indica se o evento é de dia inteiro.',
+          },
+          type: {
+            type: 'string',
+            enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'other'],
+            description: 'Tipo do evento. Padrão: manual.',
+          },
+          location: {
+            type: 'string',
+            description: 'Local ou link do evento.',
+          },
+          related_entity_type: {
+            type: 'string',
+            enum: ['student', 'course', 'uc', 'class', 'custom'],
+            description: 'Tipo de entidade relacionada ao evento. Opcional.',
+          },
+          related_entity_id: {
+            type: 'string',
+            description: 'ID da entidade relacionada. Opcional.',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Tags do evento (ex.: ["web_aula", "uc", "alinhamento"]).',
+          },
+          ia_source: {
+            type: 'string',
+            enum: ['manual', 'ia', 'sugestao_confirmada'],
+            description: 'Origem do evento: manual (tutor), ia (criado pela IA), sugestao_confirmada (sugerido pela IA e confirmado). Padrão: ia.',
+          },
+        },
+        required: ['title', 'start_at'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'update_event',
+      description:
+        'Atualiza campos de um evento existente na agenda. Use quando o usuário pedir para editar, reagendar ou modificar um evento.',
+      parameters: {
+        type: 'object',
+        properties: {
+          event_id: {
+            type: 'string',
+            description: 'ID do evento a ser atualizado.',
+          },
+          title: {
+            type: 'string',
+            description: 'Novo título.',
+          },
+          description: {
+            type: 'string',
+            description: 'Nova descrição.',
+          },
+          start_at: {
+            type: 'string',
+            description: 'Nova data/hora de início (ISO 8601).',
+          },
+          end_at: {
+            type: 'string',
+            description: 'Nova data/hora de término (ISO 8601).',
+          },
+          all_day: {
+            type: 'boolean',
+            description: 'Evento de dia inteiro.',
+          },
+          location: {
+            type: 'string',
+            description: 'Novo local ou link.',
+          },
+          tags: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Novas tags.',
+          },
+        },
+        required: ['event_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_event',
+      description:
+        'Remove um evento da agenda. Use SOMENTE com confirmação explícita do usuário para eventos que impactam agenda compartilhada ou terceiros.',
+      parameters: {
+        type: 'object',
+        properties: {
+          event_id: {
+            type: 'string',
+            description: 'ID do evento a ser removido.',
+          },
+        },
+        required: ['event_id'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_events',
+      description:
+        'Lista eventos da agenda do tutor/monitor em um período. Use quando o usuário perguntar sobre sua agenda, compromissos ou eventos próximos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          start_date: {
+            type: 'string',
+            description: 'Data de início do período (YYYY-MM-DD). Padrão: hoje.',
+          },
+          end_date: {
+            type: 'string',
+            description: 'Data de término do período (YYYY-MM-DD). Padrão: 7 dias à frente.',
+          },
+          type: {
+            type: 'string',
+            enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'other'],
+            description: 'Filtrar por tipo de evento.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de eventos. Padrão: 10. Máximo: 50.',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+        required: [],
+      },
+    },
+  },
 ]
