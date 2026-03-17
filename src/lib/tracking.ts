@@ -33,7 +33,7 @@ export async function logError(
   options: { category?: string; payload?: Record<string, unknown> } = {},
 ): Promise<void> {
   try {
-    await supabase.from('app_error_logs').insert({
+    await (supabase.from as Function)('app_error_logs').insert({
       user_id: userId ?? null,
       severity: 'error',
       category: options.category ?? 'integration',

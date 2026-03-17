@@ -29,7 +29,7 @@ export function useTrackEvent() {
     async (eventType: UsageEventType, options: TrackEventOptions = {}) => {
       try {
         const { route, resource, metadata = {} } = options;
-        await supabase.from('app_usage_events').insert({
+        await (supabase.from as Function)('app_usage_events').insert({
           user_id: user?.id ?? null,
           event_type: eventType,
           route: route ?? location.pathname,
