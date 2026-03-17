@@ -1458,35 +1458,27 @@ async function createTask(userId: string, args: ToolCallArgs, supabase: Supabase
 
   const insert: Record<string, unknown> = {
     title,
-    created_by: userId,
-    assigned_to: userId,
-    suggested_by_ai: true,
-    status: 'todo',
-    priority: args.priority ?? 'medium',
+    created_by_user_id: userId,
+    assigned_to_user_id: userId,
+    status: 'aberta',
+    priority: args.priority === 'urgent' ? 'urgente' : args.priority === 'high' ? 'alta' : args.priority === 'low' ? 'baixa' : 'media',
+    task_type: 'interna',
   }
 
   if (args.description) insert.description = args.description.trim()
   if (args.due_date) insert.due_date = args.due_date
-  if (args.entity_type) insert.entity_type = args.entity_type
-  if (args.entity_id) insert.entity_id = args.entity_id
-  if (args.origin_reason) insert.origin_reason = args.origin_reason.trim()
-  if (args.tags && args.tags.length > 0) insert.tags = args.tags
 
   const { data, error } = await supabase
-    .from('tasks')
+    .from('pending_tasks')
     .insert(insert)
-    .select('id, title, status, priority, due_date, origin_reason, entity_type, entity_id, tags')
+    .select('id, title, status, priority, due_date, description')
     .single()
 
   if (error || !data) {
     return { error: 'Falha ao criar tarefa.' }
   }
 
-  return {
-    success: true,
-    created: true,
-    task: data,
-  }
+  return { success: true, created: true, task: data }
 }
 
 async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase) {
@@ -1498,93 +1490,86 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
   const updates: Record<string, unknown> = {}
   if (args.title) updates.title = args.title.trim()
   if (args.description !== undefined) updates.description = args.description?.trim() ?? null
-  if (args.priority) updates.priority = args.priority
+  if (args.priority) {
+    updates.priority = args.priority === 'urgent' ? 'urgente' : args.priority === 'high' ? 'alta' : args.priority === 'low' ? 'baixa' : 'media'
+  }
   if (args.due_date !== undefined) updates.due_date = args.due_date || null
-  if (args.origin_reason !== undefined) updates.origin_reason = args.origin_reason?.trim() ?? null
-  if (args.tags) updates.tags = args.tags
 
   if (Object.keys(updates).length === 0) {
     return { error: 'Nenhum campo informado para atualização.' }
   }
 
   const { data, error } = await supabase
-    .from('tasks')
+    .from('pending_tasks')
     .update(updates)
     .eq('id', taskId)
-    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
-    .select('id, title, status, priority, due_date, origin_reason, tags')
+    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
+    .select('id, title, status, priority, due_date')
     .maybeSingle()
 
-  if (error) {
-    return { error: 'Falha ao atualizar tarefa.' }
-  }
+  if (error) return { error: 'Falha ao atualizar tarefa.' }
+  if (!data) return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
 
-  if (!data) {
-    return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
-  }
-
-  return {
-    success: true,
-    updated: true,
-    task: data,
-  }
+  return { success: true, updated: true, task: data }
 }
 
 async function changeTaskStatus(userId: string, args: ToolCallArgs, supabase: Supabase) {
   const taskId = (args.task_id ?? '').trim()
-  const status = (args.status ?? '').trim()
+  const rawStatus = (args.status ?? '').trim()
 
   if (!taskId) return { error: 'Campo task_id é obrigatório.' }
-  if (!status) return { error: 'Campo status é obrigatório.' }
+  if (!rawStatus) return { error: 'Campo status é obrigatório.' }
 
-  const validStatuses = ['todo', 'in_progress', 'done']
-  if (!validStatuses.includes(status)) {
-    return { error: `Status inválido. Use: ${validStatuses.join(', ')}.` }
+  // Map English statuses to DB enum values
+  const statusMap: Record<string, string> = {
+    todo: 'aberta', open: 'aberta', aberta: 'aberta',
+    in_progress: 'em_andamento', em_andamento: 'em_andamento',
+    done: 'resolvida', resolved: 'resolvida', resolvida: 'resolvida',
+  }
+  const status = statusMap[rawStatus]
+  if (!status) {
+    return { error: `Status inválido. Use: aberta, em_andamento, resolvida.` }
   }
 
+  const updatePayload: Record<string, unknown> = { status }
+  if (status === 'resolvida') updatePayload.completed_at = new Date().toISOString()
+
   const { data, error } = await supabase
-    .from('tasks')
-    .update({ status })
+    .from('pending_tasks')
+    .update(updatePayload)
     .eq('id', taskId)
-    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
     .select('id, title, status')
     .maybeSingle()
 
-  if (error) {
-    return { error: 'Falha ao alterar status da tarefa.' }
-  }
+  if (error) return { error: 'Falha ao alterar status da tarefa.' }
+  if (!data) return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
 
-  if (!data) {
-    return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
-  }
-
-  return {
-    success: true,
-    task_id: data.id,
-    title: data.title,
-    new_status: data.status,
-  }
+  return { success: true, task_id: data.id, title: data.title, new_status: data.status }
 }
 
 async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase) {
   const limit = Math.min(args.limit ?? 10, 50)
 
   let query = supabase
-    .from('tasks')
-    .select('id, title, description, status, priority, due_date, entity_type, entity_id, origin_reason, tags, created_at')
-    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .from('pending_tasks')
+    .select('id, title, description, status, priority, due_date, task_type, created_at')
+    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
     .limit(limit)
 
   if (args.status) {
-    query = query.eq('status', args.status)
+    const statusMap: Record<string, string> = {
+      todo: 'aberta', open: 'aberta', aberta: 'aberta',
+      in_progress: 'em_andamento', em_andamento: 'em_andamento',
+      done: 'resolvida', resolved: 'resolvida', resolvida: 'resolvida',
+    }
+    const mapped = statusMap[args.status] ?? args.status
+    query = query.eq('status', mapped as 'aberta' | 'em_andamento' | 'resolvida')
   } else {
-    query = query.in('status', ['todo', 'in_progress'])
+    query = query.in('status', ['aberta', 'em_andamento'])
   }
-
-  if (args.priority) query = query.eq('priority', args.priority)
-  if (args.entity_type) query = query.eq('entity_type', args.entity_type)
 
   const { data, error } = await query
   if (error) return { error: 'Falha ao listar tarefas.' }
