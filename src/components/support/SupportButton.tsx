@@ -19,9 +19,11 @@ import { toast } from '@/hooks/use-toast';
 
 interface SupportButtonProps {
   className?: string;
+  size?: 'icon' | 'default';
+  showLabel?: boolean;
 }
 
-export function SupportButton({ className }: SupportButtonProps) {
+export function SupportButton({ className, size = 'icon', showLabel = false }: SupportButtonProps) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<string>('problema');
   const [title, setTitle] = useState('');
@@ -72,12 +74,13 @@ export function SupportButton({ className }: SupportButtonProps) {
     <>
       <Button
         variant="ghost"
-        size="icon"
+        size={size}
         onClick={() => setOpen(true)}
         title="Suporte"
         className={className}
       >
         <LifeBuoy className="h-4 w-4" />
+        {showLabel && <span>Suporte</span>}
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

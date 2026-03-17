@@ -6,6 +6,11 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TopBar } from "@/components/layout/TopBar";
 
+const ROUTER_FUTURE = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 const useAuthMock = vi.fn();
 const setIsEditModeMock = vi.fn();
 const fromMock = vi.fn();
@@ -32,6 +37,23 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarTrigger: () => <button type="button">Open Sidebar</button>,
 }));
 
+vi.mock("@/components/ui/switch", () => ({
+  Switch: ({ checked, onCheckedChange }: { checked?: boolean; onCheckedChange?: (value: boolean) => void }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked ? "true" : "false"}
+      onClick={() => onCheckedChange?.(!checked)}
+    >
+      Toggle
+    </button>
+  ),
+}));
+
+vi.mock("@/components/ui/scroll-area", () => ({
+  ScrollArea: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+}));
+
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -48,7 +70,7 @@ function createWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>{children}</MemoryRouter>
+      <MemoryRouter future={ROUTER_FUTURE}>{children}</MemoryRouter>
     </QueryClientProvider>
   );
 }

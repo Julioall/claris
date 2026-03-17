@@ -1,4 +1,18 @@
 import "@testing-library/jest-dom";
+import { afterAll, beforeAll, vi } from "vitest";
+
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+beforeAll(() => {
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+    const message = String(args[0] ?? "");
+    if (message.includes("not wrapped in act")) return;
+  });
+});
+
+afterAll(() => {
+  consoleErrorSpy?.mockRestore();
+});
 
 Object.defineProperty(window, "matchMedia", {
   writable: true,

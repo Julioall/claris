@@ -8,11 +8,17 @@ import {
   BookOpen,
   Building2,
   MessageSquare,
-  Sparkles
+  Sparkles,
+  Shield,
+  ChevronDown
 } from 'lucide-react';
 import { ClarisIcon } from '@/components/ui/claris-logo';
 import { NavLink } from '@/components/NavLink';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
+import { SupportButton } from '@/components/support/SupportButton';
+import { useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import {
   Sidebar,
   SidebarContent,
@@ -25,9 +31,13 @@ import {
   SidebarHeader,
   SidebarFooter,
   useSidebar,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
 } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 const mainNavItems = [
   { title: 'Resumo da Semana', url: '/', icon: LayoutDashboard },
@@ -44,10 +54,30 @@ const secondaryNavItems = [
   { title: 'Configurações', url: '/configuracoes', icon: Settings },
 ];
 
+const adminNavItems = [
+  { title: 'Painel', url: '/admin' },
+  { title: 'Usuários', url: '/admin/usuarios' },
+  { title: 'Métricas de Uso', url: '/admin/metricas' },
+  { title: 'Logs de Erro', url: '/admin/logs-erros' },
+  { title: 'Suporte', url: '/admin/suporte' },
+  { title: 'Conversas Claris', url: '/admin/conversas-claris' },
+  { title: 'Configurações', url: '/admin/configuracoes' },
+];
+
 export function AppSidebar() {
   const { user, logout } = useAuth();
+  const { isAdmin } = usePermissions();
+  const location = useLocation();
   const { state } = useSidebar();
   const isCollapsed = state === 'collapsed';
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const [isAdminMenuOpen, setIsAdminMenuOpen] = useState(isAdminRoute);
+
+  useEffect(() => {
+    if (isAdminRoute) {
+      setIsAdminMenuOpen(true);
+    }
+  }, [isAdminRoute]);
 
   return (
     <Sidebar collapsible="icon" className="border-r border-sidebar-border">
@@ -110,6 +140,52 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+
+              <SidebarMenuItem>
+                <SupportButton
+                  size="default"
+                  showLabel={!isCollapsed}
+                  className="w-full justify-start gap-3 rounded-md px-3 py-2 text-sm text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                />
+              </SidebarMenuItem>
+
+              {isAdmin && (
+                <Collapsible open={isAdminMenuOpen && !isCollapsed} onOpenChange={setIsAdminMenuOpen}>
+                  <SidebarMenuItem>
+                    <CollapsibleTrigger asChild>
+                      <SidebarMenuButton
+                        tooltip="Administração"
+                        className="justify-between"
+                        isActive={isAdminRoute}
+                      >
+                        <span className="flex items-center gap-3">
+                          <Shield className="h-4 w-4 shrink-0" />
+                          {!isCollapsed && <span>Administração</span>}
+                        </span>
+                        {!isCollapsed && (
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 transition-transform ${isAdminMenuOpen ? 'rotate-180' : ''}`}
+                          />
+                        )}
+                      </SidebarMenuButton>
+                    </CollapsibleTrigger>
+                  </SidebarMenuItem>
+
+                  <CollapsibleContent>
+                    <SidebarMenuSub>
+                      {adminNavItems.map((item) => (
+                        <SidebarMenuSubItem key={item.title}>
+                          <SidebarMenuSubButton asChild isActive={location.pathname === item.url}>
+                            <NavLink to={item.url} end={item.url === '/admin'}>
+                              <span>{item.title}</span>
+                            </NavLink>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      ))}
+                    </SidebarMenuSub>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

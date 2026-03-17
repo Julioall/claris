@@ -1,14 +1,24 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { FloatingClarisChat } from '@/components/layout/FloatingClarisChat';
 import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
 
+const ROUTER_FUTURE = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
+vi.mock('@/components/ui/scroll-area', () => ({
+  ScrollArea: ({ children, ...props }: React.ComponentProps<'div'>) => <div {...props}>{children}</div>,
+}));
+
 const invokeMock = vi.fn();
 const fromMock = vi.fn();
+const usePermissionsMock = vi.fn();
 const WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
-let clarisConfiguredGlobal = false;
+let clarisAvailabilityState: 'ready' | 'not_configured' | 'invalid' = 'not_configured';
 let conversationsStore: Array<{
   id: string;
   user_id: string;
@@ -38,9 +48,13 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
-function setClarisConfigured(value: boolean) {
-  clarisConfiguredGlobal = value;
-  localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, value ? 'true' : 'false');
+vi.mock('@/hooks/usePermissions', () => ({
+  usePermissions: () => usePermissionsMock(),
+}));
+
+function setClarisAvailability(value: 'ready' | 'not_configured' | 'invalid') {
+  clarisAvailabilityState = value;
+  localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, value === 'ready' ? 'true' : 'false');
 }
 
 const HISTORY_STORAGE_KEY = 'claris_chat_history:user-1';
@@ -49,7 +63,13 @@ beforeEach(() => {
   invokeMock.mockReset();
   fromMock.mockReset();
   localStorage.clear();
-  clarisConfiguredGlobal = false;
+  clarisAvailabilityState = 'not_configured';
+  usePermissionsMock.mockReturnValue({
+    isAdmin: false,
+    role: null,
+    permissions: [],
+    canAccessAdminSection: () => false,
+  });
   conversationsStore = [];
 
   fromMock.mockImplementation((table: string) => {
@@ -63,7 +83,7 @@ beforeEach(() => {
                 moodle_connection_url: 'https://moodle.example.com',
                 moodle_connection_service: 'moodle_mobile_app',
                 risk_threshold_days: { atencao: 7, risco: 14, critico: 30 },
-                claris_llm_settings: clarisConfiguredGlobal
+                claris_llm_settings: clarisAvailabilityState === 'ready'
                   ? {
                       provider: 'openai',
                       model: 'gpt-4o-mini',
@@ -71,7 +91,15 @@ beforeEach(() => {
                       apiKey: 'sk-test',
                       configured: true,
                     }
-                  : {},
+                  : clarisAvailabilityState === 'invalid'
+                    ? {
+                        provider: 'openai',
+                        model: '',
+                        baseUrl: 'https://api.openai.com/v1',
+                        apiKey: '',
+                        configured: true,
+                      }
+                    : {},
               },
               error: null,
             }),
@@ -145,7 +173,7 @@ beforeEach(() => {
 
 function renderFloatingClarisChat() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter future={ROUTER_FUTURE}>
       <FloatingClarisChat />
     </MemoryRouter>,
   );
@@ -154,7 +182,7 @@ function renderFloatingClarisChat() {
 describe('FloatingClarisChat', () => {
   it('opens and closes the floating chat', async () => {
     invokeMock.mockResolvedValue({ data: { reply: 'ok' }, error: null });
-    setClarisConfigured(false);
+    setClarisAvailability('not_configured');
     const user = userEvent.setup();
     renderFloatingClarisChat();
 
@@ -192,22 +220,40 @@ describe('FloatingClarisChat', () => {
 
   it('replies asking for configuration when not configured', async () => {
     invokeMock.mockResolvedValue({ data: { reply: 'ok' }, error: null });
-    setClarisConfigured(false);
-    const user = userEvent.setup();
+    setClarisAvailability('not_configured');
     renderFloatingClarisChat();
 
-    await user.click(screen.getByRole('button', { name: /abrir chat da claris ia/i }));
-    await user.type(screen.getByLabelText(/mensagem para claris ia/i), 'Oi, Claris');
-    await user.click(screen.getByRole('button', { name: /enviar mensagem/i }));
+    await userEvent.click(screen.getByRole('button', { name: /abrir chat da claris ia/i }));
 
-    expect(screen.getByText('Oi, Claris')).toBeInTheDocument();
-    expect(screen.getByText(/ainda não estou configurada\. vá em configurações > claris ia/i)).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText(/aguardando o administrador do site me configurar/i)).toBeInTheDocument();
+    });
+    expect(screen.getByLabelText(/mensagem para claris ia/i)).toBeDisabled();
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it('shows invalid configuration message for admin', async () => {
+    setClarisAvailability('invalid');
+    usePermissionsMock.mockReturnValue({
+      isAdmin: true,
+      role: 'admin',
+      permissions: ['admin'],
+      canAccessAdminSection: () => true,
+    });
+
+    renderFloatingClarisChat();
+
+    await userEvent.click(screen.getByRole('button', { name: /abrir chat da claris ia/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/configuração atual da claris ia está inválida/i)).toBeInTheDocument();
+    });
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
   it('calls edge function and renders llm response when configured', async () => {
     invokeMock.mockResolvedValue({ data: { reply: 'Olá! Posso te ajudar com seus alunos hoje.' }, error: null });
-    setClarisConfigured(true);
+    setClarisAvailability('ready');
     const user = userEvent.setup();
     renderFloatingClarisChat();
 
@@ -232,7 +278,7 @@ describe('FloatingClarisChat', () => {
 
   it('shows fallback error message when llm request fails', async () => {
     invokeMock.mockRejectedValue(new Error('network error'));
-    setClarisConfigured(true);
+    setClarisAvailability('ready');
     const user = userEvent.setup();
     renderFloatingClarisChat();
 
@@ -246,7 +292,7 @@ describe('FloatingClarisChat', () => {
   });
 
   it('restores chat history when reopening component', async () => {
-    setClarisConfigured(true);
+    setClarisAvailability('ready');
     conversationsStore = [{
       id: 'conv-1',
       user_id: 'user-1',
@@ -270,7 +316,7 @@ describe('FloatingClarisChat', () => {
   });
 
   it('clears history with /limpar command without calling llm', async () => {
-    setClarisConfigured(true);
+    setClarisAvailability('ready');
     localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify([
       { role: 'user', content: 'Mensagem antiga' },
     ]));
@@ -312,7 +358,7 @@ describe('FloatingClarisChat', () => {
         error: null,
       });
 
-    setClarisConfigured(true);
+    setClarisAvailability('ready');
     const user = userEvent.setup();
     renderFloatingClarisChat();
 
@@ -371,7 +417,7 @@ describe('FloatingClarisChat', () => {
       error: null,
     });
 
-    setClarisConfigured(true);
+    setClarisAvailability('ready');
     const user = userEvent.setup();
     renderFloatingClarisChat();
 
@@ -405,7 +451,7 @@ describe('FloatingClarisChat', () => {
       error: null,
     });
 
-    setClarisConfigured(true);
+    setClarisAvailability('ready');
     const user = userEvent.setup();
     renderFloatingClarisChat();
 
@@ -436,7 +482,7 @@ describe('FloatingClarisChat', () => {
     }];
 
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Fpendencias"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Fpendencias"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
@@ -452,9 +498,10 @@ describe('FloatingClarisChat', () => {
   });
 
   it('shows icebreakers only when conversation has no messages yet', async () => {
+    setClarisAvailability('ready');
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
@@ -470,9 +517,10 @@ describe('FloatingClarisChat', () => {
   });
 
   it('does not create multiple empty conversations in sequence', async () => {
+    setClarisAvailability('ready');
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
@@ -507,7 +555,7 @@ describe('FloatingClarisChat', () => {
 
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
@@ -545,7 +593,7 @@ describe('FloatingClarisChat', () => {
 
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
@@ -581,7 +629,7 @@ describe('FloatingClarisChat', () => {
 
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
@@ -619,7 +667,7 @@ describe('FloatingClarisChat', () => {
 
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Falunos"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
@@ -658,7 +706,7 @@ describe('FloatingClarisChat', () => {
 
     const user = userEvent.setup();
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Fmensagens"]}>
+      <MemoryRouter initialEntries={["/claris?context=%2Fmensagens"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );
