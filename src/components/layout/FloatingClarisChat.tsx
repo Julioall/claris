@@ -417,6 +417,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const [conversations, setConversations] = useState<ClarisConversationThread[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [clarisAvailability, setClarisAvailability] = useState<ClarisAvailabilityStatus>('not_configured');
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isHydratingConversations, setIsHydratingConversations] = useState(true);
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
@@ -473,31 +474,12 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, 'false');
       setClarisAvailability('not_configured');
       return 'not_configured' as ClarisAvailabilityStatus;
+    } finally {
+      setIsCheckingAvailability(false);
     }
   }, []);
 
   useEffect(() => { void refreshGlobalClarisConfiguration(); }, [refreshGlobalClarisConfiguration]);
-
-  useEffect(() => {
-    if (isHydratingConversations) return;
-    if (clarisAvailability === 'ready') return;
-    const unavailableMessage = getUnavailableReply(clarisAvailability);
-    setMessages((prev) => {
-      if (prev.some((message) => message.isSystem && message.content === unavailableMessage)) {
-        return prev;
-      }
-
-      return [
-        ...prev,
-        {
-          id: `assistant-unavailable-${Date.now()}`,
-          role: 'assistant',
-          content: unavailableMessage,
-          isSystem: true,
-        },
-      ];
-    });
-  }, [clarisAvailability, getUnavailableReply, isHydratingConversations]);
 
   useEffect(() => {
     if (!isFloating) return;
@@ -593,7 +575,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   // ---- Persist conversation ----
   useEffect(() => {
     if (isHydratingConversations || !activeConversationId) return;
-    const historyToPersist = messages.filter((m) => m.id !== 'welcome').map(({ role, content }) => ({ role, content })).slice(-40);
+    const historyToPersist = messages.filter((m) => m.id !== 'welcome' && !m.isSystem).map(({ role, content }) => ({ role, content })).slice(-40);
     localStorage.setItem(historyStorageKey, JSON.stringify(historyToPersist));
     const nextTitle = deriveConversationTitle(historyToPersist);
     const shouldAutoTitle = activeConversationTitle.trim().toLowerCase() === 'nova conversa';
@@ -674,13 +656,12 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     const trimmed = source.trim();
     if (!trimmed) return;
     if (isClearHistoryCommand(trimmed)) { clearConversation(); return; }
-    const history = messages.filter((m) => m.id !== 'welcome').map(({ role, content }) => ({ role, content }));
+    const history = messages.filter((m) => m.id !== 'welcome' && !m.isSystem).map(({ role, content }) => ({ role, content }));
     const userMsg: ChatMessage = { id: `user-${Date.now()}`, role: 'user', content: trimmed };
     setMessages((prev) => [...prev.map((m): ChatMessage => ({ ...m, actions: undefined })), userMsg]);
     if (!messageOverride) setInputValue('');
     const availability = isClarisReady ? 'ready' : await refreshGlobalClarisConfiguration();
     if (availability !== 'ready') {
-      setMessages((prev) => [...prev, { id: `assistant-${Date.now()}`, role: 'assistant', content: getUnavailableReply(availability) }]);
       return;
     }
     setIsSending(true);
@@ -763,6 +744,13 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
         </ScrollArea>
 
         {/* Input area */}
+        {!isCheckingAvailability && clarisAvailability !== 'ready' && (
+          <div className="shrink-0 border-t border-amber-200/50 bg-amber-50/60 px-4 py-2.5 dark:bg-amber-900/10">
+            <p className="text-xs text-amber-700 dark:text-amber-300 leading-snug">
+              {getUnavailableReply(clarisAvailability)}
+            </p>
+          </div>
+        )}
         <div className={cn('shrink-0 border-t', isFloating ? 'p-2' : 'px-4 py-3')}>
           <form className={cn('mx-auto flex items-center gap-2', !isFloating && 'max-w-3xl')} onSubmit={(e) => { e.preventDefault(); handleSend(); }}>
             <div className="relative flex-1">

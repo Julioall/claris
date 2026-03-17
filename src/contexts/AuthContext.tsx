@@ -642,6 +642,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setCourses([]);
     setLastSync(null);
     sessionStorage.removeItem(STORAGE_KEY);
+    if (user?.id) {
+      localStorage.removeItem(`claris_chat_history:${user.id}`);
+    }
     toast({
       title: 'Logout realizado',
       description: 'Voce foi desconectado com sucesso.',
