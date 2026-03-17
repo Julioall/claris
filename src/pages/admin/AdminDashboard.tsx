@@ -84,8 +84,7 @@ export default function AdminDashboard() {
     queryFn: async () => {
       const since = subDays(new Date(), 6);
       since.setHours(0, 0, 0, 0);
-      const { data } = await supabase
-        .from('app_usage_events')
+      const { data } = await (supabase.from as Function)('app_usage_events')
         .select('created_at')
         .gte('created_at', since.toISOString())
         .order('created_at', { ascending: true });

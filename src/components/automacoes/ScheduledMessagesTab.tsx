@@ -217,7 +217,7 @@ export function ScheduledMessagesTab() {
       scheduled_at: localDt,
       recipient_count: msg.recipient_count ?? undefined,
       notes: msg.notes ?? '',
-      channel: (msg as Record<string, unknown>).channel as string ?? 'moodle',
+      channel: ((msg as unknown as Record<string, unknown>).channel as string) ?? 'moodle',
     });
     setFormOpen(true);
   };

@@ -108,7 +108,7 @@ export default function AdminConfiguracoes() {
     try {
       const { error } = await supabase
         .from('app_settings')
-        .upsert({ singleton_id: GLOBAL_APP_SETTINGS_ID, risk_threshold_days: normalized }, { onConflict: 'singleton_id' });
+        .upsert({ singleton_id: GLOBAL_APP_SETTINGS_ID, risk_threshold_days: normalized } as never, { onConflict: 'singleton_id' });
       if (error) throw error;
       setLastSavedRiskThresholdDays(normalized);
       setRiskThresholdDays(normalized);
