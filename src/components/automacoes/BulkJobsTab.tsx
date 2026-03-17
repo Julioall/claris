@@ -55,12 +55,9 @@ function getStatusBadge(status: string) {
   );
 }
 
-function getOriginBadge(userId: string, currentUserId: string | undefined) {
-  // We use the presence of a specific marker in a separate column or heuristic.
-  // For now, all jobs are treated as "manual" since the origin column doesn't exist yet.
-  // TODO: extend bulk_message_jobs with an origin column.
-  void userId;
-  void currentUserId;
+function getOriginBadge(_userId: string, _currentUserId: string | undefined) {
+  // TODO: extend bulk_message_jobs with an `origin` column (manual vs ia) in a
+  // follow-up migration to properly distinguish AI-created jobs from manual ones.
   return (
     <Badge variant="outline" className="text-xs bg-muted/40">
       Manual

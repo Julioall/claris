@@ -33,6 +33,9 @@ function toTask(row: any): Task {
     origin_reason: row.origin_reason ?? null,
     entity_type: row.entity_type ?? null,
     entity_id: row.entity_id ?? null,
+    // The `tasks.tags` DB column is a text[] of AI-generated tag strings.
+    // Mapped to `ai_tags` on the Task type to distinguish from the separate
+    // `task_tags` join-table relation (stored in the `tags` field as Tag[]).
     ai_tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
     created_at: row.created_at,
     updated_at: row.updated_at,

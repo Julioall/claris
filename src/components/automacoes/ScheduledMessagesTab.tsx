@@ -93,6 +93,10 @@ export function ScheduledMessagesTab() {
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['scheduled-messages'],
     queryFn: async () => {
+      // `as never` is needed because `scheduled_messages` is a new table added by the
+      // 20260317230000 migration and the auto-generated Supabase types haven't been
+      // regenerated yet. Once `npx supabase gen types typescript` is run, these casts
+      // can be replaced with proper typed references.
       const { data, error } = await supabase
         .from('scheduled_messages' as never)
         .select('*')
