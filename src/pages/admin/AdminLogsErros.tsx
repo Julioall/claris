@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -203,9 +203,8 @@ export default function AdminLogsErros() {
               </TableHeader>
               <TableBody>
                 {filtered.map((log) => (
-                  <>
+                  <Fragment key={log.id}>
                     <TableRow
-                      key={log.id}
                       className="cursor-pointer"
                       onClick={() => setExpandedId(expandedId === log.id ? null : log.id)}
                     >
@@ -229,7 +228,7 @@ export default function AdminLogsErros() {
                       </TableCell>
                     </TableRow>
                     {expandedId === log.id && (
-                      <TableRow key={`${log.id}-detail`}>
+                      <TableRow>
                         <TableCell colSpan={6} className="bg-muted/30 p-4">
                           <div className="space-y-3">
                             <div>
@@ -266,7 +265,7 @@ export default function AdminLogsErros() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
