@@ -28,6 +28,7 @@ import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
 import Claris from "@/pages/Claris";
 import NotFound from "@/pages/NotFound";
+import Automacoes from "@/pages/Automacoes";
 
 // Admin Pages
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -70,6 +71,7 @@ function AppRoutes() {
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/mensagens" element={<Messages />} />
         <Route path="/claris" element={<Claris />} />
+        <Route path="/automacoes" element={<Automacoes />} />
         <Route path="/relatorios" element={<Reports />} />
         <Route path="/configuracoes" element={<Settings />} />
       </Route>

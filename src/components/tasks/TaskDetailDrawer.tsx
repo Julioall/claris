@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TagInput } from '@/components/ui/TagInput';
-import { Send, Clock, MessageCircle, Tag as TagIcon } from 'lucide-react';
+import { Send, Clock, MessageCircle, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { useTaskDetail } from '@/hooks/useTasks';
 import type { Task } from '@/types';
 import { format, parseISO } from 'date-fns';
@@ -61,9 +61,20 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
     <Sheet open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 pt-6 pb-4 border-b">
-          <SheetTitle className="text-left leading-snug">{task?.title}</SheetTitle>
+          <div className="flex items-start gap-2">
+            <SheetTitle className="text-left leading-snug flex-1">{task?.title}</SheetTitle>
+            {task?.suggested_by_ai && (
+              <Badge variant="outline" className="shrink-0 gap-1 text-xs text-purple-600 border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800">
+                <Sparkles className="h-3 w-3" />
+                Claris IA
+              </Badge>
+            )}
+          </div>
           {task?.description && (
             <SheetDescription className="text-left text-sm">{task.description}</SheetDescription>
+          )}
+          {task?.origin_reason && (
+            <p className="text-xs text-muted-foreground/70 italic mt-1">{task.origin_reason}</p>
           )}
         </SheetHeader>
 
@@ -72,6 +83,17 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
             <TagIcon className="h-3.5 w-3.5" />
             Tags
           </p>
+          {/* Show AI-generated text tags (read-only) */}
+          {task?.ai_tags && task.ai_tags.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-2">
+              {task.ai_tags.map(tag => (
+                <Badge key={tag} variant="outline" className="text-[10px] gap-0.5 text-purple-600 border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800">
+                  <Sparkles className="h-2.5 w-2.5" />
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          )}
           <TagInput
             tags={tags}
             onAdd={addTag}

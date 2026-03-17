@@ -11,7 +11,8 @@ import {
   MessageSquare,
   Sparkles,
   Shield,
-  ChevronDown
+  ChevronDown,
+  Zap
 } from 'lucide-react';
 import { ClarisIcon } from '@/components/ui/claris-logo';
 import { NavLink } from '@/components/NavLink';
@@ -48,6 +49,7 @@ const mainNavItems = [
   { title: 'Tarefas', url: '/tarefas', icon: CheckSquare },
   { title: 'Agenda', url: '/agenda', icon: CalendarDays },
   { title: 'Mensagens', url: '/mensagens', icon: MessageSquare },
+  { title: 'Automações', url: '/automacoes', icon: Zap },
   { title: 'Claris IA', url: '/claris', icon: Sparkles },
   { title: 'Relatórios', url: '/relatorios', icon: FileSpreadsheet },
 ];

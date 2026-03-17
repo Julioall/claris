@@ -137,6 +137,11 @@ export interface Task {
   created_by?: string | null;
   due_date?: string | null;
   project_id?: string | null;
+  suggested_by_ai?: boolean | null;
+  origin_reason?: string | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  ai_tags?: string[];
   created_at: string;
   updated_at: string;
   tags?: Tag[];
