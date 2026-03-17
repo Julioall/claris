@@ -2,6 +2,18 @@
 
 Fluxo local padrao com Docker Compose para subir frontend + Supabase local.
 
+## Variaveis de ambiente
+
+1. Copie o arquivo de exemplo:
+
+```bash
+cp .env.example .env
+```
+
+2. Preencha os valores no `.env` com as credenciais do seu projeto Supabase.
+
+> **Importante:** nunca commite o arquivo `.env`. Ele esta listado no `.gitignore` para evitar vazamentos de credenciais.
+
 ## Documentacao
 
 - [docs/ACTIM.md](docs/ACTIM.md): visao funcional e fluxo do produto.

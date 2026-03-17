@@ -6,6 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SyncProgressDialog } from '@/components/sync/SyncProgressDialog';
 import { CourseSelectorDialog } from '@/components/sync/CourseSelectorDialog';
 import { FloatingClarisChat } from '@/components/layout/FloatingClarisChat';
+import { AppFooter } from '@/components/layout/AppFooter';
 
 export function AppLayout() {
   const location = useLocation();
@@ -37,6 +38,7 @@ export function AppLayout() {
               <Outlet />
             </div>
           </main>
+          <AppFooter />
         </div>
       </div>
       

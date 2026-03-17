@@ -133,6 +133,10 @@ export default function Login() {
         <p className="text-center text-xs text-muted-foreground">
           Ao entrar, seus dados são sincronizados do Moodle e salvos de forma segura.
         </p>
+
+        <p className="text-center text-[10px] text-muted-foreground/70">
+          Copyright (c) 2026 Julio Alves. All rights reserved.
+        </p>
       </div>
     </div>
   );
