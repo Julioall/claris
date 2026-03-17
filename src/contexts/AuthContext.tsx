@@ -635,7 +635,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [saveSession]);
 
   const logout = useCallback(async () => {
-    void trackEvent(user?.id, 'logout');
+    await trackEvent(user?.id, 'logout');
     await supabase.auth.signOut();
     setUser(null);
     setMoodleSession(null);
