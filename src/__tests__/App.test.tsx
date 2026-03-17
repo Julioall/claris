@@ -90,6 +90,18 @@ vi.mock("@/pages/NotFound", () => ({
   default: () => <div>NotFound Page</div>,
 }));
 
+vi.mock("@/pages/Automacoes", () => ({
+  default: () => <div>Automacoes Page</div>,
+}));
+
+vi.mock("@/pages/MeusServicos", () => ({
+  default: () => <div>MeusServicos Page</div>,
+}));
+
+vi.mock("@/pages/admin/AdminServicosAplicacao", () => ({
+  default: () => <div>AdminServicosAplicacao Page</div>,
+}));
+
 function setPath(path: string) {
   window.history.pushState({}, "Test", path);
 }
@@ -211,5 +223,31 @@ describe("App routing", () => {
     render(<App />);
 
     expect(screen.getByText("NotFound Page")).toBeInTheDocument();
+  });
+
+  it("renders meus-servicos page for authenticated users", () => {
+    setPath("/meus-servicos");
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(<App />);
+
+    expect(screen.getByText("MeusServicos Page")).toBeInTheDocument();
+    expect(screen.getByText("App Layout")).toBeInTheDocument();
+  });
+
+  it("renders automacoes page for authenticated users", () => {
+    setPath("/automacoes");
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(<App />);
+
+    expect(screen.getByText("Automacoes Page")).toBeInTheDocument();
+    expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 });

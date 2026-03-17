@@ -29,6 +29,7 @@ import Reports from "@/pages/Reports";
 import Claris from "@/pages/Claris";
 import NotFound from "@/pages/NotFound";
 import Automacoes from "@/pages/Automacoes";
+import MeusServicos from "@/pages/MeusServicos";
 
 // Admin Pages
 import AdminDashboard from "@/pages/admin/AdminDashboard";
@@ -39,6 +40,7 @@ import AdminLogsErros from "@/pages/admin/AdminLogsErros";
 import AdminSuporte from "@/pages/admin/AdminSuporte";
 import AdminConversasClaris from "@/pages/admin/AdminConversasClaris";
 import AdminFeatureFlags from "@/pages/admin/AdminFeatureFlags";
+import AdminServicosAplicacao from "@/pages/admin/AdminServicosAplicacao";
 
 const queryClient = new QueryClient();
 
@@ -74,6 +76,7 @@ function AppRoutes() {
         <Route path="/automacoes" element={<Automacoes />} />
         <Route path="/relatorios" element={<Reports />} />
         <Route path="/configuracoes" element={<Settings />} />
+        <Route path="/meus-servicos" element={<MeusServicos />} />
       </Route>
       <Route element={<AdminRoute><AdminLayout /></AdminRoute>}>
         <Route path="/admin" element={<AdminDashboard />} />
@@ -84,6 +87,7 @@ function AppRoutes() {
         <Route path="/admin/suporte" element={<AdminSuporte />} />
         <Route path="/admin/conversas-claris" element={<AdminConversasClaris />} />
         <Route path="/admin/feature-flags" element={<AdminFeatureFlags />} />
+        <Route path="/admin/servicos-aplicacao" element={<AdminServicosAplicacao />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
