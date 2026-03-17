@@ -72,7 +72,7 @@ const STEP_FUNCTION_MAP: Record<Exclude<SyncEntity, 'courses'>, string> = {
 };
 
 const STEP_BATCH_CONFIG: Record<Exclude<SyncEntity, 'courses'>, { batchSize: number; timeoutMs: number }> = {
-  students: { batchSize: 4, timeoutMs: 22000 },
+  students: { batchSize: 5, timeoutMs: 22000 },
   activities: { batchSize: 2, timeoutMs: 26000 },
   grades: { batchSize: 2, timeoutMs: 26000 },
 };

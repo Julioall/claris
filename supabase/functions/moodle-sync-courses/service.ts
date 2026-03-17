@@ -2,7 +2,6 @@ import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   listLinkedCourseIds,
-  removeUserCourseLinks,
   upsertCourses,
   upsertUserCourseLinks,
 } from '../_shared/domain/moodle-sync/repository.ts'
@@ -68,11 +67,6 @@ export async function linkSelectedCourses(userId: string, selectedCourseIds: str
 
   const existingLinks = await listLinkedCourseIds(supabase, linkUser.id)
   const existingCourseIds = new Set<string>(existingLinks)
-  const selectedSet = new Set<string>(selectedCourseIds)
-
-  // Remove unselected
-  const toRemove = Array.from(existingCourseIds).filter((id) => !selectedSet.has(id))
-  if (toRemove.length > 0) await removeUserCourseLinks(supabase, linkUser.id, toRemove)
 
   // Add newly selected
   const toAdd = selectedCourseIds.filter((id) => !existingCourseIds.has(id))
@@ -86,6 +80,6 @@ export async function linkSelectedCourses(userId: string, selectedCourseIds: str
 
   await touchUserLastSync(supabase, linkUser.id, new Date().toISOString())
 
-  console.log(`Linked ${toAdd.length} courses, removed ${toRemove.length} for user ${linkUser.id}`)
-  return jsonResponse({ success: true, added: toAdd.length, removed: toRemove.length })
+  console.log(`Linked ${toAdd.length} courses for user ${linkUser.id}`)
+  return jsonResponse({ success: true, added: toAdd.length, removed: 0 })
 }
