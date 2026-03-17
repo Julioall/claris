@@ -54,15 +54,15 @@ function mapActivityFeedItems(items: Array<Record<string, unknown>>): ActivityFe
     const feedStudent = item.students as FeedStudentSummary | null;
 
     return {
-      id: item.id,
-      user_id: item.user_id || undefined,
-      student_id: item.student_id || undefined,
-      course_id: item.course_id || undefined,
-      event_type: item.event_type,
-      title: item.title,
-      description: item.description || undefined,
+      id: item.id as string,
+      user_id: (item.user_id as string) || undefined,
+      student_id: (item.student_id as string) || undefined,
+      course_id: (item.course_id as string) || undefined,
+      event_type: item.event_type as string,
+      title: item.title as string,
+      description: (item.description as string) || undefined,
       metadata: item.metadata as Record<string, unknown> | undefined,
-      created_at: item.created_at || new Date().toISOString(),
+      created_at: (item.created_at as string) || new Date().toISOString(),
       student: feedStudent ? {
         id: feedStudent.id,
         moodle_user_id: '',

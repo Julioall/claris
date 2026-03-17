@@ -19,7 +19,7 @@ export function useErrorLog() {
     async (message: string, options: LogErrorOptions = {}) => {
       try {
         const { severity = 'error', category = 'ui', payload = {}, context = {} } = options;
-        await supabase.from('app_error_logs').insert({
+        await (supabase.from as Function)('app_error_logs').insert({
           user_id: user?.id ?? null,
           severity,
           category,

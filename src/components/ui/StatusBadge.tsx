@@ -7,14 +7,17 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-const statusConfig: Record<TaskStatus, { label: string; className: string }> = {
+const statusConfig: Record<string, { label: string; className: string }> = {
   aberta: { label: 'Aberta', className: 'bg-card border border-l-2 border-status-pending/30 border-l-status-pending text-status-pending' },
+  todo: { label: 'Aberta', className: 'bg-card border border-l-2 border-status-pending/30 border-l-status-pending text-status-pending' },
   em_andamento: { label: 'Em andamento', className: 'bg-card border border-l-2 border-status-warning/30 border-l-status-warning text-status-warning' },
+  in_progress: { label: 'Em andamento', className: 'bg-card border border-l-2 border-status-warning/30 border-l-status-warning text-status-warning' },
   resolvida: { label: 'Resolvida', className: 'bg-card border border-l-2 border-status-success/30 border-l-status-success text-status-success' },
+  done: { label: 'Resolvida', className: 'bg-card border border-l-2 border-status-success/30 border-l-status-success text-status-success' },
 };
 
 export function StatusBadge({ status, size = 'md', className }: StatusBadgeProps) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] ?? statusConfig.aberta;
 
   return (
     <span

@@ -2,9 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-const ADMIN_MOODLE_USERNAME = '04112637225';
-const ADMIN_EMAIL = 'julioalves@fieg.com.br';
-
 export type AdminRole = 'admin' | 'support' | 'analyst';
 
 export interface AdminPermissions {
@@ -14,17 +11,10 @@ export interface AdminPermissions {
   canAccessAdminSection: (section: string) => boolean;
 }
 
-function isHardcodedAdmin(user: { moodle_username?: string; email?: string } | null): boolean {
-  if (!user) return false;
-  return (
-    user.moodle_username === ADMIN_MOODLE_USERNAME ||
-    (user.email ?? '').toLowerCase() === ADMIN_EMAIL
-  );
-}
-
 export function usePermissions(): AdminPermissions {
   const { user } = useAuth();
 
+  // Check admin_user_roles table for proper RBAC
   const { data: roleData } = useQuery({
     queryKey: ['admin-role', user?.id],
     queryFn: async () => {
@@ -41,12 +31,25 @@ export function usePermissions(): AdminPermissions {
     staleTime: 5 * 60 * 1000,
   });
 
-  const hardcoded = isHardcodedAdmin(user ?? null);
-  const isAdmin = hardcoded || roleData?.role === 'admin';
-  const role = (roleData?.role as AdminRole | null) ?? (hardcoded ? 'admin' : null);
+  // Also check the server-side is_application_admin() function
+  // This is the source of truth for admin status (SECURITY DEFINER function)
+  const { data: isServerAdmin } = useQuery({
+    queryKey: ['is-app-admin', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return false;
+      const { data, error } = await supabase.rpc('is_application_admin');
+      if (error) return false;
+      return data === true;
+    },
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const isAdmin = isServerAdmin === true || roleData?.role === 'admin';
+  const role = (roleData?.role as AdminRole | null) ?? (isAdmin ? 'admin' : null);
   const permissions: string[] = Array.isArray(roleData?.permissions)
     ? (roleData!.permissions as string[])
-    : hardcoded
+    : isAdmin
       ? ['admin', 'support', 'analyst']
       : [];
 
