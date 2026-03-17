@@ -103,6 +103,7 @@ const GENERIC_QUICK_SUGGESTIONS = [
   'Resumo geral da operação',
   'Pendências mais urgentes',
   'Alunos para acompanhar esta semana',
+  'Como usar a plataforma Claris?',
 ];
 
 const ROUTE_QUICK_SUGGESTIONS: Array<{ match: RegExp; suggestions: string[] }> = [
@@ -143,8 +144,11 @@ function parseStoredHistory(raw: string | null): ClarisChatHistoryItem[] {
 function clearStoredHistory(key: string) { localStorage.removeItem(key); }
 
 function buildContextualSuggestions(route: string): string[] {
+  const HELP_SUGGESTION = 'Como usar a plataforma Claris?';
   const contextual = ROUTE_QUICK_SUGGESTIONS.find((e) => e.match.test(route))?.suggestions ?? [];
-  return [...contextual, ...GENERIC_QUICK_SUGGESTIONS].slice(0, 6);
+  const generic = GENERIC_QUICK_SUGGESTIONS.filter((s) => s !== HELP_SUGGESTION);
+  const unique = Array.from(new Set([...contextual, ...generic]));
+  return [...unique, HELP_SUGGESTION].slice(0, 6);
 }
 
 function parseHistoryFromJson(raw: unknown): ClarisChatHistoryItem[] {
