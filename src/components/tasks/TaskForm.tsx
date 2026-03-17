@@ -12,7 +12,7 @@ const schema = z.object({
   title: z.string().min(1, 'Título obrigatório').max(200),
   description: z.string().optional(),
   status: z.enum(['todo', 'in_progress', 'done', 'aberta', 'em_andamento', 'resolvida']),
-  priority: z.enum(['low', 'medium', 'high', 'urgent']),
+  priority: z.enum(['low', 'medium', 'high', 'urgent', 'baixa', 'media', 'alta', 'urgente']),
   due_date: z.string().optional(),
 });
 

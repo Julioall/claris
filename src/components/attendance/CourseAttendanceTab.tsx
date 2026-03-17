@@ -92,7 +92,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
       id: row.id as string,
       attendance_date: row.attendance_date as string,
       status: row.status as AttendanceStatus,
-      notes: row.notes,
+      notes: row.notes as string | undefined,
       student: row.students
         ? {
             id: (row.students as { id: string }).id,

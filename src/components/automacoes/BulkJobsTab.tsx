@@ -81,7 +81,7 @@ export function BulkJobsTab() {
         .limit(200);
 
       if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+        query = query.eq('status', statusFilter as never);
       }
 
       const { data, error } = await query;
