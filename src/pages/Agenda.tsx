@@ -11,20 +11,24 @@ import type { CalendarEvent, CalendarEventType } from '@/types';
 import { format, parseISO, isThisWeek, isThisMonth, isFuture } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+const GROUP_THIS_WEEK = 'Esta semana';
+const GROUP_THIS_MONTH = 'Este mês';
+const GROUP_PAST = 'Passados';
+
 function groupEventsByPeriod(events: CalendarEvent[]): Record<string, CalendarEvent[]> {
   const groups: Record<string, CalendarEvent[]> = {};
   for (const ev of events) {
     const d = parseISO(ev.start_at);
     let key: string;
     if (isThisWeek(d, { locale: ptBR })) {
-      key = 'Esta semana';
+      key = GROUP_THIS_WEEK;
     } else if (isThisMonth(d)) {
-      key = 'Este mês';
+      key = GROUP_THIS_MONTH;
     } else if (isFuture(d)) {
-      key = format(d, 'MMMM yyyy', { locale: ptBR });
-      key = key.charAt(0).toUpperCase() + key.slice(1);
+      const raw = format(d, 'MMMM yyyy', { locale: ptBR });
+      key = raw.charAt(0).toUpperCase() + raw.slice(1);
     } else {
-      key = 'Passados';
+      key = GROUP_PAST;
     }
     if (!groups[key]) groups[key] = [];
     groups[key].push(ev);
@@ -35,12 +39,12 @@ function groupEventsByPeriod(events: CalendarEvent[]): Record<string, CalendarEv
 function sortGroups(groups: Record<string, CalendarEvent[]>) {
   const keys = Object.keys(groups);
   keys.sort((a, b) => {
-    if (a === 'Esta semana') return -1;
-    if (b === 'Esta semana') return 1;
-    if (a === 'Este mês') return -1;
-    if (b === 'Este mês') return 1;
-    if (a === 'Passados') return 1;
-    if (b === 'Passados') return -1;
+    if (a === GROUP_THIS_WEEK) return -1;
+    if (b === GROUP_THIS_WEEK) return 1;
+    if (a === GROUP_THIS_MONTH) return -1;
+    if (b === GROUP_THIS_MONTH) return 1;
+    if (a === GROUP_PAST) return 1;
+    if (b === GROUP_PAST) return -1;
     return a.localeCompare(b, 'pt-BR');
   });
   return keys;

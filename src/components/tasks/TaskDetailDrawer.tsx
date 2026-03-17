@@ -22,11 +22,24 @@ const FIELD_LABELS: Record<string, string> = {
   due_date: 'Prazo',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  todo: 'A fazer',
-  in_progress: 'Em andamento',
-  done: 'Concluído',
+const VALUE_LABELS: Record<string, Record<string, string>> = {
+  status: {
+    todo: 'A fazer',
+    in_progress: 'Em andamento',
+    done: 'Concluído',
+  },
+  priority: {
+    low: 'Baixa',
+    medium: 'Média',
+    high: 'Alta',
+    urgent: 'Urgente',
+  },
 };
+
+function formatHistoryValue(field: string, value: string | null | undefined): string {
+  if (value == null || value === '') return '(vazio)';
+  return VALUE_LABELS[field]?.[value] ?? value;
+}
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -139,9 +152,9 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
                       <div>
                         <span className="font-medium">{FIELD_LABELS[h.field_changed] ?? h.field_changed}</span>
                         {' alterado de '}
-                        <span className="text-muted-foreground">{STATUS_LABELS[h.old_value ?? ''] ?? h.old_value ?? '(vazio)'}</span>
+                        <span className="text-muted-foreground">{formatHistoryValue(h.field_changed, h.old_value)}</span>
                         {' para '}
-                        <span className="font-medium">{STATUS_LABELS[h.new_value ?? ''] ?? h.new_value ?? '(vazio)'}</span>
+                        <span className="font-medium">{formatHistoryValue(h.field_changed, h.new_value)}</span>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {format(parseISO(h.created_at), "d MMM yyyy 'às' HH:mm", { locale: ptBR })}
                         </p>

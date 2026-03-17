@@ -105,8 +105,10 @@ begin
 end;
 $$;
 
+drop trigger if exists tasks_updated_at on public.tasks;
 create trigger tasks_updated_at before update on public.tasks
   for each row execute function public.set_updated_at();
 
+drop trigger if exists calendar_events_updated_at on public.calendar_events;
 create trigger calendar_events_updated_at before update on public.calendar_events
   for each row execute function public.set_updated_at();

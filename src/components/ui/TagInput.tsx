@@ -89,11 +89,16 @@ export function TagInput({ tags, onAdd, onRemove, placeholder = 'Adicionar tag..
     if (!showMenu || activePrefix.current === null) return;
     const prefix = activePrefix.current;
     const search = value.replace(new RegExp(`^/${prefix}:?`), '');
-    let cancelled = false;
-    fetchEntitySuggestions(prefix, search)
-      .then(results => { if (!cancelled) setSuggestions(results); })
-      .catch(() => { if (!cancelled) setSuggestions([]); });
-    return () => { cancelled = true; };
+
+    const timer = setTimeout(() => {
+      let cancelled = false;
+      fetchEntitySuggestions(prefix, search)
+        .then(results => { if (!cancelled) setSuggestions(results); })
+        .catch(() => { if (!cancelled) setSuggestions([]); });
+      return () => { cancelled = true; };
+    }, 200);
+
+    return () => clearTimeout(timer);
   }, [value, showMenu]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -87,7 +87,7 @@ export const tasksService = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const old = oldData as any;
       const historyEntries = trackedFields
-        .filter(field => input[field] !== undefined && String(old[field] ?? '') !== String(input[field] ?? ''))
+        .filter(field => input[field] !== undefined && (old[field] ?? null) !== (input[field] ?? null))
         .map(field => ({
           task_id: id,
           field_changed: field,
