@@ -63,6 +63,7 @@ const adminNavItems = [
   { title: 'Logs de Erro', url: '/admin/logs-erros' },
   { title: 'Suporte', url: '/admin/suporte' },
   { title: 'Conversas Claris', url: '/admin/conversas-claris' },
+  { title: 'Feature Flags', url: '/admin/feature-flags' },
   { title: 'Configurações', url: '/admin/configuracoes' },
 ];
 

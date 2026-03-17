@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Bell } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface SupportTicket {
@@ -51,6 +51,27 @@ export default function AdminSuporte() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
+  const [newTicketCount, setNewTicketCount] = useState(0);
+
+  // Realtime subscription for new tickets
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-support-tickets-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'support_tickets' },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ['admin-support-tickets'] });
+          setNewTicketCount((prev) => prev + 1);
+          toast({ title: 'Novo ticket de suporte recebido!' });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
 
   const { data: tickets = [], isLoading } = useQuery({
     queryKey: ['admin-support-tickets', statusFilter, typeFilter],
@@ -90,9 +111,22 @@ export default function AdminSuporte() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Tickets de Suporte</h1>
-        <p className="text-muted-foreground">Gerencie os tickets de suporte dos usuarios</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Tickets de Suporte</h1>
+          <p className="text-muted-foreground">Gerencie os tickets de suporte dos usuarios</p>
+        </div>
+        {newTicketCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setNewTicketCount(0)}
+            className="relative"
+          >
+            <Bell className="h-4 w-4 mr-2" />
+            {newTicketCount} novo{newTicketCount > 1 ? 's' : ''} ticket{newTicketCount > 1 ? 's' : ''}
+          </Button>
+        )}
       </div>
 
       <Card>

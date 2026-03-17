@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTrackEvent } from '@/hooks/useTrackEvent';
+import { useErrorLog } from '@/hooks/useErrorLog';
 
 export interface ChatMessage {
   id: string;
@@ -77,6 +79,8 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string | nul
 
 export function useChat() {
   const { moodleSession: session } = useAuth();
+  const { track } = useTrackEvent();
+  const { logError } = useErrorLog();
   const [isLoading, setIsLoading] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -236,15 +240,22 @@ export function useChat() {
       };
 
       setMessages(prev => [...prev, newMsg]);
+      void track('send_message', { resource: String(moodleUserId) });
       return true;
     } catch (err) {
       console.error('Error sending message:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao enviar mensagem');
+      const errMsg = err instanceof Error ? err.message : 'Erro ao enviar mensagem';
+      setError(errMsg);
+      void logError('Erro ao enviar mensagem via Moodle', {
+        severity: 'error',
+        category: 'integration',
+        payload: { message: errMsg, moodleUserId: String(moodleUserId) },
+      });
       return false;
     } finally {
       setIsSending(false);
     }
-  }, [session, currentMoodleUserId]);
+  }, [session, currentMoodleUserId, track, logError]);
 
   return {
     conversations,

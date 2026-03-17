@@ -37,6 +37,7 @@ import AdminMetricas from "@/pages/admin/AdminMetricas";
 import AdminLogsErros from "@/pages/admin/AdminLogsErros";
 import AdminSuporte from "@/pages/admin/AdminSuporte";
 import AdminConversasClaris from "@/pages/admin/AdminConversasClaris";
+import AdminFeatureFlags from "@/pages/admin/AdminFeatureFlags";
 
 const queryClient = new QueryClient();
 
@@ -80,6 +81,7 @@ function AppRoutes() {
         <Route path="/admin/logs-erros" element={<AdminLogsErros />} />
         <Route path="/admin/suporte" element={<AdminSuporte />} />
         <Route path="/admin/conversas-claris" element={<AdminConversasClaris />} />
+        <Route path="/admin/feature-flags" element={<AdminFeatureFlags />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>
