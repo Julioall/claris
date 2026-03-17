@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { format } from 'date-fns';
+import { format, endOfDay, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Download } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
+import { exportToCsv } from '@/lib/csv';
 
 interface ErrorLog {
   id: string;
@@ -38,10 +39,12 @@ export default function AdminLogsErros() {
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [resolvedFilter, setResolvedFilter] = useState<string>('open');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['admin-error-logs', severityFilter, categoryFilter, resolvedFilter],
+    queryKey: ['admin-error-logs', severityFilter, categoryFilter, resolvedFilter, dateFrom, dateTo],
     queryFn: async () => {
       let query = supabase
         .from('app_error_logs')
@@ -53,6 +56,8 @@ export default function AdminLogsErros() {
       if (categoryFilter !== 'all') query = query.eq('category', categoryFilter);
       if (resolvedFilter === 'open') query = query.eq('resolved', false);
       if (resolvedFilter === 'resolved') query = query.eq('resolved', true);
+      if (dateFrom) query = query.gte('created_at', startOfDay(new Date(dateFrom)).toISOString());
+      if (dateTo) query = query.lte('created_at', endOfDay(new Date(dateTo)).toISOString());
 
       const { data, error } = await query;
       if (error) throw error;
@@ -79,11 +84,33 @@ export default function AdminLogsErros() {
     return log.message.toLowerCase().includes(search.toLowerCase());
   });
 
+  const handleExport = () => {
+    exportToCsv(
+      `logs-erros-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`,
+      filtered.map((l) => ({
+        id: l.id,
+        user_id: l.user_id ?? '',
+        severity: l.severity,
+        category: l.category,
+        message: l.message,
+        resolved: String(l.resolved),
+        resolved_at: l.resolved_at ?? '',
+        created_at: l.created_at,
+      })),
+    );
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Logs de Erro</h1>
-        <p className="text-muted-foreground">Monitore e resolva erros da plataforma</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Logs de Erro</h1>
+          <p className="text-muted-foreground">Monitore e resolva erros da plataforma</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={filtered.length === 0}>
+          <Download className="h-4 w-4 mr-2" />
+          Exportar CSV
+        </Button>
       </div>
 
       <Card>
@@ -138,6 +165,20 @@ export default function AdminLogsErros() {
                 <SelectItem value="resolved">Resolvidos</SelectItem>
               </SelectContent>
             </Select>
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="w-[150px]"
+              title="Data inicial"
+            />
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="w-[150px]"
+              title="Data final"
+            />
           </div>
         </CardContent>
       </Card>

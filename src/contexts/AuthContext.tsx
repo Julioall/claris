@@ -9,6 +9,7 @@ import {
   resolveFunctionsInvokeErrorMessage,
   resolveMoodleErrorMessage,
 } from '@/lib/moodle-errors';
+import { trackEvent, logError } from '@/lib/tracking';
 
 interface MoodleSession {
   moodleToken: string;
@@ -585,6 +586,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: `Bem-vindo, ${newUser.full_name}!${offlineNote}`,
       });
 
+      void trackEvent(newUser.id, 'login');
+
       return true;
     } catch (err) {
       console.error('Login error:', err);
@@ -601,6 +604,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [saveSession]);
 
   const logout = useCallback(async () => {
+    void trackEvent(user?.id, 'logout');
     await supabase.auth.signOut();
     setUser(null);
     setMoodleSession(null);
@@ -611,7 +615,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       title: 'Logout realizado',
       description: 'Voce foi desconectado com sucesso.',
     });
-  }, []);
+  }, [user?.id]);
 
   const clearInvalidSession = useCallback(async () => {
     resetAuthState();
@@ -739,6 +743,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isComplete: false,
     });
 
+    void trackEvent(context.user.id, 'sync_start', {
+      metadata: { courseIds, courseCount: courseIds.length },
+    });
+
     let syncedCourses = courses.filter(course => courseIds.includes(course.id));
     let totalStudents = 0;
     let totalActivities = 0;
@@ -849,6 +857,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         description: `${syncedCourses.length} cursos, ${totalStudents} alunos, ${totalActivities} atividades e ${totalGrades} notas sincronizados.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
       });
 
+      void trackEvent(context.user.id, 'sync_finish', {
+        metadata: {
+          courses: syncedCourses.length,
+          students: totalStudents,
+          activities: totalActivities,
+          grades: totalGrades,
+        },
+      });
+
       if (riskUpdateResult?.missingRpc) {
         toast({
           title: 'Funcao de risco indisponivel',
@@ -870,6 +887,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         title: 'Erro na sincronizacao',
         description: 'Ocorreu um erro durante a sincronizacao. Tente novamente.',
         variant: 'destructive',
+      });
+      void trackEvent(context.user.id, 'sync_error');
+      void logError(context.user.id, 'Erro na sincronizacao com Moodle', {
+        category: 'integration',
+        payload: { message: err instanceof Error ? err.message : String(err) },
       });
       setSyncProgress(prev => ({ ...prev, isComplete: true }));
     } finally {

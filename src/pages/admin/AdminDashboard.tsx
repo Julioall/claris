@@ -2,6 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Activity, AlertTriangle, LifeBuoy, MessageSquare, Users } from 'lucide-react';
+import { format, subDays, startOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 interface StatCardProps {
   title: string;
@@ -78,6 +81,31 @@ export default function AdminDashboard() {
     },
   });
 
+  // Trend: events per day for the last 7 days
+  const { data: recentEvents = [] } = useQuery({
+    queryKey: ['admin-recent-events-trend'],
+    queryFn: async () => {
+      const since = subDays(new Date(), 6);
+      since.setHours(0, 0, 0, 0);
+      const { data } = await supabase
+        .from('app_usage_events')
+        .select('created_at')
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: true });
+      return (data ?? []) as { created_at: string }[];
+    },
+  });
+
+  const trendData = Array.from({ length: 7 }, (_, i) => {
+    const d = startOfDay(subDays(new Date(), 6 - i));
+    const nextD = startOfDay(subDays(new Date(), 5 - i));
+    const count = recentEvents.filter((e) => {
+      const t = new Date(e.created_at);
+      return t >= d && t < nextD;
+    }).length;
+    return { date: format(d, 'dd/MM', { locale: ptBR }), eventos: count };
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -117,6 +145,24 @@ export default function AdminDashboard() {
           description="Total de conversas com a IA"
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Atividade recente (eventos por dia — ultimos 7 dias)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={trendData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="eventos" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
     </div>
   );
 }

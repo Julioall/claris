@@ -13,6 +13,14 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
 }));
 
+vi.mock("@/hooks/useTrackEvent", () => ({
+  useTrackEvent: () => ({ track: vi.fn() }),
+}));
+
+vi.mock("@/hooks/useErrorLog", () => ({
+  useErrorLog: () => ({ logError: vi.fn() }),
+}));
+
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     functions: {
