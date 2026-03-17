@@ -47,16 +47,10 @@ describe("SyncProgressDialog", () => {
     expect(screen.queryByRole("button", { name: /Fechar/i })).not.toBeInTheDocument();
   });
 
-  it("shows success summary and closes dialog on click", async () => {
+  it("shows completed state and closes dialog on click", async () => {
     const user = userEvent.setup();
     const { onClose } = renderDialog({
       isComplete: true,
-      summary: {
-        courses: 4,
-        students: 120,
-        activities: 36,
-        grades: 512,
-      },
       steps: [
         { id: "courses", label: "Cursos", icon: "courses", status: "completed", count: 4 },
         { id: "students", label: "Alunos", icon: "students", status: "completed", count: 120 },
@@ -64,8 +58,7 @@ describe("SyncProgressDialog", () => {
     });
 
     expect(screen.getByText(/conclu/i)).toBeInTheDocument();
-    expect(screen.getByText(/Resumo da sincroniza/i)).toBeInTheDocument();
-    expect(screen.getByText("512")).toBeInTheDocument();
+    expect(screen.queryByText(/Resumo da sincroniza/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Fechar/i }));
     expect(onClose).toHaveBeenCalledTimes(1);

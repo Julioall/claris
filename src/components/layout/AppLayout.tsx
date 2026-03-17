@@ -57,7 +57,6 @@ export function AppLayout() {
         currentStep={syncProgress.currentStep}
         isComplete={syncProgress.isComplete}
         onClose={closeSyncProgress}
-        summary={syncProgress.summary}
       />
       {!shouldHideFloatingClaris && <FloatingClarisChat />}
     </SidebarProvider>

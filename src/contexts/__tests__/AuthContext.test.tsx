@@ -13,6 +13,8 @@ const toastMock = vi.fn();
 const encryptSessionDataMock = vi.fn();
 const decryptSessionDataMock = vi.fn();
 const fetchMock = vi.fn();
+const fromMock = vi.fn();
+const fromInsertMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -26,12 +28,7 @@ vi.mock("@/integrations/supabase/client", () => ({
       invoke: (...args: unknown[]) => invokeMock(...args),
     },
     rpc: (...args: unknown[]) => rpcMock(...args),
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })),
-      })),
-      upsert: vi.fn().mockResolvedValue({ error: null }),
-    })),
+    from: (...args: unknown[]) => fromMock(...args),
   },
 }));
 
@@ -67,6 +64,14 @@ describe("AuthContext", () => {
     rpcMock.mockResolvedValue({ data: 2, error: null });
     encryptSessionDataMock.mockResolvedValue("encrypted-session");
     decryptSessionDataMock.mockResolvedValue(null);
+    fromInsertMock.mockResolvedValue({ error: null });
+    fromMock.mockImplementation(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })),
+      })),
+      upsert: vi.fn().mockResolvedValue({ error: null }),
+      insert: (...args: unknown[]) => fromInsertMock(...args),
+    }));
   });
 
   afterAll(() => {
@@ -332,7 +337,7 @@ describe("AuthContext", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it("runs syncSelectedCourses end-to-end and fills sync summary", async () => {
+  it("runs syncSelectedCourses end-to-end", async () => {
     invokeMock.mockResolvedValueOnce({
       data: {
         user: {
@@ -451,15 +456,26 @@ describe("AuthContext", () => {
       expect(authRef?.syncProgress.isComplete).toBe(true);
     });
 
-    expect(authRef?.syncProgress.summary).toEqual({
-      courses: 1,
-      students: 2,
-      activities: 3,
-      grades: 4,
-    });
-    expect(fetchMock).toHaveBeenCalledTimes(5);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/moodle-sync-courses$/),
+      expect.anything(),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/moodle-sync-students$/),
+      expect.anything(),
+    );
     expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringMatching(/sincronizacao concluida/i) }),
+      expect.objectContaining({ title: expect.stringMatching(/sincronização inicial concluída/i) }),
+    );
+
+    await waitFor(() => {
+      expect(fromMock).toHaveBeenCalledWith("activity_feed");
+    });
+    expect(fromInsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event_type: "sync_finish",
+        title: "Sincronização concluída",
+      }),
     );
   });
 });
