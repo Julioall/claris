@@ -7,15 +7,19 @@ interface PriorityBadgeProps {
   className?: string;
 }
 
-const priorityConfig: Record<TaskPriority, { label: string; className: string }> = {
+const priorityConfig: Record<string, { label: string; className: string }> = {
   baixa: { label: 'Baixa', className: 'priority-baixa bg-muted' },
+  low: { label: 'Baixa', className: 'priority-baixa bg-muted' },
   media: { label: 'Média', className: 'priority-media bg-status-pending-bg' },
+  medium: { label: 'Média', className: 'priority-media bg-status-pending-bg' },
   alta: { label: 'Alta', className: 'priority-alta bg-risk-risco-bg' },
+  high: { label: 'Alta', className: 'priority-alta bg-risk-risco-bg' },
   urgente: { label: 'Urgente', className: 'priority-urgente bg-risk-critico-bg' },
+  urgent: { label: 'Urgente', className: 'priority-urgente bg-risk-critico-bg' },
 };
 
 export function PriorityBadge({ priority, size = 'md', className }: PriorityBadgeProps) {
-  const config = priorityConfig[priority];
+  const config = priorityConfig[priority] ?? priorityConfig.media;
   
   return (
     <span
