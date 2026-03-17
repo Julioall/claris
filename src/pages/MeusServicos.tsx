@@ -285,15 +285,14 @@ export default function MeusServicos() {
     queryKey: ['my-whatsapp-instance'],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await supabase
-        .from('app_service_instances')
+      const { data, error } = await (supabase.from as Function)('app_service_instances')
         .select('*')
         .eq('owner_user_id', user.id)
         .eq('service_type', 'whatsapp')
         .eq('scope', 'personal')
         .maybeSingle();
       if (error) throw error;
-      return data as ServiceInstance | null;
+      return data as unknown as ServiceInstance | null;
     },
     enabled: !!user,
   });
