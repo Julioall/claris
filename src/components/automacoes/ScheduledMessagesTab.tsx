@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, Trash2, CalendarClock, AlertCircle, Pencil } from 'lucide-react';
+import { Plus, Trash2, CalendarClock, AlertCircle, Pencil, MessageCircle, BookOpen } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -52,6 +53,8 @@ interface ScheduledMessageFormValues {
   scheduled_at: string;
   recipient_count?: number;
   notes?: string;
+  channel: 'moodle' | 'whatsapp';
+  whatsapp_instance_id?: string;
 }
 
 function getStatusBadge(status: string) {
@@ -80,6 +83,8 @@ const EMPTY_FORM: ScheduledMessageFormValues = {
   scheduled_at: '',
   recipient_count: undefined,
   notes: '',
+  channel: 'moodle',
+  whatsapp_instance_id: undefined,
 };
 
 export function ScheduledMessagesTab() {
@@ -89,6 +94,33 @@ export function ScheduledMessagesTab() {
   const [editing, setEditing] = useState<ScheduledMessage | null>(null);
   const [form, setForm] = useState<ScheduledMessageFormValues>(EMPTY_FORM);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // Fetch accessible WhatsApp instances for the current user
+  const { data: whatsappInstances = [] } = useQuery({
+    queryKey: ['accessible-whatsapp-instances'],
+    queryFn: async () => {
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from('app_service_instances' as never)
+        .select('id, name, scope, connection_status, is_active, is_blocked, owner_user_id')
+        .eq('service_type', 'whatsapp')
+        .eq('is_active', true)
+        .eq('is_blocked', false)
+        .or(`owner_user_id.eq.${user.id},scope.eq.shared`)
+        .order('scope', { ascending: false }); // personal first
+      if (error) return [];
+      return (data ?? []) as Array<{
+        id: string;
+        name: string;
+        scope: string;
+        connection_status: string;
+        is_active: boolean;
+        is_blocked: boolean;
+        owner_user_id: string | null;
+      }>;
+    },
+    enabled: !!user,
+  });
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['scheduled-messages'],
@@ -195,6 +227,10 @@ export function ScheduledMessagesTab() {
     e.preventDefault();
     if (!form.title.trim() || !form.message_content.trim() || !form.scheduled_at) {
       toast.error('Preencha todos os campos obrigatórios');
+      return;
+    }
+    if (form.channel === 'whatsapp' && !form.whatsapp_instance_id) {
+      toast.error('Selecione uma instância de WhatsApp');
       return;
     }
     if (editing) {
@@ -304,6 +340,71 @@ export function ScheduledMessagesTab() {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="sched-channel">Canal de envio <span className="text-destructive">*</span></Label>
+              <Select
+                value={form.channel}
+                onValueChange={(v: 'moodle' | 'whatsapp') =>
+                  setForm(f => ({ ...f, channel: v, whatsapp_instance_id: undefined }))
+                }
+              >
+                <SelectTrigger id="sched-channel">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="moodle">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="h-4 w-4 text-muted-foreground" />
+                      Moodle
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="whatsapp">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle className="h-4 w-4 text-green-500" />
+                      WhatsApp
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {form.channel === 'whatsapp' && (
+              <div className="space-y-2">
+                <Label htmlFor="sched-instance">Instância de WhatsApp <span className="text-destructive">*</span></Label>
+                {whatsappInstances.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-3 text-center text-sm text-muted-foreground">
+                    Nenhuma instância de WhatsApp disponível.{' '}
+                    <a href="/meus-servicos" className="underline">Configure em Meus Serviços</a>.
+                  </div>
+                ) : (
+                  <Select
+                    value={form.whatsapp_instance_id ?? ''}
+                    onValueChange={(v) => setForm(f => ({ ...f, whatsapp_instance_id: v }))}
+                  >
+                    <SelectTrigger id="sched-instance">
+                      <SelectValue placeholder="Selecione uma instância..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {whatsappInstances.map((inst) => (
+                        <SelectItem key={inst.id} value={inst.id}>
+                          <div className="flex items-center gap-2">
+                            <MessageCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                            <span>{inst.name}</span>
+                            {inst.scope === 'shared' && (
+                              <Badge variant="outline" className="text-xs ml-1">Compartilhada</Badge>
+                            )}
+                            {inst.connection_status !== 'connected' && (
+                              <Badge variant="secondary" className="text-xs ml-1">Desconectada</Badge>
+                            )}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="sched-title">Título <span className="text-destructive">*</span></Label>
               <Input
