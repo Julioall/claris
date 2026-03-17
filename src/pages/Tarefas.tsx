@@ -105,7 +105,7 @@ export default function Tarefas() {
             <SelectValue placeholder="Prioridade" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Todas prioridades</SelectItem>
+            <SelectItem value="all">Todas</SelectItem>
             <SelectItem value="low">Baixa</SelectItem>
             <SelectItem value="medium">Média</SelectItem>
             <SelectItem value="high">Alta</SelectItem>
