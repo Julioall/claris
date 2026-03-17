@@ -465,7 +465,7 @@ export default function Agenda() {
                   onChange={(e) => setForm((f) => ({ ...f, start_date: e.target.value }))}
                 />
               </div>
-              <div className="space-y-1.5 flex items-end">
+              <div className="flex items-end">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="ev-allday"

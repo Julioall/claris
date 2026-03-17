@@ -3,6 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { InternalTask, InternalTaskStatus, InternalTaskPriority, InternalTaskComment } from '@/types';
 
+// These tables are added by migration 20260317010000_add_internal_tasks.sql
+// and are not yet present in the auto-generated Supabase types.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = supabase as any;
+
 interface InternalTaskRow {
   id: string;
   title: string;
@@ -64,22 +69,15 @@ export function useTasksData() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (q: string) => {
-            or: (q: string) => {
-              order: (col: string, opts: { ascending: boolean }) => Promise<{ data: InternalTaskRow[] | null; error: Error | null }>;
-            };
-          };
-        };
-      }).from('internal_tasks')
+      const { data, error: fetchError } = await db
+        .from('internal_tasks')
         .select('*')
         .or(`created_by_user_id.eq.${user.id},assigned_to_user_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
 
-      setTasks((data ?? []).map(rowToTask));
+      setTasks(((data ?? []) as InternalTaskRow[]).map(rowToTask));
     } catch (err) {
       console.error('Error fetching internal tasks:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar tarefas');
@@ -99,20 +97,18 @@ export function useTasksData() {
     if (!user) return false;
 
     try {
-      const { error: insertError } = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (row: Record<string, unknown>) => Promise<{ error: Error | null }>;
-        };
-      }).from('internal_tasks').insert({
-        title: payload.title,
-        description: payload.description ?? null,
-        status: 'backlog',
-        priority: payload.priority ?? 'media',
-        category: payload.category ?? null,
-        created_by_user_id: user.id,
-        assigned_to_user_id: payload.assigned_to_user_id ?? null,
-        due_date: payload.due_date ?? null,
-      });
+      const { error: insertError } = await db
+        .from('internal_tasks')
+        .insert({
+          title: payload.title,
+          description: payload.description ?? null,
+          status: 'backlog',
+          priority: payload.priority ?? 'media',
+          category: payload.category ?? null,
+          created_by_user_id: user.id,
+          assigned_to_user_id: payload.assigned_to_user_id ?? null,
+          due_date: payload.due_date ?? null,
+        });
 
       if (insertError) throw insertError;
 
@@ -126,13 +122,8 @@ export function useTasksData() {
 
   const updateTaskStatus = useCallback(async (taskId: string, status: InternalTaskStatus) => {
     try {
-      const { error: updateError } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (row: Record<string, unknown>) => {
-            eq: (col: string, val: string) => Promise<{ error: Error | null }>;
-          };
-        };
-      }).from('internal_tasks')
+      const { error: updateError } = await db
+        .from('internal_tasks')
         .update({
           status,
           completed_at: status === 'concluida' ? new Date().toISOString() : null,
@@ -151,13 +142,8 @@ export function useTasksData() {
 
   const deleteTask = useCallback(async (taskId: string) => {
     try {
-      const { error: deleteError } = await (supabase as unknown as {
-        from: (table: string) => {
-          delete: () => {
-            eq: (col: string, val: string) => Promise<{ error: Error | null }>;
-          };
-        };
-      }).from('internal_tasks')
+      const { error: deleteError } = await db
+        .from('internal_tasks')
         .delete()
         .eq('id', taskId);
 
@@ -175,15 +161,8 @@ export function useTasksData() {
     if (!user) return null;
 
     try {
-      const { data, error: insertError } = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (row: Record<string, unknown>) => {
-            select: (q: string) => {
-              single: () => Promise<{ data: TaskCommentRow | null; error: Error | null }>;
-            };
-          };
-        };
-      }).from('internal_task_comments')
+      const { data, error: insertError } = await db
+        .from('internal_task_comments')
         .insert({ task_id: taskId, user_id: user.id, content })
         .select('id, task_id, user_id, content, created_at')
         .single();
@@ -191,12 +170,13 @@ export function useTasksData() {
       if (insertError) throw insertError;
       if (!data) return null;
 
+      const row = data as TaskCommentRow;
       return {
-        id: data.id,
-        task_id: data.task_id,
-        user_id: data.user_id ?? undefined,
-        content: data.content,
-        created_at: data.created_at,
+        id: row.id,
+        task_id: row.task_id,
+        user_id: row.user_id ?? undefined,
+        content: row.content,
+        created_at: row.created_at,
       };
     } catch (err) {
       console.error('Error adding task comment:', err);

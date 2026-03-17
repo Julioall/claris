@@ -3,6 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import type { AgendaEvent, AgendaEventType, AgendaEventStatus, AgendaParticipant } from '@/types';
 
+// These tables are added by migration 20260317020000_add_agenda_events.sql
+// and are not yet present in the auto-generated Supabase types.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const db = supabase as any;
+
 interface AgendaEventRow {
   id: string;
   title: string;
@@ -70,22 +75,15 @@ export function useAgendaData() {
     setError(null);
 
     try {
-      const { data, error: fetchError } = await (supabase as unknown as {
-        from: (table: string) => {
-          select: (q: string) => {
-            eq: (col: string, val: string) => {
-              order: (col: string, opts: { ascending: boolean }) => Promise<{ data: AgendaEventRow[] | null; error: Error | null }>;
-            };
-          };
-        };
-      }).from('agenda_events')
+      const { data, error: fetchError } = await db
+        .from('agenda_events')
         .select('*')
         .eq('created_by_user_id', user.id)
         .order('start_at', { ascending: true });
 
       if (fetchError) throw fetchError;
 
-      setEvents((data ?? []).map(rowToEvent));
+      setEvents(((data ?? []) as AgendaEventRow[]).map(rowToEvent));
     } catch (err) {
       console.error('Error fetching agenda events:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar agenda');
@@ -108,23 +106,21 @@ export function useAgendaData() {
     if (!user) return false;
 
     try {
-      const { error: insertError } = await (supabase as unknown as {
-        from: (table: string) => {
-          insert: (row: Record<string, unknown>) => Promise<{ error: Error | null }>;
-        };
-      }).from('agenda_events').insert({
-        title: payload.title,
-        description: payload.description ?? null,
-        event_type: payload.event_type ?? 'compromisso',
-        start_at: payload.start_at,
-        end_at: payload.end_at ?? null,
-        all_day: payload.all_day ?? false,
-        location: payload.location ?? null,
-        meeting_url: payload.meeting_url ?? null,
-        participants: payload.participants ?? [],
-        created_by_user_id: user.id,
-        status: 'agendado',
-      });
+      const { error: insertError } = await db
+        .from('agenda_events')
+        .insert({
+          title: payload.title,
+          description: payload.description ?? null,
+          event_type: payload.event_type ?? 'compromisso',
+          start_at: payload.start_at,
+          end_at: payload.end_at ?? null,
+          all_day: payload.all_day ?? false,
+          location: payload.location ?? null,
+          meeting_url: payload.meeting_url ?? null,
+          participants: payload.participants ?? [],
+          created_by_user_id: user.id,
+          status: 'agendado',
+        });
 
       if (insertError) throw insertError;
 
@@ -138,13 +134,8 @@ export function useAgendaData() {
 
   const updateEventStatus = useCallback(async (eventId: string, status: AgendaEventStatus) => {
     try {
-      const { error: updateError } = await (supabase as unknown as {
-        from: (table: string) => {
-          update: (row: Record<string, unknown>) => {
-            eq: (col: string, val: string) => Promise<{ error: Error | null }>;
-          };
-        };
-      }).from('agenda_events')
+      const { error: updateError } = await db
+        .from('agenda_events')
         .update({ status })
         .eq('id', eventId);
 
@@ -160,13 +151,8 @@ export function useAgendaData() {
 
   const deleteEvent = useCallback(async (eventId: string) => {
     try {
-      const { error: deleteError } = await (supabase as unknown as {
-        from: (table: string) => {
-          delete: () => {
-            eq: (col: string, val: string) => Promise<{ error: Error | null }>;
-          };
-        };
-      }).from('agenda_events')
+      const { error: deleteError } = await db
+        .from('agenda_events')
         .delete()
         .eq('id', eventId);
 
