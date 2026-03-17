@@ -13,6 +13,7 @@ import { PriorityList } from '@/components/dashboard/PriorityList';
 import { CourseOverview } from '@/components/dashboard/CourseOverview';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { ActivitiesToReview } from '@/components/dashboard/ActivitiesToReview';
+import { ClarisSuggestions } from '@/components/dashboard/ClarisSuggestions';
 import { useDashboardData } from '@/hooks/useDashboardData';
 import { useCoursesData } from '@/hooks/useCoursesData';
 
@@ -92,6 +93,9 @@ export default function Dashboard() {
 
       {/* Weekly Indicators */}
       <WeeklyIndicators summary={summary || defaultSummary} />
+
+      {/* Claris IA proactive suggestions panel */}
+      <ClarisSuggestions />
 
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-2">

@@ -672,4 +672,220 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
       },
     },
   },
+  // -------------------------------------------------------------------------
+  // Phase 2 – Academic context reading tools
+  // -------------------------------------------------------------------------
+  {
+    type: 'function',
+    function: {
+      name: 'get_student_summary',
+      description:
+        'Retorna resumo acadêmico completo de um aluno: risco atual, motivos, atividades atrasadas, nota média, último acesso e tarefas abertas. Informe student_id (preferível) ou student_name. Use quando precisar analisar um aluno específico em profundidade.',
+      parameters: {
+        type: 'object',
+        properties: {
+          student_name: {
+            type: 'string',
+            description: 'Nome ou parte do nome do aluno. Use quando não tiver o student_id.',
+          },
+          student_id: {
+            type: 'string',
+            description: 'ID do aluno (preferível ao nome para evitar ambiguidade).',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_grade_risk',
+      description:
+        'Lista alunos com risco de reprovação por nota: notas abaixo do limiar mínimo, tendência de queda ou sem nota lançada. Use para priorizar intervenções de recuperação.',
+      parameters: {
+        type: 'object',
+        properties: {
+          threshold_percentage: {
+            type: 'number',
+            description: 'Percentual mínimo de aprovação (padrão: 60). Alunos abaixo disso aparecem no resultado.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de alunos retornados. Padrão: 10. Máximo: 50.',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_engagement_signals',
+      description:
+        'Retorna sinais de desengajamento acadêmico: alunos sem acesso recente, sem entrega recente ou com queda na participação. Use para identificar alunos em risco de evasão antes que apareçam como crítico.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days_without_access: {
+            type: 'integer',
+            description: 'Dias sem acesso para considerar desengajado. Padrão: 7.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Máximo de alunos retornados. Padrão: 10. Máximo: 50.',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_recent_attendance_risk',
+      description:
+        'Retorna alunos com alto índice de ausências registradas. Use para identificar risco por frequência antes de gerar intervenção.',
+      parameters: {
+        type: 'object',
+        properties: {
+          min_absences: {
+            type: 'integer',
+            description: 'Mínimo de ausências para aparecer no resultado. Padrão: 2.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Máximo de alunos retornados. Padrão: 10. Máximo: 50.',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'get_upcoming_calendar_commitments',
+      description:
+        'Lista os próximos compromissos da agenda do tutor/monitor nos próximos dias (web aulas, alinhamentos, entregas). Use para contextualizar a semana e sugerir preparativos.',
+      parameters: {
+        type: 'object',
+        properties: {
+          days_ahead: {
+            type: 'integer',
+            description: 'Quantos dias à frente verificar. Padrão: 7. Máximo: 30.',
+            minimum: 1,
+            maximum: 30,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  // -------------------------------------------------------------------------
+  // Phase 3 – Routine automation and smart checklists
+  // -------------------------------------------------------------------------
+  {
+    type: 'function',
+    function: {
+      name: 'get_tutor_routine_suggestions',
+      description:
+        'Retorna sugestões proativas baseadas na rotina do tutor/monitor e no dia da semana atual: abertura de semana na segunda, verificação de chats e fóruns, correções pendentes, contato com alunos em risco, preparativos para web aula, etc. Use para gerar a lista de próximos passos do dia.',
+      parameters: {
+        type: 'object',
+        properties: {
+          include_academic_context: {
+            type: 'boolean',
+            description: 'Se true, cruza com dados acadêmicos reais do sistema. Padrão: true.',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'generate_weekly_checklist',
+      description:
+        'Gera um checklist semanal estruturado para o tutor/monitor com base em: alunos em risco, atividades a corrigir, mensagens a responder, alinhamentos agendados e encerramento de UCs. Ideal para início de semana ou planejamento.',
+      parameters: {
+        type: 'object',
+        properties: {
+          week_context: {
+            type: 'string',
+            enum: ['current', 'next'],
+            description: 'Semana de referência. Padrão: current (semana atual).',
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'save_suggestion',
+      description:
+        'Persiste uma sugestão proativa gerada pela Claris IA no painel do tutor/monitor (aparece como card na home). Use após analisar contexto e identificar uma ação recomendada que o tutor pode aceitar ou dispensar depois.',
+      parameters: {
+        type: 'object',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['task_followup', 'weekly_message', 'correction_followup', 'alignment_event', 'recovery_followup', 'grade_risk', 'attendance_risk', 'engagement_risk', 'uc_closing', 'routine_reminder', 'custom'],
+            description: 'Tipo da sugestão.',
+          },
+          title: {
+            type: 'string',
+            description: 'Título curto e objetivo da sugestão.',
+          },
+          body: {
+            type: 'string',
+            description: 'Descrição detalhada da sugestão com contexto e ação recomendada.',
+          },
+          priority: {
+            type: 'string',
+            enum: ['low', 'medium', 'high', 'urgent'],
+            description: 'Prioridade da sugestão. Padrão: medium.',
+          },
+          entity_type: {
+            type: 'string',
+            enum: ['student', 'course', 'uc', 'class', 'custom'],
+            description: 'Tipo da entidade relacionada.',
+          },
+          entity_id: {
+            type: 'string',
+            description: 'ID da entidade relacionada.',
+          },
+          entity_name: {
+            type: 'string',
+            description: 'Nome legível da entidade (ex.: nome do aluno, nome do curso).',
+          },
+          action_type: {
+            type: 'string',
+            enum: ['create_task', 'create_event', 'open_chat'],
+            description: 'Tipo de ação quando o tutor aceitar a sugestão.',
+          },
+          action_payload: {
+            type: 'object',
+            description: 'Dados para executar a ação (ex.: campos de tarefa ou evento a criar).',
+            properties: {},
+          },
+          expires_in_hours: {
+            type: 'integer',
+            description: 'Horas até a sugestão expirar. Padrão: 48.',
+          },
+        },
+        required: ['type', 'title', 'body'],
+      },
+    },
+  },
 ]

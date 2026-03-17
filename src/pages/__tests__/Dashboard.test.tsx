@@ -45,6 +45,10 @@ vi.mock("@/components/dashboard/ActivityFeed", () => ({
   ),
 }));
 
+vi.mock("@/components/dashboard/ClarisSuggestions", () => ({
+  ClarisSuggestions: () => <div data-testid="claris-suggestions" />,
+}));
+
 describe("Dashboard page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
