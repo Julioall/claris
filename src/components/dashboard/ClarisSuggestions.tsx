@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Brain, CheckCircle2, X, ChevronRight, Lightbulb, AlertTriangle, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Brain, CheckCircle2, X, ChevronRight, Lightbulb, AlertTriangle, Clock, ChevronDown, ChevronUp, Zap, MessageSquare, Calendar, ListTodo, GraduationCap, Settings2, LayoutDashboard } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useClarisSuggestions, type ClarisSuggestion } from '@/hooks/useClarisSuggestions';
+import { useClarisSuggestions, type ClarisSuggestion, type TriggerEngine } from '@/hooks/useClarisSuggestions';
 
 const PRIORITY_STYLES: Record<string, { badge: string; border: string }> = {
   urgent: { badge: 'bg-risk-critico/15 text-risk-critico border-risk-critico/30', border: 'border-l-risk-critico' },
@@ -25,6 +25,7 @@ const TYPE_ICONS: Record<string, typeof AlertTriangle> = {
   grade_risk: AlertTriangle,
   attendance_risk: AlertTriangle,
   engagement_risk: AlertTriangle,
+  student_no_activity: AlertTriangle,
   weekly_message: Lightbulb,
   correction_followup: Clock,
   alignment_event: Clock,
@@ -32,6 +33,49 @@ const TYPE_ICONS: Record<string, typeof AlertTriangle> = {
   uc_closing: Clock,
   routine_reminder: Lightbulb,
   custom: Lightbulb,
+  // communication engine
+  unanswered_message: MessageSquare,
+  interrupted_contact: MessageSquare,
+  channel_ineffective: MessageSquare,
+  // agenda engine
+  event_no_prep: Calendar,
+  schedule_conflict: Calendar,
+  recurring_event_manual: Calendar,
+  // tasks engine
+  overdue_task: ListTodo,
+  stalled_task: ListTodo,
+  task_no_context: ListTodo,
+  // academic engine
+  class_no_followup: GraduationCap,
+  uc_no_update: GraduationCap,
+  // operational engine
+  manual_flow_recurring: Settings2,
+  old_pending: Settings2,
+  interrupted_process: Settings2,
+  // platform usage engine
+  unused_module: LayoutDashboard,
+  repetitive_pattern: LayoutDashboard,
+  unorganized_messages: LayoutDashboard,
+};
+
+const ENGINE_LABELS: Record<TriggerEngine, string> = {
+  communication: 'Comunicação',
+  agenda: 'Agenda',
+  tasks: 'Tarefas',
+  academic: 'Acadêmico',
+  operational: 'Operacional',
+  platform_usage: 'Plataforma',
+  manual: 'Manual',
+};
+
+const ENGINE_ICONS: Record<TriggerEngine, typeof Brain> = {
+  communication: MessageSquare,
+  agenda: Calendar,
+  tasks: ListTodo,
+  academic: GraduationCap,
+  operational: Settings2,
+  platform_usage: LayoutDashboard,
+  manual: Brain,
 };
 
 interface SuggestionCardProps {
@@ -41,8 +85,14 @@ interface SuggestionCardProps {
 }
 
 function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const styles = PRIORITY_STYLES[suggestion.priority] ?? PRIORITY_STYLES.medium;
   const Icon = TYPE_ICONS[suggestion.type] ?? Lightbulb;
+  const hasDetails = suggestion.reason || suggestion.analysis || suggestion.expected_impact;
+
+  const engine = suggestion.trigger_engine;
+  const EngineIcon = engine ? ENGINE_ICONS[engine] : Brain;
+  const engineLabel = engine ? ENGINE_LABELS[engine] : null;
 
   return (
     <div
@@ -60,20 +110,62 @@ function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps
           <button
             onClick={() => onDismiss(suggestion.id)}
             className="shrink-0 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-            aria-label="Dispensar sugestão"
+            aria-label="Recusar sugestão"
           >
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
         <p className="text-xs text-muted-foreground line-clamp-2">{suggestion.body}</p>
-        <div className="flex items-center gap-2 pt-0.5">
+        <div className="flex items-center gap-2 pt-0.5 flex-wrap">
           <Badge variant="outline" className={cn('text-xs py-0', styles.badge)}>
             {PRIORITY_LABELS[suggestion.priority] ?? suggestion.priority}
           </Badge>
+          {engineLabel && (
+            <Badge variant="outline" className="text-xs py-0 gap-1 text-muted-foreground">
+              <EngineIcon className="h-2.5 w-2.5" />
+              {engineLabel}
+            </Badge>
+          )}
           {suggestion.entity_name && (
             <span className="text-xs text-muted-foreground truncate">· {suggestion.entity_name}</span>
           )}
         </div>
+
+        {/* Expandable details */}
+        {hasDetails && (
+          <div>
+            <button
+              onClick={() => setDetailsOpen((o) => !o)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+            >
+              {detailsOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {detailsOpen ? 'Ocultar análise' : 'Ver análise'}
+            </button>
+            {detailsOpen && (
+              <div className="mt-2 space-y-1.5 text-xs text-muted-foreground border-t pt-2">
+                {suggestion.reason && (
+                  <div>
+                    <span className="font-medium text-foreground/70">Motivo: </span>
+                    {suggestion.reason}
+                  </div>
+                )}
+                {suggestion.analysis && (
+                  <div>
+                    <span className="font-medium text-foreground/70">Análise: </span>
+                    {suggestion.analysis}
+                  </div>
+                )}
+                {suggestion.expected_impact && (
+                  <div>
+                    <span className="font-medium text-foreground/70">Impacto esperado: </span>
+                    {suggestion.expected_impact}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {suggestion.action_type && (
           <Button
             size="sm"
@@ -93,8 +185,13 @@ function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps
 }
 
 export function ClarisSuggestions() {
-  const { suggestions, isLoading, acceptSuggestion, dismissSuggestion } = useClarisSuggestions();
+  const { suggestions, isLoading, acceptSuggestion, dismissSuggestion, triggerProactiveGeneration } = useClarisSuggestions();
   const [expanded, setExpanded] = useState(true);
+
+  // Trigger proactive generation on mount (rate-limited inside the hook)
+  useEffect(() => {
+    triggerProactiveGeneration();
+  }, [triggerProactiveGeneration]);
 
   if (isLoading || suggestions.length === 0) return null;
 
@@ -109,14 +206,25 @@ export function ClarisSuggestions() {
               {suggestions.length}
             </Badge>
           </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-muted-foreground"
-            onClick={() => setExpanded((e) => !e)}
-          >
-            {expanded ? 'Ocultar' : 'Ver todas'}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground gap-1"
+              onClick={() => triggerProactiveGeneration()}
+              title="Atualizar sugestões"
+            >
+              <Zap className="h-3 w-3" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs text-muted-foreground"
+              onClick={() => setExpanded((e) => !e)}
+            >
+              {expanded ? 'Ocultar' : 'Ver todas'}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       {expanded && (

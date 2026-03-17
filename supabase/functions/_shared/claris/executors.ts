@@ -68,6 +68,10 @@ export interface ToolCallArgs {
   include_academic_context?: boolean
   week_context?: 'current' | 'next'
   body?: string
+  reason?: string
+  analysis?: string
+  expected_impact?: string
+  trigger_engine?: 'communication' | 'agenda' | 'tasks' | 'academic' | 'operational' | 'platform_usage' | 'manual'
   action_type?: 'create_task' | 'create_event' | 'open_chat'
   action_payload?: Record<string, unknown>
   expires_in_hours?: number
@@ -154,6 +158,9 @@ export async function executeToolCall(
       return generateWeeklyChecklist(userId, args, supabase)
     case 'save_suggestion':
       return saveSuggestion(userId, args, supabase)
+    // Phase 4 – Proactive intelligence engines
+    case 'run_proactive_engines':
+      return runProactiveEngines(userId, supabase)
     default:
       return { error: `Unknown tool: ${toolName}` }
   }
@@ -2213,6 +2220,7 @@ async function saveSuggestion(userId: string, args: ToolCallArgs, supabase: Supa
     body,
     priority: args.priority ?? 'medium',
     status: 'pending',
+    trigger_engine: args.trigger_engine ?? 'manual',
     expires_at: expiresAt,
   }
 
@@ -2221,6 +2229,9 @@ async function saveSuggestion(userId: string, args: ToolCallArgs, supabase: Supa
   if (args.entity_name) insert.entity_name = args.entity_name
   if (args.action_type) insert.action_type = args.action_type
   if (args.action_payload) insert.action_payload = args.action_payload
+  if (args.reason) insert.reason = args.reason
+  if (args.analysis) insert.analysis = args.analysis
+  if (args.expected_impact) insert.expected_impact = args.expected_impact
 
   const { data, error } = await supabase
     .from('claris_suggestions')
@@ -2237,5 +2248,23 @@ async function saveSuggestion(userId: string, args: ToolCallArgs, supabase: Supa
     saved: true,
     suggestion: data,
     message: 'Sugestão salva e aparecerá no painel do tutor.',
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Delegates to the generate-proactive-suggestions edge function service.
+ * Re-uses the same logic that the standalone edge function uses so the
+ * chat agent can also trigger proactive engines on demand.
+ */
+async function runProactiveEngines(userId: string, supabase: Supabase) {
+  // Import lazily to avoid circular deps — the generate-proactive-suggestions
+  // function lives in a sibling directory and shares the same Deno runtime.
+  const { runEngines } = await import('../../generate-proactive-suggestions/service.ts')
+  const result = await runEngines(userId, supabase)
+  return {
+    success: true,
+    ...result,
   }
 }

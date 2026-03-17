@@ -832,15 +832,38 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'run_proactive_engines',
+      description:
+        'Executa os 6 motores de sugestão proativa da Claris IA (comunicação, agenda, tarefas, acadêmico, operacional, plataforma) e gera sugestões automaticamente com base nos dados reais da plataforma. Use quando o usuário pedir para atualizar sugestões, ou ao identificar que há sinais não capturados ainda. As sugestões são persistidas no painel do tutor.',
+      parameters: {
+        type: 'object',
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'save_suggestion',
       description:
-        'Persiste uma sugestão proativa gerada pela Claris IA no painel do tutor/monitor (aparece como card na home). Use após analisar contexto e identificar uma ação recomendada que o tutor pode aceitar ou dispensar depois.',
+        'Persiste uma sugestão proativa gerada pela Claris IA no painel do tutor/monitor (aparece como card na home). Use após analisar contexto e identificar uma ação recomendada que o tutor pode aceitar ou dispensar depois. Inclua sempre reason, analysis e expected_impact para fornecer contexto completo.',
       parameters: {
         type: 'object',
         properties: {
           type: {
             type: 'string',
-            enum: ['task_followup', 'weekly_message', 'correction_followup', 'alignment_event', 'recovery_followup', 'grade_risk', 'attendance_risk', 'engagement_risk', 'uc_closing', 'routine_reminder', 'custom'],
+            enum: [
+              'task_followup', 'weekly_message', 'correction_followup', 'alignment_event',
+              'recovery_followup', 'grade_risk', 'attendance_risk', 'engagement_risk',
+              'uc_closing', 'routine_reminder', 'custom',
+              'unanswered_message', 'interrupted_contact', 'channel_ineffective',
+              'event_no_prep', 'schedule_conflict', 'recurring_event_manual',
+              'overdue_task', 'stalled_task', 'task_no_context',
+              'student_no_activity', 'class_no_followup', 'uc_no_update',
+              'manual_flow_recurring', 'old_pending', 'interrupted_process',
+              'unused_module', 'repetitive_pattern', 'unorganized_messages',
+            ],
             description: 'Tipo da sugestão.',
           },
           title: {
@@ -850,6 +873,23 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           body: {
             type: 'string',
             description: 'Descrição detalhada da sugestão com contexto e ação recomendada.',
+          },
+          reason: {
+            type: 'string',
+            description: 'Motivo objetivo que gerou esta sugestão (ex.: "Aluno em risco crítico sem contato há 30 dias").',
+          },
+          analysis: {
+            type: 'string',
+            description: 'Análise contextual que fundamenta a sugestão, cruzando sinais de dados da plataforma.',
+          },
+          expected_impact: {
+            type: 'string',
+            description: 'Impacto esperado se o tutor aceitar e executar a ação sugerida.',
+          },
+          trigger_engine: {
+            type: 'string',
+            enum: ['communication', 'agenda', 'tasks', 'academic', 'operational', 'platform_usage', 'manual'],
+            description: 'Motor de detecção que gerou esta sugestão. Use "manual" quando gerado diretamente pelo chat.',
           },
           priority: {
             type: 'string',
