@@ -725,4 +725,63 @@ describe('FloatingClarisChat', () => {
     expect(confirmSpy).toHaveBeenCalledTimes(1);
     confirmSpy.mockRestore();
   });
+
+  it('shows unavailability as a banner, not a chat message bubble', async () => {
+    setClarisAvailability('not_configured');
+    renderFloatingClarisChat();
+
+    await userEvent.click(screen.getByRole('button', { name: /abrir chat da claris ia/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/aguardando o administrador do site me configurar/i)).toBeInTheDocument();
+    });
+
+    // The unavailability text must NOT be inside the message list (not a chat bubble)
+    const messageList = screen.getByTestId('message-list');
+    expect(messageList).not.toHaveTextContent(/aguardando o administrador do site me configurar/i);
+  });
+
+  it('does not duplicate unavailability notice when the page variant remounts', async () => {
+    setClarisAvailability('not_configured');
+
+    const { unmount } = render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <FloatingClarisChat variant="page" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/aguardando o administrador do site me configurar/i)).toHaveLength(1);
+    });
+
+    unmount();
+
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <FloatingClarisChat variant="page" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/aguardando o administrador do site me configurar/i)).toHaveLength(1);
+    });
+  });
+
+  it('does not persist unavailability notice to localStorage', async () => {
+    setClarisAvailability('not_configured');
+
+    render(
+      <MemoryRouter future={ROUTER_FUTURE}>
+        <FloatingClarisChat variant="page" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/aguardando o administrador do site me configurar/i)).toBeInTheDocument();
+    });
+
+    const stored = localStorage.getItem(HISTORY_STORAGE_KEY);
+    const history = stored ? (JSON.parse(stored) as Array<{ role: string; content: string }>) : [];
+    expect(history).toHaveLength(0);
+  });
 });

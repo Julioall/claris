@@ -478,4 +478,37 @@ describe("AuthContext", () => {
       }),
     );
   });
+
+  it("clears claris chat history from localStorage on logout", async () => {
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        user: { id: "u-logout", full_name: "Tutor", moodle_user_id: "20", last_sync: null },
+        moodleToken: "token-x",
+        moodleUserId: 20,
+        session: { access_token: "access", refresh_token: "refresh" },
+      },
+      error: null,
+    });
+
+    render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => expect(authRef?.isLoading).toBe(false));
+
+    await act(async () => {
+      await authRef!.login("tutor", "pass", "https://moodle.local");
+    });
+
+    // Simulate stored chat history for this user
+    localStorage.setItem("claris_chat_history:u-logout", JSON.stringify([{ role: "user", content: "Olá" }]));
+
+    await act(async () => {
+      await authRef!.logout();
+    });
+
+    expect(localStorage.getItem("claris_chat_history:u-logout")).toBeNull();
+  });
 });
