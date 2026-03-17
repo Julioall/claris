@@ -99,7 +99,7 @@ Secrets necessarios no GitHub Actions para esse deploy remoto, configurados no *
 
 O ambiente `supabase` e referenciado diretamente pelo job de deploy (`environment: supabase`). Nao e necessario manter esses secrets no ambiente `github-pages`, que e usado exclusivamente pelo job de publicacao no GitHub Pages.
 
-O workflow resolve automaticamente o projeto remoto a partir de `VITE_SUPABASE_PROJECT_ID` em `.env`.
+O workflow resolve automaticamente o projeto remoto a partir do secret `SUPABASE_PROJECT_ID` configurado no ambiente `supabase` (veja a secao [Variaveis de Ambiente GitHub Actions / Pages](#variaveis-de-ambiente-github-actions--pages) abaixo).
 
 Tambem e possivel disparar manualmente o deploy remoto via `workflow_dispatch` no workflow [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml).
 
@@ -138,6 +138,36 @@ Variáveis opcionais:
 ```bash
 docker compose down
 ```
+
+## Variaveis de Ambiente GitHub Actions / Pages
+
+Os valores do Supabase usados no build do Vite (`VITE_SUPABASE_*`) **nao devem ser commitados no repositorio**. Configure-os como **secrets** no ambiente `supabase` do GitHub para que os workflows de build e deploy os utilizem automaticamente.
+
+### Onde configurar
+
+Todos os secrets abaixo devem ser adicionados em **Settings → Environments → supabase → Environment secrets**:
+
+| Secret | Descricao |
+|---|---|
+| `SUPABASE_PROJECT_ID` | ID do projeto Supabase (ex.: `mmddjuiemvywwqspjovg`) |
+| `SUPABASE_PUBLISHABLE_KEY` | Chave publica (anon key) do Supabase |
+| `SUPABASE_URL` | URL do projeto Supabase (ex.: `https://<project-id>.supabase.co`) |
+| `SUPABASE_ACCESS_TOKEN` | Token de acesso para deploy via CLI |
+| `SUPABASE_PASSWORD` | Senha do banco de dados Supabase |
+
+> O ambiente `supabase` e usado tanto pelo job de **build/Pages** (`ci.yml`) quanto pelo job de **deploy remoto** (`supabase-deploy.yml`). Os secrets sao injetados como variaveis de ambiente com o prefixo `VITE_` necessario para o Vite durante o build.
+
+### Desenvolvimento local
+
+Para rodar o projeto localmente, copie `.env.example` para `.env` e preencha com seus valores:
+
+```bash
+cp .env.example .env
+```
+
+O arquivo `.env` esta no `.gitignore` e **nunca deve ser commitado**.
+
+---
 
 ## CI/CD
 
@@ -239,5 +269,4 @@ permissions:
 
 ## Observacoes
 
-- O `.env` do Lovable pode permanecer no repositorio; o Compose nao depende dele para subir local.
-- `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321`.
+- `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321` para o ambiente local.

@@ -12,6 +12,10 @@ export default defineConfig({
     testTimeout: 15000,
     hookTimeout: 15000,
     maxWorkers: 4,
+    env: {
+      VITE_SUPABASE_URL: "https://test.supabase.co",
+      VITE_SUPABASE_PUBLISHABLE_KEY: "test-anon-key",
+    },
   },
   resolve: {
     alias: { "@": path.resolve(__dirname, "./src") },
