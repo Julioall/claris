@@ -87,7 +87,7 @@ Secrets necessarios no GitHub Actions para esse deploy remoto, configurados no *
 
 O ambiente `supabase` e referenciado diretamente pelo job de deploy (`environment: supabase`). Nao e necessario manter esses secrets no ambiente `github-pages`, que e usado exclusivamente pelo job de publicacao no GitHub Pages.
 
-O workflow resolve automaticamente o projeto remoto a partir de `VITE_SUPABASE_PROJECT_ID` em `.env`.
+O workflow resolve automaticamente o projeto remoto a partir da variavel `VITE_SUPABASE_PROJECT_ID` configurada no GitHub (veja a secao [Variaveis de Ambiente GitHub Actions / Pages](#variaveis-de-ambiente-github-actions--pages) abaixo).
 
 Tambem e possivel disparar manualmente o deploy remoto via `workflow_dispatch` no workflow [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml).
 
@@ -126,6 +126,45 @@ Variáveis opcionais:
 ```bash
 docker compose down
 ```
+
+## Variaveis de Ambiente GitHub Actions / Pages
+
+As variaveis publicas do Vite (`VITE_SUPABASE_*`) **nao devem ser commitadas no repositorio**. Configure-as como **Variables** (nao Secrets) no GitHub para que os workflows de build e deploy do GitHub Pages as utilizem automaticamente.
+
+### Onde configurar
+
+#### Variaveis de repositorio (para todos os workflows)
+
+1. Acesse **Settings → Secrets and variables → Actions**.
+2. Clique na aba **Variables**.
+3. Clique em **New repository variable** e adicione cada uma das variaveis abaixo com o valor correto do seu projeto Supabase:
+
+| Variavel | Descricao |
+|---|---|
+| `VITE_SUPABASE_PROJECT_ID` | ID do projeto Supabase (ex.: `mmddjuiemvywwqspjovg`) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Chave publica (anon key) do Supabase |
+| `VITE_SUPABASE_URL` | URL do projeto Supabase (ex.: `https://<project-id>.supabase.co`) |
+
+#### Variaveis de ambiente (`github-pages`)
+
+Se preferir isolar as variaveis no ambiente de deploy do Pages:
+
+1. Acesse **Settings → Environments → github-pages**.
+2. Em **Environment variables**, adicione as mesmas tres variaveis acima.
+
+> Variaveis de ambiente sobrescrevem variaveis de repositorio para jobs que usam aquele ambiente.
+
+### Desenvolvimento local
+
+Para rodar o projeto localmente, copie `.env.example` para `.env` e preencha com seus valores:
+
+```bash
+cp .env.example .env
+```
+
+O arquivo `.env` esta no `.gitignore` e **nunca deve ser commitado**.
+
+---
 
 ## CI/CD
 
@@ -227,5 +266,4 @@ permissions:
 
 ## Observacoes
 
-- O `.env` do Lovable pode permanecer no repositorio; o Compose nao depende dele para subir local.
-- `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321`.
+- `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321` para o ambiente local.

@@ -27,6 +27,7 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets['SUPABASE_ACCESS_TOKEN'] }}
       SUPABASE_DB_PASSWORD: ${{ secrets['SUPABASE_PASSWORD'] }}
+      VITE_SUPABASE_PROJECT_ID: ${{ vars.VITE_SUPABASE_PROJECT_ID }}
 
     steps:
       - name: Checkout repository
@@ -55,10 +56,10 @@ jobs:
       - name: Resolve Supabase project ref
         shell: bash
         run: |
-          project_ref="$(grep '^VITE_SUPABASE_PROJECT_ID=' .env | cut -d '=' -f2- | tr -d '"' | tr -d "'")"
+          project_ref="$VITE_SUPABASE_PROJECT_ID"
 
           if [ -z "$project_ref" ]; then
-            echo "::error::VITE_SUPABASE_PROJECT_ID nao foi encontrado em .env"
+            echo "::error::Configure a variavel VITE_SUPABASE_PROJECT_ID em Settings → Secrets and variables → Actions → Variables."
             exit 1
           fi
 
