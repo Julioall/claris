@@ -112,6 +112,77 @@ export interface WeeklySummary {
   new_at_risk_this_week: number;
 }
 
+// ── Tasks module ─────────────────────────────────────────────
+export type TaskStatus = 'todo' | 'in_progress' | 'done';
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent';
+
+export interface Tag {
+  id: string;
+  label: string;
+  prefix?: string | null;
+  entity_id?: string | null;
+  entity_type?: string | null;
+  color?: string | null;
+  created_by?: string | null;
+  created_at: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  assigned_to?: string | null;
+  created_by?: string | null;
+  due_date?: string | null;
+  project_id?: string | null;
+  created_at: string;
+  updated_at: string;
+  tags?: Tag[];
+}
+
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  author_id?: string | null;
+  comment: string;
+  created_at: string;
+}
+
+export interface TaskHistoryEntry {
+  id: string;
+  task_id: string;
+  field_changed: string;
+  old_value?: string | null;
+  new_value?: string | null;
+  changed_by?: string | null;
+  created_at: string;
+}
+
+// ── Agenda module ─────────────────────────────────────────────
+export type CalendarEventType = 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'other';
+export type ExternalSource = 'manual' | 'teams' | 'future_sync';
+export type SyncStatus = 'none' | 'synced' | 'pending' | 'error';
+
+export interface CalendarEvent {
+  id: string;
+  title: string;
+  description?: string | null;
+  start_at: string;
+  end_at?: string | null;
+  type: CalendarEventType;
+  owner?: string | null;
+  external_source: ExternalSource;
+  external_id?: string | null;
+  external_provider?: string | null;
+  external_event_id?: string | null;
+  sync_status?: SyncStatus | null;
+  last_sync_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Auth context type
 export interface AuthContextType {
   user: User | null;
