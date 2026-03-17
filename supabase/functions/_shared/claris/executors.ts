@@ -23,7 +23,7 @@ import { callMoodleApi } from '../moodle/mod.ts'
 /**
  * Writes an immutable audit row to claris_ai_actions.
  * Failures are swallowed so that a logging error never aborts the actual tool.
- * The arg payload is capped at 4 KB to avoid storing excessive data.
+ * Free-text arg fields are capped individually to avoid storing excessive data.
  */
 async function auditAiAction(
   userId: string,
@@ -33,7 +33,7 @@ async function auditAiAction(
   supabase: Supabase,
 ): Promise<void> {
   try {
-    // Sanitise args: remove potentially large free-text fields
+    // Sanitise args: cap potentially large free-text fields before storing.
     const safeArgs: Partial<ToolCallArgs> = { ...args }
     if (safeArgs.body && safeArgs.body.length > 500) {
       safeArgs.body = safeArgs.body.slice(0, 500) + '…'
@@ -45,13 +45,10 @@ async function auditAiAction(
       safeArgs.message = safeArgs.message.slice(0, 500) + '…'
     }
 
-    const serialised = JSON.stringify(safeArgs)
-    const capped = serialised.length > 4096 ? serialised.slice(0, 4096) + '…}' : serialised
-
     await supabase.from('claris_ai_actions').insert({
       user_id: userId,
       tool_name: toolName,
-      tool_args: JSON.parse(capped) as Record<string, unknown>,
+      tool_args: safeArgs as Record<string, unknown>,
       result_summary: resultSummary.slice(0, 500),
     })
   } catch {
