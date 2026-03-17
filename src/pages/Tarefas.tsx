@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react';
-import { CheckSquare, Plus, ListFilter } from 'lucide-react';
+import { CheckSquare, Plus, ListFilter, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { TaskCard } from '@/components/tasks/TaskCard';
 import { TaskForm } from '@/components/tasks/TaskForm';
@@ -25,18 +27,29 @@ export default function Tarefas() {
   const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } = useTasks();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
+  const [tagSearch, setTagSearch] = useState('');
+  const [aiOnly, setAiOnly] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   const filtered = useMemo(() => {
+    const tagQ = tagSearch.trim().toLowerCase();
     return tasks.filter(t => {
       if (statusFilter !== 'all' && t.status !== statusFilter) return false;
       if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
+      if (aiOnly && !t.suggested_by_ai) return false;
+      if (tagQ) {
+        const allTags = [
+          ...(t.tags ?? []).map(tg => tg.label.toLowerCase()),
+          ...(t.ai_tags ?? []).map(tg => tg.toLowerCase()),
+        ];
+        if (!allTags.some(tg => tg.includes(tagQ))) return false;
+      }
       return true;
     });
-  }, [tasks, statusFilter, priorityFilter]);
+  }, [tasks, statusFilter, priorityFilter, tagSearch, aiOnly]);
 
   const counts = useMemo(() => ({
     all: tasks.length,
@@ -64,6 +77,8 @@ export default function Tarefas() {
   const handleDelete = () => {
     if (deleteId) deleteTask(deleteId, { onSuccess: () => setDeleteId(null) });
   };
+
+  const aiTaskCount = useMemo(() => tasks.filter(t => t.suggested_by_ai).length, [tasks]);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -99,19 +114,48 @@ export default function Tarefas() {
           </TabsList>
         </Tabs>
 
-        <Select value={priorityFilter} onValueChange={v => setPriorityFilter(v as 'all' | TaskPriority)}>
-          <SelectTrigger className="w-40 h-9 text-xs">
-            <ListFilter className="h-3.5 w-3.5 mr-1.5" />
-            <SelectValue placeholder="Prioridade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="low">Baixa</SelectItem>
-            <SelectItem value="medium">Média</SelectItem>
-            <SelectItem value="high">Alta</SelectItem>
-            <SelectItem value="urgent">Urgente</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Tag search */}
+          <div className="relative">
+            <TagIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Filtrar por tag..."
+              value={tagSearch}
+              onChange={e => setTagSearch(e.target.value)}
+              className="pl-8 h-9 w-40 text-xs"
+            />
+          </div>
+
+          {/* AI only toggle */}
+          {aiTaskCount > 0 && (
+            <Button
+              variant={aiOnly ? 'default' : 'outline'}
+              size="sm"
+              className="h-9 gap-1.5 text-xs"
+              onClick={() => setAiOnly(v => !v)}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Claris IA
+              {aiOnly && (
+                <Badge variant="secondary" className="ml-0.5 h-4 min-w-4 px-1 text-[10px]">{aiTaskCount}</Badge>
+              )}
+            </Button>
+          )}
+
+          <Select value={priorityFilter} onValueChange={v => setPriorityFilter(v as 'all' | TaskPriority)}>
+            <SelectTrigger className="w-40 h-9 text-xs">
+              <ListFilter className="h-3.5 w-3.5 mr-1.5" />
+              <SelectValue placeholder="Prioridade" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="low">Baixa</SelectItem>
+              <SelectItem value="medium">Média</SelectItem>
+              <SelectItem value="high">Alta</SelectItem>
+              <SelectItem value="urgent">Urgente</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Task List */}
@@ -123,11 +167,11 @@ export default function Tarefas() {
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <CheckSquare className="h-10 w-10 text-muted-foreground/40 mb-3" />
           <p className="text-sm font-medium text-muted-foreground">
-            {statusFilter === 'all' && priorityFilter === 'all'
+            {statusFilter === 'all' && priorityFilter === 'all' && !tagSearch && !aiOnly
               ? 'Nenhuma tarefa criada ainda'
               : 'Nenhuma tarefa encontrada com esses filtros'}
           </p>
-          {statusFilter === 'all' && priorityFilter === 'all' && (
+          {statusFilter === 'all' && priorityFilter === 'all' && !tagSearch && !aiOnly && (
             <Button variant="outline" size="sm" onClick={openCreate} className="mt-4">
               <Plus className="h-4 w-4 mr-1.5" />
               Criar primeira tarefa

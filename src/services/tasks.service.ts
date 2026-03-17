@@ -10,6 +10,7 @@ export interface CreateTaskInput {
   due_date?: string;
   project_id?: string;
   created_by?: string;
+  tags?: string[];
 }
 
 export interface UpdateTaskInput extends Partial<CreateTaskInput> {
@@ -28,6 +29,11 @@ function toTask(row: any): Task {
     created_by: row.created_by,
     due_date: row.due_date,
     project_id: row.project_id,
+    suggested_by_ai: row.suggested_by_ai ?? false,
+    origin_reason: row.origin_reason ?? null,
+    entity_type: row.entity_type ?? null,
+    entity_id: row.entity_id ?? null,
+    ai_tags: Array.isArray(row.tags) ? (row.tags as string[]) : [],
     created_at: row.created_at,
     updated_at: row.updated_at,
     tags: [],

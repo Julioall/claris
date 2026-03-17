@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, Edit2, Trash2, Tag as TagIcon } from 'lucide-react';
+import { Calendar, Edit2, Trash2, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Task } from '@/types';
 import { format, isPast, parseISO } from 'date-fns';
@@ -31,6 +31,11 @@ interface TaskCardProps {
 export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: TaskCardProps) {
   const isOverdue = task.due_date && task.status !== 'done' && isPast(parseISO(task.due_date));
 
+  // Combine relation tags and AI text tags for display
+  const relationTagLabels = (task.tags ?? []).map(t => t.label);
+  const aiTagLabels = (task.ai_tags ?? []).filter(t => !relationTagLabels.includes(t));
+  const allTagLabels = [...relationTagLabels, ...aiTagLabels];
+
   return (
     <div
       className={cn(
@@ -54,12 +59,24 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
         />
 
         <div className="flex-1 min-w-0">
-          <p className={cn('font-medium text-sm leading-snug', task.status === 'done' && 'line-through text-muted-foreground')}>
-            {task.title}
-          </p>
+          <div className="flex items-center gap-1.5">
+            <p className={cn('font-medium text-sm leading-snug', task.status === 'done' && 'line-through text-muted-foreground')}>
+              {task.title}
+            </p>
+            {task.suggested_by_ai && (
+              <Badge variant="outline" className="text-[10px] px-1 py-0 gap-0.5 text-purple-600 border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800">
+                <Sparkles className="h-2.5 w-2.5" />
+                IA
+              </Badge>
+            )}
+          </div>
 
           {task.description && (
             <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{task.description}</p>
+          )}
+
+          {task.origin_reason && (
+            <p className="mt-0.5 text-xs text-muted-foreground/60 italic line-clamp-1">{task.origin_reason}</p>
           )}
 
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -75,11 +92,11 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
               </span>
             )}
 
-            {task.tags && task.tags.length > 0 && (
+            {allTagLabels.length > 0 && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <TagIcon className="h-3 w-3" />
-                {task.tags.slice(0, 2).map(t => t.label).join(', ')}
-                {task.tags.length > 2 && ` +${task.tags.length - 2}`}
+                {allTagLabels.slice(0, 3).join(', ')}
+                {allTagLabels.length > 3 && ` +${allTagLabels.length - 3}`}
               </span>
             )}
           </div>
