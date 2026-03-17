@@ -51,8 +51,7 @@ export default function AdminDashboard() {
   const { data: ticketCount } = useQuery({
     queryKey: ['admin-ticket-count'],
     queryFn: async () => {
-      const { count } = await supabase
-        .from('support_tickets')
+      const { count } = await (supabase.from as Function)('support_tickets')
         .select('*', { count: 'exact', head: true })
         .eq('status', 'aberto');
       return count ?? 0;
