@@ -89,8 +89,8 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
     if (error) throw error;
 
     const mapped: AttendanceRecord[] = (data || []).map((row: Record<string, unknown>) => ({
-      id: row.id,
-      attendance_date: row.attendance_date,
+      id: row.id as string,
+      attendance_date: row.attendance_date as string,
       status: row.status as AttendanceStatus,
       notes: row.notes,
       student: row.students
