@@ -32,8 +32,7 @@ export default function AdminDashboard() {
   const { data: usageCount } = useQuery({
     queryKey: ['admin-usage-count'],
     queryFn: async () => {
-      const { count } = await supabase
-        .from('app_usage_events')
+      const { count } = await (supabase.from as Function)('app_usage_events')
         .select('*', { count: 'exact', head: true });
       return count ?? 0;
     },
