@@ -161,6 +161,11 @@ export function useClarisSuggestions() {
 
     isRunningRef.current = true;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        isRunningRef.current = false;
+        return;
+      }
       const { error } = await supabase.functions.invoke('generate-proactive-suggestions');
       if (!error) {
         sessionStorage.setItem(PROACTIVE_LAST_RUN_KEY, String(Date.now()));
