@@ -39,6 +39,38 @@ export interface ToolCallArgs {
   student_status?: 'ativo' | 'concluido' | 'suspenso' | 'inativo'
   category?: string
   job_id?: string
+  // Task fields
+  task_id?: string
+  priority?: 'low' | 'medium' | 'high' | 'urgent'
+  due_date?: string
+  entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
+  entity_id?: string
+  origin_reason?: string
+  tags?: string[]
+  // Calendar/event fields
+  event_id?: string
+  start_at?: string
+  end_at?: string
+  all_day?: boolean
+  location?: string
+  type?: 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'other'
+  related_entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
+  related_entity_id?: string
+  ia_source?: 'manual' | 'ia' | 'sugestao_confirmada'
+  start_date?: string
+  end_date?: string
+  // Phase 2 – context reading
+  threshold_percentage?: number
+  days_without_access?: number
+  min_absences?: number
+  days_ahead?: number
+  // Phase 3 – routine and suggestions
+  include_academic_context?: boolean
+  week_context?: 'current' | 'next'
+  body?: string
+  action_type?: 'create_task' | 'create_event' | 'open_chat'
+  action_payload?: Record<string, unknown>
+  expires_in_hours?: number
 }
 
 export interface ToolExecutionContext {
@@ -86,6 +118,42 @@ export async function executeToolCall(
       return confirmBulkMessageSend(userId, args, context, supabase)
     case 'cancel_bulk_message_send':
       return cancelBulkMessageSend(userId, args, supabase)
+    // Task management
+    case 'create_task':
+      return createTask(userId, args, supabase)
+    case 'update_task':
+      return updateTask(userId, args, supabase)
+    case 'change_task_status':
+      return changeTaskStatus(userId, args, supabase)
+    case 'list_tasks':
+      return listTasks(userId, args, supabase)
+    // Calendar / agenda management
+    case 'create_event':
+      return createEvent(userId, args, supabase)
+    case 'update_event':
+      return updateEvent(userId, args, supabase)
+    case 'delete_event':
+      return deleteEvent(userId, args, supabase)
+    case 'list_events':
+      return listEvents(userId, args, supabase)
+    // Phase 2 – Academic context reading
+    case 'get_student_summary':
+      return getStudentSummary(userId, args, supabase)
+    case 'get_grade_risk':
+      return getGradeRisk(userId, args, supabase)
+    case 'get_engagement_signals':
+      return getEngagementSignals(userId, args, supabase)
+    case 'get_recent_attendance_risk':
+      return getRecentAttendanceRisk(userId, args, supabase)
+    case 'get_upcoming_calendar_commitments':
+      return getUpcomingCalendarCommitments(userId, args, supabase)
+    // Phase 3 – Routine automation and smart checklists
+    case 'get_tutor_routine_suggestions':
+      return getTutorRoutineSuggestions(userId, args, supabase)
+    case 'generate_weekly_checklist':
+      return generateWeeklyChecklist(userId, args, supabase)
+    case 'save_suggestion':
+      return saveSuggestion(userId, args, supabase)
     default:
       return { error: `Unknown tool: ${toolName}` }
   }
@@ -1369,4 +1437,805 @@ async function confirmBulkMessageSend(
   }
 
   return runBulkMessageJob(jobId, userId, context.moodleUrl, context.moodleToken, supabase)
+}
+
+// ---------------------------------------------------------------------------
+// Task management executors
+// ---------------------------------------------------------------------------
+
+async function createTask(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const title = (args.title ?? '').trim()
+  if (!title) {
+    return { error: 'Campo title é obrigatório para criar uma tarefa.' }
+  }
+
+  const insert: Record<string, unknown> = {
+    title,
+    created_by: userId,
+    assigned_to: userId,
+    suggested_by_ai: true,
+    status: 'todo',
+    priority: args.priority ?? 'medium',
+  }
+
+  if (args.description) insert.description = args.description.trim()
+  if (args.due_date) insert.due_date = args.due_date
+  if (args.entity_type) insert.entity_type = args.entity_type
+  if (args.entity_id) insert.entity_id = args.entity_id
+  if (args.origin_reason) insert.origin_reason = args.origin_reason.trim()
+  if (args.tags && args.tags.length > 0) insert.tags = args.tags
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert(insert)
+    .select('id, title, status, priority, due_date, origin_reason, entity_type, entity_id, tags')
+    .single()
+
+  if (error || !data) {
+    return { error: 'Falha ao criar tarefa.' }
+  }
+
+  return {
+    success: true,
+    created: true,
+    task: data,
+  }
+}
+
+async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const taskId = (args.task_id ?? '').trim()
+  if (!taskId) {
+    return { error: 'Campo task_id é obrigatório para atualizar uma tarefa.' }
+  }
+
+  const updates: Record<string, unknown> = {}
+  if (args.title) updates.title = args.title.trim()
+  if (args.description !== undefined) updates.description = args.description?.trim() ?? null
+  if (args.priority) updates.priority = args.priority
+  if (args.due_date !== undefined) updates.due_date = args.due_date || null
+  if (args.origin_reason !== undefined) updates.origin_reason = args.origin_reason?.trim() ?? null
+  if (args.tags) updates.tags = args.tags
+
+  if (Object.keys(updates).length === 0) {
+    return { error: 'Nenhum campo informado para atualização.' }
+  }
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .update(updates)
+    .eq('id', taskId)
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .select('id, title, status, priority, due_date, origin_reason, tags')
+    .maybeSingle()
+
+  if (error) {
+    return { error: 'Falha ao atualizar tarefa.' }
+  }
+
+  if (!data) {
+    return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
+  }
+
+  return {
+    success: true,
+    updated: true,
+    task: data,
+  }
+}
+
+async function changeTaskStatus(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const taskId = (args.task_id ?? '').trim()
+  const status = (args.status ?? '').trim()
+
+  if (!taskId) return { error: 'Campo task_id é obrigatório.' }
+  if (!status) return { error: 'Campo status é obrigatório.' }
+
+  const validStatuses = ['todo', 'in_progress', 'done']
+  if (!validStatuses.includes(status)) {
+    return { error: `Status inválido. Use: ${validStatuses.join(', ')}.` }
+  }
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .update({ status })
+    .eq('id', taskId)
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .select('id, title, status')
+    .maybeSingle()
+
+  if (error) {
+    return { error: 'Falha ao alterar status da tarefa.' }
+  }
+
+  if (!data) {
+    return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
+  }
+
+  return {
+    success: true,
+    task_id: data.id,
+    title: data.title,
+    new_status: data.status,
+  }
+}
+
+async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 10, 50)
+
+  let query = supabase
+    .from('tasks')
+    .select('id, title, description, status, priority, due_date, entity_type, entity_id, origin_reason, tags, created_at')
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (args.status) {
+    query = query.eq('status', args.status)
+  } else {
+    query = query.in('status', ['todo', 'in_progress'])
+  }
+
+  if (args.priority) query = query.eq('priority', args.priority)
+  if (args.entity_type) query = query.eq('entity_type', args.entity_type)
+
+  const { data, error } = await query
+  if (error) return { error: 'Falha ao listar tarefas.' }
+
+  return data ?? []
+}
+
+// ---------------------------------------------------------------------------
+// Calendar / agenda executors
+// ---------------------------------------------------------------------------
+
+async function createEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const title = (args.title ?? '').trim()
+  const startAt = (args.start_at ?? '').trim()
+
+  if (!title) return { error: 'Campo title é obrigatório para criar um evento.' }
+  if (!startAt) return { error: 'Campo start_at é obrigatório para criar um evento.' }
+
+  const insert: Record<string, unknown> = {
+    title,
+    start_at: startAt,
+    owner: userId,
+    type: args.type ?? 'manual',
+    external_source: 'manual',
+    all_day: args.all_day ?? false,
+    ia_source: args.ia_source ?? 'ia',
+  }
+
+  if (args.description) insert.description = args.description.trim()
+  if (args.end_at) insert.end_at = args.end_at
+  if (args.location) insert.location = args.location.trim()
+  if (args.related_entity_type) insert.related_entity_type = args.related_entity_type
+  if (args.related_entity_id) insert.related_entity_id = args.related_entity_id
+  if (args.tags && args.tags.length > 0) insert.tags = args.tags
+
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .insert(insert)
+    .select('id, title, start_at, end_at, type, all_day, location, ia_source, related_entity_type, related_entity_id, tags')
+    .single()
+
+  if (error || !data) {
+    return { error: 'Falha ao criar evento.' }
+  }
+
+  return {
+    success: true,
+    created: true,
+    event: data,
+  }
+}
+
+async function updateEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const eventId = (args.event_id ?? '').trim()
+  if (!eventId) return { error: 'Campo event_id é obrigatório para atualizar um evento.' }
+
+  const updates: Record<string, unknown> = {}
+  if (args.title) updates.title = args.title.trim()
+  if (args.description !== undefined) updates.description = args.description?.trim() ?? null
+  if (args.start_at) updates.start_at = args.start_at
+  if (args.end_at !== undefined) updates.end_at = args.end_at || null
+  if (args.all_day !== undefined) updates.all_day = args.all_day
+  if (args.location !== undefined) updates.location = args.location?.trim() ?? null
+  if (args.tags) updates.tags = args.tags
+
+  if (Object.keys(updates).length === 0) {
+    return { error: 'Nenhum campo informado para atualização.' }
+  }
+
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .update(updates)
+    .eq('id', eventId)
+    .eq('owner', userId)
+    .select('id, title, start_at, end_at, type, all_day, location, tags')
+    .maybeSingle()
+
+  if (error) return { error: 'Falha ao atualizar evento.' }
+  if (!data) return { error: 'Evento não encontrado ou sem permissão de acesso.' }
+
+  return {
+    success: true,
+    updated: true,
+    event: data,
+  }
+}
+
+async function deleteEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const eventId = (args.event_id ?? '').trim()
+  if (!eventId) return { error: 'Campo event_id é obrigatório para remover um evento.' }
+
+  const { data: existing } = await supabase
+    .from('calendar_events')
+    .select('id, title')
+    .eq('id', eventId)
+    .eq('owner', userId)
+    .maybeSingle()
+
+  if (!existing) return { error: 'Evento não encontrado ou sem permissão de acesso.' }
+
+  const { error } = await supabase
+    .from('calendar_events')
+    .delete()
+    .eq('id', eventId)
+    .eq('owner', userId)
+
+  if (error) return { error: 'Falha ao remover evento.' }
+
+  return {
+    success: true,
+    deleted: true,
+    event_id: eventId,
+    title: existing.title,
+  }
+}
+
+async function listEvents(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 10, 50)
+  const now = new Date()
+  const startDate = args.start_date ? `${args.start_date}T00:00:00` : now.toISOString()
+  const defaultEnd = new Date(now)
+  defaultEnd.setDate(defaultEnd.getDate() + 7)
+  const endDate = args.end_date ? `${args.end_date}T23:59:59` : defaultEnd.toISOString()
+
+  let query = supabase
+    .from('calendar_events')
+    .select('id, title, description, start_at, end_at, type, all_day, location, related_entity_type, related_entity_id, tags, ia_source')
+    .eq('owner', userId)
+    .gte('start_at', startDate)
+    .lte('start_at', endDate)
+    .order('start_at', { ascending: true })
+    .limit(limit)
+
+  if (args.type) query = query.eq('type', args.type)
+
+  const { data, error } = await query
+  if (error) return { error: 'Falha ao listar eventos.' }
+
+  return data ?? []
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 – Academic context reading executors
+// ---------------------------------------------------------------------------
+
+async function getStudentSummary(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  // Prefer student_id over name lookup
+  const explicitId = (args.student_id ?? '').trim()
+  const nameQuery = (args.student_name ?? '').trim()
+
+  if (!explicitId && !nameQuery) {
+    return { error: 'Informe student_id ou student_name para obter o resumo do aluno.' }
+  }
+
+  const courseIds = await getUserCourseIds(userId, supabase)
+  if (courseIds.length === 0) return { error: 'Nenhum curso vinculado ao tutor.' }
+
+  const studentIds = await getStudentIdsInCourses(courseIds, supabase)
+  if (studentIds.length === 0) return { error: 'Nenhum aluno encontrado nos seus cursos.' }
+
+  let studentQuery = supabase
+    .from('students')
+    .select('id, full_name, email, current_risk_level, risk_reasons, last_access, tags')
+    .in('id', studentIds)
+    .limit(1)
+
+  if (explicitId) {
+    studentQuery = studentQuery.eq('id', explicitId)
+  } else {
+    studentQuery = studentQuery.ilike('full_name', `%${nameQuery}%`)
+  }
+
+  const { data: students } = await studentQuery
+  if (!students || students.length === 0) {
+    return { error: `Aluno não encontrado: "${nameQuery || explicitId}".` }
+  }
+
+  const student = students[0]
+
+  const [activitiesResult, gradesResult, pendingTasksResult, attendanceResult] = await Promise.all([
+    supabase
+      .from('student_activities')
+      .select('activity_name, due_date, submitted_at, completed_at, percentage, is_recovery')
+      .eq('student_id', student.id)
+      .in('course_id', courseIds)
+      .order('due_date', { ascending: false })
+      .limit(10),
+    supabase
+      .from('student_course_grades')
+      .select('grade_percentage, grade_formatted, courses(name, short_name)')
+      .eq('student_id', student.id)
+      .in('course_id', courseIds)
+      .limit(10),
+    supabase
+      .from('pending_tasks')
+      .select('title, status, priority, due_date')
+      .eq('student_id', student.id)
+      .in('status', ['aberta', 'em_andamento'])
+      .limit(5),
+    supabase
+      .from('attendance_records')
+      .select('attendance_date, status')
+      .eq('student_id', student.id)
+      .in('course_id', courseIds)
+      .order('attendance_date', { ascending: false })
+      .limit(10),
+  ])
+
+  const activities = activitiesResult.data ?? []
+  const overdueCount = activities.filter(
+    (a: { due_date?: string | null; completed_at?: string | null }) =>
+      a.due_date && new Date(a.due_date) < new Date() && !a.completed_at,
+  ).length
+  const gradedActivities = activities.filter((a: { percentage?: number | null }) => a.percentage != null)
+  const avgGrade = gradedActivities.length > 0
+    ? gradedActivities.reduce((sum: number, a: { percentage?: number | null }) => sum + (a.percentage ?? 0), 0) / gradedActivities.length
+    : null
+
+  const absences = (attendanceResult.data ?? []).filter(
+    (r: { status: string }) => r.status === 'ausente',
+  ).length
+
+  const daysSinceAccess = student.last_access
+    ? Math.floor((Date.now() - new Date(student.last_access).getTime()) / 86400000)
+    : null
+
+  return {
+    id: student.id,
+    full_name: student.full_name,
+    email: student.email,
+    current_risk_level: student.current_risk_level,
+    risk_reasons: student.risk_reasons,
+    last_access: student.last_access,
+    days_since_access: daysSinceAccess,
+    overdue_activities: overdueCount,
+    average_grade_percentage: avgGrade !== null ? Math.round(avgGrade) : null,
+    grades: gradesResult.data ?? [],
+    pending_tasks: pendingTasksResult.data ?? [],
+    recent_attendance: attendanceResult.data ?? [],
+    absences_last_10: absences,
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+async function getGradeRisk(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const threshold = args.threshold_percentage ?? 60
+  const limit = Math.min(args.limit ?? 10, 50)
+
+  const courseIds = await getUserCourseIds(userId, supabase)
+  const studentIds = await getStudentIdsInCourses(courseIds, supabase)
+  if (studentIds.length === 0) return []
+
+  const { data } = await supabase
+    .from('student_course_grades')
+    .select('grade_percentage, grade_formatted, students(id, full_name, current_risk_level), courses(name, short_name)')
+    .in('course_id', courseIds)
+    .in('student_id', studentIds)
+    .lt('grade_percentage', threshold)
+    .order('grade_percentage', { ascending: true })
+    .limit(limit)
+
+  return (data ?? []).map((row: Record<string, unknown>) => ({
+    student: row.students,
+    course: row.courses,
+    grade_percentage: row.grade_percentage,
+    grade_formatted: row.grade_formatted,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+
+async function getEngagementSignals(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const daysWithoutAccess = args.days_without_access ?? 7
+  const limit = Math.min(args.limit ?? 10, 50)
+  const cutoff = new Date(Date.now() - daysWithoutAccess * 86400000).toISOString()
+
+  const courseIds = await getUserCourseIds(userId, supabase)
+  const studentIds = await getStudentIdsInCourses(courseIds, supabase)
+  if (studentIds.length === 0) return []
+
+  const { data } = await supabase
+    .from('students')
+    .select('id, full_name, email, current_risk_level, last_access')
+    .in('id', studentIds)
+    .or(`last_access.lt.${cutoff},last_access.is.null`)
+    .order('last_access', { ascending: true, nullsFirst: true })
+    .limit(limit)
+
+  return (data ?? []).map((s: { id: string; full_name: string; email: string | null; current_risk_level: string | null; last_access: string | null }) => ({
+    id: s.id,
+    full_name: s.full_name,
+    email: s.email,
+    current_risk_level: s.current_risk_level,
+    last_access: s.last_access,
+    days_without_access: s.last_access
+      ? Math.floor((Date.now() - new Date(s.last_access).getTime()) / 86400000)
+      : null,
+  }))
+}
+
+// ---------------------------------------------------------------------------
+
+async function getRecentAttendanceRisk(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const minAbsences = args.min_absences ?? 2
+  const limit = Math.min(args.limit ?? 10, 50)
+
+  const courseIds = await getUserCourseIds(userId, supabase)
+  if (courseIds.length === 0) return []
+
+  // Aggregate absences per student across tutor's courses
+  const { data: absenceRows } = await supabase
+    .from('attendance_records')
+    .select('student_id, students(full_name, current_risk_level)')
+    .in('course_id', courseIds)
+    .eq('status', 'ausente')
+
+  const countMap = new Map<string, { full_name: string; current_risk_level: string | null; count: number }>()
+  for (const row of absenceRows ?? []) {
+    const sid = (row as { student_id: string }).student_id
+    const student = (row as { students?: { full_name?: string; current_risk_level?: string | null } | null }).students
+    const entry = countMap.get(sid) ?? { full_name: student?.full_name ?? sid, current_risk_level: student?.current_risk_level ?? null, count: 0 }
+    entry.count++
+    countMap.set(sid, entry)
+  }
+
+  return Array.from(countMap.entries())
+    .filter(([, v]) => v.count >= minAbsences)
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, limit)
+    .map(([id, v]) => ({
+      student_id: id,
+      full_name: v.full_name,
+      current_risk_level: v.current_risk_level,
+      total_absences: v.count,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+
+async function getUpcomingCalendarCommitments(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const daysAhead = Math.min(args.days_ahead ?? 7, 30)
+  const end = new Date(Date.now() + daysAhead * 86400000).toISOString()
+
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .select('id, title, description, start_at, end_at, type, all_day, location, related_entity_type, related_entity_id, tags')
+    .eq('owner', userId)
+    .gte('start_at', new Date().toISOString())
+    .lte('start_at', end)
+    .order('start_at', { ascending: true })
+    .limit(20)
+
+  if (error) return { error: 'Falha ao consultar agenda.' }
+  return data ?? []
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 – Routine automation and smart checklist executors
+// ---------------------------------------------------------------------------
+
+async function getTutorRoutineSuggestions(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const includeContext = args.include_academic_context !== false
+  const now = new Date()
+  const dayOfWeek = now.getDay() // 0=Sun, 1=Mon … 6=Sat
+  const hour = now.getHours()
+
+  const suggestions: Array<{
+    trigger: string
+    priority: string
+    title: string
+    body: string
+    action_hint?: string
+  }> = []
+
+  // Day-based routine rules (from the tutor guide)
+  if (dayOfWeek === 1) {
+    suggestions.push({
+      trigger: 'monday_opening',
+      priority: 'high',
+      title: 'Mensagem de abertura da semana',
+      body: 'É segunda-feira. Considere enviar a mensagem de abertura semanal para as UCs vigentes, apresentando os objetivos e atividades da semana.',
+      action_hint: 'Use "prepare_bulk_message_send" com template de abertura de semana ou peça à IA para redigir.',
+    })
+    suggestions.push({
+      trigger: 'monday_planning',
+      priority: 'medium',
+      title: 'Planejamento e validação da semana',
+      body: 'Revise o planejamento da semana: verifique alinhamentos programados, atividades a corrigir e alunos em risco que precisam de contato.',
+      action_hint: 'Use "generate_weekly_checklist" para gerar o checklist completo.',
+    })
+  }
+
+  // Daily rules
+  suggestions.push({
+    trigger: 'daily_chat_forum',
+    priority: 'medium',
+    title: 'Verificar chats e fóruns',
+    body: 'Lembre-se: responder chats e fóruns em até 48h úteis. Verifique se há mensagens não respondidas nos canais dos seus cursos.',
+    action_hint: 'Crie uma tarefa de lembrete se necessário.',
+  })
+
+  if (hour >= 8 && hour < 18) {
+    suggestions.push({
+      trigger: 'daily_correction',
+      priority: 'medium',
+      title: 'Correção e feedback de atividades',
+      body: 'Atividades entregues aguardam correção. Priorize alunos em risco. O feedback é parte essencial da aprendizagem.',
+      action_hint: 'Use "get_activities_to_review" para ver a fila de correção.',
+    })
+  }
+
+  if (!includeContext) {
+    return { day_of_week: dayOfWeek, hour, suggestions }
+  }
+
+  // Enrich with real academic data
+  try {
+    const courseIds = await getUserCourseIds(userId, supabase)
+    const studentIds = await getStudentIdsInCourses(courseIds, supabase)
+
+    // Students at risk needing weekly contact
+    if (studentIds.length > 0) {
+      const { data: riskStudents } = await supabase
+        .from('students')
+        .select('full_name, current_risk_level')
+        .in('id', studentIds)
+        .in('current_risk_level', ['risco', 'critico'])
+        .limit(3)
+
+      if (riskStudents && riskStudents.length > 0) {
+        const names = riskStudents.map((s: { full_name: string }) => s.full_name).join(', ')
+        suggestions.push({
+          trigger: 'weekly_at_risk_contact',
+          priority: 'high',
+          title: `Contato com alunos em risco (${riskStudents.length})`,
+          body: `Os seguintes alunos precisam de contato semanal: ${names}. Verifique o progresso e ofereça suporte.`,
+          action_hint: 'Use "create_task" para criar tarefa de acompanhamento ou "prepare_single_student_message_send" para mensagem direta.',
+        })
+      }
+    }
+
+    // Upcoming events in next 48h
+    const next48h = new Date(Date.now() + 2 * 86400000).toISOString()
+    const { data: upcomingEvents } = await supabase
+      .from('calendar_events')
+      .select('title, start_at, type')
+      .eq('owner', userId)
+      .gte('start_at', now.toISOString())
+      .lte('start_at', next48h)
+      .order('start_at', { ascending: true })
+      .limit(3)
+
+    for (const ev of upcomingEvents ?? []) {
+      const evTyped = ev as { title: string; start_at: string; type: string }
+      if (evTyped.type === 'webclass' || evTyped.type === 'alignment') {
+        suggestions.push({
+          trigger: 'upcoming_event_prep',
+          priority: 'high',
+          title: `Preparação: ${evTyped.title}`,
+          body: `Você tem "${evTyped.title}" agendado em breve. Verifique: pauta, lista de alunos, materiais e pendências da turma.`,
+          action_hint: 'Use "create_task" para criar checklist preparatório.',
+        })
+      }
+    }
+
+    // Activities pending correction
+    if (studentIds.length > 0) {
+      const { count: correctionCount } = await supabase
+        .from('student_activities')
+        .select('*', { count: 'exact', head: true })
+        .in('course_id', courseIds)
+        .not('submitted_at', 'is', null)
+        .is('graded_at', null)
+
+      if (correctionCount && correctionCount > 0) {
+        suggestions.push({
+          trigger: 'pending_corrections',
+          priority: correctionCount >= 10 ? 'urgent' : 'high',
+          title: `${correctionCount} atividade(s) aguardando correção`,
+          body: `Há ${correctionCount} atividade(s) entregues aguardando avaliação. Prazo recomendado: 48h após entrega.`,
+          action_hint: 'Use "get_activities_to_review" para ver a fila detalhada.',
+        })
+      }
+    }
+  } catch (_err) {
+    // Return base suggestions even if context lookup fails
+  }
+
+  return { day_of_week: dayOfWeek, hour, suggestions }
+}
+
+// ---------------------------------------------------------------------------
+
+async function generateWeeklyChecklist(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const weekContext = args.week_context ?? 'current'
+  const courseIds = await getUserCourseIds(userId, supabase)
+
+  const checklistSections: Array<{
+    section: string
+    items: Array<{ done: boolean; item: string; context?: string }>
+  }> = []
+
+  // 1. Students requiring attention
+  const studentIds = await getStudentIdsInCourses(courseIds, supabase)
+  const atRiskItems: Array<{ done: boolean; item: string; context?: string }> = []
+
+  if (studentIds.length > 0) {
+    const { data: riskStudents } = await supabase
+      .from('students')
+      .select('full_name, current_risk_level, risk_reasons')
+      .in('id', studentIds)
+      .in('current_risk_level', ['atencao', 'risco', 'critico'])
+      .order('current_risk_level', { ascending: false })
+      .limit(10)
+
+    for (const s of riskStudents ?? []) {
+      const st = s as { full_name: string; current_risk_level: string; risk_reasons: string[] | null }
+      atRiskItems.push({
+        done: false,
+        item: `Contato com ${st.full_name} (${st.current_risk_level})`,
+        context: (st.risk_reasons ?? []).join(', ') || undefined,
+      })
+    }
+  }
+
+  if (atRiskItems.length > 0) {
+    checklistSections.push({ section: '🎯 Alunos em risco — contato semanal', items: atRiskItems })
+  }
+
+  // 2. Activities to review
+  let activitiesToReviewCount = 0
+  if (studentIds.length > 0) {
+    const { count } = await supabase
+      .from('student_activities')
+      .select('*', { count: 'exact', head: true })
+      .in('course_id', courseIds)
+      .not('submitted_at', 'is', null)
+      .is('graded_at', null)
+    activitiesToReviewCount = count ?? 0
+  }
+
+  checklistSections.push({
+    section: '📝 Correções e feedback',
+    items: [
+      { done: false, item: `Corrigir atividades entregues (${activitiesToReviewCount} na fila)` },
+      { done: false, item: 'Lançar notas de avaliações presenciais (prazo: 48h)' },
+      { done: false, item: 'Postar links de gravações de web aulas (prazo: 24h após aula)' },
+    ],
+  })
+
+  // 3. Communication
+  checklistSections.push({
+    section: '💬 Comunicação',
+    items: [
+      { done: false, item: 'Responder mensagens de chat não respondidas (prazo: 48h úteis)' },
+      { done: false, item: 'Verificar e responder fóruns ativos' },
+      { done: false, item: weekContext === 'current' ? 'Enviar mensagem de abertura da semana (se segunda-feira)' : 'Preparar mensagem de abertura da próxima semana' },
+    ],
+  })
+
+  // 4. Upcoming calendar events
+  const daysAhead = weekContext === 'current' ? 7 : 14
+  const horizonDate = new Date(Date.now() + daysAhead * 86400000).toISOString()
+  const { data: events } = await supabase
+    .from('calendar_events')
+    .select('title, start_at, type')
+    .eq('owner', userId)
+    .gte('start_at', new Date().toISOString())
+    .lte('start_at', horizonDate)
+    .order('start_at', { ascending: true })
+    .limit(10)
+
+  const eventItems = (events ?? []).map((e: { title: string; start_at: string; type: string }) => ({
+    done: false,
+    item: `${e.type === 'webclass' ? 'Web aula' : e.type === 'alignment' ? 'Alinhamento' : 'Compromisso'}: ${e.title}`,
+    context: new Date(e.start_at).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+  }))
+
+  if (eventItems.length > 0) {
+    checklistSections.push({ section: '📅 Agenda da semana', items: eventItems })
+  } else {
+    checklistSections.push({
+      section: '📅 Agenda da semana',
+      items: [{ done: false, item: 'Nenhum evento agendado — verifique se há alinhamentos quinzenais pendentes' }],
+    })
+  }
+
+  // 5. Open tasks
+  const { data: openTasks } = await supabase
+    .from('tasks')
+    .select('title, priority, due_date')
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .in('status', ['todo', 'in_progress'])
+    .order('due_date', { ascending: true, nullsFirst: false })
+    .limit(5)
+
+  const taskItems = (openTasks ?? []).map((t: { title: string; priority: string; due_date: string | null }) => ({
+    done: false,
+    item: `[${t.priority.toUpperCase()}] ${t.title}`,
+    context: t.due_date ? `Prazo: ${new Date(t.due_date).toLocaleDateString('pt-BR')}` : undefined,
+  }))
+
+  if (taskItems.length > 0) {
+    checklistSections.push({ section: '✅ Tarefas abertas', items: taskItems })
+  }
+
+  return {
+    week_context: weekContext,
+    generated_at: new Date().toISOString(),
+    total_items: checklistSections.reduce((sum, s) => sum + s.items.length, 0),
+    checklist: checklistSections,
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+async function saveSuggestion(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const type = (args.type ?? 'custom') as string
+  const title = (args.title ?? '').trim()
+  const body = (args.body ?? '').trim()
+
+  if (!title) return { error: 'Campo title é obrigatório para salvar sugestão.' }
+  if (!body) return { error: 'Campo body é obrigatório para salvar sugestão.' }
+
+  const expiresInHours = args.expires_in_hours ?? 48
+  const expiresAt = new Date(Date.now() + expiresInHours * 3600000).toISOString()
+
+  const insert: Record<string, unknown> = {
+    user_id: userId,
+    type,
+    title,
+    body,
+    priority: args.priority ?? 'medium',
+    status: 'pending',
+    expires_at: expiresAt,
+  }
+
+  if (args.entity_type) insert.entity_type = args.entity_type
+  if (args.entity_id) insert.entity_id = args.entity_id
+  if (args.entity_name) insert.entity_name = args.entity_name
+  if (args.action_type) insert.action_type = args.action_type
+  if (args.action_payload) insert.action_payload = args.action_payload
+
+  const { data, error } = await supabase
+    .from('claris_suggestions')
+    .insert(insert)
+    .select('id, type, title, priority, status, expires_at')
+    .single()
+
+  if (error || !data) {
+    return { error: 'Falha ao salvar sugestão.' }
+  }
+
+  return {
+    success: true,
+    saved: true,
+    suggestion: data,
+    message: 'Sugestão salva e aparecerá no painel do tutor.',
+  }
 }
