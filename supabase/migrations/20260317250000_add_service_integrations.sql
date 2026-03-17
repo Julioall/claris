@@ -157,6 +157,10 @@ CREATE INDEX IF NOT EXISTS idx_app_service_instance_events_instance
 CREATE INDEX IF NOT EXISTS idx_app_service_instance_events_created_at
   ON public.app_service_instance_events(created_at DESC);
 
+-- Composite index for common filter: events by instance + type + recency
+CREATE INDEX IF NOT EXISTS idx_app_service_instance_events_instance_type_created
+  ON public.app_service_instance_events(instance_id, event_type, created_at DESC);
+
 ALTER TABLE public.app_service_instance_events ENABLE ROW LEVEL SECURITY;
 
 -- Users can SELECT events for their own personal instances
@@ -207,6 +211,11 @@ CREATE TABLE IF NOT EXISTS public.app_service_instance_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_app_service_instance_jobs_instance_status
   ON public.app_service_instance_jobs(instance_id, status);
+
+-- Index for queue processor: find pending/scheduled jobs ready to run
+CREATE INDEX IF NOT EXISTS idx_app_service_instance_jobs_status_scheduled
+  ON public.app_service_instance_jobs(status, scheduled_at)
+  WHERE status IN ('pending', 'cooldown');
 
 ALTER TABLE public.app_service_instance_jobs ENABLE ROW LEVEL SECURITY;
 
@@ -371,7 +380,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.app_service_webhook_events TO aut
 CREATE TABLE IF NOT EXISTS public.app_service_instance_group_permissions (
   id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   instance_id  UUID        NOT NULL REFERENCES public.app_service_instances(id) ON DELETE CASCADE,
-  group_id     UUID        NOT NULL,
+  group_id     UUID        NOT NULL, -- forward reference: will reference a groups table when it exists
   can_view     BOOLEAN     NOT NULL DEFAULT true,
   can_use      BOOLEAN     NOT NULL DEFAULT true,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
