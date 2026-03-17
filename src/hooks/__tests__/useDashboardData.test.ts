@@ -125,51 +125,10 @@ describe("useDashboardData", () => {
       error: null,
     });
 
+    // pending_tasks is now a count-only query
     pendingTasksSelectMock.mockReturnValue({ in: pendingTasksInMock });
     pendingTasksInMock.mockReturnValue({ neq: pendingTasksNeqMock });
     pendingTasksNeqMock.mockResolvedValue({
-      data: [
-        {
-          id: "pt-1",
-          student_id: "s-1",
-          course_id: "c-1",
-          created_by_user_id: "user-1",
-          title: "Vencida",
-          description: "Atrasada",
-          task_type: "interna",
-          status: "aberta",
-          priority: "alta",
-          due_date: isoDaysFromNow(-2),
-          created_at: "2026-02-20T10:00:00.000Z",
-          updated_at: "2026-02-20T10:00:00.000Z",
-          students: {
-            id: "s-1",
-            full_name: "Ana",
-            current_risk_level: "risco",
-            email: "ana@example.com",
-          },
-        },
-        {
-          id: "pt-2",
-          student_id: "s-2",
-          course_id: "c-1",
-          created_by_user_id: "user-1",
-          title: "Proxima",
-          description: "Prazo curto",
-          task_type: "interna",
-          status: "aberta",
-          priority: "media",
-          due_date: isoDaysFromNow(2),
-          created_at: "2026-02-20T10:00:00.000Z",
-          updated_at: "2026-02-20T10:00:00.000Z",
-          students: {
-            id: "s-2",
-            full_name: "Bruno",
-            current_risk_level: "critico",
-            email: "bruno@example.com",
-          },
-        },
-      ],
       count: 2,
       error: null,
     });
@@ -304,7 +263,6 @@ describe("useDashboardData", () => {
     });
 
     expect(result.current.summary).toBeNull();
-    expect(result.current.pendingTasks).toEqual([]);
     expect(fromMock).not.toHaveBeenCalled();
   });
 
@@ -327,13 +285,12 @@ describe("useDashboardData", () => {
       students_at_risk: 0,
       new_at_risk_this_week: 0,
     });
-    expect(result.current.pendingTasks).toEqual([]);
     expect(result.current.criticalStudents).toEqual([]);
     expect(result.current.activitiesToReview).toEqual([]);
     expect(result.current.activityFeed).toEqual([]);
   });
 
-  it("loads dashboard metrics and computes overdue/upcoming tasks", async () => {
+  it("loads dashboard metrics correctly", async () => {
     const { result } = renderHook(() => useDashboardData("current", "all"));
 
     await waitFor(() => {
@@ -343,7 +300,7 @@ describe("useDashboardData", () => {
     expect(result.current.error).toBeNull();
     expect(result.current.summary).toEqual({
       pending_tasks: 2,
-      overdue_tasks: 1,
+      overdue_tasks: 0,
       activities_to_review: 2,
       active_normal_students: 0,
       pending_submission_assignments: 1,
@@ -355,11 +312,7 @@ describe("useDashboardData", () => {
     expect(missedActivitiesInStudentMock).toHaveBeenCalledWith("student_id", ["s-1", "s-2"]);
     expect(uncorrectedActivitiesInStudentMock).toHaveBeenCalledWith("student_id", ["s-1", "s-2"]);
 
-    expect(result.current.pendingTasks).toHaveLength(2);
-    expect(result.current.overdueTasks.map((task) => task.id)).toEqual(["pt-1"]);
-    expect(result.current.upcomingTasks.map((task) => task.id)).toEqual(["pt-2"]);
     expect(result.current.criticalStudents.map((student) => student.id)).toEqual(["s-2", "s-1"]);
-    expect(result.current.criticalStudents[0].pending_tasks_count).toBe(1);
     expect(result.current.activitiesToReview).toHaveLength(2);
     expect(result.current.activitiesToReview[0]).toMatchObject({
       id: "act-1",

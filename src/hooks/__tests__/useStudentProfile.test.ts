@@ -9,10 +9,6 @@ const studentSelectMock = vi.fn();
 const studentEqMock = vi.fn();
 const studentSingleMock = vi.fn();
 
-const tasksSelectMock = vi.fn();
-const tasksEqMock = vi.fn();
-const tasksOrderMock = vi.fn();
-
 const notesSelectMock = vi.fn();
 const notesEqMock = vi.fn();
 const notesOrderMock = vi.fn();
@@ -33,10 +29,6 @@ function setupFromMock() {
   fromMock.mockImplementation((table: string) => {
     if (table === "students") {
       return { select: studentSelectMock };
-    }
-
-    if (table === "pending_tasks") {
-      return { select: tasksSelectMock };
     }
 
     if (table === "notes") {
@@ -74,40 +66,6 @@ describe("useStudentProfile", () => {
       error: null,
     });
 
-    tasksSelectMock.mockReturnValue({ eq: tasksEqMock });
-    tasksEqMock.mockReturnValue({ order: tasksOrderMock });
-    tasksOrderMock.mockResolvedValue({
-      data: [
-        {
-          id: "t-1",
-          student_id: "s-1",
-          course_id: "c-1",
-          title: "Contato",
-          description: null,
-          task_type: "interna",
-          status: "aberta",
-          priority: "alta",
-          due_date: null,
-          created_at: "2026-02-20T00:00:00.000Z",
-          updated_at: "2026-02-20T00:00:00.000Z",
-        },
-        {
-          id: "t-2",
-          student_id: "s-1",
-          course_id: "c-1",
-          title: "Concluida",
-          description: null,
-          task_type: "interna",
-          status: "resolvida",
-          priority: "baixa",
-          due_date: null,
-          created_at: "2026-02-20T00:00:00.000Z",
-          updated_at: "2026-02-20T00:00:00.000Z",
-        },
-      ],
-      error: null,
-    });
-
     notesSelectMock.mockReturnValue({ eq: notesEqMock });
     notesEqMock.mockReturnValue({ order: notesOrderMock });
     notesOrderMock.mockResolvedValue({
@@ -117,7 +75,6 @@ describe("useStudentProfile", () => {
           student_id: "s-1",
           user_id: "user-1",
           content: "Observacao",
-          pending_task_id: null,
           created_at: "2026-02-20T00:00:00.000Z",
           updated_at: "2026-02-20T00:00:00.000Z",
         },
@@ -130,7 +87,7 @@ describe("useStudentProfile", () => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("loads student profile with tasks and notes", async () => {
+  it("loads student profile with notes", async () => {
     const { result } = renderHook(() => useStudentProfile("s-1"));
 
     await waitFor(() => {
@@ -142,11 +99,7 @@ describe("useStudentProfile", () => {
       id: "s-1",
       current_risk_level: "risco",
     });
-    expect(result.current.pendingTasks).toHaveLength(2);
     expect(result.current.notes).toHaveLength(1);
-    expect(result.current.stats).toEqual({
-      pendingTasksCount: 1,
-    });
   });
 
   it("returns early when student id is missing", async () => {
@@ -213,6 +166,7 @@ describe("useStudentProfile", () => {
     });
 
     expect(studentSelectMock).toHaveBeenCalledTimes(2);
-    expect(tasksSelectMock).toHaveBeenCalledTimes(2);
+    expect(notesSelectMock).toHaveBeenCalledTimes(2);
   });
 });
+

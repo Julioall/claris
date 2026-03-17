@@ -62,8 +62,12 @@ vi.mock("@/pages/StudentProfile", () => ({
   default: () => <div>StudentProfile Page</div>,
 }));
 
-vi.mock("@/pages/PendingTasks", () => ({
-  default: () => <div>PendingTasks Page</div>,
+vi.mock("@/pages/Tarefas", () => ({
+  default: () => <div>Tarefas Page</div>,
+}));
+
+vi.mock("@/pages/Agenda", () => ({
+  default: () => <div>Agenda Page</div>,
 }));
 
 vi.mock("@/pages/Messages", () => ({
@@ -168,6 +172,32 @@ describe("App routing", () => {
     render(<App />);
 
     expect(screen.getByText("Claris Page")).toBeInTheDocument();
+    expect(screen.getByText("App Layout")).toBeInTheDocument();
+  });
+
+  it("renders tarefas page for authenticated users", () => {
+    setPath("/tarefas");
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(<App />);
+
+    expect(screen.getByText("Tarefas Page")).toBeInTheDocument();
+    expect(screen.getByText("App Layout")).toBeInTheDocument();
+  });
+
+  it("renders agenda page for authenticated users", () => {
+    setPath("/agenda");
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(<App />);
+
+    expect(screen.getByText("Agenda Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 

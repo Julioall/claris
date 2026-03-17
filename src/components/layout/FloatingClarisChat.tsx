@@ -107,7 +107,8 @@ const GENERIC_QUICK_SUGGESTIONS = [
 
 const ROUTE_QUICK_SUGGESTIONS: Array<{ match: RegExp; suggestions: string[] }> = [
   { match: /\/alunos(?:\/|$)/, suggestions: ['Alunos em risco com último acesso', 'Piora de engajamento esta semana', 'Plano de acompanhamento — 5 mais críticos'] },
-  { match: /\/pendencias(?:\/|$)/, suggestions: ['Pendências por prioridade e prazo', 'Pendências atrasadas — ação hoje', 'Resumo por curso para distribuir'] },
+  { match: /\/tarefas(?:\/|$)/, suggestions: ['Tarefas em aberto por aluno', 'Tarefas com prazo próximo', 'Resumo de tarefas por curso'] },
+  { match: /\/agenda(?:\/|$)/, suggestions: ['Próximos compromissos desta semana', 'Eventos por curso', 'Resumo da agenda mensal'] },
   { match: /\/mensagens(?:\/|$)/, suggestions: ['Templates para alunos em risco', 'Rascunho de acompanhamento', 'Alunos que precisam de contato'] },
 ];
 

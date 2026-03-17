@@ -54,17 +54,6 @@ describe("StudentProfile page", () => {
         moodle_user_id: 99,
         last_access: "2026-02-20T00:00:00.000Z",
       },
-      pendingTasks: [
-        {
-          id: "t-1",
-          title: "Pendencia 1",
-          status: "aberta",
-          task_type: "manual",
-          priority: "alta",
-          due_date: "2099-01-01T00:00:00.000Z",
-          description: "Descricao",
-        },
-      ],
       notes: [
         {
           id: "n-1",
@@ -72,9 +61,6 @@ describe("StudentProfile page", () => {
           created_at: "2026-02-20T00:00:00.000Z",
         },
       ],
-      stats: {
-        pendingTasksCount: 1,
-      },
       isLoading: false,
       error: null,
     });
@@ -83,9 +69,7 @@ describe("StudentProfile page", () => {
   it("shows loading state", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
-      pendingTasks: [],
       notes: [],
-      stats: { pendingTasksCount: 0 },
       isLoading: true,
       error: null,
     });
@@ -97,9 +81,7 @@ describe("StudentProfile page", () => {
   it("shows error state when student is missing", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
-      pendingTasks: [],
       notes: [],
-      stats: { pendingTasksCount: 0 },
       isLoading: false,
       error: "Erro ao carregar aluno",
     });
@@ -108,13 +90,12 @@ describe("StudentProfile page", () => {
     expect(screen.getByText(/erro ao carregar aluno/i)).toBeInTheDocument();
   });
 
-  it("renders profile data without the old actions flow", () => {
+  it("renders profile data with tarefas placeholder", () => {
     renderPage();
 
     expect(screen.getByText("Ana Silva")).toBeInTheDocument();
     expect(screen.getByText(/motivos do risco/i)).toBeInTheDocument();
-    expect(screen.getByText(/pendencia 1/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /nova a/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/em construção/i)).toBeInTheDocument();
     expect(
       screen.queryByRole("tab", {
         name: (name) => name.trim().toLowerCase() === "acoes",

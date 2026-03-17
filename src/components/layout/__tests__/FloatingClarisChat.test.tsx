@@ -476,13 +476,13 @@ describe('FloatingClarisChat', () => {
         { role: 'user', content: 'Quero um resumo do dia' },
         { role: 'assistant', content: 'Aqui está o resumo.' },
       ],
-      last_context_route: '/pendencias',
+      last_context_route: '/tarefas',
       updated_at: '2026-03-15T10:00:00.000Z',
       created_at: '2026-03-15T10:00:00.000Z',
     }];
 
     render(
-      <MemoryRouter initialEntries={["/claris?context=%2Fpendencias"]} future={ROUTER_FUTURE}>
+      <MemoryRouter initialEntries={["/claris?context=%2Ftarefas"]} future={ROUTER_FUTURE}>
         <FloatingClarisChat variant="page" />
       </MemoryRouter>,
     );

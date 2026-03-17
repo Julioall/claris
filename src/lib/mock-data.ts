@@ -1,6 +1,6 @@
 // Mock data for development and demonstration
 import { 
-  Course, Student, PendingTask, Note,
+  Course, Student,
   ActivityFeedItem, WeeklySummary, RiskLevel 
 } from '@/types';
 
@@ -148,80 +148,6 @@ export const mockStudents: Student[] = [
   },
 ];
 
-// Mock Pending Tasks
-export const mockPendingTasks: PendingTask[] = [
-  {
-    id: 'task-1',
-    student_id: 'student-1',
-    course_id: 'course-1',
-    title: 'Atividade 5 - Sistemas Pneumáticos',
-    description: 'Atividade prática não entregue',
-    task_type: 'moodle',
-    status: 'aberta',
-    priority: 'urgente',
-    due_date: daysAgo(5),
-    created_at: daysAgo(10),
-    updated_at: daysAgo(0),
-    student: mockStudents[0],
-  },
-  {
-    id: 'task-2',
-    student_id: 'student-1',
-    course_id: 'course-1',
-    title: 'Contatar responsável',
-    description: 'Ligar para família do aluno para entender situação',
-    task_type: 'interna',
-    status: 'aberta',
-    priority: 'alta',
-    due_date: daysFromNow(1),
-    created_at: daysAgo(2),
-    updated_at: daysAgo(0),
-    student: mockStudents[0],
-  },
-  {
-    id: 'task-3',
-    student_id: 'student-2',
-    course_id: 'course-1',
-    title: 'Prova de recuperação',
-    description: 'Agendar prova de recuperação do módulo 2',
-    task_type: 'interna',
-    status: 'em_andamento',
-    priority: 'media',
-    due_date: daysFromNow(3),
-    created_at: daysAgo(5),
-    updated_at: daysAgo(1),
-    student: mockStudents[1],
-  },
-  {
-    id: 'task-4',
-    student_id: 'student-5',
-    course_id: 'course-2',
-    title: 'Verificar acesso à plataforma',
-    description: 'Aluno relata problemas de acesso',
-    task_type: 'interna',
-    status: 'aberta',
-    priority: 'alta',
-    due_date: daysFromNow(0),
-    created_at: daysAgo(3),
-    updated_at: daysAgo(0),
-    student: mockStudents[4],
-  },
-  {
-    id: 'task-5',
-    student_id: 'student-6',
-    course_id: 'course-2',
-    title: 'Atividade 3 - Circuitos Elétricos',
-    description: 'Atividade atrasada há 7 dias',
-    task_type: 'moodle',
-    status: 'aberta',
-    priority: 'urgente',
-    due_date: daysAgo(7),
-    created_at: daysAgo(14),
-    updated_at: daysAgo(0),
-    student: mockStudents[5],
-  },
-];
-
 // Mock Activity Feed
 export const mockActivityFeed: ActivityFeedItem[] = [
   {
@@ -269,8 +195,8 @@ export const mockActivityFeed: ActivityFeedItem[] = [
 
 // Weekly summary computed from mock data
 export const mockWeeklySummary: WeeklySummary = {
-  pending_tasks: mockPendingTasks.filter(t => t.status !== 'resolvida').length,
-  overdue_tasks: mockPendingTasks.filter(t => Boolean(t.due_date) && new Date(t.due_date as string) < new Date() && t.status !== 'resolvida').length,
+  pending_tasks: 0,
+  overdue_tasks: 0,
   activities_to_review: 0,
   active_normal_students: mockStudents.filter(s => s.current_risk_level === 'normal').length,
   pending_submission_assignments: 0,
@@ -295,10 +221,5 @@ export const getRiskLevelLabel = (level: RiskLevel): string => {
 export const getStudentsByCourse = (courseId: string): Student[] => {
   // In a real app, this would filter by course relationship
   return mockStudents;
-};
-
-// Helper to get tasks by student
-export const getTasksByStudent = (studentId: string): PendingTask[] => {
-  return mockPendingTasks.filter(t => t.student_id === studentId);
 };
 

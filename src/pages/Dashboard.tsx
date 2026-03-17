@@ -22,8 +22,6 @@ export default function Dashboard() {
 
   const { 
     summary, 
-    overdueTasks, 
-    upcomingTasks, 
     criticalStudents, 
     activitiesToReview,
     activityFeed,
@@ -98,8 +96,6 @@ export default function Dashboard() {
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-2">
         <PriorityList 
-          overdueTasks={overdueTasks}
-          upcomingTasks={upcomingTasks}
           criticalStudents={criticalStudents}
         />
 

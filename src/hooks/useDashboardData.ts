@@ -3,23 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   WeeklySummary,
-  PendingTask,
   Student,
   ActivityFeedItem,
   DashboardReviewActivity,
   RiskLevel,
-  TaskStatus,
-  TaskPriority,
-  TaskType,
 } from '@/types';
-import { startOfWeek, subWeeks, isPast, addDays } from 'date-fns';
-
-type TaskStudentSummary = {
-  id: string;
-  full_name: string;
-  current_risk_level: RiskLevel;
-  email?: string | null;
-};
+import { startOfWeek, subWeeks } from 'date-fns';
 
 type FeedStudentSummary = {
   id: string;
@@ -89,7 +78,6 @@ function mapActivityFeedItems(items: Array<Record<string, unknown>>): ActivityFe
 export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', courseFilter?: string) {
   const { user } = useAuth();
   const [summary, setSummary] = useState<WeeklySummary | null>(null);
-  const [pendingTasks, setPendingTasks] = useState<PendingTask[]>([]);
   const [criticalStudents, setCriticalStudents] = useState<Student[]>([]);
   const [activitiesToReview, setActivitiesToReview] = useState<DashboardReviewActivity[]>([]);
   const [activityFeed, setActivityFeed] = useState<ActivityFeedItem[]>([]);
@@ -125,7 +113,6 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
 
       if (courseIds.length === 0) {
         setSummary({ ...EMPTY_SUMMARY });
-        setPendingTasks([]);
         setCriticalStudents([]);
         setActivitiesToReview([]);
         setActivityFeed([]);
@@ -184,7 +171,6 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         if (feedError) throw feedError;
 
         setSummary({ ...EMPTY_SUMMARY });
-        setPendingTasks([]);
         setCriticalStudents([]);
         setActivitiesToReview([]);
         setActivityFeed(mapActivityFeedItems((feedData || []) as Array<Record<string, unknown>>));
@@ -207,7 +193,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
       }
 
       const [
-        pendingTasksResponse,
+        pendingTasksCountResponse,
         atRiskStudentsResponse,
         activeNormalStudentsResponse,
         newAtRiskResponse,
@@ -217,10 +203,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
       ] = await Promise.all([
         supabase
           .from('pending_tasks')
-          .select(`
-            *,
-            students (id, full_name, current_risk_level, email)
-          `, { count: 'exact' })
+          .select('id', { count: 'exact', head: true })
           .in('student_id', studentIds)
           .neq('status', 'resolvida'),
         supabase
@@ -272,7 +255,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
           .not('submitted_at', 'is', null),
       ]);
 
-      const { data: tasksData, count: pendingTasksCount, error: pendingTasksError } = pendingTasksResponse;
+      const { count: pendingTasksCount, error: pendingTasksError } = pendingTasksCountResponse;
       const { data: atRiskStudents, error: atRiskStudentsError } = atRiskStudentsResponse;
       const { count: activeNormalStudentsCount, error: activeNormalStudentsError } = activeNormalStudentsResponse;
       const { count: newAtRisk, error: newAtRiskError } = newAtRiskResponse;
@@ -288,21 +271,10 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
       if (missedAssignmentsError) throw missedAssignmentsError;
       if (uncorrectedActivitiesError) throw uncorrectedActivitiesError;
 
-      const overdueTasksCount = (tasksData || []).filter(task => {
-        if (!task.due_date) return false;
-        return isPast(new Date(task.due_date)) && task.status !== 'resolvida';
-      }).length;
-
-      const openTaskCountByStudent = (tasksData || []).reduce((acc, task) => {
-        if (!task.student_id) return acc;
-        acc.set(task.student_id, (acc.get(task.student_id) || 0) + 1);
-        return acc;
-      }, new Map<string, number>());
-
       // Set summary
       setSummary({
         pending_tasks: pendingTasksCount || 0,
-        overdue_tasks: overdueTasksCount,
+        overdue_tasks: 0,
         activities_to_review: uncorrectedActivities?.length || 0,
         active_normal_students: activeNormalStudentsCount || 0,
         pending_submission_assignments: missedAssignmentsCount || 0,
@@ -310,39 +282,6 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         students_at_risk: atRiskStudents?.length || 0,
         new_at_risk_this_week: newAtRisk || 0,
       });
-
-      // Set pending tasks with proper typing
-      const typedTasks: PendingTask[] = (tasksData || []).map(task => {
-        const relatedStudent = task.students as TaskStudentSummary | null;
-
-        return {
-          id: task.id,
-          student_id: task.student_id,
-          course_id: task.course_id || undefined,
-          created_by_user_id: task.created_by_user_id || undefined,
-          assigned_to_user_id: task.assigned_to_user_id || undefined,
-          title: task.title,
-          description: task.description || undefined,
-          task_type: (task.task_type || 'interna') as TaskType,
-          status: (task.status || 'aberta') as TaskStatus,
-          priority: (task.priority || 'media') as TaskPriority,
-          due_date: task.due_date || undefined,
-          completed_at: task.completed_at || undefined,
-          moodle_activity_id: task.moodle_activity_id || undefined,
-          created_at: task.created_at || new Date().toISOString(),
-          updated_at: task.updated_at || new Date().toISOString(),
-          student: relatedStudent ? {
-            id: relatedStudent.id,
-            moodle_user_id: '',
-            full_name: relatedStudent.full_name,
-            current_risk_level: relatedStudent.current_risk_level,
-            created_at: '',
-            updated_at: '',
-          } : undefined,
-        };
-      });
-
-      setPendingTasks(typedTasks);
 
       // Set critical students
       const typedStudents: Student[] = (atRiskStudents || []).map(s => ({
@@ -355,7 +294,6 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         risk_reasons: s.risk_reasons || undefined,
         tags: s.tags || undefined,
         last_access: s.last_access || undefined,
-        pending_tasks_count: openTaskCountByStudent.get(s.id) || 0,
         created_at: s.created_at || new Date().toISOString(),
         updated_at: s.updated_at || new Date().toISOString(),
       }))
@@ -368,10 +306,7 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
             inativo: 4,
           };
 
-          const byRisk = riskOrder[a.current_risk_level] - riskOrder[b.current_risk_level];
-          if (byRisk !== 0) return byRisk;
-
-          return (b.pending_tasks_count || 0) - (a.pending_tasks_count || 0);
+          return riskOrder[a.current_risk_level] - riskOrder[b.current_risk_level];
         });
 
       setCriticalStudents(typedStudents);
@@ -430,24 +365,8 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  // Compute derived data
-  const overdueTasks = pendingTasks.filter(task => {
-    if (!task.due_date) return false;
-    return isPast(new Date(task.due_date)) && task.status !== 'resolvida';
-  });
-
-  const upcomingTasks = pendingTasks.filter(task => {
-    if (!task.due_date) return false;
-    const dueDate = new Date(task.due_date);
-    const threeDaysFromNow = addDays(new Date(), 3);
-    return dueDate <= threeDaysFromNow && !isPast(dueDate) && task.status !== 'resolvida';
-  });
-
   return {
     summary,
-    pendingTasks,
-    overdueTasks,
-    upcomingTasks,
     criticalStudents,
     activitiesToReview,
     activityFeed,
