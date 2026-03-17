@@ -7,12 +7,13 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ClarisIcon } from '@/components/ui/claris-logo';
 import { cn } from '@/lib/utils';
-import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
-import { fetchGlobalAppSettings } from '@/lib/global-app-settings';
+import { CLARIS_CONFIGURED_STORAGE_KEY, parseClarisLlmSettings } from '@/lib/claris-settings';
+import { GLOBAL_APP_SETTINGS_ID } from '@/lib/global-app-settings';
 import { supabase } from '@/integrations/supabase/client';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -77,7 +78,13 @@ const CLARIS_PLACEHOLDER_REPLY =
   'Ainda estou em desenvolvimento, mas em breve estarei aqui para te ajudar no acompanhamento dos nossos alunos com orientações e insights em tempo real.';
 
 const CLARIS_NOT_CONFIGURED_REPLY =
-  'Ainda não estou configurada. Vá em Configurações > Claris IA para conectar um modelo.';
+  'Ainda não estou configurada. Vá em Administração > Configurações > Claris IA para conectar um modelo.';
+
+const CLARIS_INVALID_CONFIG_ADMIN_REPLY =
+  'A configuração atual da Claris IA está inválida. Revise em Administração > Configurações > Claris IA para eu voltar a responder.';
+
+const CLARIS_BLOCKED_COMMON_USER_REPLY =
+  'Desculpe, no momento estou aguardando o Administrador do site me configurar e por enquanto não posso responder.';
 
 const INITIAL_MESSAGE: ChatMessage = {
   id: 'welcome',
@@ -333,6 +340,7 @@ interface ClarisConversationThread {
 }
 
 type FloatingChatVisualState = 'closed' | 'opening' | 'open' | 'closing';
+type ClarisAvailabilityStatus = 'ready' | 'not_configured' | 'invalid';
 
 // ---- Supabase helpers ----
 
@@ -388,6 +396,7 @@ export interface FloatingClarisChatProps { variant?: 'floating' | 'page'; }
 
 export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatProps) {
   const auth = useAuth() as { moodleSession?: { moodleUrl: string; moodleToken: string } | null; user?: { id: string } | null };
+  const { isAdmin } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
   const moodleSession = auth.moodleSession ?? null;
@@ -407,7 +416,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [conversations, setConversations] = useState<ClarisConversationThread[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
-  const [isConfigured, setIsConfigured] = useState(false);
+  const [clarisAvailability, setClarisAvailability] = useState<ClarisAvailabilityStatus>('not_configured');
   const [isSending, setIsSending] = useState(false);
   const [isHydratingConversations, setIsHydratingConversations] = useState(true);
   const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
@@ -417,7 +426,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const inputRef = useRef<HTMLInputElement>(null);
   const isOpen = visualState === 'opening' || visualState === 'open';
 
-  const canSend = useMemo(() => inputValue.trim().length > 0 && !isSending, [inputValue, isSending]);
+  const isClarisReady = clarisAvailability === 'ready';
+  const canSend = useMemo(() => inputValue.trim().length > 0 && !isSending && isClarisReady, [inputValue, isSending, isClarisReady]);
   const activeConversation = useMemo(() => conversations.find((c) => c.id === activeConversationId) ?? null, [conversations, activeConversationId]);
   const activeConversationTitle = activeConversation?.title ?? '';
   const suggestionsRoute = activeConversation?.lastContextRoute || activeRouteContext;
@@ -426,21 +436,68 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const shouldShowIcebreakers = !isHydratingConversations && !activeConversationHasMessages;
   const visibleConversations = useMemo(() => conversations.filter((c) => c.history.length > 0), [conversations]);
 
+  const getUnavailableReply = useCallback((status: ClarisAvailabilityStatus) => {
+    if (!isAdmin) return CLARIS_BLOCKED_COMMON_USER_REPLY;
+    return status === 'invalid' ? CLARIS_INVALID_CONFIG_ADMIN_REPLY : CLARIS_NOT_CONFIGURED_REPLY;
+  }, [isAdmin]);
+
   const refreshGlobalClarisConfiguration = useCallback(async () => {
     try {
-      const appSettings = await fetchGlobalAppSettings(supabase);
-      const configured = Boolean(appSettings.clarisSettings.configured);
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('claris_llm_settings')
+        .eq('singleton_id', GLOBAL_APP_SETTINGS_ID)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const rawSettings = (data?.claris_llm_settings ?? null) as unknown;
+      const parsed = parseClarisLlmSettings(rawSettings);
+      const rawConfiguredFlag = Boolean(
+        rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
+          ? (rawSettings as { configured?: unknown }).configured
+          : false,
+      );
+
+      const status: ClarisAvailabilityStatus = parsed.configured
+        ? 'ready'
+        : rawConfiguredFlag
+          ? 'invalid'
+          : 'not_configured';
+
+      const configured = status === 'ready';
       localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(configured));
-      setIsConfigured(configured);
-      return configured;
+      setClarisAvailability(status);
+      return status;
     } catch {
-      const configured = localStorage.getItem(CLARIS_CONFIGURED_STORAGE_KEY) === 'true';
-      setIsConfigured(configured);
-      return configured;
+      localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, 'false');
+      setClarisAvailability('not_configured');
+      return 'not_configured' as ClarisAvailabilityStatus;
     }
   }, []);
 
   useEffect(() => { void refreshGlobalClarisConfiguration(); }, [refreshGlobalClarisConfiguration]);
+
+  useEffect(() => {
+    if (isHydratingConversations) return;
+    if (clarisAvailability === 'ready') return;
+    const unavailableMessage = getUnavailableReply(clarisAvailability);
+    setMessages((prev) => {
+      if (prev.some((message) => message.isSystem && message.content === unavailableMessage)) {
+        return prev;
+      }
+
+      return [
+        ...prev,
+        {
+          id: `assistant-unavailable-${Date.now()}`,
+          role: 'assistant',
+          content: unavailableMessage,
+          isSystem: true,
+        },
+      ];
+    });
+  }, [clarisAvailability, getUnavailableReply, isHydratingConversations]);
 
   useEffect(() => {
     if (!isFloating) return;
@@ -621,8 +678,11 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     const userMsg: ChatMessage = { id: `user-${Date.now()}`, role: 'user', content: trimmed };
     setMessages((prev) => [...prev.map((m): ChatMessage => ({ ...m, actions: undefined })), userMsg]);
     if (!messageOverride) setInputValue('');
-    const clarisConfigured = isConfigured || await refreshGlobalClarisConfiguration();
-    if (!clarisConfigured) { setMessages((prev) => [...prev, { id: `assistant-${Date.now()}`, role: 'assistant', content: CLARIS_NOT_CONFIGURED_REPLY }]); return; }
+    const availability = isClarisReady ? 'ready' : await refreshGlobalClarisConfiguration();
+    if (availability !== 'ready') {
+      setMessages((prev) => [...prev, { id: `assistant-${Date.now()}`, role: 'assistant', content: getUnavailableReply(availability) }]);
+      return;
+    }
     setIsSending(true);
     try {
       const { data, error } = await supabase.functions.invoke('claris-chat', {
@@ -690,7 +750,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
             {shouldShowIcebreakers && (
               <div className={cn('flex flex-wrap justify-center gap-2 py-6', isFloating ? 'px-2' : 'px-4')}>
                 {contextualSuggestions.map((suggestion) => (
-                  <Button key={suggestion} type="button" variant="outline" size="sm" className="h-auto max-w-[340px] rounded-full border-border/60 px-4 py-2.5 text-center text-xs leading-4 shadow-sm hover:bg-muted/80 transition-colors" onClick={() => handleSend(suggestion)} disabled={isSending}>
+                  <Button key={suggestion} type="button" variant="outline" size="sm" className="h-auto max-w-[340px] rounded-full border-border/60 px-4 py-2.5 text-center text-xs leading-4 shadow-sm hover:bg-muted/80 transition-colors" onClick={() => handleSend(suggestion)} disabled={isSending || !isClarisReady}>
                     <Sparkles className="mr-1.5 h-3.5 w-3.5 shrink-0 text-primary/50" />
                     <span>{suggestion}</span>
                   </Button>
@@ -710,9 +770,9 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
                 ref={inputRef}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                placeholder="Mensagem para Claris IA..."
+                placeholder={isClarisReady ? 'Mensagem para Claris IA...' : 'Claris IA indisponível no momento'}
                 aria-label="Mensagem para Claris IA"
-                disabled={isSending}
+                disabled={isSending || !isClarisReady}
                 className="rounded-full bg-muted/50 border-border/60 pr-10 focus-visible:ring-1"
               />
             </div>

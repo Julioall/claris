@@ -102,6 +102,12 @@ async function parseFunctionsError(err: unknown): Promise<{ status?: number; mes
   }
 }
 
+function isInvalidRefreshTokenError(error: unknown): boolean {
+  if (!error) return false;
+  const message = String((error as { message?: string })?.message || error).toLowerCase();
+  return message.includes('invalid refresh token') || message.includes('refresh token not found');
+}
+
 async function loadStoredSession(): Promise<StoredSession | null> {
   try {
     const stored = sessionStorage.getItem(STORAGE_KEY);
@@ -130,14 +136,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isComplete: false,
   });
 
+  const resetAuthState = useCallback(() => {
+    setUser(null);
+    setMoodleSession(null);
+    setLastSync(null);
+    setCourses([]);
+    sessionStorage.removeItem(STORAGE_KEY);
+  }, []);
+
   useEffect(() => {
+    const handleInvalidRefreshToken = async () => {
+      resetAuthState();
+      await supabase.auth.signOut({ scope: 'local' });
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
-        setUser(null);
-        setMoodleSession(null);
-        setLastSync(null);
-        setCourses([]);
-        sessionStorage.removeItem(STORAGE_KEY);
+        resetAuthState();
         setIsLoading(false);
         return;
       }
@@ -156,23 +171,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadStoredSession().then(stored => {
-          if (stored) {
-            if (stored.user) setUser(stored.user);
-            if (stored.moodleSession) setMoodleSession(stored.moodleSession);
-            setLastSync(stored.user?.last_sync || null);
-          }
+    const initializeSession = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+
+        if (error && isInvalidRefreshTokenError(error)) {
+          await handleInvalidRefreshToken();
           setIsLoading(false);
-        }).catch(() => setIsLoading(false));
-      } else {
+          return;
+        }
+
+        if (session?.user) {
+          loadStoredSession().then(stored => {
+            if (stored) {
+              if (stored.user) setUser(stored.user);
+              if (stored.moodleSession) setMoodleSession(stored.moodleSession);
+              setLastSync(stored.user?.last_sync || null);
+            }
+            setIsLoading(false);
+          }).catch(() => setIsLoading(false));
+          return;
+        }
+
+        setIsLoading(false);
+      } catch (error) {
+        if (isInvalidRefreshTokenError(error)) {
+          await handleInvalidRefreshToken();
+        }
         setIsLoading(false);
       }
-    });
+    };
+
+    initializeSession();
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [resetAuthState]);
 
   const saveSession = useCallback(async (newUser: User | null, newMoodleSession: MoodleSession | null) => {
     if (newUser && newMoodleSession) {
@@ -581,13 +614,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearInvalidSession = useCallback(async () => {
-    setUser(null);
-    setMoodleSession(null);
-    setCourses([]);
-    setLastSync(null);
-    sessionStorage.removeItem(STORAGE_KEY);
-    await supabase.auth.signOut();
-  }, []);
+    resetAuthState();
+    await supabase.auth.signOut({ scope: 'local' });
+  }, [resetAuthState]);
 
   const fetchMoodleCourses = useCallback(async (userIdOverride?: number): Promise<{ courses: Course[]; handledError: boolean }> => {
     const context = await resolveSessionContext();

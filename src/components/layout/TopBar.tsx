@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Bell, Pencil, WifiOff, CheckCheck, ShieldCheck } from 'lucide-react';
+import { Bell, Pencil, WifiOff, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,9 +13,6 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { SupportButton } from '@/components/support/SupportButton';
-import { usePermissions } from '@/hooks/usePermissions';
-import { useNavigate } from 'react-router-dom';
 
 type NotificationSeverity = 'info' | 'warning' | 'critical';
 
@@ -62,8 +59,6 @@ export function TopBar() {
     setIsEditMode,
     isOfflineMode
   } = useAuth();
-  const { isAdmin } = usePermissions();
-  const navigate = useNavigate();
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -175,26 +170,6 @@ export function TopBar() {
               </div>
             </TooltipTrigger>
             <TooltipContent>Moodle indisponível. Sincronização e mensagens desabilitadas.</TooltipContent>
-          </Tooltip>
-        )}
-
-        {/* Support button */}
-        <SupportButton />
-
-        {/* Admin link */}
-        {isAdmin && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate('/admin')}
-                aria-label="Painel admin"
-              >
-                <ShieldCheck className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Painel Administrativo</TooltipContent>
           </Tooltip>
         )}
 

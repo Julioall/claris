@@ -4,6 +4,11 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
 
+const ROUTER_FUTURE = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 const useAuthMock = vi.fn();
 const closeSyncProgressMock = vi.fn();
 const setShowCourseSelectorMock = vi.fn();
@@ -45,7 +50,7 @@ vi.mock("@/components/layout/FloatingClarisChat", () => ({
 
 function renderPage(initialEntry = "/") {
   return render(
-    <MemoryRouter initialEntries={[initialEntry]}>
+    <MemoryRouter initialEntries={[initialEntry]} future={ROUTER_FUTURE}>
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/claris" element={<div>Claris Page</div>} />

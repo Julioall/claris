@@ -5,12 +5,28 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 
+const ROUTER_FUTURE = {
+  v7_startTransition: true,
+  v7_relativeSplatPath: true,
+} as const;
+
 const useAuthMock = vi.fn();
 const useSidebarMock = vi.fn();
+const usePermissionsMock = vi.fn();
 const logoutMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
+}));
+
+vi.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => usePermissionsMock(),
+}));
+
+vi.mock("@/components/support/SupportButton", () => ({
+  SupportButton: ({ showLabel }: { showLabel?: boolean }) => (
+    <button type="button">{showLabel ? "Suporte" : ""}</button>
+  ),
 }));
 
 vi.mock("@/components/ui/sidebar", () => ({
@@ -24,12 +40,21 @@ vi.mock("@/components/ui/sidebar", () => ({
   SidebarMenuItem: ({ children }: { children: ReactNode }) => <li>{children}</li>,
   SidebarHeader: ({ children }: { children: ReactNode }) => <header>{children}</header>,
   SidebarFooter: ({ children }: { children: ReactNode }) => <footer>{children}</footer>,
+  SidebarMenuSub: ({ children }: { children: ReactNode }) => <ul>{children}</ul>,
+  SidebarMenuSubButton: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  SidebarMenuSubItem: ({ children }: { children: ReactNode }) => <li>{children}</li>,
   useSidebar: () => useSidebarMock(),
+}));
+
+vi.mock("@/components/ui/collapsible", () => ({
+  Collapsible: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CollapsibleTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  CollapsibleContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 
 function renderSidebar() {
   return render(
-    <MemoryRouter>
+    <MemoryRouter future={ROUTER_FUTURE}>
       <AppSidebar />
     </MemoryRouter>,
   );
@@ -46,6 +71,7 @@ describe("AppSidebar", () => {
       logout: logoutMock,
     });
     useSidebarMock.mockReturnValue({ state: "expanded" });
+    usePermissionsMock.mockReturnValue({ isAdmin: false, role: null, permissions: [], canAccessAdminSection: () => false });
   });
 
   it("renders navigation and user info when expanded", () => {
@@ -57,6 +83,8 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Alunos")).toBeInTheDocument();
     expect(screen.getByText("Claris IA")).toBeInTheDocument();
     expect(screen.getByText("Relatórios")).toBeInTheDocument();
+    expect(screen.getByText("Configurações")).toBeInTheDocument();
+    expect(screen.getByText("Suporte")).toBeInTheDocument();
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
     expect(screen.getByText("julio")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /meus cursos/i })).toHaveAttribute(
