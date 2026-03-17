@@ -310,7 +310,7 @@ async function getPendingTasks(userId: string, args: ToolCallArgs, supabase: Sup
     .limit(limit)
 
   if (args.status) {
-    query = query.eq('status', args.status)
+    query = query.eq('status', args.status as 'aberta' | 'em_andamento' | 'resolvida')
   } else {
     query = query.in('status', ['aberta', 'em_andamento'])
   }
