@@ -26,6 +26,8 @@ import Messages from "@/pages/Messages";
 import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
 import Claris from "@/pages/Claris";
+import Tasks from "@/pages/Tasks";
+import Agenda from "@/pages/Agenda";
 import NotFound from "@/pages/NotFound";
 
 // Admin Pages
@@ -67,6 +69,8 @@ function AppRoutes() {
         <Route path="/pendencias" element={<PendingTasks />} />
         <Route path="/mensagens" element={<Messages />} />
         <Route path="/claris" element={<Claris />} />
+        <Route path="/tarefas" element={<Tasks />} />
+        <Route path="/agenda" element={<Agenda />} />
         <Route path="/relatorios" element={<Reports />} />
         <Route path="/configuracoes" element={<Settings />} />
       </Route>

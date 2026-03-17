@@ -10,7 +10,9 @@ import {
   MessageSquare,
   Sparkles,
   Shield,
-  ChevronDown
+  ChevronDown,
+  ClipboardCheck,
+  CalendarDays,
 } from 'lucide-react';
 import { ClarisIcon } from '@/components/ui/claris-logo';
 import { NavLink } from '@/components/NavLink';
@@ -45,6 +47,8 @@ const mainNavItems = [
   { title: 'Escolas', url: '/escolas', icon: Building2 },
   { title: 'Alunos', url: '/alunos', icon: Users },
   { title: 'Pendências', url: '/pendencias', icon: ClipboardList },
+  { title: 'Tarefas', url: '/tarefas', icon: ClipboardCheck },
+  { title: 'Agenda', url: '/agenda', icon: CalendarDays },
   { title: 'Mensagens', url: '/mensagens', icon: MessageSquare },
   { title: 'Claris IA', url: '/claris', icon: Sparkles },
   { title: 'Relatórios', url: '/relatorios', icon: FileSpreadsheet },

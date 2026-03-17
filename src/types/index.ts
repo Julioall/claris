@@ -181,6 +181,84 @@ export interface PriorityItem {
   due_date?: string;
 }
 
+// ── Tarefas (Internal Tasks) module ────────────────────────────────────────
+
+export type InternalTaskStatus = 'backlog' | 'em_andamento' | 'concluida' | 'cancelada';
+export type InternalTaskPriority = 'baixa' | 'media' | 'alta' | 'urgente';
+
+export interface InternalTaskComment {
+  id: string;
+  task_id: string;
+  user_id?: string;
+  content: string;
+  created_at: string;
+  user?: Pick<User, 'id' | 'full_name'>;
+}
+
+export interface InternalTask {
+  id: string;
+  title: string;
+  description?: string;
+  status: InternalTaskStatus;
+  priority: InternalTaskPriority;
+  category?: string;
+  created_by_user_id?: string;
+  assigned_to_user_id?: string;
+  due_date?: string;
+  completed_at?: string;
+  /** Future: link to internal projects */
+  project_id?: string;
+  /** Future: Microsoft Teams task identifier */
+  teams_task_id?: string;
+  created_at: string;
+  updated_at?: string;
+  // Relations
+  created_by?: Pick<User, 'id' | 'full_name'>;
+  assigned_to?: Pick<User, 'id' | 'full_name'>;
+  comments?: InternalTaskComment[];
+}
+
+// ── Agenda module ───────────────────────────────────────────────────────────
+
+export type AgendaEventType = 'reuniao' | 'webaula' | 'rotina' | 'compromisso' | 'outro';
+export type AgendaEventStatus = 'agendado' | 'em_andamento' | 'concluido' | 'cancelado';
+
+export interface AgendaParticipant {
+  user_id?: string;
+  name: string;
+  email?: string;
+}
+
+export interface AgendaEvent {
+  id: string;
+  title: string;
+  description?: string;
+  event_type: AgendaEventType;
+  start_at: string;
+  end_at?: string;
+  all_day: boolean;
+  location?: string;
+  meeting_url?: string;
+  is_recurring: boolean;
+  recurrence_rule?: string;
+  recurrence_parent_id?: string;
+  participants: AgendaParticipant[];
+  created_by_user_id?: string;
+  /** Future: Microsoft Teams event identifier */
+  teams_event_id?: string;
+  /** Future: Microsoft Teams online meeting URL */
+  teams_online_meeting_url?: string;
+  /** Future: Microsoft Teams join URL */
+  teams_join_url?: string;
+  /** Future: timestamp of last sync from Teams */
+  synced_from_teams_at?: string;
+  status: AgendaEventStatus;
+  created_at: string;
+  updated_at?: string;
+  // Relations
+  created_by?: Pick<User, 'id' | 'full_name'>;
+}
+
 // Auth context type
 export interface AuthContextType {
   user: User | null;
