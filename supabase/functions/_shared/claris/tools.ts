@@ -722,6 +722,34 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'get_student_history',
+      description:
+        'Retorna o histórico de estados do aluno ao longo das sincronizações com o Moodle: evolução do nível de risco, dias sem acesso, atividades pendentes e atrasadas em cada ponto no tempo. Use para avaliar se intervenções tiveram efeito, identificar tendências ou detectar possíveis desistentes (sem acesso há mais de 90 dias).',
+      parameters: {
+        type: 'object',
+        properties: {
+          student_id: {
+            type: 'string',
+            description: 'ID do aluno.',
+          },
+          student_name: {
+            type: 'string',
+            description: 'Nome ou parte do nome do aluno. Use quando não tiver student_id.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de snapshots retornados. Padrão: 30. Máximo: 60.',
+            minimum: 1,
+            maximum: 60,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'get_grade_risk',
       description:
         'Lista alunos com risco de reprovação por nota: notas abaixo do limiar mínimo, tendência de queda ou sem nota lançada. Use para priorizar intervenções de recuperação.',

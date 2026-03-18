@@ -17,26 +17,9 @@ interface StudentProfile {
   updated_at: string | null;
 }
 
-interface Note {
-  id: string;
-  student_id: string;
-  user_id: string;
-  content: string;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-interface StudentProfileData {
-  student: StudentProfile | null;
-  notes: Note[];
-}
-
 export function useStudentProfile(studentId: string | undefined) {
   const { user } = useAuth();
-  const [data, setData] = useState<StudentProfileData>({
-    student: null,
-    notes: [],
-  });
+  const [student, setStudent] = useState<StudentProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -50,8 +33,7 @@ export function useStudentProfile(studentId: string | undefined) {
     setError(null);
 
     try {
-      // Fetch student basic info
-      const { data: student, error: studentError } = await supabase
+      const { data: studentData, error: studentError } = await supabase
         .from('students')
         .select('*')
         .eq('id', studentId)
@@ -67,22 +49,10 @@ export function useStudentProfile(studentId: string | undefined) {
         return;
       }
 
-      // Fetch notes
-      const { data: notes, error: notesError } = await supabase
-        .from('notes')
-        .select('*')
-        .eq('student_id', studentId)
-        .order('created_at', { ascending: false });
-
-      if (notesError) throw notesError;
-
-      setData({
-        student: {
-          ...student,
-          current_risk_level: student.current_risk_level as RiskLevel,
-        } as StudentProfile,
-        notes: (notes || []) as Note[],
-      });
+      setStudent({
+        ...studentData,
+        current_risk_level: studentData.current_risk_level as RiskLevel,
+      } as StudentProfile);
     } catch (err) {
       console.error('Error fetching student profile:', err);
       setError(err instanceof Error ? err.message : 'Erro ao carregar perfil do aluno');
@@ -96,9 +66,10 @@ export function useStudentProfile(studentId: string | undefined) {
   }, [fetchStudentData]);
 
   return { 
-    ...data, 
+    student, 
     isLoading, 
     error, 
     refetch: fetchStudentData 
   };
 }
+

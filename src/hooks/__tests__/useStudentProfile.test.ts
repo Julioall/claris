@@ -9,10 +9,6 @@ const studentSelectMock = vi.fn();
 const studentEqMock = vi.fn();
 const studentSingleMock = vi.fn();
 
-const notesSelectMock = vi.fn();
-const notesEqMock = vi.fn();
-const notesOrderMock = vi.fn();
-
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -29,10 +25,6 @@ function setupFromMock() {
   fromMock.mockImplementation((table: string) => {
     if (table === "students") {
       return { select: studentSelectMock };
-    }
-
-    if (table === "notes") {
-      return { select: notesSelectMock };
     }
 
     throw new Error(`Unexpected table: ${table}`);
@@ -65,29 +57,13 @@ describe("useStudentProfile", () => {
       },
       error: null,
     });
-
-    notesSelectMock.mockReturnValue({ eq: notesEqMock });
-    notesEqMock.mockReturnValue({ order: notesOrderMock });
-    notesOrderMock.mockResolvedValue({
-      data: [
-        {
-          id: "n-1",
-          student_id: "s-1",
-          user_id: "user-1",
-          content: "Observacao",
-          created_at: "2026-02-20T00:00:00.000Z",
-          updated_at: "2026-02-20T00:00:00.000Z",
-        },
-      ],
-      error: null,
-    });
   });
 
   afterAll(() => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("loads student profile with notes", async () => {
+  it("loads student profile", async () => {
     const { result } = renderHook(() => useStudentProfile("s-1"));
 
     await waitFor(() => {
@@ -99,7 +75,6 @@ describe("useStudentProfile", () => {
       id: "s-1",
       current_risk_level: "risco",
     });
-    expect(result.current.notes).toHaveLength(1);
   });
 
   it("returns early when student id is missing", async () => {
@@ -141,16 +116,16 @@ describe("useStudentProfile", () => {
     expect(result.current.student).toBeNull();
   });
 
-  it("handles fetch errors from related resources", async () => {
-    notesOrderMock.mockResolvedValueOnce({
+  it("handles fetch errors", async () => {
+    studentSingleMock.mockResolvedValueOnce({
       data: null,
-      error: new Error("notes failed"),
+      error: new Error("fetch failed"),
     });
 
     const { result } = renderHook(() => useStudentProfile("s-1"));
 
     await waitFor(() => {
-      expect(result.current.error).toContain("notes failed");
+      expect(result.current.error).toBeTruthy();
     });
   });
 
@@ -166,7 +141,5 @@ describe("useStudentProfile", () => {
     });
 
     expect(studentSelectMock).toHaveBeenCalledTimes(2);
-    expect(notesSelectMock).toHaveBeenCalledTimes(2);
   });
 });
-

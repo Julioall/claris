@@ -2,6 +2,7 @@ import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   findCourseByMoodleCourseId,
+  insertStudentSyncSnapshots,
   listExistingCourseStudentLinks,
   touchCourseLastSync,
   upsertStudentCourseLinks,
@@ -327,6 +328,66 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       await upsertStudentCourseLinks(supabase, linksToUpsert)
     } catch (linkError) {
       console.error('Error linking students to course:', linkError)
+    }
+
+    // -----------------------------------------------------------------------
+    // Record sync snapshots (one per student per day)
+    // Fetch pending/overdue activity counts for all synced students in one query.
+    // -----------------------------------------------------------------------
+    try {
+      const syncedStudentIds = syncedStudents.map((s) => s.id)
+      const nowDate = new Date()
+
+      // Bulk fetch activity statuses for the course
+      const { data: activityRows } = await supabase
+        .from('student_activities')
+        .select('student_id, due_date, completed_at, submitted_at')
+        .eq('course_id', dbCourse.id)
+        .in('student_id', syncedStudentIds)
+
+      // Aggregate per student
+      type ActivityCounts = { pending: number; overdue: number }
+      const activityCountsByStudent = new Map<string, ActivityCounts>()
+      for (const row of activityRows ?? []) {
+        const sid = row.student_id
+        if (!activityCountsByStudent.has(sid)) {
+          activityCountsByStudent.set(sid, { pending: 0, overdue: 0 })
+        }
+        const counts = activityCountsByStudent.get(sid)!
+        const isDone = Boolean(row.completed_at || row.submitted_at)
+        if (!isDone) {
+          counts.pending++
+          if (row.due_date && new Date(row.due_date) < nowDate) {
+            counts.overdue++
+          }
+        }
+      }
+
+      const snapshots = syncedStudents.map((s) => {
+        const data = studentDataMap.get(s.moodle_user_id)
+        const counts = activityCountsByStudent.get(s.id) ?? { pending: 0, overdue: 0 }
+        const lastAccessIso = data?.lastCourseAccess ?? s.last_access ?? null
+        const daysSinceAccess = lastAccessIso
+          ? Math.floor((nowDate.getTime() - new Date(lastAccessIso).getTime()) / 86400000)
+          : null
+        return {
+          student_id: s.id,
+          course_id: dbCourse.id,
+          synced_at: now,
+          risk_level: s.current_risk_level ?? 'normal',
+          enrollment_status: data?.status ?? 'ativo',
+          last_access: lastAccessIso,
+          days_since_access: daysSinceAccess,
+          pending_activities: counts.pending,
+          overdue_activities: counts.overdue,
+        }
+      })
+
+      await insertStudentSyncSnapshots(supabase, snapshots)
+      console.log(`[moodle-sync-students] course=${courseId} recorded ${snapshots.length} sync snapshots`)
+    } catch (snapshotError) {
+      console.error('[moodle-sync-students] Error recording sync snapshots:', snapshotError)
+      // Non-fatal
     }
   }
 
