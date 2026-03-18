@@ -519,6 +519,146 @@ export type Database = {
           },
         ]
       }
+      claris_suggestion_cooldowns: {
+        Row: {
+          created_at: string
+          entity_id: string | null
+          entity_type: string | null
+          expires_at: string
+          id: string
+          outcome: string
+          set_at: string
+          suggestion_id: string | null
+          trigger_engine: string
+          trigger_key: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          expires_at: string
+          id?: string
+          outcome?: string
+          set_at?: string
+          suggestion_id?: string | null
+          trigger_engine: string
+          trigger_key: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          entity_id?: string | null
+          entity_type?: string | null
+          expires_at?: string
+          id?: string
+          outcome?: string
+          set_at?: string
+          suggestion_id?: string | null
+          trigger_engine?: string
+          trigger_key?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claris_suggestion_cooldowns_suggestion_id_fkey"
+            columns: ["suggestion_id"]
+            isOneToOne: false
+            referencedRelation: "claris_suggestions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "claris_suggestion_cooldowns_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      claris_suggestions: {
+        Row: {
+          acted_at: string | null
+          action_payload: Json | null
+          action_type: string | null
+          analysis: string | null
+          body: string
+          created_at: string
+          entity_id: string | null
+          entity_name: string | null
+          entity_type: string | null
+          expected_impact: string | null
+          expires_at: string | null
+          id: string
+          priority: string
+          reason: string | null
+          status: string
+          suggested_at: string
+          title: string
+          trigger_context: Json | null
+          trigger_engine: string | null
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          acted_at?: string | null
+          action_payload?: Json | null
+          action_type?: string | null
+          analysis?: string | null
+          body: string
+          created_at?: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: string | null
+          expected_impact?: string | null
+          expires_at?: string | null
+          id?: string
+          priority?: string
+          reason?: string | null
+          status?: string
+          suggested_at?: string
+          title: string
+          trigger_context?: Json | null
+          trigger_engine?: string | null
+          type: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          acted_at?: string | null
+          action_payload?: Json | null
+          action_type?: string | null
+          analysis?: string | null
+          body?: string
+          created_at?: string
+          entity_id?: string | null
+          entity_name?: string | null
+          entity_type?: string | null
+          expected_impact?: string | null
+          expires_at?: string | null
+          id?: string
+          priority?: string
+          reason?: string | null
+          status?: string
+          suggested_at?: string
+          title?: string
+          trigger_context?: Json | null
+          trigger_engine?: string | null
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claris_suggestions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           category: string | null
