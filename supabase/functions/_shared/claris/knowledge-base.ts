@@ -127,9 +127,11 @@ O fluxo recomendado para acompanhamento de alunos na Claris é:
 - Use a Claris IA para rascunhar a mensagem de contato
 - Envie via Mensagens (individual ou lote)
 
-**4. Atualizar o risco**
-- Após o contato ou avaliação, atualize o nível de risco do aluno
-- Registre observações no histórico para rastreabilidade
+**4. Acompanhar evolução pelo Histórico**
+- Acesse o perfil do aluno → aba **Histórico** para ver a linha do tempo de sincronizações
+- O histórico mostra: nível de risco, último acesso, atividades pendentes e atrasadas em cada sincronização
+- Use a Claris IA: "Histórico do aluno [nome]" para analisar tendências e avaliar se as intervenções surtiram efeito
+- Alunos sem acesso há mais de 90 dias são classificados como possíveis **desistentes** — acione a escola para atualizar o registro na plataforma
 
 **5. Correção de atividades**
 - Acesse Tarefas ou peça à Claris IA: "Atividades aguardando correção"

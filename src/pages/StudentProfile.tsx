@@ -5,10 +5,9 @@ import {
   User,
   Clock,
   AlertTriangle,
-  Plus,
-  Edit,
   MessageSquare,
-  GraduationCap
+  GraduationCap,
+  History
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -18,6 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { useStudentProfile } from '@/hooks/useStudentProfile';
 import { StudentGradesTab } from '@/components/student/StudentGradesTab';
+import { StudentHistoryTab } from '@/components/student/StudentHistoryTab';
 import { ChatWindow } from '@/components/chat/ChatWindow';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -35,7 +35,6 @@ export default function StudentProfile() {
   
   const { 
     student, 
-    notes, 
     isLoading, 
     error 
   } = useStudentProfile(id);
@@ -97,12 +96,6 @@ export default function StudentProfile() {
           </div>
         </div>
 
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm">
-            <Edit className="h-4 w-4 mr-2" />
-            Editar risco
-          </Button>
-        </div>
       </div>
 
       {/* Quick stats */}
@@ -150,14 +143,9 @@ export default function StudentProfile() {
             <GraduationCap className="h-4 w-4" />
             Notas
           </TabsTrigger>
-          <TabsTrigger value="observacoes" className="gap-2">
-            <MessageSquare className="h-4 w-4" />
-            Observações
-            {notes.length > 0 && (
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {notes.length}
-              </Badge>
-            )}
+          <TabsTrigger value="historico" className="gap-2">
+            <History className="h-4 w-4" />
+            Histórico
           </TabsTrigger>
           <TabsTrigger value="chat" className="gap-2">
             <MessageSquare className="h-4 w-4" />
@@ -170,35 +158,9 @@ export default function StudentProfile() {
           {id && <StudentGradesTab studentId={id} />}
         </TabsContent>
 
-        {/* Observações (Notes) */}
-        <TabsContent value="observacoes" className="mt-4">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-medium">Observações</h3>
-            <Button size="sm" variant="outline">
-              <Plus className="h-4 w-4 mr-2" />
-              Adicionar observação
-            </Button>
-          </div>
-          
-          {notes.length > 0 ? (
-            <div className="space-y-2">
-              {notes.map(note => (
-                <Card key={note.id} className="card-interactive">
-                  <CardContent className="p-4">
-                    <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {note.created_at && formatTime(note.created_at)}
-                    </p>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <MessageSquare className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>Nenhuma observação registrada</p>
-            </div>
-          )}
+        {/* Histórico (Sync History) */}
+        <TabsContent value="historico" className="mt-4">
+          {id && <StudentHistoryTab studentId={id} />}
         </TabsContent>
 
         {/* Chat */}

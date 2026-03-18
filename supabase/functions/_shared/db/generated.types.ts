@@ -1327,6 +1327,66 @@ export type Database = {
           },
         ]
       }
+      student_sync_snapshots: {
+        Row: {
+          id: string
+          student_id: string
+          course_id: string
+          sync_date: string
+          synced_at: string
+          risk_level: string
+          enrollment_status: string
+          last_access: string | null
+          days_since_access: number | null
+          pending_activities: number
+          overdue_activities: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          student_id: string
+          course_id: string
+          sync_date?: string
+          synced_at?: string
+          risk_level?: string
+          enrollment_status?: string
+          last_access?: string | null
+          days_since_access?: number | null
+          pending_activities?: number
+          overdue_activities?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          student_id?: string
+          course_id?: string
+          sync_date?: string
+          synced_at?: string
+          risk_level?: string
+          enrollment_status?: string
+          last_access?: string | null
+          days_since_access?: number | null
+          pending_activities?: number
+          overdue_activities?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_sync_snapshots_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_sync_snapshots_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_courses: {
         Row: {
           course_id: string

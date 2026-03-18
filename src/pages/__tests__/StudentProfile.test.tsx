@@ -16,6 +16,12 @@ vi.mock("@/components/student/StudentGradesTab", () => ({
   ),
 }));
 
+vi.mock("@/components/student/StudentHistoryTab", () => ({
+  StudentHistoryTab: ({ studentId }: { studentId: string }) => (
+    <div data-testid="student-history-tab">{studentId}</div>
+  ),
+}));
+
 vi.mock("@/components/chat/ChatWindow", () => ({
   ChatWindow: ({
     studentName,
@@ -54,13 +60,6 @@ describe("StudentProfile page", () => {
         moodle_user_id: 99,
         last_access: "2026-02-20T00:00:00.000Z",
       },
-      notes: [
-        {
-          id: "n-1",
-          content: "Observacao importante",
-          created_at: "2026-02-20T00:00:00.000Z",
-        },
-      ],
       isLoading: false,
       error: null,
     });
@@ -69,7 +68,6 @@ describe("StudentProfile page", () => {
   it("shows loading state", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
-      notes: [],
       isLoading: true,
       error: null,
     });
@@ -81,7 +79,6 @@ describe("StudentProfile page", () => {
   it("shows error state when student is missing", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
-      notes: [],
       isLoading: false,
       error: "Erro ao carregar aluno",
     });
@@ -100,6 +97,28 @@ describe("StudentProfile page", () => {
         name: (name) => name.trim().toLowerCase() === "acoes",
       }),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders Histórico tab replacing Observações", () => {
+    renderPage();
+
+    expect(screen.getByRole("tab", { name: /histórico/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /observações/i })).not.toBeInTheDocument();
+  });
+
+  it("does not render risk edit button", () => {
+    renderPage();
+
+    expect(screen.queryByRole("button", { name: /editar risco/i })).not.toBeInTheDocument();
+  });
+
+  it("renders StudentHistoryTab when Histórico tab is active", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByRole("tab", { name: /histórico/i }));
+
+    expect(screen.getByTestId("student-history-tab")).toBeInTheDocument();
   });
 
   it("renders chat tab with student moodle id", async () => {

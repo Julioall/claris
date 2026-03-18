@@ -187,6 +187,8 @@ export async function executeToolCall(
     // Phase 2 – Academic context reading
     case 'get_student_summary':
       return getStudentSummary(userId, args, supabase)
+    case 'get_student_history':
+      return getStudentHistory(userId, args, supabase)
     case 'get_grade_risk':
       return getGradeRisk(userId, args, supabase)
     case 'get_engagement_signals':
@@ -1934,6 +1936,102 @@ async function getStudentSummary(userId: string, args: ToolCallArgs, supabase: S
     pending_tasks: pendingTasksResult.data ?? [],
     recent_attendance: attendanceResult.data ?? [],
     absences_last_10: absences,
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+async function getStudentHistory(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const explicitId = (args.student_id ?? '').trim()
+  const nameQuery = (args.student_name ?? '').trim()
+  const limit = Math.min(args.limit ?? 30, 60)
+
+  if (!explicitId && !nameQuery) {
+    return { error: 'Informe student_id ou student_name para obter o histórico do aluno.' }
+  }
+
+  const courseIds = await getUserCourseIds(userId, supabase)
+  if (courseIds.length === 0) return { error: 'Nenhum curso vinculado ao tutor.' }
+
+  const studentIds = await getStudentIdsInCourses(courseIds, supabase)
+  if (studentIds.length === 0) return { error: 'Nenhum aluno encontrado nos seus cursos.' }
+
+  // Resolve student ID from name if needed
+  let resolvedStudentId = explicitId
+  if (!resolvedStudentId) {
+    const { data: matches } = await supabase
+      .from('students')
+      .select('id, full_name')
+      .in('id', studentIds)
+      .ilike('full_name', `%${nameQuery}%`)
+      .limit(1)
+    if (!matches || matches.length === 0) {
+      return { error: `Aluno não encontrado: "${nameQuery}".` }
+    }
+    resolvedStudentId = matches[0].id
+  }
+
+  if (!studentIds.includes(resolvedStudentId)) {
+    return { error: 'Aluno não pertence aos seus cursos.' }
+  }
+
+  const { data: snapshots, error: snapshotsError } = await supabase
+    .from('student_sync_snapshots')
+    .select('synced_at, risk_level, enrollment_status, last_access, days_since_access, pending_activities, overdue_activities, courses(name, short_name)')
+    .eq('student_id', resolvedStudentId)
+    .in('course_id', courseIds)
+    .order('synced_at', { ascending: false })
+    .limit(limit)
+
+  if (snapshotsError) {
+    return { error: `Erro ao buscar histórico do aluno: ${snapshotsError.message}` }
+  }
+
+  const DROPOUT_DAYS = 90
+  const rows = (snapshots ?? []) as Array<{
+    synced_at: string
+    risk_level: string
+    enrollment_status: string
+    last_access: string | null
+    days_since_access: number | null
+    pending_activities: number
+    overdue_activities: number
+    courses: { name: string; short_name: string } | null
+  }>
+
+  const latestSnapshot = rows[0]
+  const isPossibleDropout = latestSnapshot && (latestSnapshot.days_since_access ?? 0) > DROPOUT_DAYS
+
+  // Detect risk-level changes across snapshots
+  const riskChanges: Array<{ date: string; from: string; to: string }> = []
+  for (let i = 0; i < rows.length - 1; i++) {
+    if (rows[i].risk_level !== rows[i + 1].risk_level) {
+      riskChanges.push({
+        date: rows[i].synced_at,
+        from: rows[i + 1].risk_level,
+        to: rows[i].risk_level,
+      })
+    }
+  }
+
+  return {
+    student_id: resolvedStudentId,
+    snapshot_count: rows.length,
+    is_possible_dropout: isPossibleDropout,
+    dropout_recommendation: isPossibleDropout
+      ? 'Aluno sem acesso há mais de 90 dias. Considere classificá-lo como desistente e solicitar à escola a atualização do registro na plataforma.'
+      : null,
+    risk_changes: riskChanges,
+    snapshots: rows.map((s) => ({
+      synced_at: s.synced_at,
+      risk_level: s.risk_level,
+      enrollment_status: s.enrollment_status,
+      last_access: s.last_access,
+      days_since_access: s.days_since_access,
+      pending_activities: s.pending_activities,
+      overdue_activities: s.overdue_activities,
+      course: s.courses?.short_name ?? s.courses?.name ?? null,
+    })),
   }
 }
 

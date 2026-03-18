@@ -11,6 +11,7 @@ export type StudentCourseInsert = TablesInsert<'student_courses'>
 export type StudentActivityInsert = TablesInsert<'student_activities'>
 export type StudentCourseGradeInsert = TablesInsert<'student_course_grades'>
 export type UserCourseInsert = TablesInsert<'user_courses'>
+export type StudentSyncSnapshotInsert = TablesInsert<'student_sync_snapshots'>
 
 export async function findCourseByMoodleCourseId(
   supabase: AppSupabaseClient,
@@ -227,4 +228,29 @@ export async function upsertStudentCourseGrades(
   }
 
   return total
+}
+
+/**
+ * Inserts sync snapshots for each student in the given course.
+ * Uses ON CONFLICT DO NOTHING so that at most one snapshot is kept per
+ * student+course per calendar day (enforced by the unique index).
+ */
+export async function insertStudentSyncSnapshots(
+  supabase: AppSupabaseClient,
+  payload: StudentSyncSnapshotInsert[],
+): Promise<void> {
+  if (payload.length === 0) return
+
+  const BATCH = 200
+  for (let i = 0; i < payload.length; i += BATCH) {
+    const batch = payload.slice(i, i + BATCH)
+    const { error } = await supabase
+      .from('student_sync_snapshots')
+      .upsert(batch, { onConflict: 'student_id,course_id,sync_date', ignoreDuplicates: true })
+
+    if (error) {
+      console.error('[insertStudentSyncSnapshots] error:', error)
+      // Non-fatal: snapshots are supplementary data, don't abort the main sync.
+    }
+  }
 }
