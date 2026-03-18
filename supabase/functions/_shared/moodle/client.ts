@@ -79,7 +79,8 @@ export async function callMoodleApi(
   moodleUrl: string,
   token: string,
   wsfunction: string,
-  params: Record<string, string | number> = {}
+  params: Record<string, string | number> = {},
+  timeoutMs = 25_000,
 ): Promise<unknown> {
   const apiUrl = `${moodleUrl}/webservice/rest/server.php`
   const queryParams = new URLSearchParams({
@@ -91,7 +92,9 @@ export async function callMoodleApi(
 
   console.log(`Calling Moodle API: ${wsfunction}`)
 
-  const response = await fetch(`${apiUrl}?${queryParams.toString()}`)
+  const response = await fetch(`${apiUrl}?${queryParams.toString()}`, {
+    signal: AbortSignal.timeout(timeoutMs),
+  })
   const data = await response.json()
 
   if (data.exception) {
@@ -109,7 +112,8 @@ export async function callMoodleApiPost(
   moodleUrl: string,
   token: string,
   wsfunction: string,
-  params: Record<string, string | number>
+  params: Record<string, string | number>,
+  timeoutMs = 25_000,
 ): Promise<unknown> {
   const apiUrl = `${moodleUrl}/webservice/rest/server.php`
   const formData = new URLSearchParams({
@@ -125,6 +129,7 @@ export async function callMoodleApiPost(
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: formData.toString(),
+    signal: AbortSignal.timeout(timeoutMs),
   })
   const data = await response.json()
 

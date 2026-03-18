@@ -377,6 +377,7 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
         return {
           student_id: s.id,
           course_id: dbCourse.id,
+          sync_date: nowDate.toISOString().split('T')[0],
           synced_at: now,
           risk_level: s.current_risk_level ?? 'normal',
           enrollment_status: data?.status ?? 'ativo',
