@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, CheckCircle2, X, ChevronRight, Lightbulb, AlertTriangle, Clock, ChevronDown, ChevronUp, Zap, MessageSquare, Calendar, ListTodo, GraduationCap, Settings2, LayoutDashboard } from 'lucide-react';
+import { Brain, CheckCircle2, X, ChevronRight, Lightbulb, AlertTriangle, Clock, ChevronDown, ChevronUp, RefreshCw, MessageSquare, Calendar, ListTodo, GraduationCap, Settings2, LayoutDashboard } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -185,15 +185,13 @@ function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps
 }
 
 export function ClarisSuggestions() {
-  const { suggestions, isLoading, acceptSuggestion, dismissSuggestion, triggerProactiveGeneration } = useClarisSuggestions();
+  const { suggestions, isLoading, isGenerating, acceptSuggestion, dismissSuggestion, triggerProactiveGeneration, forceGenerate } = useClarisSuggestions();
   const [expanded, setExpanded] = useState(true);
 
   // Trigger proactive generation on mount (rate-limited inside the hook)
   useEffect(() => {
     triggerProactiveGeneration();
   }, [triggerProactiveGeneration]);
-
-  if (isLoading || suggestions.length === 0) return null;
 
   return (
     <Card>
@@ -202,32 +200,50 @@ export function ClarisSuggestions() {
           <CardTitle className="text-lg flex items-center gap-2">
             <Brain className="h-5 w-5 text-primary" />
             Sugestões da Claris IA
-            <Badge variant="secondary" className="text-xs">
-              {suggestions.length}
-            </Badge>
+            {suggestions.length > 0 && (
+              <Badge variant="secondary" className="text-xs">
+                {suggestions.length}
+              </Badge>
+            )}
           </CardTitle>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
-              className="h-7 text-xs text-muted-foreground gap-1"
-              onClick={() => triggerProactiveGeneration()}
-              title="Atualizar sugestões"
+              className="h-7 w-7 p-0 text-muted-foreground"
+              onClick={() => forceGenerate()}
+              title="Gerar novas sugestões"
+              disabled={isGenerating}
             >
-              <Zap className="h-3 w-3" />
+              <RefreshCw className={cn('h-3.5 w-3.5', isGenerating && 'animate-spin')} />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 text-xs text-muted-foreground"
-              onClick={() => setExpanded((e) => !e)}
-            >
-              {expanded ? 'Ocultar' : 'Ver todas'}
-            </Button>
+            {suggestions.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-muted-foreground"
+                onClick={() => setExpanded((e) => !e)}
+              >
+                {expanded ? 'Ocultar' : 'Ver todas'}
+              </Button>
+            )}
           </div>
         </div>
       </CardHeader>
-      {expanded && (
+      {isLoading ? (
+        <CardContent className="space-y-2">
+          {[1, 2].map((i) => (
+            <div key={i} className="h-16 rounded-lg bg-muted/40 animate-pulse" />
+          ))}
+        </CardContent>
+      ) : suggestions.length === 0 ? (
+        <CardContent>
+          <p className="text-sm text-muted-foreground text-center py-4">
+            Nenhuma sugestão no momento. Clique em{' '}
+            <RefreshCw className="inline h-3 w-3" /> para gerar novas sugestões.
+          </p>
+        </CardContent>
+      ) : expanded ? (
         <CardContent className="space-y-2">
           {suggestions.map((s) => (
             <SuggestionCard
@@ -238,7 +254,7 @@ export function ClarisSuggestions() {
             />
           ))}
         </CardContent>
-      )}
+      ) : null}
     </Card>
   );
 }

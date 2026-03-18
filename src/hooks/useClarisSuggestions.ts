@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -151,21 +151,17 @@ export function useClarisSuggestions() {
   }, [user]);
 
   const isRunningRef = useRef(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const triggerProactiveGeneration = useCallback(async () => {
+  const invokeGeneration = useCallback(async () => {
     if (!user) return;
     if (isRunningRef.current) return;
 
-    const lastRun = parseInt(sessionStorage.getItem(PROACTIVE_LAST_RUN_KEY) ?? '0', 10);
-    if (Date.now() - lastRun < PROACTIVE_MIN_INTERVAL_MS) return;
-
     isRunningRef.current = true;
+    setIsGenerating(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        isRunningRef.current = false;
-        return;
-      }
+      if (!session) return;
       const { error } = await supabase.functions.invoke('generate-proactive-suggestions');
       if (!error) {
         sessionStorage.setItem(PROACTIVE_LAST_RUN_KEY, String(Date.now()));
@@ -175,12 +171,25 @@ export function useClarisSuggestions() {
       // silently ignore
     } finally {
       isRunningRef.current = false;
+      setIsGenerating(false);
     }
   }, [user, qc]);
+
+  const triggerProactiveGeneration = useCallback(async () => {
+    const lastRun = parseInt(sessionStorage.getItem(PROACTIVE_LAST_RUN_KEY) ?? '0', 10);
+    if (Date.now() - lastRun < PROACTIVE_MIN_INTERVAL_MS) return;
+    await invokeGeneration();
+  }, [invokeGeneration]);
+
+  const forceGenerate = useCallback(async () => {
+    sessionStorage.removeItem(PROACTIVE_LAST_RUN_KEY);
+    await invokeGeneration();
+  }, [invokeGeneration]);
 
   return {
     suggestions,
     isLoading,
+    isGenerating,
     acceptSuggestion: acceptMutation.mutate,
     dismissSuggestion: (id: string) => {
       const suggestion = suggestions.find((s) => s.id === id);
@@ -188,5 +197,6 @@ export function useClarisSuggestions() {
       if (suggestion) updateDismissedCooldown(suggestion);
     },
     triggerProactiveGeneration,
+    forceGenerate,
   };
 }

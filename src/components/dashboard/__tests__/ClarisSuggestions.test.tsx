@@ -44,9 +44,11 @@ function defaultHookValue(
   return {
     suggestions,
     isLoading: false,
+    isGenerating: false,
     acceptSuggestion: vi.fn(),
     dismissSuggestion: vi.fn(),
     triggerProactiveGeneration: vi.fn(),
+    forceGenerate: vi.fn(),
     ...overrides,
   };
 }
@@ -56,20 +58,23 @@ describe("ClarisSuggestions", () => {
     vi.clearAllMocks();
   });
 
-  it("renders nothing when there are no suggestions", () => {
+  it("renders the panel with empty state when there are no suggestions", () => {
     useClarisSuggestionsMock.mockReturnValue(defaultHookValue([]));
 
-    const { container } = render(<ClarisSuggestions />);
-    expect(container.firstChild).toBeNull();
+    render(<ClarisSuggestions />);
+    expect(screen.getByText("Sugestões da Claris IA")).toBeInTheDocument();
+    expect(screen.getByText(/Nenhuma sugestão no momento/)).toBeInTheDocument();
   });
 
-  it("renders nothing while loading", () => {
+  it("renders loading skeleton while loading", () => {
     useClarisSuggestionsMock.mockReturnValue(
       defaultHookValue([], { isLoading: true }),
     );
 
-    const { container } = render(<ClarisSuggestions />);
-    expect(container.firstChild).toBeNull();
+    render(<ClarisSuggestions />);
+    expect(screen.getByText("Sugestões da Claris IA")).toBeInTheDocument();
+    // Loading skeletons are rendered (no empty state message visible)
+    expect(screen.queryByText(/Nenhuma sugestão/)).not.toBeInTheDocument();
   });
 
   it("renders suggestion title, body and priority badge when suggestions are present", () => {
@@ -173,12 +178,38 @@ describe("ClarisSuggestions", () => {
   it("calls triggerProactiveGeneration on mount", () => {
     const triggerProactiveGeneration = vi.fn();
     useClarisSuggestionsMock.mockReturnValue(
-      defaultHookValue([buildSuggestion()], { triggerProactiveGeneration }),
+      defaultHookValue([], { triggerProactiveGeneration }),
     );
 
     render(<ClarisSuggestions />);
 
     expect(triggerProactiveGeneration).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls forceGenerate when the refresh button is clicked", async () => {
+    const forceGenerate = vi.fn();
+    useClarisSuggestionsMock.mockReturnValue(
+      defaultHookValue([], { forceGenerate }),
+    );
+
+    render(<ClarisSuggestions />);
+
+    await act(async () => {
+      await userEvent.click(screen.getByRole("button", { name: /gerar novas sugestões/i }));
+    });
+
+    expect(forceGenerate).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows spinning refresh button while isGenerating", () => {
+    useClarisSuggestionsMock.mockReturnValue(
+      defaultHookValue([], { isGenerating: true }),
+    );
+
+    render(<ClarisSuggestions />);
+
+    const refreshBtn = screen.getByRole("button", { name: /gerar novas sugestões/i });
+    expect(refreshBtn).toBeDisabled();
   });
 
   it("expands and collapses the suggestion list when the toggle button is clicked", async () => {
