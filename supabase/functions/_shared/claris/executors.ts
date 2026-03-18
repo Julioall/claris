@@ -206,6 +206,9 @@ export async function executeToolCall(
     // Platform help / documentation
     case 'get_platform_help':
       return getPlatformHelp(userId, args)
+    // Support tickets
+    case 'create_support_ticket':
+      return createSupportTicket(userId, args, supabase)
     default:
       return { error: `Unknown tool: ${toolName}` }
   }
@@ -255,7 +258,7 @@ async function getDashboardSummary(userId: string, supabase: Supabase) {
     return {
       courses: 0,
       students: { total: 0, normal: 0, atencao: 0, risco: 0, critico: 0, inativo: 0 },
-      pending_tasks: { total: 0, aberta: 0, em_andamento: 0 },
+      pending_tasks: { total: 0, todo: 0, in_progress: 0 },
       activities_to_review: 0,
     }
   }
@@ -283,17 +286,17 @@ async function getDashboardSummary(userId: string, supabase: Supabase) {
     if (level in riskCounts) riskCounts[level as keyof typeof riskCounts]++
   }
 
-  // Pending tasks
+  // Pending tasks (from the tasks table)
   const { data: tasks } = await supabase
-    .from('pending_tasks')
+    .from('tasks')
     .select('status')
-    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
-    .in('status', ['aberta', 'em_andamento'])
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .in('status', ['todo', 'in_progress'])
 
-  const taskCounts = { aberta: 0, em_andamento: 0 }
+  const taskCounts = { todo: 0, in_progress: 0 }
   for (const t of tasks ?? []) {
-    if (t.status === 'aberta') taskCounts.aberta++
-    else if (t.status === 'em_andamento') taskCounts.em_andamento++
+    if (t.status === 'todo') taskCounts.todo++
+    else if (t.status === 'in_progress') taskCounts.in_progress++
   }
 
   // Activities to review
@@ -312,7 +315,7 @@ async function getDashboardSummary(userId: string, supabase: Supabase) {
   return {
     courses: courseIds.length,
     students: { total: uniqueStudents.size, ...riskCounts },
-    pending_tasks: { total: taskCounts.aberta + taskCounts.em_andamento, ...taskCounts },
+    pending_tasks: { total: taskCounts.todo + taskCounts.in_progress, ...taskCounts },
     activities_to_review: activitiesToReview,
   }
 }
@@ -339,20 +342,23 @@ async function getPendingTasks(userId: string, args: ToolCallArgs, supabase: Sup
   const limit = Math.min(args.limit ?? 10, 50)
 
   let query = supabase
-    .from('pending_tasks')
-    .select(`
-      title, status, priority, due_date, description,
-      students(full_name),
-      courses(short_name)
-    `)
-    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
+    .from('tasks')
+    .select('id, title, status, priority, due_date, description, entity_type, entity_id')
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
     .order('due_date', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: false })
     .limit(limit)
 
   if (args.status) {
-    query = query.eq('status', args.status as 'aberta' | 'em_andamento' | 'resolvida')
+    const statusMap: Record<string, string> = {
+      todo: 'todo', open: 'todo', aberta: 'todo',
+      in_progress: 'in_progress', em_andamento: 'in_progress',
+      done: 'done', resolved: 'done', resolvida: 'done',
+    }
+    const mapped = statusMap[args.status] ?? args.status
+    query = query.eq('status', mapped as 'todo' | 'in_progress' | 'done')
   } else {
-    query = query.in('status', ['aberta', 'em_andamento'])
+    query = query.in('status', ['todo', 'in_progress'])
   }
 
   const { data } = await query
@@ -383,10 +389,11 @@ async function getStudentDetails(userId: string, studentName: string, supabase: 
 
   const [tasksResult, gradesResult] = await Promise.all([
     supabase
-      .from('pending_tasks')
+      .from('tasks')
       .select('title, status, priority, due_date')
-      .eq('student_id', student.id)
-      .in('status', ['aberta', 'em_andamento'])
+      .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+      .eq('entity_id', student.id)
+      .in('status', ['todo', 'in_progress'])
       .order('due_date', { ascending: true })
       .limit(5),
     supabase
@@ -1499,20 +1506,29 @@ async function createTask(userId: string, args: ToolCallArgs, supabase: Supabase
     return { error: 'Campo title é obrigatório para criar uma tarefa.' }
   }
 
+  const priorityMap: Record<string, string> = {
+    urgent: 'urgent', urgente: 'urgent',
+    high: 'high', alta: 'high',
+    medium: 'medium', media: 'medium',
+    low: 'low', baixa: 'low',
+  }
+
   const insert: Record<string, unknown> = {
     title,
-    created_by_user_id: userId,
-    assigned_to_user_id: userId,
-    status: 'aberta',
-    priority: args.priority === 'urgent' ? 'urgente' : args.priority === 'high' ? 'alta' : args.priority === 'low' ? 'baixa' : 'media',
-    task_type: 'interna',
+    created_by: userId,
+    assigned_to: userId,
+    status: 'todo',
+    priority: priorityMap[args.priority ?? ''] ?? 'medium',
+    suggested_by_ai: true,
   }
 
   if (args.description) insert.description = args.description.trim()
   if (args.due_date) insert.due_date = args.due_date
+  if (args.entity_type) insert.entity_type = args.entity_type
+  if (args.entity_id) insert.entity_id = args.entity_id
 
   const { data, error } = await supabase
-    .from('pending_tasks')
+    .from('tasks')
     .insert(insert)
     .select('id, title, status, priority, due_date, description')
     .single()
@@ -1532,12 +1548,17 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
     return { error: 'Campo task_id é obrigatório para atualizar uma tarefa.' }
   }
 
+  const priorityMap: Record<string, string> = {
+    urgent: 'urgent', urgente: 'urgent',
+    high: 'high', alta: 'high',
+    medium: 'medium', media: 'medium',
+    low: 'low', baixa: 'low',
+  }
+
   const updates: Record<string, unknown> = {}
   if (args.title) updates.title = args.title.trim()
   if (args.description !== undefined) updates.description = args.description?.trim() ?? null
-  if (args.priority) {
-    updates.priority = args.priority === 'urgent' ? 'urgente' : args.priority === 'high' ? 'alta' : args.priority === 'low' ? 'baixa' : 'media'
-  }
+  if (args.priority) updates.priority = priorityMap[args.priority] ?? args.priority
   if (args.due_date !== undefined) updates.due_date = args.due_date || null
 
   if (Object.keys(updates).length === 0) {
@@ -1545,10 +1566,10 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
   }
 
   const { data, error } = await supabase
-    .from('pending_tasks')
+    .from('tasks')
     .update(updates)
     .eq('id', taskId)
-    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
     .select('id, title, status, priority, due_date')
     .maybeSingle()
 
@@ -1566,25 +1587,24 @@ async function changeTaskStatus(userId: string, args: ToolCallArgs, supabase: Su
   if (!taskId) return { error: 'Campo task_id é obrigatório.' }
   if (!rawStatus) return { error: 'Campo status é obrigatório.' }
 
-  // Map English statuses to DB enum values
+  // Map various status aliases to the tasks table enum values
   const statusMap: Record<string, string> = {
-    todo: 'aberta', open: 'aberta', aberta: 'aberta',
-    in_progress: 'em_andamento', em_andamento: 'em_andamento',
-    done: 'resolvida', resolved: 'resolvida', resolvida: 'resolvida',
+    todo: 'todo', open: 'todo', aberta: 'todo',
+    in_progress: 'in_progress', em_andamento: 'in_progress',
+    done: 'done', resolved: 'done', resolvida: 'done',
   }
   const status = statusMap[rawStatus]
   if (!status) {
-    return { error: `Status inválido. Use: aberta, em_andamento, resolvida.` }
+    return { error: `Status inválido. Use: todo, in_progress, done.` }
   }
 
   const updatePayload: Record<string, unknown> = { status }
-  if (status === 'resolvida') updatePayload.completed_at = new Date().toISOString()
 
   const { data, error } = await supabase
-    .from('pending_tasks')
+    .from('tasks')
     .update(updatePayload)
     .eq('id', taskId)
-    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
     .select('id, title, status')
     .maybeSingle()
 
@@ -1599,23 +1619,23 @@ async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase)
   const limit = Math.min(args.limit ?? 10, 50)
 
   let query = supabase
-    .from('pending_tasks')
-    .select('id, title, description, status, priority, due_date, task_type, created_at')
-    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
+    .from('tasks')
+    .select('id, title, description, status, priority, due_date, suggested_by_ai, created_at')
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
     .limit(limit)
 
   if (args.status) {
     const statusMap: Record<string, string> = {
-      todo: 'aberta', open: 'aberta', aberta: 'aberta',
-      in_progress: 'em_andamento', em_andamento: 'em_andamento',
-      done: 'resolvida', resolved: 'resolvida', resolvida: 'resolvida',
+      todo: 'todo', open: 'todo', aberta: 'todo',
+      in_progress: 'in_progress', em_andamento: 'in_progress',
+      done: 'done', resolved: 'done', resolvida: 'done',
     }
     const mapped = statusMap[args.status] ?? args.status
-    query = query.eq('status', mapped as 'aberta' | 'em_andamento' | 'resolvida')
+    query = query.eq('status', mapped as 'todo' | 'in_progress' | 'done')
   } else {
-    query = query.in('status', ['aberta', 'em_andamento'])
+    query = query.in('status', ['todo', 'in_progress'])
   }
 
   const { data, error } = await query
@@ -1815,10 +1835,11 @@ async function getStudentSummary(userId: string, args: ToolCallArgs, supabase: S
       .in('course_id', courseIds)
       .limit(10),
     supabase
-      .from('pending_tasks')
+      .from('tasks')
       .select('title, status, priority, due_date')
-      .eq('student_id', student.id)
-      .in('status', ['aberta', 'em_andamento'])
+      .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+      .eq('entity_id', student.id)
+      .in('status', ['todo', 'in_progress'])
       .limit(5),
     supabase
       .from('attendance_records')
@@ -2329,5 +2350,56 @@ async function getPlatformHelp(_userId: string, args: ToolCallArgs) {
     found: true,
     topic: args.topic ?? 'all',
     sections: sections.map((s) => ({ id: s.id, title: s.title, content: s.content })),
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+async function createSupportTicket(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const title = (args.title ?? '').trim()
+  const description = (args.description ?? '').trim()
+
+  if (!title) return { error: 'Campo title é obrigatório para criar um ticket de suporte.' }
+  if (!description) return { error: 'Campo description é obrigatório para criar um ticket de suporte.' }
+
+  const typeMap: Record<string, string> = {
+    problema: 'problema', bug: 'problema', error: 'problema', erro: 'problema',
+    sugestao: 'sugestao', suggestion: 'sugestao', melhoria: 'sugestao',
+    duvida: 'duvida', question: 'duvida', ajuda: 'duvida',
+  }
+  const priorityMap: Record<string, string> = {
+    critica: 'critica', critico: 'critica', critical: 'critica', urgent: 'critica',
+    alta: 'alta', high: 'alta',
+    normal: 'normal', medium: 'normal', media: 'normal',
+    baixa: 'baixa', low: 'baixa',
+  }
+
+  const ticketType = typeMap[String(args.type ?? '').toLowerCase()] ?? 'problema'
+  const priority = priorityMap[String(args.priority ?? '').toLowerCase()] ?? 'normal'
+
+  const { data, error } = await supabase
+    .from('support_tickets')
+    .insert({
+      user_id: userId,
+      type: ticketType,
+      title,
+      description,
+      priority,
+      route: args.route ?? null,
+      context: args.context ? { ai_generated: true, ...args.context } : { ai_generated: true },
+    })
+    .select('id, title, type, priority, status')
+    .single()
+
+  if (error || !data) {
+    await auditAiAction(userId, 'create_support_ticket', args, 'error: falha ao criar ticket', supabase)
+    return { error: 'Falha ao criar ticket de suporte.' }
+  }
+
+  await auditAiAction(userId, 'create_support_ticket', args, `support ticket created: id=${data.id} title="${data.title}"`, supabase)
+  return {
+    success: true,
+    ticket: data,
+    message: `Ticket de suporte criado com sucesso! ID: ${data.id}. A equipe de suporte foi notificada e entrará em contato em breve.`,
   }
 }

@@ -1,8 +1,9 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar, Edit2, Trash2, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/types';
+import type { Task, TaskStatus } from '@/types';
 import { format, isPast, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -18,6 +19,18 @@ const PRIORITY_LABELS: Record<string, string> = {
   medium: 'Média',
   high: 'Alta',
   urgent: 'Urgente',
+};
+
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  todo: 'A fazer',
+  in_progress: 'Em andamento',
+  done: 'Concluído',
+};
+
+const STATUS_STYLES: Record<TaskStatus, string> = {
+  todo: 'text-muted-foreground',
+  in_progress: 'text-blue-600 dark:text-blue-400',
+  done: 'text-green-600 dark:text-green-400',
 };
 
 interface TaskCardProps {
@@ -83,6 +96,27 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
             <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium', PRIORITY_STYLES[task.priority])}>
               {PRIORITY_LABELS[task.priority]}
             </span>
+
+            {/* Quick status selector */}
+            {onStatusChange && (
+              <div onClick={e => e.stopPropagation()}>
+                <Select
+                  value={task.status}
+                  onValueChange={(val) => onStatusChange(task.id, val as TaskStatus)}
+                >
+                  <SelectTrigger className={cn('h-6 text-[11px] px-2 py-0 border-dashed gap-1 min-w-[100px]', STATUS_STYLES[task.status])}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(STATUS_LABELS) as [TaskStatus, string][]).map(([value, label]) => (
+                      <SelectItem key={value} value={value} className="text-xs">
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {task.due_date && (
               <span className={cn('flex items-center gap-1 text-xs', isOverdue ? 'text-destructive' : 'text-muted-foreground')}>

@@ -114,6 +114,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
   '— Leitura de contexto geral: get_dashboard_summary, get_students_at_risk, get_pending_tasks, get_activities_to_review, get_notifications.',
   '— Leitura de contexto específico (Fase 2): get_student_summary (resumo detalhado de aluno), get_grade_risk (alunos com risco de reprovação), get_engagement_signals (desengajamento), get_recent_attendance_risk (faltas), get_upcoming_calendar_commitments (próximos compromissos).',
   '— Tarefas: create_task, update_task, change_task_status, list_tasks.',
+  '— Suporte: create_support_ticket (registra problemas, bugs, sugestões ou dúvidas no sistema de suporte — use autonomamente ao detectar um problema claro, ou de forma sugestiva perguntando ao usuário se deseja registrar).',
   '— Agenda: create_event, update_event, delete_event, list_events.',
   '— Rotina e automação (Fase 3): get_tutor_routine_suggestions (sugestões do dia), generate_weekly_checklist (checklist semanal), save_suggestion (salvar sugestão no painel da home).',
   '— Proatividade inteligente (Fase 4): run_proactive_engines (executa os 6 motores de sugestão proativa: comunicação, agenda, tarefas, acadêmico, operacional e plataforma — gera sugestões automáticas com memória e cooldown).',

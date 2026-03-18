@@ -64,7 +64,7 @@ interface ChatMessage {
   richBlocks?: ChatRichBlock[];
 }
 
-interface ClarisChatHistoryItem { role: ChatRole; content: string; }
+interface ClarisChatHistoryItem { role: ChatRole; content: string; richBlocks?: ChatRichBlock[]; }
 
 interface ClarisChatFunctionResponse { reply?: unknown; uiActions?: unknown; richBlocks?: unknown; }
 
@@ -137,6 +137,12 @@ function parseStoredHistory(raw: string | null): ClarisChatHistoryItem[] {
         item !== null && typeof item === 'object'
         && ((item as { role?: unknown }).role === 'assistant' || (item as { role?: unknown }).role === 'user')
         && typeof (item as { content?: unknown }).content === 'string')
+      .map((item) => {
+        const base: ClarisChatHistoryItem = { role: item.role, content: item.content };
+        const blocks = parseRichBlocks((item as Record<string, unknown>).richBlocks);
+        if (blocks.length > 0) base.richBlocks = blocks;
+        return base;
+      })
       .slice(-40);
   } catch { return []; }
 }
@@ -158,11 +164,22 @@ function parseHistoryFromJson(raw: unknown): ClarisChatHistoryItem[] {
       item !== null && typeof item === 'object'
       && ((item as { role?: unknown }).role === 'assistant' || (item as { role?: unknown }).role === 'user')
       && typeof (item as { content?: unknown }).content === 'string')
+    .map((item) => {
+      const base: ClarisChatHistoryItem = { role: item.role, content: item.content };
+      const blocks = parseRichBlocks((item as Record<string, unknown>).richBlocks);
+      if (blocks.length > 0) base.richBlocks = blocks;
+      return base;
+    })
     .slice(-40);
 }
 
 function historyToChatMessages(history: ClarisChatHistoryItem[]): ChatMessage[] {
-  return history.map((item, i) => ({ id: `history-${i}-${Date.now()}`, role: item.role, content: item.content }));
+  return history.map((item, i) => ({
+    id: `history-${i}-${Date.now()}`,
+    role: item.role,
+    content: item.content,
+    ...(item.richBlocks && item.richBlocks.length > 0 ? { richBlocks: item.richBlocks } : {}),
+  }));
 }
 
 function deriveConversationTitle(history: ClarisChatHistoryItem[]): string {
@@ -586,7 +603,11 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   // ---- Persist conversation ----
   useEffect(() => {
     if (isHydratingConversations || !activeConversationId) return;
-    const historyToPersist = messages.filter((m) => m.id !== 'welcome' && !m.isSystem).map(({ role, content }) => ({ role, content })).slice(-40);
+    const historyToPersist = messages.filter((m) => m.id !== 'welcome' && !m.isSystem).map(({ role, content, richBlocks }) => ({
+      role,
+      content,
+      ...(richBlocks && richBlocks.length > 0 ? { richBlocks } : {}),
+    })).slice(-40);
     localStorage.setItem(historyStorageKey, JSON.stringify(historyToPersist));
     const nextTitle = deriveConversationTitle(historyToPersist);
     const shouldAutoTitle = activeConversationTitle.trim().toLowerCase() === 'nova conversa';
