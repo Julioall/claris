@@ -8,7 +8,6 @@ import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course
 interface CourseWithStats extends Course {
   students_count: number;
   at_risk_count: number;
-  pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
   is_attendance_enabled: boolean;
@@ -164,19 +163,11 @@ export function useAllCoursesData() {
             ).length || 0;
           }
 
-          // Count pending tasks
-          const { count: pendingTasksCount } = await supabase
-            .from('pending_tasks')
-            .select('*', { count: 'exact', head: true })
-            .eq('course_id', course.id)
-            .neq('status', 'resolvida');
-
           return {
             ...course,
             students_count: studentIds.length,
             student_ids: studentIds,
             at_risk_count: atRiskCount,
-            pending_tasks_count: pendingTasksCount || 0,
             is_following: followedCourseIds.has(course.id),
             is_ignored: ignoredCourseIds.has(course.id),
             is_attendance_enabled: attendanceCourseIds.has(course.id),

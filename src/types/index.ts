@@ -30,7 +30,6 @@ export interface Course {
   // Computed fields for UI
   students_count?: number;
   at_risk_count?: number;
-  pending_tasks_count?: number;
 }
 
 export interface Student {
@@ -47,7 +46,6 @@ export interface Student {
   updated_at: string;
   // Computed fields for UI
   courses?: Course[];
-  pending_tasks_count?: number;
 }
 
 export interface Note {
@@ -154,16 +152,6 @@ export interface TaskComment {
   task_id: string;
   author_id?: string | null;
   comment: string;
-  created_at: string;
-}
-
-export interface TaskHistoryEntry {
-  id: string;
-  task_id: string;
-  field_changed: string;
-  old_value?: string | null;
-  new_value?: string | null;
-  changed_by?: string | null;
   created_at: string;
 }
 

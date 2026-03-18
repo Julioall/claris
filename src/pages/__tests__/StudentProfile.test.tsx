@@ -90,12 +90,11 @@ describe("StudentProfile page", () => {
     expect(screen.getByText(/erro ao carregar aluno/i)).toBeInTheDocument();
   });
 
-  it("renders profile data with tarefas placeholder", () => {
+  it("renders profile data", () => {
     renderPage();
 
     expect(screen.getByText("Ana Silva")).toBeInTheDocument();
     expect(screen.getByText(/motivos do risco/i)).toBeInTheDocument();
-    expect(screen.getByText(/em construção/i)).toBeInTheDocument();
     expect(
       screen.queryByRole("tab", {
         name: (name) => name.trim().toLowerCase() === "acoes",

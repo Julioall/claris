@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Users, AlertTriangle, ClipboardList, Star, StarOff, EyeOff, Eye, CalendarCheck2 } from 'lucide-react';
+import { Users, AlertTriangle, Star, StarOff, EyeOff, Eye, CalendarCheck2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
@@ -19,7 +19,6 @@ interface CourseWithStats {
   last_sync?: string;
   students_count: number;
   at_risk_count: number;
-  pending_tasks_count: number;
   is_following: boolean;
   is_ignored: boolean;
   is_attendance_enabled: boolean;
@@ -145,12 +144,6 @@ export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore, onTog
             <span className="flex items-center gap-1 text-risk-risco">
               <AlertTriangle className="h-3.5 w-3.5" />
               {course.at_risk_count}
-            </span>
-          )}
-          {course.pending_tasks_count > 0 && (
-            <span className="flex items-center gap-1 text-status-pending">
-              <ClipboardList className="h-3.5 w-3.5" />
-              {course.pending_tasks_count}
             </span>
           )}
           {course.is_ignored && (

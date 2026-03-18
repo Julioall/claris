@@ -17,7 +17,6 @@ const baseCourse = {
   name: "Curso da Escola",
   students_count: 18,
   at_risk_count: 2,
-  pending_tasks_count: 4,
   is_following: false,
   is_ignored: false,
   is_attendance_enabled: false,

@@ -27,7 +27,7 @@ export function useTasks() {
 
   const updateMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateTaskInput }) =>
-      tasksService.updateTask(id, input, user?.id),
+      tasksService.updateTask(id, input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: TASKS_KEY });
       toast.success('Tarefa atualizada');
@@ -65,12 +65,6 @@ export function useTaskDetail(taskId: string | null) {
     enabled: !!taskId,
   });
 
-  const { data: history = [], isLoading: historyLoading } = useQuery({
-    queryKey: ['task_history', taskId],
-    queryFn: () => tasksService.listHistory(taskId!),
-    enabled: !!taskId,
-  });
-
   const { data: tags = [] } = useQuery({
     queryKey: ['task_tags', taskId],
     queryFn: () => tasksService.getTaskTags(taskId!),
@@ -103,10 +97,8 @@ export function useTaskDetail(taskId: string | null) {
 
   return {
     comments,
-    history,
     tags,
     commentsLoading,
-    historyLoading,
     addComment: addCommentMutation.mutate,
     addTag: addTagMutation.mutate,
     removeTag: removeTagMutation.mutate,

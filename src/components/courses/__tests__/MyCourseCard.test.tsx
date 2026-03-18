@@ -17,7 +17,6 @@ const baseCourse = {
   name: "Curso em acompanhamento",
   students_count: 20,
   at_risk_count: 3,
-  pending_tasks_count: 5,
   start_date: "2000-01-01T00:00:00.000Z",
   end_date: "2099-12-01T00:00:00.000Z",
   last_sync: "2026-02-20T10:00:00.000Z",

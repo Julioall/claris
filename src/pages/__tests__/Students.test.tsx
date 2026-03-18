@@ -42,7 +42,6 @@ describe("Students page", () => {
           email: "ana@example.com",
           current_risk_level: "risco",
           enrollment_status: "ativo",
-          pending_tasks_count: 2,
           last_access: "2026-02-20T00:00:00.000Z",
         },
       ],
@@ -93,7 +92,6 @@ describe("Students page", () => {
           email: "ana@example.com",
           current_risk_level: "risco",
           enrollment_status: "ativo",
-          pending_tasks_count: 2,
           last_access: "2026-02-20T00:00:00.000Z",
         },
         {
@@ -102,7 +100,6 @@ describe("Students page", () => {
           email: "bruno@example.com",
           current_risk_level: "normal",
           enrollment_status: "suspenso",
-          pending_tasks_count: 0,
           last_access: "2026-02-18T00:00:00.000Z",
         },
       ],

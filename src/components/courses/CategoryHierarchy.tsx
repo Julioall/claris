@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect } from 'react';
 import { 
   Users, 
   AlertTriangle, 
-  ClipboardList, 
   Building2,
   GraduationCap,
   Users2,
@@ -30,7 +29,6 @@ interface CourseWithStats {
   last_sync?: string;
   students_count: number;
   at_risk_count: number;
-  pending_tasks_count: number;
   student_ids?: string[];
   is_attendance_enabled?: boolean;
 }
@@ -39,7 +37,6 @@ interface CategoryStats {
   totalStudents: number;
   uniqueStudentIds: string[];
   totalAtRisk: number;
-  totalPending: number;
   coursesCount: number;
 }
 
@@ -81,7 +78,6 @@ function calculateStats(courses: CourseWithStats[]): CategoryStats {
     totalStudents: uniqueStudentIds.length,
     uniqueStudentIds,
     totalAtRisk: courses.reduce((sum, c) => sum + (c.at_risk_count || 0), 0),
-    totalPending: courses.reduce((sum, c) => sum + (c.pending_tasks_count || 0), 0),
     coursesCount: courses.length,
   };
 }
@@ -103,12 +99,6 @@ function StatsDisplay({ stats, showCourses = false }: { stats: CategoryStats; sh
         <span className="flex items-center gap-1 text-risk-risco">
           <AlertTriangle className="h-3.5 w-3.5" />
           {stats.totalAtRisk}
-        </span>
-      )}
-      {stats.totalPending > 0 && (
-        <span className="flex items-center gap-1 text-status-pending">
-          <ClipboardList className="h-3.5 w-3.5" />
-          {stats.totalPending}
         </span>
       )}
     </div>

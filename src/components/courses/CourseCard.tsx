@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom';
 import { 
   Users, 
   AlertTriangle, 
-  ClipboardList, 
   Calendar,
   Clock,
   ExternalLink
@@ -24,7 +23,6 @@ interface CourseWithStats {
   last_sync?: string;
   students_count: number;
   at_risk_count: number;
-  pending_tasks_count: number;
 }
 
 interface CourseCardProps {
@@ -54,7 +52,7 @@ export function CourseCard({ course }: CourseCardProps) {
           </div>
 
           {/* Stats */}
-          <div className="grid grid-cols-3 gap-3 py-3 border-y">
+          <div className="grid grid-cols-2 gap-3 py-3 border-y">
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-muted-foreground">
                 <Users className="h-3.5 w-3.5" />
@@ -68,13 +66,6 @@ export function CourseCard({ course }: CourseCardProps) {
               </div>
               <p className="text-lg font-semibold">{course.at_risk_count || 0}</p>
               <p className="text-xs text-muted-foreground">Em risco</p>
-            </div>
-            <div className="text-center">
-              <div className="flex items-center justify-center gap-1 text-status-pending">
-                <ClipboardList className="h-3.5 w-3.5" />
-              </div>
-              <p className="text-lg font-semibold">{course.pending_tasks_count || 0}</p>
-              <p className="text-xs text-muted-foreground">Pendências</p>
             </div>
           </div>
 

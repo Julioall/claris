@@ -13,7 +13,6 @@ describe("CourseCard", () => {
             name: "Curso de Matematica",
             students_count: 30,
             at_risk_count: 4,
-            pending_tasks_count: 6,
             start_date: "2026-01-10T00:00:00.000Z",
             end_date: "2026-12-20T00:00:00.000Z",
             last_sync: "2026-02-20T12:00:00.000Z",
@@ -25,7 +24,7 @@ describe("CourseCard", () => {
     expect(screen.getByText("Curso de Matematica")).toBeInTheDocument();
     expect(screen.getByText("30")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
-    expect(screen.getByText("6")).toBeInTheDocument();
+    expect(screen.queryByText("6")).not.toBeInTheDocument();
     expect(screen.getByText(/sincronizado/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /ver painel do curso/i })).toHaveAttribute(
       "href",
@@ -42,7 +41,6 @@ describe("CourseCard", () => {
             name: "Curso sem datas",
             students_count: 0,
             at_risk_count: 0,
-            pending_tasks_count: 0,
             start_date: undefined,
             end_date: undefined,
             last_sync: undefined,
@@ -69,7 +67,6 @@ describe("CourseCard", () => {
             name: "Curso com termino inferido",
             students_count: 0,
             at_risk_count: 0,
-            pending_tasks_count: 0,
             start_date: "2026-01-10T00:00:00.000Z",
             end_date: "2026-12-20T00:00:00.000Z",
             effective_end_date: "2026-03-15T12:00:00.000Z",

@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { Task, TaskComment, TaskHistoryEntry, Tag, TaskStatus, TaskPriority } from '@/types';
+import type { Task, TaskComment, Tag, TaskStatus, TaskPriority } from '@/types';
 
 export interface CreateTaskInput {
   title: string;
@@ -76,13 +76,7 @@ export const tasksService = {
     return toTask(data as any);
   },
 
-  async updateTask(id: string, input: UpdateTaskInput, changedBy?: string): Promise<Task> {
-    const { data: oldData } = await supabase
-      .from('tasks' as never)
-      .select('*')
-      .eq('id', id)
-      .single();
-
+  async updateTask(id: string, input: UpdateTaskInput): Promise<Task> {
     const { data, error } = await supabase
       .from('tasks' as never)
       .update(input as never)
@@ -90,24 +84,6 @@ export const tasksService = {
       .select()
       .single();
     if (error) throw error;
-
-    if (oldData && changedBy) {
-      const trackedFields: (keyof UpdateTaskInput)[] = ['title', 'description', 'status', 'priority', 'assigned_to', 'due_date'];
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const old = oldData as any;
-      const historyEntries = trackedFields
-        .filter(field => input[field] !== undefined && (old[field] ?? null) !== (input[field] ?? null))
-        .map(field => ({
-          task_id: id,
-          field_changed: field,
-          old_value: old[field] != null ? String(old[field]) : null,
-          new_value: input[field] != null ? String(input[field]) : null,
-          changed_by: changedBy,
-        }));
-      if (historyEntries.length > 0) {
-        await supabase.from('task_history' as never).insert(historyEntries as never);
-      }
-    }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return toTask(data as any);
@@ -141,16 +117,6 @@ export const tasksService = {
   async deleteComment(id: string): Promise<void> {
     const { error } = await supabase.from('task_comments' as never).delete().eq('id', id);
     if (error) throw error;
-  },
-
-  async listHistory(taskId: string): Promise<TaskHistoryEntry[]> {
-    const { data, error } = await supabase
-      .from('task_history' as never)
-      .select('*')
-      .eq('task_id', taskId)
-      .order('created_at', { ascending: false });
-    if (error) throw error;
-    return (data ?? []) as TaskHistoryEntry[];
   },
 
   async getTaskTags(taskId: string): Promise<Tag[]> {
