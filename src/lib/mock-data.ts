@@ -195,8 +195,8 @@ export const mockActivityFeed: ActivityFeedItem[] = [
 
 // Weekly summary computed from mock data
 export const mockWeeklySummary: WeeklySummary = {
-  pending_tasks: 0,
-  overdue_tasks: 0,
+  today_events: 0,
+  today_tasks: 0,
   activities_to_review: 0,
   active_normal_students: mockStudents.filter(s => s.current_risk_level === 'normal').length,
   pending_submission_assignments: 0,

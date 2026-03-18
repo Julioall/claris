@@ -1,8 +1,8 @@
 import {
   AlertTriangle,
+  CalendarDays,
+  CheckSquare,
   ClipboardCheck,
-  ClipboardList,
-  Clock,
   UserCheck,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
@@ -18,17 +18,17 @@ export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
       <h2 className="text-lg font-semibold">Sinais do monitoramento</h2>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
-          title="Pendências abertas"
-          value={summary.pending_tasks}
-          subtitle="a resolver"
-          icon={ClipboardList}
+          title="Eventos hoje"
+          value={summary.today_events}
+          subtitle={summary.today_events > 0 ? 'na agenda' : 'nenhum evento hoje'}
+          icon={CalendarDays}
           variant="pending"
         />
         <StatCard
-          title="Pendências atrasadas"
-          value={summary.overdue_tasks}
-          subtitle={summary.overdue_tasks > 0 ? 'exigem atenção' : undefined}
-          icon={Clock}
+          title="Tarefas para hoje"
+          value={summary.today_tasks}
+          subtitle={summary.today_tasks > 0 ? 'com vencimento hoje' : 'nenhuma tarefa hoje'}
+          icon={CheckSquare}
           variant="risk"
         />
         <StatCard
