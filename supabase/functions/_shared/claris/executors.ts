@@ -171,6 +171,8 @@ export async function executeToolCall(
       return updateTask(userId, args, supabase)
     case 'change_task_status':
       return changeTaskStatus(userId, args, supabase)
+    case 'add_tag_to_task':
+      return addTagToTask(userId, args, supabase)
     case 'list_tasks':
       return listTasks(userId, args, supabase)
     // Calendar / agenda management
@@ -324,10 +326,16 @@ async function getDashboardSummary(userId: string, supabase: Supabase) {
 
 async function getStudentsAtRisk(userId: string, args: ToolCallArgs, supabase: Supabase) {
   const riskLevels = (args.risk_levels ?? ['atencao', 'risco', 'critico']) as ('normal' | 'atencao' | 'risco' | 'critico' | 'inativo' | null)[]
+  const limit = Math.min(args.limit ?? 20, 50)
+
+  const courseIds = await getUserCourseIds(userId, supabase)
+  if (courseIds.length === 0) return []
+  const studentIds = await getStudentIdsInCourses(courseIds, supabase)
+  if (studentIds.length === 0) return []
 
   const { data } = await supabase
     .from('students')
-    .select('full_name, current_risk_level, risk_reasons, last_access, email')
+    .select('id, full_name, current_risk_level, risk_reasons, last_access, email')
     .in('id', studentIds)
     .in('current_risk_level', riskLevels)
     .order('current_risk_level', { ascending: false })
@@ -1527,11 +1535,16 @@ async function createTask(userId: string, args: ToolCallArgs, supabase: Supabase
   if (args.due_date) insert.due_date = args.due_date
   if (args.entity_type) insert.entity_type = args.entity_type
   if (args.entity_id) insert.entity_id = args.entity_id
+  if (args.origin_reason) insert.origin_reason = String(args.origin_reason).trim()
+  // Persist AI-supplied text tags on the tasks.tags column (ai_tags in the frontend)
+  if (Array.isArray(args.tags) && args.tags.length > 0) {
+    insert.tags = (args.tags as string[]).map((t: string) => String(t).trim()).filter(Boolean)
+  }
 
   const { data, error } = await supabase
     .from('tasks')
     .insert(insert)
-    .select('id, title, status, priority, due_date, description')
+    .select('id, title, status, priority, due_date, description, entity_type, entity_id, origin_reason, tags')
     .single()
 
   if (error || !data) {
@@ -1614,6 +1627,43 @@ async function changeTaskStatus(userId: string, args: ToolCallArgs, supabase: Su
 
   await auditAiAction(userId, 'change_task_status', args, `task status changed: id=${data.id} status=${data.status}`, supabase)
   return { success: true, task_id: data.id, title: data.title, new_status: data.status }
+}
+
+// ---------------------------------------------------------------------------
+
+async function addTagToTask(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const taskId = (args.task_id ?? '').trim()
+  const tagLabel = (args.tag ?? '').trim()
+
+  if (!taskId) return { error: 'Campo task_id é obrigatório.' }
+  if (!tagLabel) return { error: 'Campo tag é obrigatório.' }
+
+  // Verify task ownership
+  const { data: task } = await supabase
+    .from('tasks')
+    .select('id, title, tags')
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .eq('id', taskId)
+    .single()
+
+  if (!task) return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
+
+  // Append tag to the AI tags array (tasks.tags column) if not already present
+  const existingTags: string[] = Array.isArray(task.tags) ? (task.tags as string[]) : []
+  if (existingTags.includes(tagLabel)) {
+    return { success: true, task_id: taskId, tag: tagLabel, message: 'Tag já está presente na tarefa.' }
+  }
+
+  const updatedTags = [...existingTags, tagLabel]
+  const { error } = await supabase
+    .from('tasks')
+    .update({ tags: updatedTags, updated_at: new Date().toISOString() })
+    .eq('id', taskId)
+
+  if (error) return { error: 'Falha ao adicionar tag à tarefa.' }
+
+  await auditAiAction(userId, 'add_tag_to_task', args, `tag "${tagLabel}" added to task ${taskId}`, supabase)
+  return { success: true, task_id: taskId, title: task.title, tag: tagLabel, all_tags: updatedTags }
 }
 
 async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase) {
@@ -2379,6 +2429,16 @@ async function createSupportTicket(userId: string, args: ToolCallArgs, supabase:
   const ticketType = typeMap[String(args.type ?? '').toLowerCase()] ?? 'problema'
   const priority = priorityMap[String(args.priority ?? '').toLowerCase()] ?? 'normal'
 
+  // Build rich context object for support team
+  const context: Record<string, unknown> = {
+    ai_generated: true,
+    reported_by_claris: true,
+    created_at_utc: new Date().toISOString(),
+  }
+  if (args.steps_to_reproduce) context.steps_to_reproduce = String(args.steps_to_reproduce)
+  if (args.error_message) context.error_message = String(args.error_message)
+  if (args.route) context.route = String(args.route)
+
   const { data, error } = await supabase
     .from('support_tickets')
     .insert({
@@ -2388,7 +2448,7 @@ async function createSupportTicket(userId: string, args: ToolCallArgs, supabase:
       description,
       priority,
       route: args.route ?? null,
-      context: { ai_generated: true },
+      context,
     })
     .select('id, title, type, priority, status')
     .single()

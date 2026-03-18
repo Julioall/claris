@@ -12,11 +12,11 @@ import {
   startOfWeek,
   endOfWeek,
   isSameMonth,
-  isSameDay,
   parseISO,
   addMonths,
   subMonths,
   isToday,
+  isSameDay,
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -48,8 +48,18 @@ export function AgendaCalendarView({ events, onEdit, onCreateOnDate }: AgendaCal
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
   const days = eachDayOfInterval({ start: calStart, end: calEnd });
 
+  // Use local date string comparison to avoid timezone boundary issues.
+  // Supabase returns UTC timestamps; comparing YYYY-MM-DD strings in local time
+  // ensures events align with the day the user picks on the calendar grid.
+  const eventDateKey = (ev: CalendarEvent) => {
+    const d = parseISO(ev.start_at);
+    return format(d, 'yyyy-MM-dd');
+  };
+
+  const dayKey = (day: Date) => format(day, 'yyyy-MM-dd');
+
   const eventsOnDay = (day: Date) =>
-    events.filter(ev => isSameDay(parseISO(ev.start_at), day));
+    events.filter(ev => eventDateKey(ev) === dayKey(day));
 
   const selectedDayEvents = selectedDate ? eventsOnDay(selectedDate) : [];
 
