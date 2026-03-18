@@ -17,7 +17,7 @@ describe("integrations/supabase/client", () => {
     expect(key).toBe(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY);
     expect(options).toMatchObject({
       auth: {
-        storage: localStorage,
+        storage: sessionStorage,
         persistSession: true,
         autoRefreshToken: true,
       },

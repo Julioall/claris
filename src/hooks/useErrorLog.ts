@@ -19,7 +19,7 @@ export function useErrorLog() {
     async (message: string, options: LogErrorOptions = {}) => {
       try {
         const { severity = 'error', category = 'ui', payload = {}, context = {} } = options;
-        await (supabase.from as Function)('app_error_logs').insert({
+        await supabase.from('app_error_logs' as never).insert({
           user_id: user?.id ?? null,
           severity,
           category,
@@ -30,7 +30,7 @@ export function useErrorLog() {
             url: window.location.pathname,
             userAgent: navigator.userAgent,
           },
-        });
+        } as never);
       } catch {
         // Error logging failures are silent
       }

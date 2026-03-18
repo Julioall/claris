@@ -214,6 +214,58 @@ Observações:
 
 - Embora vivam em domínios funcionais diferentes, a fronteira de autorização é a mesma e deve permanecer consistente.
 
+## Tarefas (schema tasks) E Agenda
+
+Tabelas:
+
+- `tasks`
+- `task_comments`
+- `task_history`
+- `tags`
+- `task_tags`
+- `calendar_events`
+
+Regra canônica:
+
+- `tasks`: leitura e escrita restritas ao criador (`created_by`) ou responsável (`assigned_to`). Insert obriga `created_by = auth.uid()`. Delete apenas pelo criador.
+- `task_comments`: leitura contextual pelo vínculo com a tarefa (criador ou responsável); insert exige `author_id = auth.uid()` e pertencimento à tarefa; update/delete apenas pelo autor.
+- `task_history`: leitura pelo criador ou responsável da tarefa; insert exige `changed_by = auth.uid()` e pertencimento.
+- `tags`: user-owned por `created_by = auth.uid()`.
+- `task_tags`: acesso e insert condicionados ao vínculo com tarefa do próprio usuário.
+- `calendar_events`: user-owned por `owner = auth.uid()`. Todos os operations CRUD restritos ao dono.
+
+Migrations de referência:
+
+- `20260317200000_create_tasks_and_agenda.sql` — criação inicial (policies permissivas, substituídas abaixo).
+- `20260317210000_extend_tasks_and_agenda_for_ia.sql` — campos adicionais para IA.
+- `20260317260000_tighten_tasks_calendar_rls.sql` — **canônica**: remove policies `auth.uid() IS NOT NULL` e substitui por escopo de propriedade real.
+
+Observações:
+
+- A migration `20260317200000` usava `USING (auth.uid() IS NOT NULL)` — qualquer usuário autenticado lia e gravava todos os registros. Isso foi corrigido pela migration `20260317260000`.
+- A política de `calendar_events` é análoga à de `moodle_conversations` (owner-only).
+- Tasks do sistema criadas por Edge Functions são inseridas via `service_role` e ficam fora do escopo de RLS.
+
+## Auditoria de Ações da IA
+
+Tabelas:
+
+- `claris_ai_actions`
+
+Regra canônica:
+
+- `claris_ai_actions`: leitura apenas pelo próprio usuário (`user_id = auth.uid()`). Insert autenticado exige `user_id = auth.uid()`; as Edge Functions (service_role) inserem diretamente. Nenhuma policy de UPDATE ou DELETE — linhas são imutáveis.
+
+Migrations de referência:
+
+- `20260317270000_add_claris_ai_audit.sql`
+
+Observações:
+
+- Cada ação mutante iniciada pela IA (create_task, update_task, change_task_status, create_event, update_event, delete_event, confirm_bulk_message_send, cancel_bulk_message_send) grava uma linha nesta tabela via `auditAiAction()` nos executores.
+- O payload de args é truncado em 4 KB e campos de texto livre em 500 chars para evitar armazenamento excessivo.
+- A imutabilidade é garantida pela ausência de policies de UPDATE/DELETE para roles não-service_role.
+
 ## Checklist De Revisão Para Novas Migrations
 
 - Atualizar este documento sempre que uma migration criar, dropar ou reescrever policy.

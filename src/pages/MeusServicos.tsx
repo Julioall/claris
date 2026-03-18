@@ -285,7 +285,7 @@ export default function MeusServicos() {
     queryKey: ['my-whatsapp-instance'],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await (supabase.from as Function)('app_service_instances')
+      const { data, error } = await supabase.from('app_service_instances' as never)
         .select('*')
         .eq('owner_user_id', user.id)
         .eq('service_type', 'whatsapp')
@@ -301,7 +301,7 @@ export default function MeusServicos() {
     queryKey: ['my-whatsapp-events', myInstance?.id],
     queryFn: async () => {
       if (!myInstance) return [];
-      const { data, error } = await (supabase.from as Function)('app_service_instance_events')
+      const { data, error } = await supabase.from('app_service_instance_events' as never)
         .select('id, event_type, origin, status, context, error_summary, created_at')
         .eq('instance_id', myInstance.id)
         .order('created_at', { ascending: false })

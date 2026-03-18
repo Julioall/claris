@@ -11,12 +11,12 @@ export async function trackEvent(
   options: { route?: string; metadata?: Record<string, unknown> } = {},
 ): Promise<void> {
   try {
-    await (supabase.from as Function)('app_usage_events').insert({
+    await supabase.from('app_usage_events' as never).insert({
       user_id: userId ?? null,
       event_type: eventType,
       route: options.route ?? (typeof window !== 'undefined' ? window.location.pathname : null),
       metadata: options.metadata ?? {},
-    });
+    } as never);
   } catch {
     // Tracking failures are silent
   }
@@ -33,7 +33,7 @@ export async function logError(
   options: { category?: string; payload?: Record<string, unknown> } = {},
 ): Promise<void> {
   try {
-    await (supabase.from as Function)('app_error_logs').insert({
+    await supabase.from('app_error_logs' as never).insert({
       user_id: userId ?? null,
       severity: 'error',
       category: options.category ?? 'integration',
@@ -41,7 +41,7 @@ export async function logError(
       payload: options.payload ?? {},
       context: { url: typeof window !== 'undefined' ? window.location.pathname : null },
       resolved: false,
-    });
+    } as never);
   } catch {
     // Logging failures are silent
   }

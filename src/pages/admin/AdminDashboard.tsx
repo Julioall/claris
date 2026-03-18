@@ -32,7 +32,7 @@ export default function AdminDashboard() {
   const { data: usageCount } = useQuery({
     queryKey: ['admin-usage-count'],
     queryFn: async () => {
-      const { count } = await (supabase.from as Function)('app_usage_events')
+      const { count } = await supabase.from('app_usage_events' as never)
         .select('*', { count: 'exact', head: true });
       return count ?? 0;
     },
@@ -41,7 +41,7 @@ export default function AdminDashboard() {
   const { data: errorCount } = useQuery({
     queryKey: ['admin-error-count'],
     queryFn: async () => {
-      const { count } = await (supabase.from as Function)('app_error_logs')
+      const { count } = await supabase.from('app_error_logs' as never)
         .select('*', { count: 'exact', head: true })
         .eq('resolved', false);
       return count ?? 0;
@@ -51,7 +51,7 @@ export default function AdminDashboard() {
   const { data: ticketCount } = useQuery({
     queryKey: ['admin-ticket-count'],
     queryFn: async () => {
-      const { count } = await (supabase.from as Function)('support_tickets')
+      const { count } = await supabase.from('support_tickets' as never)
         .select('*', { count: 'exact', head: true })
         .eq('status', 'aberto');
       return count ?? 0;
@@ -84,7 +84,7 @@ export default function AdminDashboard() {
     queryFn: async () => {
       const since = subDays(new Date(), 6);
       since.setHours(0, 0, 0, 0);
-      const { data } = await (supabase.from as Function)('app_usage_events')
+      const { data } = await supabase.from('app_usage_events' as never)
         .select('created_at')
         .gte('created_at', since.toISOString())
         .order('created_at', { ascending: true });
