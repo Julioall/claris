@@ -65,7 +65,7 @@ export interface ClarisStatCardsBlock {
 export type ClarisRichBlock = ClarisDataTableBlock | ClarisStatCardsBlock
 
 /** Maximum number of tool-call iterations to prevent infinite loops. */
-const MAX_ITERATIONS = 5
+const MAX_ITERATIONS = 15
 
 // ---------------------------------------------------------------------------
 // Rich block helpers
@@ -363,7 +363,7 @@ export async function runClarisLoop(
         body: JSON.stringify({
           model: settings.model,
           temperature: 0.3,
-          max_tokens: 800,
+          max_tokens: 4000,
           tools: CLARIS_TOOLS,
           tool_choice: 'auto',
           messages: history,

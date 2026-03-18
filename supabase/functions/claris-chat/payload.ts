@@ -21,7 +21,7 @@ export function parseClarisChatPayload(rawBody: unknown): ClarisChatPayload {
   const body = expectBodyObject(rawBody)
 
   return {
-    message: readRequiredString(body, 'message', 4000),
+    message: readRequiredString(body, 'message', 32000),
     history: parseHistory(body.history),
     moodleUrl: body.moodleUrl ? readRequiredMoodleUrl(body) : undefined,
     moodleToken: readOptionalString(body, 'moodleToken', 4096),

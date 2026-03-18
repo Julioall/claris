@@ -163,7 +163,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
         actionKind: body.action?.kind,
         actionJobId: body.action?.jobId,
       },
-      60000,
+      120000,
     )
 
     if (!reply) {
