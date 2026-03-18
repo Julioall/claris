@@ -93,6 +93,7 @@ function resolveEnrollmentStatus(args: {
   isInactive: boolean
   isNotCurrent: boolean
   isExplicitlyActive: boolean
+  hasRecentCourseAccess: boolean
 }): 'ativo' | 'suspenso' | 'concluido' | 'inativo' {
   const {
     isMassSuspensionPreStartIgnored,
@@ -102,11 +103,18 @@ function resolveEnrollmentStatus(args: {
     isInactive,
     isNotCurrent,
     isExplicitlyActive,
+    hasRecentCourseAccess,
   } = args
 
   if (isNotCurrent) return 'inativo'
   if (isExplicitlyActive && !isSuspendedByPayload) return 'ativo'
   if (isMassSuspensionPreStartIgnored && isSuspendedByOnlySuspended) return 'inativo'
+  // A student who accessed the course very recently is demonstrably active.
+  // The weaker isSuspendedByOnlySuspended signal (from the Moodle enrolled-users
+  // API, which can have false positives) must not override this. Only explicit
+  // suspension flags in the payload (isSuspendedByPayload) are strong enough to
+  // mark a recently-active student as suspended.
+  if (hasRecentCourseAccess && !isSuspendedByPayload) return 'ativo'
   if (isSuspendedByOnlySuspended || isSuspendedByPayload) return 'suspenso'
   if (isCompleted) return 'concluido'
   if (isInactive) return 'inativo'
@@ -210,6 +218,21 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       isInactiveValue((student as { active?: unknown }).active) ||
       isInactiveValue((student as { isactive?: unknown }).isactive)
 
+    const studentWithExtras = student as { lastcourseaccess?: number }
+    const lastCourseAccessTimestamp = studentWithExtras.lastcourseaccess ?? 0
+    const lastCourseAccess = lastCourseAccessTimestamp
+      ? new Date(lastCourseAccessTimestamp * 1000).toISOString()
+      : null
+
+    // A student who accessed the course within the last 7 days is demonstrably
+    // active. 7 days matches the default "atencao" risk threshold (see the
+    // compute_student_risk DB function). Keep this value in sync with that
+    // threshold if it ever becomes user-configurable.
+    const RECENT_ACCESS_THRESHOLD_SECONDS = 7 * 24 * 60 * 60
+    const hasRecentCourseAccess =
+      lastCourseAccessTimestamp > 0 &&
+      Date.now() / 1000 - lastCourseAccessTimestamp < RECENT_ACCESS_THRESHOLD_SECONDS
+
     const enrollmentStatus = resolveEnrollmentStatus({
       isMassSuspensionPreStartIgnored,
       isSuspendedByOnlySuspended,
@@ -218,12 +241,8 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       isInactive,
       isNotCurrent,
       isExplicitlyActive,
+      hasRecentCourseAccess,
     })
-
-    const studentWithExtras = student as { lastcourseaccess?: number }
-    const lastCourseAccess = studentWithExtras.lastcourseaccess
-      ? new Date(studentWithExtras.lastcourseaccess * 1000).toISOString()
-      : null
 
     return {
       moodle_user_id: String(student.id),

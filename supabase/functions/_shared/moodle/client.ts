@@ -254,60 +254,22 @@ export async function getCourseSuspendedUserIds(
           'options[0][value]': 1,
         })
 
-        if (suspendedViaOptions.length > 0) {
-          const suspendedIds = new Set<number>(
-            suspendedViaOptions
-              .map((user: { id?: number }) => user.id)
-              .filter((id): id is number => typeof id === 'number')
-          )
-          console.log(
-            `Fetched suspended users via options for course ${courseId}: suspended=${suspendedIds.size}`
-          )
-          return suspendedIds
-        }
-
-        console.warn(
-          `Moodle for course ${courseId} returned non-array for options[onlysuspended]. Falling back to inference.`
-        )
-
-        const allEnrolledUsers = await getCourseEnrolledUsers(moodleUrl, token, courseId)
-
-        let activeUsers: unknown[] = []
-        try {
-          activeUsers = await callGetEnrolledUsers(moodleUrl, token, courseId, { onlyactive: 1 })
-        } catch {
-          activeUsers = await callGetEnrolledUsers(moodleUrl, token, courseId, {
-            'options[0][name]': 'onlyactive',
-            'options[0][value]': 1,
-          })
-        }
-
-        const allIds = new Set<number>(
-          allEnrolledUsers
-            .map((user) => user.id)
-            .filter((id): id is number => typeof id === 'number')
-        )
-
-        const activeIds = new Set<number>(
-          activeUsers
+        // Trust the result directly — an empty array means no suspended users,
+        // not that the filter was ignored. Falling through to inference here was
+        // the root cause of falsely marking students with recent access as
+        // suspended (inference: all enrolled − active enrolled = suspended is
+        // unreliable across Moodle versions).
+        const suspendedIds = new Set<number>(
+          suspendedViaOptions
             .map((user: { id?: number }) => user.id)
             .filter((id): id is number => typeof id === 'number')
         )
-
-        const inferredSuspendedIds = new Set<number>()
-        for (const userId of allIds) {
-          if (!activeIds.has(userId)) {
-            inferredSuspendedIds.add(userId)
-          }
-        }
-
         console.log(
-          `Inferred suspended users for course ${courseId}: total=${allIds.size}, active=${activeIds.size}, suspended=${inferredSuspendedIds.size}`
+          `Fetched suspended users via options for course ${courseId}: suspended=${suspendedIds.size}`
         )
-
-        return inferredSuspendedIds
+        return suspendedIds
       } catch (fallbackError) {
-        console.error(`Fallback failed inferring suspended users for course ${courseId}:`, fallbackError)
+        console.error(`Fallback failed fetching suspended users for course ${courseId}:`, fallbackError)
         return new Set<number>()
       }
     }
