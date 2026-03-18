@@ -5,7 +5,6 @@ import {
   Users, 
   ClipboardList, 
   AlertTriangle,
-  BookOpen,
   Calendar,
   Clock,
   CheckCircle2,
@@ -17,6 +16,7 @@ import {
   ChevronUp,
   RefreshCw
 } from 'lucide-react';
+import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -356,7 +356,7 @@ export default function CoursePanel() {
                   <span className="font-medium">{formatDateTime(course.last_sync)}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
-                  <BookOpen className="h-4 w-4 text-muted-foreground" />
+                  <MoodleIcon className="h-4 w-4" />
                   <span className="text-muted-foreground">ID Moodle:</span>
                   <span className="font-medium">{course.moodle_course_id}</span>
                 </div>

@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, Trash2, CalendarClock, AlertCircle, Pencil, MessageCircle, BookOpen } from 'lucide-react';
+import { Plus, Trash2, CalendarClock, AlertCircle, Pencil, MessageCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
@@ -355,7 +356,7 @@ export function ScheduledMessagesTab() {
                 <SelectContent>
                   <SelectItem value="moodle">
                     <div className="flex items-center gap-2">
-                      <BookOpen className="h-4 w-4 text-muted-foreground" />
+                      <MoodleIcon className="h-4 w-4 shrink-0" />
                       Moodle
                     </div>
                   </SelectItem>

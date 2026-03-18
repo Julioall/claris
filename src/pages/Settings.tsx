@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { User, RefreshCw, LogOut, Clock, Globe } from 'lucide-react';
+import { User, RefreshCw, LogOut, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -89,7 +90,7 @@ export default function Settings() {
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 text-sm">
-              <Globe className="h-4 w-4 text-muted-foreground" />
+              <MoodleIcon className="h-4 w-4" />
               <span className="text-muted-foreground">URL do Moodle:</span>
               <span className="font-medium">{moodleConnectionUrl}</span>
             </div>

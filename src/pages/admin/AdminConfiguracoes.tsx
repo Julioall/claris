@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Globe, Bot } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -228,7 +229,7 @@ export default function AdminConfiguracoes() {
       <Card>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <Globe className="h-5 w-5" />
+            <MoodleIcon className="h-5 w-5" />
             Conexao Moodle
           </CardTitle>
           <CardDescription>URL e servico do Moodle para autenticacao de todos os usuarios</CardDescription>
