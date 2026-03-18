@@ -61,13 +61,13 @@ const enrollmentsResponse = [
     student_id: 'student-1',
     course_id: 'course-1',
     enrollment_status: 'ativo',
-    students: { full_name: 'Ana Silva' },
+    students: { full_name: 'Ana Silva', last_access: null },
   },
   {
     student_id: 'student-2',
     course_id: 'course-1',
     enrollment_status: 'suspenso',
-    students: { full_name: 'Bruno Souza' },
+    students: { full_name: 'Bruno Souza', last_access: null },
   },
 ];
 
@@ -207,10 +207,12 @@ describe('Reports page', () => {
     expect(jsonToSheetMock).toHaveBeenCalledWith([
       {
         Aluno: 'Ana Silva',
+        'Último Acesso (dias)': '-',
         Matematica: 18,
       },
       {
         Aluno: 'Bruno Souza (Suspenso)',
+        'Último Acesso (dias)': '-',
         Matematica: '',
       },
     ]);
@@ -223,6 +225,7 @@ describe('Reports page', () => {
     expect(jsonToSheetMock).toHaveBeenCalledWith([
       {
         Aluno: 'Ana Silva',
+        'Último Acesso (dias)': '-',
         Matematica: 18,
       },
     ]);
