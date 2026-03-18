@@ -7,10 +7,7 @@ import {
   AlertTriangle,
   Plus,
   Edit,
-  CheckSquare,
   MessageSquare,
-  Construction,
-  History,
   GraduationCap
 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
@@ -34,7 +31,7 @@ const riskReasonLabels: Record<string, string> = {
 
 export default function StudentProfile() {
   const { id } = useParams<{ id: string }>();
-  const [activeTab, setActiveTab] = useState('tarefas');
+  const [activeTab, setActiveTab] = useState('notas');
   
   const { 
     student, 
@@ -149,10 +146,6 @@ export default function StudentProfile() {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start">
-          <TabsTrigger value="tarefas" className="gap-2">
-            <CheckSquare className="h-4 w-4" />
-            Tarefas
-          </TabsTrigger>
           <TabsTrigger value="notas" className="gap-2">
             <GraduationCap className="h-4 w-4" />
             Notas
@@ -166,26 +159,11 @@ export default function StudentProfile() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="historico" className="gap-2">
-            <History className="h-4 w-4" />
-            Histórico
-          </TabsTrigger>
           <TabsTrigger value="chat" className="gap-2">
             <MessageSquare className="h-4 w-4" />
             Chat
           </TabsTrigger>
         </TabsList>
-
-        {/* Tarefas */}
-        <TabsContent value="tarefas" className="mt-4">
-          <div className="text-center py-8 text-muted-foreground">
-            <Construction className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p className="font-medium">Módulo de Tarefas em construção</p>
-            <p className="text-sm mt-1">
-              As tarefas deste aluno estarão disponíveis quando o novo módulo for implementado.
-            </p>
-          </div>
-        </TabsContent>
 
         {/* Notas (Grades) */}
         <TabsContent value="notas" className="mt-4">
@@ -221,15 +199,6 @@ export default function StudentProfile() {
               <p>Nenhuma observação registrada</p>
             </div>
           )}
-        </TabsContent>
-
-        {/* Histórico */}
-        <TabsContent value="historico" className="mt-4">
-          <h3 className="font-medium mb-3">Linha do Tempo</h3>
-          <div className="text-center py-8 text-muted-foreground">
-            <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-            <p>Histórico em desenvolvimento</p>
-          </div>
         </TabsContent>
 
         {/* Chat */}

@@ -12,8 +12,6 @@ const userCoursesEqRoleMock = vi.fn();
 const studentCoursesSelectMock = vi.fn();
 const studentCoursesInMock = vi.fn();
 
-const pendingTasksSelectMock = vi.fn();
-
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
@@ -27,12 +25,6 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
-const pendingCountByStudent: Record<string, number> = {
-  "s-1": 2,
-  "s-2": 5,
-  "s-3": 0,
-};
-
 function setupFromMock() {
   fromMock.mockImplementation((table: string) => {
     if (table === "user_courses") {
@@ -44,12 +36,6 @@ function setupFromMock() {
     if (table === "student_courses") {
       return {
         select: studentCoursesSelectMock,
-      };
-    }
-
-    if (table === "pending_tasks") {
-      return {
-        select: pendingTasksSelectMock,
       };
     }
 
@@ -138,20 +124,6 @@ describe("useStudentsData", () => {
       ],
       error: null,
     });
-
-    pendingTasksSelectMock.mockReturnValue({
-      eq: (column: string, value: string) => {
-        if (column !== "student_id") {
-          throw new Error(`Unexpected column on pending_tasks.eq: ${column}`);
-        }
-        return {
-          neq: vi.fn().mockResolvedValue({
-            count: pendingCountByStudent[value] ?? 0,
-            error: null,
-          }),
-        };
-      },
-    });
   });
 
   afterAll(() => {
@@ -173,19 +145,16 @@ describe("useStudentsData", () => {
       id: "s-2",
       current_risk_level: "critico",
       enrollment_status: "suspenso",
-      pending_tasks_count: 5,
     });
     expect(result.current.students[1]).toMatchObject({
       id: "s-1",
       current_risk_level: "atencao",
       enrollment_status: "ativo",
-      pending_tasks_count: 2,
     });
     expect(result.current.students[2]).toMatchObject({
       id: "s-3",
       current_risk_level: "normal",
       enrollment_status: "concluido",
-      pending_tasks_count: 0,
     });
   });
 

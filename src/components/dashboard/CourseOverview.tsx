@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { BookOpen, Users, AlertTriangle, ClipboardList, ExternalLink, Clock } from 'lucide-react';
+import { BookOpen, Users, AlertTriangle, ExternalLink, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -47,12 +47,6 @@ export function CourseOverview({ courses }: CourseOverviewProps) {
                     <span className="flex items-center gap-1 text-risk-risco">
                       <AlertTriangle className="h-3 w-3" />
                       {course.at_risk_count} em risco
-                    </span>
-                  )}
-                  {course.pending_tasks_count && course.pending_tasks_count > 0 && (
-                    <span className="flex items-center gap-1">
-                      <ClipboardList className="h-3 w-3" />
-                      {course.pending_tasks_count} pendências
                     </span>
                   )}
                 </div>

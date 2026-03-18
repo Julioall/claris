@@ -5,7 +5,6 @@ import {
   Search, 
   Filter,
   Clock,
-  ClipboardList,
   UserCheck,
   RefreshCw
 } from 'lucide-react';
@@ -203,7 +202,6 @@ export default function Students() {
               <TableHead>Aluno</TableHead>
               <TableHead>Risco</TableHead>
               <TableHead className="hidden sm:table-cell">Status</TableHead>
-              <TableHead className="hidden md:table-cell">Pendências</TableHead>
               <TableHead className="hidden lg:table-cell">Último Acesso</TableHead>
             </TableRow>
           </TableHeader>
@@ -240,16 +238,6 @@ export default function Students() {
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
                   <EnrollmentStatusBadge status={student.enrollment_status || 'ativo'} />
-                </TableCell>
-                <TableCell className="hidden md:table-cell">
-                  {student.pending_tasks_count && student.pending_tasks_count > 0 ? (
-                    <div className="flex items-center gap-1.5 text-sm">
-                      <ClipboardList className="h-4 w-4 text-muted-foreground" />
-                      <span>{student.pending_tasks_count}</span>
-                    </div>
-                  ) : (
-                    <span className="text-muted-foreground">-</span>
-                  )}
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">

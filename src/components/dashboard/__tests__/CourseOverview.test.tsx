@@ -24,7 +24,6 @@ describe("CourseOverview", () => {
             name: "Matematica Aplicada",
             students_count: 25,
             at_risk_count: 3,
-            pending_tasks_count: 4,
             last_sync: "2026-02-20T12:00:00.000Z",
           } as unknown,
         ]}
@@ -34,7 +33,7 @@ describe("CourseOverview", () => {
     expect(screen.getByText("Matematica Aplicada")).toBeInTheDocument();
     expect(screen.getByText(/25 alunos/i)).toBeInTheDocument();
     expect(screen.getByText(/3 em risco/i)).toBeInTheDocument();
-    expect(screen.getByText(/4 pend/i)).toBeInTheDocument();
+    expect(screen.queryByText(/4 pend/i)).not.toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute("href", "/cursos/c-1");
     expect(screen.getByText(/sincronizado/i)).toBeInTheDocument();
   });
@@ -54,7 +53,6 @@ describe("CourseOverview", () => {
             name: "Fisica",
             students_count: 0,
             at_risk_count: 0,
-            pending_tasks_count: 0,
             last_sync: undefined,
           } as unknown,
         ]}

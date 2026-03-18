@@ -15,10 +15,6 @@ const studentCountEqMock = vi.fn();
 const studentRiskSelectMock = vi.fn();
 const studentRiskEqMock = vi.fn();
 
-const pendingTasksSelectMock = vi.fn();
-const pendingTasksEqMock = vi.fn();
-const pendingTasksNeqMock = vi.fn();
-
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -47,12 +43,6 @@ function setupFromMock() {
           }
           return studentRiskSelectMock(query, options);
         },
-      };
-    }
-
-    if (table === "pending_tasks") {
-      return {
-        select: pendingTasksSelectMock,
       };
     }
 
@@ -100,10 +90,6 @@ describe("useCoursesData", () => {
       ],
       error: null,
     });
-
-    pendingTasksSelectMock.mockReturnValue({ eq: pendingTasksEqMock });
-    pendingTasksEqMock.mockReturnValue({ neq: pendingTasksNeqMock });
-    pendingTasksNeqMock.mockResolvedValue({ count: 4, error: null });
   });
 
   afterAll(() => {
@@ -124,7 +110,6 @@ describe("useCoursesData", () => {
         name: "Matematica",
         students_count: 25,
         at_risk_count: 2,
-        pending_tasks_count: 4,
       }),
     ]);
   });
@@ -140,7 +125,6 @@ describe("useCoursesData", () => {
 
     expect(result.current.courses).toEqual([]);
     expect(studentCountEqMock).not.toHaveBeenCalled();
-    expect(pendingTasksNeqMock).not.toHaveBeenCalled();
   });
 
   it("stores an error when fetching user courses fails", async () => {

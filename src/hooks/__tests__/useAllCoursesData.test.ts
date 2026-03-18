@@ -41,10 +41,6 @@ const attendanceInsertMock = vi.fn();
 const studentCoursesSelectMock = vi.fn();
 const studentCoursesEqMock = vi.fn();
 
-const pendingSelectMock = vi.fn();
-const pendingEqMock = vi.fn();
-const pendingNeqMock = vi.fn();
-
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -69,11 +65,6 @@ const atRiskByCourse: Record<string, Array<{ students: { current_risk_level: str
     { students: { current_risk_level: "critico" } },
   ],
   "c-2": [{ students: { current_risk_level: "normal" } }],
-};
-
-const pendingCountByCourse: Record<string, number> = {
-  "c-1": 5,
-  "c-2": 1,
 };
 
 function setupFromMock() {
@@ -111,12 +102,6 @@ function setupFromMock() {
     if (table === "student_courses") {
       return {
         select: studentCoursesSelectMock,
-      };
-    }
-
-    if (table === "pending_tasks") {
-      return {
-        select: pendingSelectMock,
       };
     }
 
@@ -197,17 +182,6 @@ describe("useAllCoursesData", () => {
       };
     });
 
-    pendingSelectMock.mockReturnValue({ eq: pendingEqMock });
-    pendingEqMock.mockImplementation((column: string, courseId: string) => {
-      if (column !== "course_id") throw new Error("Unexpected pending_tasks column");
-      return {
-        neq: pendingNeqMock.mockResolvedValueOnce({
-          count: pendingCountByCourse[courseId] || 0,
-          error: null,
-        }),
-      };
-    });
-
     userCoursesDeleteMock.mockReturnValue({ eq: userCoursesDeleteEqUserMock });
     userCoursesDeleteEqUserMock.mockImplementation((column: string, value: string) => {
       if (column !== "user_id") throw new Error(`Unexpected user_courses delete column: ${column}`);
@@ -265,7 +239,6 @@ describe("useAllCoursesData", () => {
       id: "c-1",
       students_count: 3,
       at_risk_count: 2,
-      pending_tasks_count: 5,
       is_following: true,
       is_ignored: false,
       is_attendance_enabled: false,
@@ -274,7 +247,6 @@ describe("useAllCoursesData", () => {
       id: "c-2",
       students_count: 1,
       at_risk_count: 0,
-      pending_tasks_count: 1,
       is_following: false,
       is_ignored: true,
       is_attendance_enabled: true,

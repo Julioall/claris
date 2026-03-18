@@ -4,7 +4,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Student, RiskLevel } from '@/types';
 
 interface StudentWithStats extends Student {
-  pending_tasks_count: number;
   enrollment_status?: string;
 }
 
@@ -135,21 +134,9 @@ export function useStudentsData(courseId?: string) {
       // Get stats for each student
       const studentsWithStats: StudentWithStats[] = await Promise.all(
         uniqueStudentEntries.map(async ({ student, enrollment_status }) => {
-          // Count pending tasks
-          const { count: pendingTasksCount, error: pendingTasksError } = await supabase
-            .from('pending_tasks')
-            .select('*', { count: 'exact', head: true })
-            .eq('student_id', student.id)
-            .neq('status', 'resolvida');
-
-          if (pendingTasksError) {
-            console.warn('Error counting pending tasks for student:', student.id, pendingTasksError);
-          }
-
           return {
             ...student,
             current_risk_level: student.current_risk_level as RiskLevel,
-            pending_tasks_count: pendingTasksCount || 0,
             enrollment_status: enrollment_status || 'ativo',
           } as StudentWithStats;
         })
