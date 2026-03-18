@@ -1975,13 +1975,17 @@ async function getStudentHistory(userId: string, args: ToolCallArgs, supabase: S
     return { error: 'Aluno não pertence aos seus cursos.' }
   }
 
-  const { data: snapshots } = await supabase
+  const { data: snapshots, error: snapshotsError } = await supabase
     .from('student_sync_snapshots')
     .select('synced_at, risk_level, enrollment_status, last_access, days_since_access, pending_activities, overdue_activities, courses(name, short_name)')
     .eq('student_id', resolvedStudentId)
     .in('course_id', courseIds)
     .order('synced_at', { ascending: false })
     .limit(limit)
+
+  if (snapshotsError) {
+    return { error: `Erro ao buscar histórico do aluno: ${snapshotsError.message}` }
+  }
 
   const DROPOUT_DAYS = 90
   const rows = (snapshots ?? []) as Array<{

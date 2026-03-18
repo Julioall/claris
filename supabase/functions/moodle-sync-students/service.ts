@@ -339,11 +339,15 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       const nowDate = new Date()
 
       // Bulk fetch activity statuses for the course
-      const { data: activityRows } = await supabase
+      const { data: activityRows, error: activityError } = await supabase
         .from('student_activities')
         .select('student_id, due_date, completed_at, submitted_at')
         .eq('course_id', dbCourse.id)
         .in('student_id', syncedStudentIds)
+
+      if (activityError) {
+        console.error('[moodle-sync-students] Failed to fetch activities for snapshot:', activityError)
+      }
 
       // Aggregate per student
       type ActivityCounts = { pending: number; overdue: number }

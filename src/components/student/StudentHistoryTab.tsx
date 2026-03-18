@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 
 const DROPOUT_THRESHOLD_DAYS = 90;
 
+const RISK_LEVEL_ORDER = ['normal', 'atencao', 'risco', 'critico'] as const;
+
 const enrollmentStatusLabel: Record<string, string> = {
   ativo: 'Ativo',
   suspenso: 'Suspenso',
@@ -29,6 +31,11 @@ function accessImproved(prev: StudentSyncSnapshot | undefined, curr: StudentSync
   return currDays < prevDays;
 }
 
+function riskIndex(level: string): number {
+  const idx = RISK_LEVEL_ORDER.indexOf(level as typeof RISK_LEVEL_ORDER[number]);
+  return idx === -1 ? 0 : idx;
+}
+
 interface SnapshotCardProps {
   snapshot: StudentSyncSnapshot;
   prev: StudentSyncSnapshot | undefined;
@@ -39,10 +46,8 @@ function SnapshotCard({ snapshot, prev, isFirst }: SnapshotCardProps) {
   const isDropout = (snapshot.days_since_access ?? 0) > DROPOUT_THRESHOLD_DAYS;
   const riskLevelChanged = riskChanged(prev, snapshot);
   const accessGot = accessImproved(prev, snapshot);
-  const riskWorsened = prev && ['normal', 'atencao', 'risco', 'critico'].indexOf(snapshot.risk_level) >
-    ['normal', 'atencao', 'risco', 'critico'].indexOf(prev.risk_level);
-  const riskImproved = prev && ['normal', 'atencao', 'risco', 'critico'].indexOf(snapshot.risk_level) <
-    ['normal', 'atencao', 'risco', 'critico'].indexOf(prev.risk_level);
+  const riskWorsened = prev && riskIndex(snapshot.risk_level) > riskIndex(prev.risk_level);
+  const riskImproved = prev && riskIndex(snapshot.risk_level) < riskIndex(prev.risk_level);
 
   return (
     <div className="relative pl-6">
