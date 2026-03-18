@@ -392,6 +392,12 @@ async function runUnauthenticatedContractChecks(status) {
       name: 'moodle-messaging valid-no-auth',
       path: 'moodle-messaging',
     },
+    {
+      body: {},
+      expectedStatus: 401,
+      name: 'generate-proactive-suggestions no-auth',
+      path: 'generate-proactive-suggestions',
+    },
   ]
 
   const failures = []
@@ -450,6 +456,24 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
   await cleanupAutomatedTaskArtifacts(status, authUserId, studentId)
 
   log('Fluxo autenticado validado com seed local e passagem pela camada de servico.')
+
+  // Smoke check for generate-proactive-suggestions (authenticated)
+  const proactiveRun = await callEdgeFunction(
+    status,
+    'generate-proactive-suggestions',
+    {},
+    accessToken,
+  )
+
+  if (proactiveRun.status !== 200) {
+    fail(`generate-proactive-suggestions deveria retornar 200 com auth, mas retornou ${proactiveRun.status}: ${JSON.stringify(proactiveRun.data)}`)
+  }
+
+  if (typeof proactiveRun.data?.engines_run !== 'number') {
+    fail(`generate-proactive-suggestions nao retornou engines_run: ${JSON.stringify(proactiveRun.data)}`)
+  }
+
+  log('generate-proactive-suggestions validado com autenticacao.')
 }
 
 async function main() {

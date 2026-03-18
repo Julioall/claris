@@ -9,6 +9,70 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      actions: {
+        Row: {
+          action_type: string
+          completed_at: string | null
+          course_id: string | null
+          created_at: string | null
+          description: string
+          id: string
+          scheduled_date: string | null
+          status: string | null
+          student_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          action_type: string
+          completed_at?: string | null
+          course_id?: string | null
+          created_at?: string | null
+          description: string
+          id?: string
+          scheduled_date?: string | null
+          status?: string | null
+          student_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          action_type?: string
+          completed_at?: string | null
+          course_id?: string | null
+          created_at?: string | null
+          description?: string
+          id?: string
+          scheduled_date?: string | null
+          status?: string | null
+          student_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "actions_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "actions_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "actions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_feed: {
         Row: {
           course_id: string | null
@@ -477,6 +541,89 @@ export type Database = {
             columns: ["job_id"]
             isOneToOne: false
             referencedRelation: "bulk_message_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      calendar_events: {
+        Row: {
+          all_day: boolean
+          created_at: string
+          description: string | null
+          end_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          external_event_id: string | null
+          external_id: string | null
+          external_provider: string | null
+          external_source: string
+          ia_source: string
+          id: string
+          last_sync_at: string | null
+          location: string | null
+          owner: string | null
+          participants: Json | null
+          start_at: string
+          sync_status: string | null
+          tags: string[]
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          external_event_id?: string | null
+          external_id?: string | null
+          external_provider?: string | null
+          external_source?: string
+          ia_source?: string
+          id?: string
+          last_sync_at?: string | null
+          location?: string | null
+          owner?: string | null
+          participants?: Json | null
+          start_at: string
+          sync_status?: string | null
+          tags?: string[]
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          external_event_id?: string | null
+          external_id?: string | null
+          external_provider?: string | null
+          external_source?: string
+          ia_source?: string
+          id?: string
+          last_sync_at?: string | null
+          location?: string | null
+          owner?: string | null
+          participants?: Json | null
+          start_at?: string
+          sync_status?: string | null
+          tags?: string[]
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_owner_fkey"
+            columns: ["owner"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1453,6 +1600,78 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          origin_reason: string | null
+          priority: string
+          project_id: string | null
+          status: string
+          suggested_by_ai: boolean
+          tags: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          origin_reason?: string | null
+          priority?: string
+          project_id?: string | null
+          status?: string
+          suggested_by_ai?: boolean
+          tags?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          origin_reason?: string | null
+          priority?: string
+          project_id?: string | null
+          status?: string
+          suggested_by_ai?: boolean
+          tags?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_courses: {
         Row: {
