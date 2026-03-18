@@ -1388,6 +1388,16 @@ export type Database = {
         ]
       }
       student_courses: {
+        Row: {
+          course_id: string
+          created_at: string | null
+          enrollment_status: string | null
+          id: string
+          last_access: string | null
+          last_sync: string | null
+          student_id: string
+        }
+        Insert: {
           course_id: string
           created_at?: string | null
           enrollment_status?: string | null
