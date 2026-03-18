@@ -261,7 +261,7 @@ async function runCommunicationEngine(
 
     // Check if there's a recent action for this student
     const { count: recentActionCount } = await supabase
-      .from('student_actions')
+      .from('actions')
       .select('*', { count: 'exact', head: true })
       .eq('student_id', entityId)
       .gte('created_at', cutoff30)
@@ -517,7 +517,7 @@ async function runAcademicEngine(
     if (studentIds.length === 0) continue
 
     const { count: recentActions } = await supabase
-      .from('student_actions')
+      .from('actions')
       .select('*', { count: 'exact', head: true })
       .in('student_id', studentIds)
       .gte('created_at', cutoff14)

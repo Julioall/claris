@@ -13,6 +13,7 @@ const DEFAULT_FUNCTIONS = [
   'data-cleanup',
   'generate-automated-tasks',
   'generate-recurring-tasks',
+  'generate-proactive-suggestions',
   'claris-llm-test',
   'claris-chat',
 ];

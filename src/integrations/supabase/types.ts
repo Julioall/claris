@@ -408,6 +408,89 @@ export type Database = {
           },
         ]
       }
+      calendar_events: {
+        Row: {
+          all_day: boolean
+          created_at: string
+          description: string | null
+          end_at: string | null
+          entity_id: string | null
+          entity_type: string | null
+          external_event_id: string | null
+          external_id: string | null
+          external_provider: string | null
+          external_source: string
+          ia_source: string
+          id: string
+          last_sync_at: string | null
+          location: string | null
+          owner: string | null
+          participants: Json | null
+          start_at: string
+          sync_status: string | null
+          tags: string[]
+          title: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          all_day?: boolean
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          external_event_id?: string | null
+          external_id?: string | null
+          external_provider?: string | null
+          external_source?: string
+          ia_source?: string
+          id?: string
+          last_sync_at?: string | null
+          location?: string | null
+          owner?: string | null
+          participants?: Json | null
+          start_at: string
+          sync_status?: string | null
+          tags?: string[]
+          title: string
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          all_day?: boolean
+          created_at?: string
+          description?: string | null
+          end_at?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          external_event_id?: string | null
+          external_id?: string | null
+          external_provider?: string | null
+          external_source?: string
+          ia_source?: string
+          id?: string
+          last_sync_at?: string | null
+          location?: string | null
+          owner?: string | null
+          participants?: Json | null
+          start_at?: string
+          sync_status?: string | null
+          tags?: string[]
+          title?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_owner_fkey"
+            columns: ["owner"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claris_conversations: {
         Row: {
           created_at: string
@@ -1235,6 +1318,78 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      tasks: {
+        Row: {
+          assigned_to: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          due_date: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          origin_reason: string | null
+          priority: string
+          project_id: string | null
+          status: string
+          suggested_by_ai: boolean
+          tags: string[]
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          origin_reason?: string | null
+          priority?: string
+          project_id?: string | null
+          status?: string
+          suggested_by_ai?: boolean
+          tags?: string[]
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          assigned_to?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          due_date?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          origin_reason?: string | null
+          priority?: string
+          project_id?: string | null
+          status?: string
+          suggested_by_ai?: boolean
+          tags?: string[]
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_assigned_to_fkey"
+            columns: ["assigned_to"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_courses: {
         Row: {

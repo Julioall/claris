@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.claris-chat]
 verify_jwt = false
+
+[functions.generate-proactive-suggestions]
+verify_jwt = false
