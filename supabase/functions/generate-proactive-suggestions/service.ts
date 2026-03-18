@@ -154,13 +154,20 @@ async function persistSuggestion(
 
   if (error || !data) return null
 
+  // Ensure the cooldown window extends at least until the suggestion expires.
+  // If cooldown_hours < expires_in_hours, there would be a gap where the
+  // suggestion is already gone from the feed but a new one cannot be created.
+  const effectiveCooldownHours = Math.max(
+    suggestion.expires_in_hours ?? 48,
+    suggestion.cooldown_hours ?? 24,
+  )
   await recordCooldown(
     supabase,
     userId,
     suggestion.trigger_engine,
     suggestion.trigger_key,
     data.id,
-    suggestion.cooldown_hours ?? 24,
+    effectiveCooldownHours,
     suggestion.entity_type,
     suggestion.entity_id,
   )
@@ -368,7 +375,7 @@ async function runAgendaEngine(
         tags: ['preparacao', 'agenda'],
       },
       expires_in_hours: 48,
-      cooldown_hours: 72,
+      cooldown_hours: 48,
     })
 
     if (id) created++
@@ -545,7 +552,7 @@ async function runAcademicEngine(
         tags: ['turma', 'acompanhamento'],
       },
       expires_in_hours: 48,
-      cooldown_hours: 72,
+      cooldown_hours: 48,
     })
 
     if (id) created++
@@ -643,7 +650,7 @@ async function runPlatformUsageEngine(
         priority: 'low',
         action_type: 'open_chat',
         action_payload: { message: 'Me ajude a organizar minha agenda com os próximos eventos e compromissos.' },
-        expires_in_hours: 72,
+        expires_in_hours: 168, // 7 days — matches cooldown to avoid a visibility gap
         cooldown_hours: 168, // 7 days
       })
 
