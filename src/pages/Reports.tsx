@@ -35,6 +35,7 @@ interface EnrollmentRow {
   enrollment_status: string | null;
   students: {
     full_name: string;
+    last_access: string | null;
   } | null;
 }
 
@@ -72,6 +73,11 @@ interface CourseTotalRow {
 }
 
 const SEM_CATEGORIA = 'Sem categoria';
+
+function daysSinceAccess(lastAccess: string | null | undefined): number | string {
+  if (!lastAccess) return '-';
+  return Math.floor((Date.now() - new Date(lastAccess).getTime()) / (1000 * 60 * 60 * 24));
+}
 
 type ReportActivityStatus = 'graded' | 'submitted' | 'pending' | 'nao_iniciada' | 'sem_atividades';
 
@@ -348,7 +354,7 @@ export default function Reports() {
             student_id,
             course_id,
             enrollment_status,
-            students!inner(full_name)
+            students!inner(full_name, last_access)
           `)
           .in('course_id', selectedUnitIds)
           .range(enrollmentPage * PAGE_SIZE, (enrollmentPage + 1) * PAGE_SIZE - 1);
@@ -494,9 +500,12 @@ export default function Reports() {
 
       const studentsById = new Map<string, string>();
       const suspendedStudentIds = new Set<string>();
+      const lastAccessByStudentId = new Map<string, number | string>();
       enrollments.forEach(enrollment => {
         if (!studentsById.has(enrollment.student_id)) {
           studentsById.set(enrollment.student_id, enrollment.students?.full_name || 'Aluno sem nome');
+          const lastAccess = enrollment.students?.last_access;
+          lastAccessByStudentId.set(enrollment.student_id, daysSinceAccess(lastAccess));
         }
         if (enrollment.enrollment_status === 'suspenso') {
           suspendedStudentIds.add(enrollment.student_id);
@@ -508,6 +517,7 @@ export default function Reports() {
           const isSuspended = suspendedStudentIds.has(studentId);
           const row: Record<string, string | number> = {
             Aluno: isSuspended ? `${studentName} (Suspenso)` : studentName,
+            'Último Acesso (dias)': lastAccessByStudentId.get(studentId) ?? '-',
           };
           const gradePercentagesByUnitHeader = new Map<string, number | null>();
 
@@ -557,6 +567,7 @@ export default function Reports() {
 
       worksheet['!cols'] = [
         { wch: 32 },
+        { wch: 20 },
         ...selectedUnitsWithHeader.map(unit => (
           { wch: Math.max(18, Math.min(42, unit.headerName.length + 4)) }
         )),
@@ -581,6 +592,7 @@ export default function Reports() {
             }
 
             const isStudentColumn = colIndex === 0;
+            const isLastAccessColumn = colIndex === 1;
             const isSuspendedRow = suspendedRowIndices.has(rowIndex);
             const baseBodyStyle = isStudentColumn ? STUDENT_CELL_STYLE : BODY_CELL_STYLE;
 
@@ -595,12 +607,12 @@ export default function Reports() {
               ...suspendedStyle,
             };
 
-            const isGradeColumn = !isStudentColumn;
+            const isGradeColumn = !isStudentColumn && !isLastAccessColumn;
 
             if (isGradeColumn && typeof cell.v === 'number') {
               if (!isSuspendedRow) {
-                // Each unit occupies 1 column; column 0 is "Aluno".
-                const selectedUnitIndex = colIndex - 1;
+                // Each unit occupies 1 column; columns 0 and 1 are "Aluno" and "Último Acesso (dias)".
+                const selectedUnitIndex = colIndex - 2;
                 const selectedUnit = selectedUnitsWithHeader[selectedUnitIndex];
                 const gradePercentage = selectedUnit
                   ? reportRows[rowIndex - 1]?.gradePercentagesByUnitHeader.get(selectedUnit.headerName) ?? null
@@ -660,7 +672,7 @@ export default function Reports() {
       while (true) {
         const { data, error } = await supabase
           .from('student_courses')
-          .select('student_id, course_id, enrollment_status, students!inner(full_name)')
+          .select('student_id, course_id, enrollment_status, students!inner(full_name, last_access)')
           .in('course_id', selectedUnitIds)
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
         if (error) throw error;
@@ -724,9 +736,12 @@ export default function Reports() {
       // Build student map
       const studentsById = new Map<string, string>();
       const suspendedIds = new Set<string>();
+      const lastAccessByStudentId = new Map<string, number | string>();
       allEnrollments.forEach(e => {
         if (!studentsById.has(e.student_id)) {
           studentsById.set(e.student_id, e.students?.full_name || 'Aluno sem nome');
+          const lastAccess = e.students?.last_access;
+          lastAccessByStudentId.set(e.student_id, daysSinceAccess(lastAccess));
         }
         if (e.enrollment_status === 'suspenso') suspendedIds.add(e.student_id);
       });
@@ -753,11 +768,13 @@ export default function Reports() {
 
       for (const [studentId, activities] of sortedStudents) {
         const studentName = studentsById.get(studentId) || 'Desconhecido';
+        const lastAccessDays = lastAccessByStudentId.get(studentId) ?? '-';
         for (const act of activities) {
           const unitName = unitNameMap.get(act.course_id) || 'N/A';
 
           rows.push({
             'Aluno': studentName,
+            'Último Acesso (dias)': lastAccessDays,
             'Unidade Curricular': unitName,
             'Atividade': act.activity_name,
             'Tipo': act.activity_type || '-',
@@ -769,6 +786,7 @@ export default function Reports() {
       // Summary sheet: count per student
       const summaryRows = sortedStudents.map(([studentId, activities]) => ({
         'Aluno': studentsById.get(studentId) || 'Desconhecido',
+        'Último Acesso (dias)': lastAccessByStudentId.get(studentId) ?? '-',
         'Atividades Pendentes': activities.length,
         'Pendente de Envio': activities.filter(a => !a.submitted_at).length,
         'Pendente de Correção': activities.filter(a => !!a.submitted_at).length,
@@ -778,13 +796,13 @@ export default function Reports() {
 
       // Summary sheet
       const summaryWs = XLSX.utils.json_to_sheet(summaryRows) as ExcelWorksheet;
-      summaryWs['!cols'] = [{ wch: 32 }, { wch: 20 }, { wch: 18 }, { wch: 22 }];
+      summaryWs['!cols'] = [{ wch: 32 }, { wch: 20 }, { wch: 22 }, { wch: 18 }, { wch: 22 }];
       applyBasicStyles(XLSX, summaryWs);
       XLSX.utils.book_append_sheet(workbook, summaryWs, 'Resumo');
 
       // Detail sheet
       const detailWs = XLSX.utils.json_to_sheet(rows) as ExcelWorksheet;
-      detailWs['!cols'] = [{ wch: 32 }, { wch: 28 }, { wch: 36 }, { wch: 10 }, { wch: 22 }];
+      detailWs['!cols'] = [{ wch: 32 }, { wch: 20 }, { wch: 28 }, { wch: 36 }, { wch: 10 }, { wch: 22 }];
       applyPendingStyles(XLSX, detailWs);
       XLSX.utils.book_append_sheet(workbook, detailWs, 'Detalhamento');
 
@@ -988,7 +1006,7 @@ function applyPendingStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
   const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
   if (!range) return;
 
-  const STATUS_COL = 4; // 'Status' column index (Aluno, UC, Atividade, Tipo, Status)
+  const STATUS_COL = 5; // 'Status' column index (Aluno, Último Acesso (dias), UC, Atividade, Tipo, Status)
 
   for (let r = range.s.r; r <= range.e.r; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
