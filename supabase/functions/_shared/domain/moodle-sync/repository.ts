@@ -246,7 +246,7 @@ export async function insertStudentSyncSnapshots(
     const batch = payload.slice(i, i + BATCH)
     const { error } = await supabase
       .from('student_sync_snapshots')
-      .upsert(batch, { onConflict: 'student_id,course_id,synced_at::date', ignoreDuplicates: true })
+      .upsert(batch, { onConflict: 'student_id,course_id,sync_date', ignoreDuplicates: true })
 
     if (error) {
       console.error('[insertStudentSyncSnapshots] error:', error)

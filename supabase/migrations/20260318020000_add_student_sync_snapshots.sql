@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.student_sync_snapshots (
   id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   student_id           uuid NOT NULL REFERENCES public.students (id) ON DELETE CASCADE,
   course_id            uuid NOT NULL REFERENCES public.courses (id) ON DELETE CASCADE,
+  sync_date            date NOT NULL DEFAULT CURRENT_DATE,
   synced_at            timestamptz NOT NULL DEFAULT now(),
   risk_level           text NOT NULL DEFAULT 'normal' CHECK (risk_level IN ('normal', 'atencao', 'risco', 'critico')),
   enrollment_status    text NOT NULL DEFAULT 'ativo',
@@ -19,8 +20,10 @@ CREATE TABLE IF NOT EXISTS public.student_sync_snapshots (
 
 -- Prevent duplicate snapshots for the same student+course within the same
 -- calendar day (one snapshot per sync session is enough).
+-- Uses a plain date column (sync_date) instead of a functional cast expression
+-- so the index qualifies as IMMUTABLE.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_student_sync_snapshot_day
-  ON public.student_sync_snapshots (student_id, course_id, (synced_at::date));
+  ON public.student_sync_snapshots (student_id, course_id, sync_date);
 
 CREATE INDEX IF NOT EXISTS idx_student_sync_snapshots_student
   ON public.student_sync_snapshots (student_id, synced_at DESC);

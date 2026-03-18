@@ -1157,6 +1157,7 @@ export type Database = {
           id: string
           student_id: string
           course_id: string
+          sync_date: string
           synced_at: string
           risk_level: string
           enrollment_status: string
@@ -1170,6 +1171,7 @@ export type Database = {
           id?: string
           student_id: string
           course_id: string
+          sync_date?: string
           synced_at?: string
           risk_level?: string
           enrollment_status?: string
@@ -1183,6 +1185,7 @@ export type Database = {
           id?: string
           student_id?: string
           course_id?: string
+          sync_date?: string
           synced_at?: string
           risk_level?: string
           enrollment_status?: string
