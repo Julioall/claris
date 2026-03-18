@@ -10,8 +10,8 @@ export function useCalendarEvents(from?: string, to?: string) {
   const qc = useQueryClient();
 
   const { data: events = [], isLoading } = useQuery({
-    queryKey: [...EVENTS_KEY, from, to],
-    queryFn: () => calendarService.listEvents(from, to),
+    queryKey: [...EVENTS_KEY, from, to, user?.id],
+    queryFn: () => calendarService.listEvents(from, to, user?.id),
     enabled: !!user,
   });
 

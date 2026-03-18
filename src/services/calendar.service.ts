@@ -35,13 +35,14 @@ function toCalendarEvent(row: any): CalendarEvent {
 }
 
 export const calendarService = {
-  async listEvents(from?: string, to?: string): Promise<CalendarEvent[]> {
+  async listEvents(from?: string, to?: string, ownerId?: string): Promise<CalendarEvent[]> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let query = (supabase.from('calendar_events' as never) as any)
       .select('*')
       .order('start_at', { ascending: true });
     if (from) query = query.gte('start_at', from);
     if (to) query = query.lte('start_at', to);
+    if (ownerId) query = query.eq('owner', ownerId);
     const { data, error } = await query;
     if (error) throw error;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

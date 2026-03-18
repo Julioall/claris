@@ -363,7 +363,7 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
     function: {
       name: 'create_task',
       description:
-        'Cria uma tarefa de acompanhamento ou pendência para o tutor/monitor. Use quando o usuário pedir para criar uma tarefa, lembrete ou acompanhamento de aluno/UC/turma. Para tarefas de baixo risco (lembretes pessoais, rascunhos), pode criar diretamente. Para ações que impactam terceiros, peça confirmação antes.',
+        'Cria uma tarefa de acompanhamento ou pendência para o tutor/monitor. Use quando o usuário pedir para criar uma tarefa, lembrete ou acompanhamento de aluno/UC/turma/escola/curso. IMPORTANTE: sempre preencha entity_type e entity_id quando houver contexto de aluno, UC, turma ou curso na conversa. Também preencha as tags com rótulos descritivos e origin_reason com o motivo. Para tarefas de baixo risco (lembretes pessoais, rascunhos), pode criar diretamente. Para ações que impactam terceiros, peça confirmação antes.',
       parameters: {
         type: 'object',
         properties: {
@@ -373,7 +373,7 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           },
           description: {
             type: 'string',
-            description: 'Descrição detalhada da tarefa, contexto e próximo passo esperado.',
+            description: 'Descrição detalhada da tarefa, incluindo contexto completo: escola, curso, turma, aluno (se aplicável) e próximo passo esperado.',
           },
           priority: {
             type: 'string',
@@ -387,20 +387,20 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           entity_type: {
             type: 'string',
             enum: ['student', 'course', 'uc', 'class', 'custom'],
-            description: 'Tipo de entidade relacionada (aluno, curso, UC, turma). Opcional.',
+            description: 'Tipo de entidade relacionada. Use "student" para tarefas de acompanhamento de aluno, "course" para curso, "uc" para unidade curricular, "class" para turma. SEMPRE informe quando houver contexto.',
           },
           entity_id: {
             type: 'string',
-            description: 'ID da entidade relacionada (ex.: student_id, course_id). Opcional.',
+            description: 'ID da entidade relacionada (student_id, course_id, etc.). SEMPRE informe quando houver contexto na conversa.',
           },
           origin_reason: {
             type: 'string',
-            description: 'Motivo que originou esta tarefa (ex.: "aluno com baixa participação na semana 3").',
+            description: 'Motivo que originou esta tarefa com contexto rico (ex.: "Aluno João Silva do curso Engenharia, turma 2024-1, com baixa participação na semana 3 — necessita de contato de acompanhamento"). Inclua escola, curso, turma e aluno quando disponíveis.',
           },
           tags: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Tags para categorização (ex.: ["aluno", "recuperacao", "uc"]).',
+            description: 'Tags para categorização que preservam o contexto. Inclua o nome do aluno, curso, turma ou escola como tags (ex.: ["aluno:joao-silva", "curso:engenharia", "turma:2024-1", "recuperacao"]).',
           },
         },
         required: ['title'],
@@ -471,6 +471,28 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           },
         },
         required: ['task_id', 'status'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'add_tag_to_task',
+      description:
+        'Adiciona uma tag a uma tarefa existente. Use quando o usuário pedir para etiquetar, categorizar ou marcar uma tarefa com uma tag. Se a tarefa não tiver a tag, ela é adicionada.',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'ID da tarefa à qual a tag será adicionada.',
+          },
+          tag: {
+            type: 'string',
+            description: 'Texto da tag a adicionar (ex.: "aluno", "recuperacao", "uc", "urgente").',
+          },
+        },
+        required: ['task_id', 'tag'],
       },
     },
   },
@@ -954,17 +976,17 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
     function: {
       name: 'create_support_ticket',
       description:
-        'Registra um problema, bug, sugestão ou dúvida no sistema de suporte. Use quando o usuário relatar um problema técnico, quiser sugerir uma melhoria, ou pedir ajuda com algo que não funciona corretamente. Pode ser usado de forma autônoma ao detectar problemas ou de forma sugestiva pedindo confirmação ao usuário.',
+        'Registra um problema, bug, sugestão ou dúvida no sistema de suporte. Use quando o usuário relatar um problema técnico, quiser sugerir uma melhoria, ou pedir ajuda com algo que não funciona corretamente. Pode ser usado de forma autônoma ao detectar problemas ou de forma sugestiva pedindo confirmação ao usuário. IMPORTANTE: preencha a descrição com máximo de contexto — inclua exatamente o que o usuário tentou fazer, a sequência de ações executadas, a mensagem de erro ou comportamento inesperado, e o impacto. Informe a rota (route) onde ocorreu. Para problemas da Claris IA, inclua o tool chamado, os parâmetros usados e o erro retornado.',
       parameters: {
         type: 'object',
         properties: {
           title: {
             type: 'string',
-            description: 'Título curto e descritivo do ticket (máx. 120 caracteres).',
+            description: 'Título curto e descritivo do ticket (máx. 120 caracteres). Seja específico: inclua o nome da funcionalidade e o comportamento incorreto (ex: "Erro ao adicionar tag em tarefa existente", "Calendário da agenda não exibe eventos").',
           },
           description: {
             type: 'string',
-            description: 'Descrição detalhada do problema, sugestão ou dúvida. Inclua contexto, passos para reproduzir (se aplicável) e impacto.',
+            description: 'Descrição detalhada e rica do problema, sugestão ou dúvida. Estruture assim:\n1. O que o usuário tentou fazer (ação exata)\n2. O que era esperado acontecer\n3. O que realmente aconteceu (erro, comportamento inesperado, mensagem de erro completa)\n4. Passos para reproduzir\n5. Impacto no fluxo de trabalho\n6. Tool da Claris IA envolvida (se aplicável), com parâmetros e resposta de erro.\nQuanto mais contexto, mais fácil será para o suporte resolver.',
           },
           type: {
             type: 'string',
@@ -974,11 +996,19 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           priority: {
             type: 'string',
             enum: ['baixa', 'normal', 'alta', 'critica'],
-            description: 'Prioridade do ticket. Use "critica" apenas para problemas que impedem o uso do sistema.',
+            description: 'Prioridade do ticket. Use "critica" apenas para problemas que impedem o uso do sistema. Use "alta" para problemas que comprometem fluxos importantes (ex: não consegue criar tarefas, não consegue ver alunos em risco).',
           },
           route: {
             type: 'string',
-            description: 'Rota ou página da aplicação onde o problema ocorreu (ex: "/tarefas", "/alunos").',
+            description: 'Rota ou página da aplicação onde o problema ocorreu (ex: "/tarefas", "/alunos", "/agenda", "/chat"). Informe sempre que possível.',
+          },
+          steps_to_reproduce: {
+            type: 'string',
+            description: 'Sequência exata de passos que levaram ao problema (ex: "1. Abriei uma tarefa existente, 2. Pedi à Claris para adicionar a tag \'recuperacao\', 3. Claris retornou erro"). Opcional mas muito útil.',
+          },
+          error_message: {
+            type: 'string',
+            description: 'Mensagem de erro exata exibida ao usuário ou retornada pelo sistema/Claris IA. Copie literalmente sem parafrasear.',
           },
         },
         required: ['title', 'description', 'type'],
