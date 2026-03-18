@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { CalendarDays, Plus } from 'lucide-react';
+import { CalendarDays, Plus, List, CalendarRange } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Spinner } from '@/components/ui/spinner';
 import { CalendarEventCard } from '@/components/agenda/CalendarEventCard';
 import { CalendarEventForm } from '@/components/agenda/CalendarEventForm';
+import { AgendaCalendarView } from '@/components/agenda/AgendaCalendarView';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import type { CalendarEvent, CalendarEventType } from '@/types';
 import { format, parseISO, isThisWeek, isThisMonth, isFuture } from 'date-fns';
@@ -14,6 +15,8 @@ import { ptBR } from 'date-fns/locale';
 const GROUP_THIS_WEEK = 'Esta semana';
 const GROUP_THIS_MONTH = 'Este mês';
 const GROUP_PAST = 'Passados';
+
+type ViewMode = 'list' | 'calendar';
 
 function groupEventsByPeriod(events: CalendarEvent[]): Record<string, CalendarEvent[]> {
   const groups: Record<string, CalendarEvent[]> = {};
@@ -52,16 +55,22 @@ function sortGroups(groups: Record<string, CalendarEvent[]>) {
 
 export default function Agenda() {
   const { events, isLoading, createEvent, updateEvent, deleteEvent, isCreating } = useCalendarEvents();
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [formOpen, setFormOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [defaultStartAt, setDefaultStartAt] = useState<string | undefined>(undefined);
 
   const grouped = groupEventsByPeriod(events);
   const sortedKeys = sortGroups(grouped);
 
-  const openCreate = () => { setEditingEvent(null); setFormOpen(true); };
+  const openCreate = (startAt?: string) => {
+    setDefaultStartAt(startAt);
+    setEditingEvent(null);
+    setFormOpen(true);
+  };
   const openEdit = (ev: CalendarEvent) => { setEditingEvent(ev); setFormOpen(true); };
-  const closeForm = () => { setFormOpen(false); setEditingEvent(null); };
+  const closeForm = () => { setFormOpen(false); setEditingEvent(null); setDefaultStartAt(undefined); };
 
   const handleFormSubmit = (values: { title: string; description?: string; start_at: string; end_at?: string; type: CalendarEventType }) => {
     if (editingEvent) {
@@ -84,24 +93,54 @@ export default function Agenda() {
             Compromissos, reuniões, WebAulas e entregas importantes.
           </p>
         </div>
-        <Button onClick={openCreate} className="shrink-0">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Novo evento
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex rounded-md border overflow-hidden">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-9 rounded-none px-3 gap-1.5 text-xs"
+              onClick={() => setViewMode('list')}
+            >
+              <List className="h-3.5 w-3.5" />
+              Lista
+            </Button>
+            <Button
+              variant={viewMode === 'calendar' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-9 rounded-none px-3 gap-1.5 text-xs"
+              onClick={() => setViewMode('calendar')}
+            >
+              <CalendarRange className="h-3.5 w-3.5" />
+              Calendário
+            </Button>
+          </div>
+          <Button onClick={() => openCreate()} className="shrink-0">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Novo evento
+          </Button>
+        </div>
       </div>
 
-      {/* Event List */}
+      {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Spinner className="h-6 w-6" />
         </div>
+      ) : viewMode === 'calendar' ? (
+        <AgendaCalendarView
+          events={events}
+          onEdit={openEdit}
+          onDelete={id => setDeleteId(id)}
+          onCreateOnDate={openCreate}
+        />
       ) : events.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <CalendarDays className="h-10 w-10 text-muted-foreground/40 mb-3" />
           <p className="text-sm font-medium text-muted-foreground">
             Nenhum evento na agenda ainda
           </p>
-          <Button variant="outline" size="sm" onClick={openCreate} className="mt-4">
+          <Button variant="outline" size="sm" onClick={() => openCreate()} className="mt-4">
             <Plus className="h-4 w-4 mr-1.5" />
             Criar primeiro evento
           </Button>
@@ -136,7 +175,7 @@ export default function Agenda() {
             </DialogDescription>
           </DialogHeader>
           <CalendarEventForm
-            defaultValues={editingEvent ?? undefined}
+            defaultValues={editingEvent ?? (defaultStartAt ? { start_at: defaultStartAt, type: 'manual' as const } : undefined)}
             onSubmit={handleFormSubmit}
             onCancel={closeForm}
             isLoading={isCreating}
