@@ -1,8 +1,10 @@
+import { type MouseEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar, Edit2, Trash2, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/types';
+import type { Task, TaskStatus } from '@/types';
 import { format, isPast, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -18,6 +20,18 @@ const PRIORITY_LABELS: Record<string, string> = {
   medium: 'Média',
   high: 'Alta',
   urgent: 'Urgente',
+};
+
+const STATUS_LABELS: Record<TaskStatus, string> = {
+  todo: 'A fazer',
+  in_progress: 'Em andamento',
+  done: 'Concluído',
+};
+
+const STATUS_STYLES: Record<TaskStatus, string> = {
+  todo: 'text-muted-foreground',
+  in_progress: 'text-blue-600 dark:text-blue-400',
+  done: 'text-green-600 dark:text-green-400',
 };
 
 interface TaskCardProps {
@@ -36,6 +50,8 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
   const aiTagLabels = (task.ai_tags ?? []).filter(t => !relationTagLabels.includes(t));
   const allTagLabels = [...relationTagLabels, ...aiTagLabels];
 
+  const stopPropagation = (e: MouseEvent) => e.stopPropagation();
+
   return (
     <div
       className={cn(
@@ -53,7 +69,7 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
             e.stopPropagation();
             onStatusChange?.(task.id, e.target.checked ? 'done' : 'todo');
           }}
-          onClick={e => e.stopPropagation()}
+          onClick={stopPropagation}
           className="mt-0.5 h-4 w-4 cursor-pointer rounded accent-primary"
           aria-label={task.status === 'done' ? 'Marcar como pendente' : 'Marcar como concluído'}
         />
@@ -84,6 +100,27 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
               {PRIORITY_LABELS[task.priority]}
             </span>
 
+            {/* Quick status selector */}
+            {onStatusChange && (
+              <div onClick={stopPropagation}>
+                <Select
+                  value={task.status}
+                  onValueChange={(val) => onStatusChange(task.id, val as TaskStatus)}
+                >
+                  <SelectTrigger className={cn('h-6 text-[11px] px-2 py-0 border-dashed gap-1 min-w-[100px]', STATUS_STYLES[task.status])}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.entries(STATUS_LABELS) as [TaskStatus, string][]).map(([value, label]) => (
+                      <SelectItem key={value} value={value} className="text-xs">
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {task.due_date && (
               <span className={cn('flex items-center gap-1 text-xs', isOverdue ? 'text-destructive' : 'text-muted-foreground')}>
                 <Calendar className="h-3 w-3" />
@@ -102,7 +139,7 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={stopPropagation}>
           {onEdit && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(task)}>
               <Edit2 className="h-3.5 w-3.5" />

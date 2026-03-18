@@ -564,14 +564,14 @@ async function runOperationalEngine(
 ): Promise<number> {
   let created = 0
 
-  // Trigger: Old pending tasks in legacy pending_tasks table (> N days)
+  // Trigger: Old tasks without resolution (> N days)
   const cutoff21 = new Date(Date.now() - CUTOFF_DAYS_OPERATIONAL * MS_PER_DAY).toISOString()
 
   const { data: oldPending } = await supabase
-    .from('pending_tasks')
+    .from('tasks')
     .select('id, title, created_at')
-    .or(`created_by_user_id.eq.${userId},assigned_to_user_id.eq.${userId}`)
-    .in('status', ['aberta', 'em_andamento'])
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .in('status', ['todo', 'in_progress'])
     .lt('created_at', cutoff21)
     .order('created_at', { ascending: true })
     .limit(5)

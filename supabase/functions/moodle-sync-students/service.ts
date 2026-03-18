@@ -135,8 +135,10 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
 
   const suspendedStudentsInCourse = students.filter((student) => suspendedUserIds.has(student.id))
   const isCourseNotStarted = dbCourse.start_date ? new Date(dbCourse.start_date) > new Date() : false
+  // Protect against mass false-positive suspensions: if ALL enrolled students appear in
+  // the suspended list, treat it as a sync artefact regardless of course start date.
+  // Real individual suspensions are still caught via explicit payload signals (user.suspended etc.).
   const isMassSuspensionPreStartIgnored =
-    isCourseNotStarted &&
     students.length > 0 &&
     suspendedStudentsInCourse.length === students.length
 
@@ -146,7 +148,7 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
 
   if (isMassSuspensionPreStartIgnored) {
     console.log(
-      `[moodle-sync-students] mass_suspension_pre_start_ignored course=${courseId} suspended_students=${suspendedStudentsInCourse.length} total_students=${students.length}`
+      `[moodle-sync-students] mass_suspension_ignored course=${courseId} suspended_students=${suspendedStudentsInCourse.length} total_students=${students.length} course_not_started=${isCourseNotStarted}`
     )
   }
 

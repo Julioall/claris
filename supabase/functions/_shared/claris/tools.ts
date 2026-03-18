@@ -948,4 +948,41 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
       },
     },
   },
+  // Support ticket creation
+  {
+    type: 'function',
+    function: {
+      name: 'create_support_ticket',
+      description:
+        'Registra um problema, bug, sugestão ou dúvida no sistema de suporte. Use quando o usuário relatar um problema técnico, quiser sugerir uma melhoria, ou pedir ajuda com algo que não funciona corretamente. Pode ser usado de forma autônoma ao detectar problemas ou de forma sugestiva pedindo confirmação ao usuário.',
+      parameters: {
+        type: 'object',
+        properties: {
+          title: {
+            type: 'string',
+            description: 'Título curto e descritivo do ticket (máx. 120 caracteres).',
+          },
+          description: {
+            type: 'string',
+            description: 'Descrição detalhada do problema, sugestão ou dúvida. Inclua contexto, passos para reproduzir (se aplicável) e impacto.',
+          },
+          type: {
+            type: 'string',
+            enum: ['problema', 'sugestao', 'duvida', 'outro'],
+            description: 'Tipo do ticket: "problema" para bugs/erros, "sugestao" para melhorias, "duvida" para perguntas.',
+          },
+          priority: {
+            type: 'string',
+            enum: ['baixa', 'normal', 'alta', 'critica'],
+            description: 'Prioridade do ticket. Use "critica" apenas para problemas que impedem o uso do sistema.',
+          },
+          route: {
+            type: 'string',
+            description: 'Rota ou página da aplicação onde o problema ocorreu (ex: "/tarefas", "/alunos").',
+          },
+        },
+        required: ['title', 'description', 'type'],
+      },
+    },
+  },
 ]

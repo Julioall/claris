@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CheckSquare, Plus, ListFilter, Tag as TagIcon, Sparkles } from 'lucide-react';
+import { CheckSquare, Plus, ListFilter, Tag as TagIcon, Sparkles, List, LayoutDashboard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -9,12 +9,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { TaskCard } from '@/components/tasks/TaskCard';
+import { TaskKanbanBoard } from '@/components/tasks/TaskKanbanBoard';
 import { TaskForm } from '@/components/tasks/TaskForm';
 import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer';
 import { useTasks } from '@/hooks/useTasks';
 import type { Task, TaskStatus, TaskPriority } from '@/types';
 
 type StatusFilter = 'all' | TaskStatus;
+type ViewMode = 'list' | 'kanban';
 
 const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'all', label: 'Todas' },
@@ -25,12 +27,14 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
 
 export default function Tarefas() {
   const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } = useTasks();
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
   const [tagSearch, setTagSearch] = useState('');
   const [aiOnly, setAiOnly] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('todo');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
@@ -58,7 +62,7 @@ export default function Tarefas() {
     done: tasks.filter(t => t.status === 'done').length,
   }), [tasks]);
 
-  const openCreate = () => { setEditingTask(null); setFormOpen(true); };
+  const openCreate = (status: TaskStatus = 'todo') => { setDefaultStatus(status); setEditingTask(null); setFormOpen(true); };
   const openEdit = (task: Task) => { setEditingTask(task); setFormOpen(true); };
   const closeForm = () => { setFormOpen(false); setEditingTask(null); };
 
@@ -80,6 +84,9 @@ export default function Tarefas() {
 
   const aiTaskCount = useMemo(() => tasks.filter(t => t.suggested_by_ai).length, [tasks]);
 
+  // In kanban mode, status filter is disabled (all columns always visible)
+  const isKanban = viewMode === 'kanban';
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -93,26 +100,58 @@ export default function Tarefas() {
             Organize e acompanhe suas tarefas operacionais.
           </p>
         </div>
-        <Button onClick={openCreate} className="shrink-0">
-          <Plus className="h-4 w-4 mr-1.5" />
-          Nova tarefa
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex rounded-md border overflow-hidden">
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-9 rounded-none px-3 gap-1.5 text-xs"
+              onClick={() => setViewMode('list')}
+            >
+              <List className="h-3.5 w-3.5" />
+              Lista
+            </Button>
+            <Button
+              variant={viewMode === 'kanban' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-9 rounded-none px-3 gap-1.5 text-xs"
+              onClick={() => setViewMode('kanban')}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              Kanban
+            </Button>
+          </div>
+          <Button onClick={() => openCreate()} className="shrink-0">
+            <Plus className="h-4 w-4 mr-1.5" />
+            Nova tarefa
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
       <div className="flex flex-wrap justify-between items-center gap-3">
-        <Tabs value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
-          <TabsList>
-            {STATUS_TABS.map(tab => (
-              <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5 text-xs">
-                {tab.label}
-                {counts[tab.value] > 0 && (
-                  <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">{counts[tab.value]}</span>
-                )}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        {/* Status tabs — hidden in kanban (columns already show all statuses) */}
+        {!isKanban && (
+          <Tabs value={statusFilter} onValueChange={v => setStatusFilter(v as StatusFilter)}>
+            <TabsList>
+              {STATUS_TABS.map(tab => (
+                <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5 text-xs">
+                  {tab.label}
+                  {counts[tab.value] > 0 && (
+                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium">{counts[tab.value]}</span>
+                  )}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        )}
+
+        {isKanban && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span>{filtered.length} tarefa{filtered.length !== 1 ? 's' : ''}</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 flex-wrap">
           {/* Tag search */}
@@ -158,11 +197,21 @@ export default function Tarefas() {
         </div>
       </div>
 
-      {/* Task List */}
+      {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
           <Spinner className="h-6 w-6" />
         </div>
+      ) : isKanban ? (
+        <TaskKanbanBoard
+          tasks={filtered}
+          isLoading={isLoading}
+          onEdit={openEdit}
+          onDelete={id => setDeleteId(id)}
+          onStatusChange={handleStatusChange}
+          onTaskClick={setDetailTask}
+          onCreateInColumn={openCreate}
+        />
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <CheckSquare className="h-10 w-10 text-muted-foreground/40 mb-3" />
@@ -172,7 +221,7 @@ export default function Tarefas() {
               : 'Nenhuma tarefa encontrada com esses filtros'}
           </p>
           {statusFilter === 'all' && priorityFilter === 'all' && !tagSearch && !aiOnly && (
-            <Button variant="outline" size="sm" onClick={openCreate} className="mt-4">
+            <Button variant="outline" size="sm" onClick={() => openCreate()} className="mt-4">
               <Plus className="h-4 w-4 mr-1.5" />
               Criar primeira tarefa
             </Button>
@@ -203,7 +252,7 @@ export default function Tarefas() {
             </DialogDescription>
           </DialogHeader>
           <TaskForm
-            defaultValues={editingTask ?? undefined}
+            defaultValues={editingTask ?? { status: defaultStatus }}
             onSubmit={handleFormSubmit}
             onCancel={closeForm}
             isLoading={isCreating || isUpdating}
