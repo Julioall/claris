@@ -56,13 +56,16 @@ export function createHandler<TBody = EmptyBody>(
     }
 
     try {
-      // Parse body (empty object for GET/DELETE)
+      // Parse body (empty object for GET/DELETE or when no body is provided)
       let rawBody: unknown = {}
       if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
-        try {
-          rawBody = await req.json()
-        } catch {
-          return errorResponse('Invalid JSON body', 400)
+        const text = await req.text()
+        if (text.trim()) {
+          try {
+            rawBody = JSON.parse(text)
+          } catch {
+            return errorResponse('Invalid JSON body', 400)
+          }
         }
       }
 
