@@ -1,3 +1,4 @@
+import { type MouseEvent } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -49,6 +50,8 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
   const aiTagLabels = (task.ai_tags ?? []).filter(t => !relationTagLabels.includes(t));
   const allTagLabels = [...relationTagLabels, ...aiTagLabels];
 
+  const stopPropagation = (e: MouseEvent) => e.stopPropagation();
+
   return (
     <div
       className={cn(
@@ -66,7 +69,7 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
             e.stopPropagation();
             onStatusChange?.(task.id, e.target.checked ? 'done' : 'todo');
           }}
-          onClick={e => e.stopPropagation()}
+          onClick={stopPropagation}
           className="mt-0.5 h-4 w-4 cursor-pointer rounded accent-primary"
           aria-label={task.status === 'done' ? 'Marcar como pendente' : 'Marcar como concluído'}
         />
@@ -99,7 +102,7 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
 
             {/* Quick status selector */}
             {onStatusChange && (
-              <div onClick={e => e.stopPropagation()}>
+              <div onClick={stopPropagation}>
                 <Select
                   value={task.status}
                   onValueChange={(val) => onStatusChange(task.id, val as TaskStatus)}
@@ -136,7 +139,7 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={stopPropagation}>
           {onEdit && (
             <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => onEdit(task)}>
               <Edit2 className="h-3.5 w-3.5" />

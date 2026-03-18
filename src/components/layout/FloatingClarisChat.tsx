@@ -127,22 +127,27 @@ function isClearHistoryCommand(value: string) {
   return normalized === 'limparhistorico' || normalized === 'limparconversa';
 }
 
+function isValidHistoryItem(item: unknown): item is ClarisChatHistoryItem {
+  return item !== null && typeof item === 'object'
+    && ((item as { role?: unknown }).role === 'assistant' || (item as { role?: unknown }).role === 'user')
+    && typeof (item as { content?: unknown }).content === 'string';
+}
+
+function mapHistoryItem(item: ClarisChatHistoryItem): ClarisChatHistoryItem {
+  const base: ClarisChatHistoryItem = { role: item.role, content: item.content };
+  const blocks = parseRichBlocks((item as Record<string, unknown>).richBlocks);
+  if (blocks.length > 0) base.richBlocks = blocks;
+  return base;
+}
+
 function parseStoredHistory(raw: string | null): ClarisChatHistoryItem[] {
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .filter((item): item is ClarisChatHistoryItem =>
-        item !== null && typeof item === 'object'
-        && ((item as { role?: unknown }).role === 'assistant' || (item as { role?: unknown }).role === 'user')
-        && typeof (item as { content?: unknown }).content === 'string')
-      .map((item) => {
-        const base: ClarisChatHistoryItem = { role: item.role, content: item.content };
-        const blocks = parseRichBlocks((item as Record<string, unknown>).richBlocks);
-        if (blocks.length > 0) base.richBlocks = blocks;
-        return base;
-      })
+      .filter(isValidHistoryItem)
+      .map(mapHistoryItem)
       .slice(-40);
   } catch { return []; }
 }
@@ -160,16 +165,8 @@ function buildContextualSuggestions(route: string): string[] {
 function parseHistoryFromJson(raw: unknown): ClarisChatHistoryItem[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .filter((item): item is ClarisChatHistoryItem =>
-      item !== null && typeof item === 'object'
-      && ((item as { role?: unknown }).role === 'assistant' || (item as { role?: unknown }).role === 'user')
-      && typeof (item as { content?: unknown }).content === 'string')
-    .map((item) => {
-      const base: ClarisChatHistoryItem = { role: item.role, content: item.content };
-      const blocks = parseRichBlocks((item as Record<string, unknown>).richBlocks);
-      if (blocks.length > 0) base.richBlocks = blocks;
-      return base;
-    })
+    .filter(isValidHistoryItem)
+    .map(mapHistoryItem)
     .slice(-40);
 }
 

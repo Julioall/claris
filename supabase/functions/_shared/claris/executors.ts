@@ -392,6 +392,7 @@ async function getStudentDetails(userId: string, studentName: string, supabase: 
       .from('tasks')
       .select('title, status, priority, due_date')
       .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+      .eq('entity_type', 'student')
       .eq('entity_id', student.id)
       .in('status', ['todo', 'in_progress'])
       .order('due_date', { ascending: true })
@@ -1838,6 +1839,7 @@ async function getStudentSummary(userId: string, args: ToolCallArgs, supabase: S
       .from('tasks')
       .select('title, status, priority, due_date')
       .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+      .eq('entity_type', 'student')
       .eq('entity_id', student.id)
       .in('status', ['todo', 'in_progress'])
       .limit(5),
@@ -2386,7 +2388,7 @@ async function createSupportTicket(userId: string, args: ToolCallArgs, supabase:
       description,
       priority,
       route: args.route ?? null,
-      context: args.context ? { ai_generated: true, ...args.context } : { ai_generated: true },
+      context: { ai_generated: true },
     })
     .select('id, title, type, priority, status')
     .single()
