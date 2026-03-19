@@ -32,8 +32,8 @@ export default function Dashboard() {
   const { courses, isLoading: coursesLoading } = useCoursesData();
 
   const defaultSummary = {
-    pending_tasks: 0,
-    overdue_tasks: 0,
+    today_events: 0,
+    today_tasks: 0,
     activities_to_review: 0,
     active_normal_students: 0,
     pending_submission_assignments: 0,

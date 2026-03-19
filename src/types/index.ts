@@ -100,8 +100,8 @@ export interface DashboardReviewActivity {
 
 // UI-specific types
 export interface WeeklySummary {
-  pending_tasks: number;
-  overdue_tasks: number;
+  today_events: number;
+  today_tasks: number;
   activities_to_review: number;
   active_normal_students: number;
   pending_submission_assignments: number;

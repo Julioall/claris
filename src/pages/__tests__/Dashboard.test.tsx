@@ -14,8 +14,8 @@ vi.mock("@/hooks/useCoursesData", () => ({
 }));
 
 vi.mock("@/components/dashboard/WeeklyIndicators", () => ({
-  WeeklyIndicators: ({ summary }: { summary: { overdue_tasks: number } }) => (
-    <div data-testid="weekly-indicators">{summary.overdue_tasks}</div>
+  WeeklyIndicators: ({ summary }: { summary: { today_tasks: number } }) => (
+    <div data-testid="weekly-indicators">{summary.today_tasks}</div>
   ),
 }));
 
@@ -54,8 +54,8 @@ describe("Dashboard page", () => {
     vi.clearAllMocks();
     useDashboardDataMock.mockReturnValue({
       summary: {
-        pending_tasks: 3,
-        overdue_tasks: 0,
+        today_events: 1,
+        today_tasks: 0,
         activities_to_review: 2,
         active_normal_students: 1,
         pending_submission_assignments: 1,

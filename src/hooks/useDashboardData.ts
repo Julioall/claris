@@ -8,7 +8,7 @@ import {
   DashboardReviewActivity,
   RiskLevel,
 } from '@/types';
-import { startOfWeek, subWeeks } from 'date-fns';
+import { startOfWeek, subWeeks, startOfDay, endOfDay } from 'date-fns';
 
 type FeedStudentSummary = {
   id: string;
@@ -39,8 +39,8 @@ type ReviewActivityRow = {
 };
 
 const EMPTY_SUMMARY: WeeklySummary = {
-  pending_tasks: 0,
-  overdue_tasks: 0,
+  today_events: 0,
+  today_tasks: 0,
   activities_to_review: 0,
   active_normal_students: 0,
   pending_submission_assignments: 0,
@@ -192,8 +192,12 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         feedQuery = feedQuery.eq('course_id', courseFilter);
       }
 
+      const todayStart = startOfDay(now).toISOString();
+      const todayEnd = endOfDay(now).toISOString();
+
       const [
-        pendingTasksCountResponse,
+        todayEventsResponse,
+        todayTasksResponse,
         atRiskStudentsResponse,
         activeNormalStudentsResponse,
         newAtRiskResponse,
@@ -201,11 +205,17 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
         missedAssignmentsResponse,
         uncorrectedActivitiesResponse,
       ] = await Promise.all([
-        supabase
-          .from('pending_tasks')
+        (supabase.from('calendar_events' as never) as ReturnType<typeof supabase.from>)
           .select('id', { count: 'exact', head: true })
-          .in('student_id', studentIds)
-          .neq('status', 'resolvida'),
+          .eq('owner', user.id)
+          .gte('start_at', todayStart)
+          .lte('start_at', todayEnd),
+        (supabase.from('tasks' as never) as ReturnType<typeof supabase.from>)
+          .select('id', { count: 'exact', head: true })
+          .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+          .gte('due_date', todayStart)
+          .lte('due_date', todayEnd)
+          .neq('status', 'done'),
         supabase
           .from('students')
           .select('*')
@@ -255,7 +265,8 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
           .not('submitted_at', 'is', null),
       ]);
 
-      const { count: pendingTasksCount, error: pendingTasksError } = pendingTasksCountResponse;
+      const { count: todayEventsCount, error: todayEventsError } = todayEventsResponse as { count: number | null; error: Error | null };
+      const { count: todayTasksCount, error: todayTasksError } = todayTasksResponse as { count: number | null; error: Error | null };
       const { data: atRiskStudents, error: atRiskStudentsError } = atRiskStudentsResponse;
       const { count: activeNormalStudentsCount, error: activeNormalStudentsError } = activeNormalStudentsResponse;
       const { count: newAtRisk, error: newAtRiskError } = newAtRiskResponse;
@@ -263,7 +274,8 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
       const { count: missedAssignmentsCount, error: missedAssignmentsError } = missedAssignmentsResponse;
       const { data: uncorrectedActivities, error: uncorrectedActivitiesError } = uncorrectedActivitiesResponse;
 
-      if (pendingTasksError) throw pendingTasksError;
+      if (todayEventsError) throw todayEventsError;
+      if (todayTasksError) throw todayTasksError;
       if (atRiskStudentsError) throw atRiskStudentsError;
       if (activeNormalStudentsError) throw activeNormalStudentsError;
       if (newAtRiskError) throw newAtRiskError;
@@ -273,8 +285,8 @@ export function useDashboardData(selectedWeek: 'current' | 'last' = 'current', c
 
       // Set summary
       setSummary({
-        pending_tasks: pendingTasksCount || 0,
-        overdue_tasks: 0,
+        today_events: todayEventsCount || 0,
+        today_tasks: todayTasksCount || 0,
         activities_to_review: uncorrectedActivities?.length || 0,
         active_normal_students: activeNormalStudentsCount || 0,
         pending_submission_assignments: missedAssignmentsCount || 0,
