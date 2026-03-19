@@ -2,6 +2,7 @@
 set -eu
 
 RUNNER_CONTAINER_NAME="${RUNNER_CONTAINER_NAME:-claris-supabase}"
+EVOLUTION_CONTAINER_NAME="${EVOLUTION_CONTAINER_NAME:-claris-evolution}"
 SUPABASE_API_URL="${SUPABASE_API_URL:-http://127.0.0.1:54321}"
 SUPABASE_API_HEALTH_PATH="${SUPABASE_API_HEALTH_PATH:-/rest/v1/}"
 SUPABASE_API_WAIT_SECONDS="${SUPABASE_API_WAIT_SECONDS:-60}"
@@ -17,16 +18,14 @@ resolve_workdir() {
     return
   fi
 
-  case "${mount_source}" in
-    [A-Za-z]:\\*)
-      drive="$(printf '%s' "${mount_source}" | cut -d: -f1 | tr 'A-Z' 'a-z')"
-      rest="$(printf '%s' "${mount_source}" | cut -d: -f2- | sed 's#\\#/#g')"
-      echo "/${drive}${rest}"
-      ;;
-    *)
-      echo "${mount_source}"
-      ;;
-  esac
+  if printf '%s' "${mount_source}" | cut -c1-2 | grep -Eq '^[A-Za-z]:$'; then
+    drive="$(printf '%s' "${mount_source}" | cut -d: -f1 | tr 'A-Z' 'a-z')"
+    rest="$(printf '%s' "${mount_source}" | cut -d: -f2- | sed 's#\\#/#g')"
+    echo "/${drive}${rest}"
+    return
+  fi
+
+  echo "${mount_source}"
 }
 
 WORKDIR="${SUPABASE_WORKDIR:-$(resolve_workdir)}"
@@ -127,6 +126,20 @@ wait_for_api() {
   return 1
 }
 
+restart_evolution_if_present() {
+  if [ -z "${EVOLUTION_CONTAINER_NAME}" ]; then
+    return
+  fi
+
+  if ! docker inspect "${EVOLUTION_CONTAINER_NAME}" >/dev/null 2>&1; then
+    log "Skipping Evolution restart: container ${EVOLUTION_CONTAINER_NAME} not found."
+    return
+  fi
+
+  log "Restarting ${EVOLUTION_CONTAINER_NAME} so it can rerun Prisma migrations against the local database..."
+  docker restart "${EVOLUTION_CONTAINER_NAME}" >/dev/null
+}
+
 prepare_workdir_alias() {
   if [ "${WORKDIR}" = "/workspace" ]; then
     return
@@ -165,6 +178,8 @@ sync_edge_database_types
 
 log "Configuring edge function secrets..."
 set_function_secrets
+
+restart_evolution_if_present
 
 log "Supabase stack is running at ${SUPABASE_API_URL}."
 while :; do

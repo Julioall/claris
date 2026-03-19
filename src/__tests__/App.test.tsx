@@ -74,6 +74,10 @@ vi.mock("@/pages/Messages", () => ({
   default: () => <div>Messages Page</div>,
 }));
 
+vi.mock("@/pages/WhatsApp", () => ({
+  default: () => <div>WhatsApp Page</div>,
+}));
+
 vi.mock("@/pages/Settings", () => ({
   default: () => <div>Settings Page</div>,
 }));
@@ -158,6 +162,19 @@ describe("App routing", () => {
     render(<App />);
 
     expect(screen.getByText("Messages Page")).toBeInTheDocument();
+    expect(screen.getByText("App Layout")).toBeInTheDocument();
+  });
+
+  it("renders whatsapp page for authenticated users", () => {
+    setPath("/whatsapp");
+    useAuthMock.mockReturnValue({
+      isAuthenticated: true,
+      isLoading: false,
+    });
+
+    render(<App />);
+
+    expect(screen.getByText("WhatsApp Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 

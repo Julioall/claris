@@ -81,6 +81,7 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Meus Cursos")).toBeInTheDocument();
     expect(screen.getByText("Escolas")).toBeInTheDocument();
     expect(screen.getByText("Alunos")).toBeInTheDocument();
+    expect(screen.getByText("WhatsApp")).toBeInTheDocument();
     expect(screen.getByText("Claris IA")).toBeInTheDocument();
     expect(screen.getByText("Relatórios")).toBeInTheDocument();
     expect(screen.getByText("Configurações")).toBeInTheDocument();
@@ -94,6 +95,10 @@ describe("AppSidebar", () => {
     expect(screen.getByRole("link", { name: /claris ia/i })).toHaveAttribute(
       "href",
       "/claris",
+    );
+    expect(screen.getByRole("link", { name: /whatsapp/i })).toHaveAttribute(
+      "href",
+      "/whatsapp",
     );
   });
 

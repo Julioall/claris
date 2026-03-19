@@ -24,6 +24,7 @@ import StudentProfile from "@/pages/StudentProfile";
 import Tarefas from "@/pages/Tarefas";
 import Agenda from "@/pages/Agenda";
 import Messages from "@/pages/Messages";
+import WhatsApp from "@/pages/WhatsApp";
 import Settings from "@/pages/Settings";
 import Reports from "@/pages/Reports";
 import Claris from "@/pages/Claris";
@@ -72,6 +73,7 @@ function AppRoutes() {
         <Route path="/tarefas" element={<Tarefas />} />
         <Route path="/agenda" element={<Agenda />} />
         <Route path="/mensagens" element={<Messages />} />
+        <Route path="/whatsapp" element={<WhatsApp />} />
         <Route path="/claris" element={<Claris />} />
         <Route path="/automacoes" element={<Automacoes />} />
         <Route path="/relatorios" element={<Reports />} />

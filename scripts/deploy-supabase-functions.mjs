@@ -16,6 +16,9 @@ const DEFAULT_FUNCTIONS = [
   'generate-proactive-suggestions',
   'claris-llm-test',
   'claris-chat',
+  'whatsapp-instance-manager',
+  'receive-whatsapp-webhook',
+  'whatsapp-messaging',
 ];
 
 const __filename = fileURLToPath(import.meta.url);
