@@ -1,6 +1,7 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
+  listCourseCategoriesByMoodleCourseIds,
   listLinkedCourseIds,
   upsertCourses,
   upsertUserCourseLinks,
@@ -10,7 +11,7 @@ import {
   findUserByMoodleUserId,
   touchUserLastSync,
 } from '../_shared/domain/users/repository.ts'
-import { getUserCourses, getCategories, buildCategoryPath } from '../_shared/moodle/mod.ts'
+import { getUserCourses, getCategories, resolveCourseCategoryName } from '../_shared/moodle/mod.ts'
 
 export async function syncCourses(moodleUrl: string, token: string, userId: string): Promise<Response> {
   const supabase = createServiceClient()
@@ -25,20 +26,31 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
 
   const categories = await getCategories(moodleUrl, token)
   console.log(`Found ${categories.length} categories`)
+  const existingCourseCategories = await listCourseCategoriesByMoodleCourseIds(
+    supabase,
+    moodleCourses.map((course) => String(course.id)),
+  )
+  const existingCategoryByMoodleCourseId = new Map(
+    existingCourseCategories.map((course) => [course.moodle_course_id, course.category]),
+  )
 
   const now = new Date().toISOString()
+  const unresolvedCourseIds: string[] = []
 
   const coursesData = moodleCourses.map((course) => {
-    let categoryName: string | null = null
-    if (course.category && categories.length > 0) {
-      categoryName = buildCategoryPath(course.category, categories)
-    }
-    if (!categoryName && course.category) {
-      categoryName = String(course.category)
+    const moodleCourseId = String(course.id)
+    const categoryName = resolveCourseCategoryName(
+      course.category,
+      categories,
+      existingCategoryByMoodleCourseId.get(moodleCourseId) ?? null,
+    )
+
+    if (course.category && !categoryName) {
+      unresolvedCourseIds.push(moodleCourseId)
     }
 
     return {
-      moodle_course_id: String(course.id),
+      moodle_course_id: moodleCourseId,
       name: course.fullname,
       short_name: course.shortname,
       category: categoryName,
@@ -48,6 +60,17 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
       updated_at: now,
     }
   })
+
+  if (unresolvedCourseIds.length > 0) {
+    console.error(
+      'Failed to resolve category hierarchy for Moodle courses:',
+      unresolvedCourseIds,
+    )
+    return errorResponse(
+      'Failed to resolve Moodle course categories. Retry the sync to avoid overwriting schools and categories with incomplete data.',
+      502,
+    )
+  }
 
   try {
     const syncedCourses = await upsertCourses(supabase, coursesData)

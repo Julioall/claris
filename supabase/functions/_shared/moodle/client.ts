@@ -1,6 +1,7 @@
 import type { MoodleTokenResponse, MoodleCourse, MoodleCategory, MoodleEnrolledUser, MoodleSiteInfo } from './types.ts'
 
 const INVALID_PARAMETER_MESSAGE = 'valor inválido de parâmetro'
+const NUMERIC_CATEGORY_PATTERN = /^\d+$/
 
 function isInvalidParameterError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : ''
@@ -185,12 +186,42 @@ export function buildCategoryPath(categoryId: number, categories: MoodleCategory
     .split('/')
     .filter((id) => id !== '')
     .map((id) => parseInt(id, 10))
+    .filter((id) => Number.isFinite(id))
 
-  const pathNames = pathIds
-    .map((id) => categoryMap.get(id)?.name)
-    .filter((name): name is string => !!name)
+  const effectivePathIds = pathIds.length > 0 ? pathIds : [category.id]
+  const pathNames: string[] = []
+
+  for (const id of effectivePathIds) {
+    const name = categoryMap.get(id)?.name?.trim()
+    if (!name) return ''
+    pathNames.push(name)
+  }
 
   return pathNames.join(' > ')
+}
+
+function isUsableResolvedCategory(categoryName: string | null | undefined): categoryName is string {
+  const normalized = categoryName?.trim()
+  return Boolean(normalized) && !NUMERIC_CATEGORY_PATTERN.test(normalized)
+}
+
+export function resolveCourseCategoryName(
+  categoryId: number | undefined,
+  categories: MoodleCategory[],
+  existingCategory: string | null | undefined,
+): string | null {
+  if (typeof categoryId === 'number') {
+    const resolvedCategory = buildCategoryPath(categoryId, categories)
+    if (isUsableResolvedCategory(resolvedCategory)) {
+      return resolvedCategory
+    }
+  }
+
+  if (isUsableResolvedCategory(existingCategory)) {
+    return existingCategory.trim()
+  }
+
+  return null
 }
 
 /**

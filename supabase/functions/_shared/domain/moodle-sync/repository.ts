@@ -5,6 +5,7 @@ import type {
 } from '../../db/mod.ts'
 
 export type CourseSyncRecord = Pick<Tables<'courses'>, 'id' | 'start_date'>
+export type ExistingCourseCategoryRecord = Pick<Tables<'courses'>, 'moodle_course_id' | 'category'>
 export type CourseInsert = TablesInsert<'courses'>
 export type StudentInsert = TablesInsert<'students'>
 export type StudentCourseInsert = TablesInsert<'student_courses'>
@@ -35,6 +36,21 @@ export async function upsertCourses(
     .from('courses')
     .upsert(payload, { onConflict: 'moodle_course_id', ignoreDuplicates: false })
     .select()
+
+  if (error) throw error
+  return data ?? []
+}
+
+export async function listCourseCategoriesByMoodleCourseIds(
+  supabase: AppSupabaseClient,
+  moodleCourseIds: string[],
+): Promise<ExistingCourseCategoryRecord[]> {
+  if (moodleCourseIds.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('courses')
+    .select('moodle_course_id, category')
+    .in('moodle_course_id', moodleCourseIds)
 
   if (error) throw error
   return data ?? []
