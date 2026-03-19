@@ -9,10 +9,10 @@ services:
         - type=gha
       cache_to:
         - type=gha,mode=max
-    container_name: moodle-monitor-supabase
+    container_name: claris-supabase
     network_mode: host
     environment:
-      RUNNER_CONTAINER_NAME: moodle-monitor-supabase
+      RUNNER_CONTAINER_NAME: claris-supabase
       SUPABASE_API_URL: http://127.0.0.1:54321
     volumes:
       - ./:/workspace
@@ -30,7 +30,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend
-    container_name: moodle-monitor-frontend
+    container_name: claris-frontend
     depends_on:
       supabase:
         condition: service_healthy

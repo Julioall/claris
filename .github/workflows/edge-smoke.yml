@@ -78,7 +78,7 @@ jobs:
 
       - name: Run Edge smoke test
         env:
-          SUPABASE_RUNNER_CONTAINER: moodle-monitor-supabase
+          SUPABASE_RUNNER_CONTAINER: claris-supabase
         run: npm run smoke:edge
 
       - name: Print Docker diagnostics

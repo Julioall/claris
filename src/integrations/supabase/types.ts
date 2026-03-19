@@ -7,101 +7,8 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.1"
-  }
   public: {
     Tables: {
-      action_types: {
-        Row: {
-          created_at: string
-          id: string
-          label: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          label: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          label?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      actions: {
-        Row: {
-          action_type: Database["public"]["Enums"]["action_type"]
-          completed_at: string | null
-          course_id: string | null
-          created_at: string | null
-          description: string
-          id: string
-          scheduled_date: string | null
-          status: Database["public"]["Enums"]["action_status"] | null
-          student_id: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          action_type: Database["public"]["Enums"]["action_type"]
-          completed_at?: string | null
-          course_id?: string | null
-          created_at?: string | null
-          description: string
-          id?: string
-          scheduled_date?: string | null
-          status?: Database["public"]["Enums"]["action_status"] | null
-          student_id: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          action_type?: Database["public"]["Enums"]["action_type"]
-          completed_at?: string | null
-          course_id?: string | null
-          created_at?: string | null
-          description?: string
-          id?: string
-          scheduled_date?: string | null
-          status?: Database["public"]["Enums"]["action_status"] | null
-          student_id?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "actions_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "actions_student_id_fkey"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "students"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "actions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       activity_feed: {
         Row: {
           course_id: string | null
@@ -163,6 +70,7 @@ export type Database = {
       admin_user_roles: {
         Row: {
           created_at: string
+          granted_by: string | null
           id: string
           permissions: Json
           role: string
@@ -171,6 +79,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          granted_by?: string | null
           id?: string
           permissions?: Json
           role?: string
@@ -179,6 +88,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          granted_by?: string | null
           id?: string
           permissions?: Json
           role?: string
@@ -187,10 +97,478 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "admin_user_roles_granted_by_fkey"
+            columns: ["granted_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "admin_user_roles_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: true
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_error_logs: {
+        Row: {
+          category: string
+          context: Json | null
+          created_at: string
+          id: string
+          message: string
+          payload: Json | null
+          resolved: boolean
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          category?: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message: string
+          payload?: Json | null
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          category?: string
+          context?: Json | null
+          created_at?: string
+          id?: string
+          message?: string
+          payload?: Json | null
+          resolved?: boolean
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_error_logs_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_error_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_feature_flags: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled: boolean
+          id: string
+          key: string
+          name: string
+          payload: Json | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          key: string
+          name: string
+          payload?: Json | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          id?: string
+          key?: string
+          name?: string
+          payload?: Json | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_feature_flags_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_service_instance_events: {
+        Row: {
+          actor_user_id: string | null
+          context: Json | null
+          correlation_id: string | null
+          created_at: string
+          error_summary: string | null
+          event_type: string
+          id: string
+          instance_id: string
+          instance_scope: string
+          origin: string
+          status: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          context?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          error_summary?: string | null
+          event_type: string
+          id?: string
+          instance_id: string
+          instance_scope?: string
+          origin?: string
+          status?: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          context?: Json | null
+          correlation_id?: string | null
+          created_at?: string
+          error_summary?: string | null
+          event_type?: string
+          id?: string
+          instance_id?: string
+          instance_scope?: string
+          origin?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_service_instance_events_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "app_service_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_service_instance_group_permissions: {
+        Row: {
+          can_use: boolean
+          can_view: boolean
+          created_at: string
+          group_id: string
+          id: string
+          instance_id: string
+          updated_at: string
+        }
+        Insert: {
+          can_use?: boolean
+          can_view?: boolean
+          created_at?: string
+          group_id: string
+          id?: string
+          instance_id: string
+          updated_at?: string
+        }
+        Update: {
+          can_use?: boolean
+          can_view?: boolean
+          created_at?: string
+          group_id?: string
+          id?: string
+          instance_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_service_instance_group_permissions_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "app_service_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_service_instance_health_logs: {
+        Row: {
+          checked_at: string
+          connection_status: string | null
+          created_at: string
+          details: Json | null
+          health_status: string
+          id: string
+          instance_id: string
+        }
+        Insert: {
+          checked_at?: string
+          connection_status?: string | null
+          created_at?: string
+          details?: Json | null
+          health_status: string
+          id?: string
+          instance_id: string
+        }
+        Update: {
+          checked_at?: string
+          connection_status?: string | null
+          created_at?: string
+          details?: Json | null
+          health_status?: string
+          id?: string
+          instance_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_service_instance_health_logs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "app_service_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_service_instance_jobs: {
+        Row: {
+          actor_user_id: string | null
+          attempts: number
+          completed_at: string | null
+          correlation_id: string | null
+          created_at: string
+          error_summary: string | null
+          id: string
+          instance_id: string
+          instance_scope: string
+          job_type: string
+          max_attempts: number
+          payload: Json | null
+          result: Json | null
+          scheduled_at: string | null
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          actor_user_id?: string | null
+          attempts?: number
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          error_summary?: string | null
+          id?: string
+          instance_id: string
+          instance_scope?: string
+          job_type: string
+          max_attempts?: number
+          payload?: Json | null
+          result?: Json | null
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          actor_user_id?: string | null
+          attempts?: number
+          completed_at?: string | null
+          correlation_id?: string | null
+          created_at?: string
+          error_summary?: string | null
+          id?: string
+          instance_id?: string
+          instance_scope?: string
+          job_type?: string
+          max_attempts?: number
+          payload?: Json | null
+          result?: Json | null
+          scheduled_at?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_service_instance_jobs_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "app_service_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_service_instance_limits: {
+        Row: {
+          created_at: string
+          id: string
+          instance_id: string
+          limit_type: string
+          limit_value: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instance_id: string
+          limit_type: string
+          limit_value: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instance_id?: string
+          limit_type?: string
+          limit_value?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_service_instance_limits_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "app_service_instances"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      app_service_instances: {
+        Row: {
+          admin_notes: string | null
+          connection_status: string
+          created_at: string
+          created_by_user_id: string | null
+          description: string | null
+          evolution_instance_name: string | null
+          external_id: string | null
+          health_status: string
+          id: string
+          is_active: boolean
+          is_blocked: boolean
+          last_activity_at: string | null
+          last_sync_at: string | null
+          limits: Json | null
+          metadata: Json | null
+          name: string
+          operational_status: string
+          owner_user_id: string | null
+          provider: string
+          scope: string
+          send_window: Json | null
+          service_type: string
+          updated_at: string
+          updated_by_user_id: string | null
+          warmup_mode: boolean
+        }
+        Insert: {
+          admin_notes?: string | null
+          connection_status?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          description?: string | null
+          evolution_instance_name?: string | null
+          external_id?: string | null
+          health_status?: string
+          id?: string
+          is_active?: boolean
+          is_blocked?: boolean
+          last_activity_at?: string | null
+          last_sync_at?: string | null
+          limits?: Json | null
+          metadata?: Json | null
+          name: string
+          operational_status?: string
+          owner_user_id?: string | null
+          provider?: string
+          scope?: string
+          send_window?: Json | null
+          service_type?: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+          warmup_mode?: boolean
+        }
+        Update: {
+          admin_notes?: string | null
+          connection_status?: string
+          created_at?: string
+          created_by_user_id?: string | null
+          description?: string | null
+          evolution_instance_name?: string | null
+          external_id?: string | null
+          health_status?: string
+          id?: string
+          is_active?: boolean
+          is_blocked?: boolean
+          last_activity_at?: string | null
+          last_sync_at?: string | null
+          limits?: Json | null
+          metadata?: Json | null
+          name?: string
+          operational_status?: string
+          owner_user_id?: string | null
+          provider?: string
+          scope?: string
+          send_window?: Json | null
+          service_type?: string
+          updated_at?: string
+          updated_by_user_id?: string | null
+          warmup_mode?: boolean
+        }
+        Relationships: []
+      }
+      app_service_webhook_events: {
+        Row: {
+          created_at: string
+          error_summary: string | null
+          event_type: string
+          evolution_instance_name: string | null
+          id: string
+          instance_id: string | null
+          payload: Json
+          processed: boolean
+          processed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          error_summary?: string | null
+          event_type: string
+          evolution_instance_name?: string | null
+          id?: string
+          instance_id?: string | null
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          error_summary?: string | null
+          event_type?: string
+          evolution_instance_name?: string | null
+          id?: string
+          instance_id?: string | null
+          payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_service_webhook_events_instance_id_fkey"
+            columns: ["instance_id"]
+            isOneToOne: false
+            referencedRelation: "app_service_instances"
             referencedColumns: ["id"]
           },
         ]
@@ -225,6 +603,44 @@ export type Database = {
         }
         Relationships: []
       }
+      app_usage_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          resource: string | null
+          route: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          resource?: string | null
+          route?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          resource?: string | null
+          route?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_usage_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance_course_settings: {
         Row: {
           course_id: string
@@ -250,6 +666,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_course_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -301,6 +724,13 @@ export type Database = {
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_records_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -414,8 +844,6 @@ export type Database = {
           created_at: string
           description: string | null
           end_at: string | null
-          entity_id: string | null
-          entity_type: string | null
           external_event_id: string | null
           external_id: string | null
           external_provider: string | null
@@ -426,6 +854,8 @@ export type Database = {
           location: string | null
           owner: string | null
           participants: Json | null
+          related_entity_id: string | null
+          related_entity_type: string | null
           start_at: string
           sync_status: string | null
           tags: string[]
@@ -438,8 +868,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_at?: string | null
-          entity_id?: string | null
-          entity_type?: string | null
           external_event_id?: string | null
           external_id?: string | null
           external_provider?: string | null
@@ -450,6 +878,8 @@ export type Database = {
           location?: string | null
           owner?: string | null
           participants?: Json | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
           start_at: string
           sync_status?: string | null
           tags?: string[]
@@ -462,8 +892,6 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_at?: string | null
-          entity_id?: string | null
-          entity_type?: string | null
           external_event_id?: string | null
           external_id?: string | null
           external_provider?: string | null
@@ -474,6 +902,8 @@ export type Database = {
           location?: string | null
           owner?: string | null
           participants?: Json | null
+          related_entity_id?: string | null
+          related_entity_type?: string | null
           start_at?: string
           sync_status?: string | null
           tags?: string[]
@@ -481,15 +911,34 @@ export type Database = {
           type?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "calendar_events_owner_fkey"
-            columns: ["owner"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
+      }
+      claris_ai_actions: {
+        Row: {
+          created_at: string
+          id: string
+          result_summary: string | null
+          tool_args: Json
+          tool_name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          result_summary?: string | null
+          tool_args?: Json
+          tool_name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          result_summary?: string | null
+          tool_args?: Json
+          tool_name?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       claris_conversations: {
         Row: {
@@ -577,13 +1026,6 @@ export type Database = {
             referencedRelation: "claris_suggestions"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "claris_suggestion_cooldowns_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
         ]
       }
       claris_suggestions: {
@@ -659,15 +1101,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "claris_suggestions_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       courses: {
         Row: {
@@ -713,7 +1147,9 @@ export type Database = {
           category: string | null
           content: string
           created_at: string
+          default_key: string | null
           id: string
+          is_default: boolean
           is_favorite: boolean | null
           title: string
           updated_at: string
@@ -723,7 +1159,9 @@ export type Database = {
           category?: string | null
           content: string
           created_at?: string
+          default_key?: string | null
           id?: string
+          is_default?: boolean
           is_favorite?: boolean | null
           title: string
           updated_at?: string
@@ -733,7 +1171,9 @@ export type Database = {
           category?: string | null
           content?: string
           created_at?: string
+          default_key?: string | null
           id?: string
+          is_default?: boolean
           is_favorite?: boolean | null
           title?: string
           updated_at?: string
@@ -876,7 +1316,9 @@ export type Database = {
       pending_tasks: {
         Row: {
           assigned_to_user_id: string | null
-          automation_type: string | null
+          automation_type:
+            | Database["public"]["Enums"]["task_automation_type"]
+            | null
           category_name: string | null
           completed_at: string | null
           course_id: string | null
@@ -885,8 +1327,11 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          is_recurring: boolean | null
           moodle_activity_id: string | null
+          parent_task_id: string | null
           priority: Database["public"]["Enums"]["task_priority"] | null
+          recurrence_id: string | null
           status: Database["public"]["Enums"]["task_status"] | null
           student_id: string | null
           task_type: Database["public"]["Enums"]["task_type"] | null
@@ -896,7 +1341,9 @@ export type Database = {
         }
         Insert: {
           assigned_to_user_id?: string | null
-          automation_type?: string | null
+          automation_type?:
+            | Database["public"]["Enums"]["task_automation_type"]
+            | null
           category_name?: string | null
           completed_at?: string | null
           course_id?: string | null
@@ -905,8 +1352,11 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          is_recurring?: boolean | null
           moodle_activity_id?: string | null
+          parent_task_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"] | null
+          recurrence_id?: string | null
           status?: Database["public"]["Enums"]["task_status"] | null
           student_id?: string | null
           task_type?: Database["public"]["Enums"]["task_type"] | null
@@ -916,7 +1366,9 @@ export type Database = {
         }
         Update: {
           assigned_to_user_id?: string | null
-          automation_type?: string | null
+          automation_type?:
+            | Database["public"]["Enums"]["task_automation_type"]
+            | null
           category_name?: string | null
           completed_at?: string | null
           course_id?: string | null
@@ -925,8 +1377,11 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          is_recurring?: boolean | null
           moodle_activity_id?: string | null
+          parent_task_id?: string | null
           priority?: Database["public"]["Enums"]["task_priority"] | null
+          recurrence_id?: string | null
           status?: Database["public"]["Enums"]["task_status"] | null
           student_id?: string | null
           task_type?: Database["public"]["Enums"]["task_type"] | null
@@ -935,6 +1390,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_pending_tasks_recurrence"
+            columns: ["recurrence_id"]
+            isOneToOne: false
+            referencedRelation: "task_recurrence_configs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pending_tasks_assigned_to_user_id_fkey"
             columns: ["assigned_to_user_id"]
@@ -954,6 +1416,13 @@ export type Database = {
             columns: ["created_by_user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pending_tasks_parent_task_id_fkey"
+            columns: ["parent_task_id"]
+            isOneToOne: false
+            referencedRelation: "pending_tasks"
             referencedColumns: ["id"]
           },
           {
@@ -1020,6 +1489,77 @@ export type Database = {
           },
         ]
       }
+      scheduled_messages: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          failed_count: number
+          filter_context: Json | null
+          id: string
+          message_content: string
+          notes: string | null
+          origin: string
+          recipient_count: number | null
+          scheduled_at: string
+          sent_count: number
+          started_at: string | null
+          status: string
+          template_id: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          failed_count?: number
+          filter_context?: Json | null
+          id?: string
+          message_content: string
+          notes?: string | null
+          origin?: string
+          recipient_count?: number | null
+          scheduled_at: string
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          template_id?: string | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          failed_count?: number
+          filter_context?: Json | null
+          id?: string
+          message_content?: string
+          notes?: string | null
+          origin?: string
+          recipient_count?: number | null
+          scheduled_at?: string
+          sent_count?: number
+          started_at?: string | null
+          status?: string
+          template_id?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scheduled_messages_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "message_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       student_activities: {
         Row: {
           activity_name: string
@@ -1033,6 +1573,7 @@ export type Database = {
           graded_at: string | null
           hidden: boolean
           id: string
+          is_recovery: boolean
           moodle_activity_id: string
           percentage: number | null
           status: string | null
@@ -1052,6 +1593,7 @@ export type Database = {
           graded_at?: string | null
           hidden?: boolean
           id?: string
+          is_recovery?: boolean
           moodle_activity_id: string
           percentage?: number | null
           status?: string | null
@@ -1071,6 +1613,7 @@ export type Database = {
           graded_at?: string | null
           hidden?: boolean
           id?: string
+          is_recovery?: boolean
           moodle_activity_id?: string
           percentage?: number | null
           status?: string | null
@@ -1152,66 +1695,6 @@ export type Database = {
           },
         ]
       }
-      student_sync_snapshots: {
-        Row: {
-          id: string
-          student_id: string
-          course_id: string
-          sync_date: string
-          synced_at: string
-          risk_level: string
-          enrollment_status: string
-          last_access: string | null
-          days_since_access: number | null
-          pending_activities: number
-          overdue_activities: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          student_id: string
-          course_id: string
-          sync_date?: string
-          synced_at?: string
-          risk_level?: string
-          enrollment_status?: string
-          last_access?: string | null
-          days_since_access?: number | null
-          pending_activities?: number
-          overdue_activities?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          student_id?: string
-          course_id?: string
-          sync_date?: string
-          synced_at?: string
-          risk_level?: string
-          enrollment_status?: string
-          last_access?: string | null
-          days_since_access?: number | null
-          pending_activities?: number
-          overdue_activities?: number
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "student_sync_snapshots_student_id_fkey"
-            columns: ["student_id"]
-            isOneToOne: false
-            referencedRelation: "students"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "student_sync_snapshots_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       student_courses: {
         Row: {
           course_id: string
@@ -1250,6 +1733,66 @@ export type Database = {
           },
           {
             foreignKeyName: "student_courses_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_sync_snapshots: {
+        Row: {
+          course_id: string
+          created_at: string
+          days_since_access: number | null
+          enrollment_status: string
+          id: string
+          last_access: string | null
+          overdue_activities: number
+          pending_activities: number
+          risk_level: string
+          student_id: string
+          sync_date: string
+          synced_at: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          days_since_access?: number | null
+          enrollment_status?: string
+          id?: string
+          last_access?: string | null
+          overdue_activities?: number
+          pending_activities?: number
+          risk_level?: string
+          student_id: string
+          sync_date?: string
+          synced_at?: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          days_since_access?: number | null
+          enrollment_status?: string
+          id?: string
+          last_access?: string | null
+          overdue_activities?: number
+          pending_activities?: number
+          risk_level?: string
+          student_id?: string
+          sync_date?: string
+          synced_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_sync_snapshots_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_sync_snapshots_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
             referencedRelation: "students"
@@ -1299,47 +1842,289 @@ export type Database = {
         }
         Relationships: []
       }
-      task_action_logs: {
+      support_tickets: {
         Row: {
-          action_type: string
+          admin_notes: string | null
+          assigned_to: string | null
+          context: Json | null
           created_at: string
           description: string
-          effectiveness: string | null
           id: string
-          pending_task_id: string
-          user_id: string
+          priority: string
+          resolved_at: string | null
+          route: string | null
+          status: string
+          title: string
+          type: string
+          updated_at: string
+          user_id: string | null
         }
         Insert: {
-          action_type?: string
+          admin_notes?: string | null
+          assigned_to?: string | null
+          context?: Json | null
           created_at?: string
           description: string
-          effectiveness?: string | null
           id?: string
-          pending_task_id: string
-          user_id: string
+          priority?: string
+          resolved_at?: string | null
+          route?: string | null
+          status?: string
+          title: string
+          type?: string
+          updated_at?: string
+          user_id?: string | null
         }
         Update: {
-          action_type?: string
+          admin_notes?: string | null
+          assigned_to?: string | null
+          context?: Json | null
           created_at?: string
           description?: string
-          effectiveness?: string | null
           id?: string
-          pending_task_id?: string
-          user_id?: string
+          priority?: string
+          resolved_at?: string | null
+          route?: string | null
+          status?: string
+          title?: string
+          type?: string
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "task_action_logs_pending_task_id_fkey"
-            columns: ["pending_task_id"]
+            foreignKeyName: "support_tickets_assigned_to_fkey"
+            columns: ["assigned_to"]
             isOneToOne: false
-            referencedRelation: "pending_tasks"
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "support_tickets_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tags: {
+        Row: {
+          color: string | null
+          created_at: string
+          created_by: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          label: string
+          prefix: string | null
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          label: string
+          prefix?: string | null
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          label?: string
+          prefix?: string | null
+        }
+        Relationships: []
+      }
+      task_comments: {
+        Row: {
+          author_id: string | null
+          comment: string
+          created_at: string
+          id: string
+          task_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          comment: string
+          created_at?: string
+          id?: string
+          task_id: string
+        }
+        Update: {
+          author_id?: string | null
+          comment?: string
+          created_at?: string
+          id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_comments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_history: {
+        Row: {
+          changed_by: string | null
+          created_at: string
+          field_changed: string
+          id: string
+          new_value: string | null
+          old_value: string | null
+          task_id: string
+        }
+        Insert: {
+          changed_by?: string | null
+          created_at?: string
+          field_changed: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          task_id: string
+        }
+        Update: {
+          changed_by?: string | null
+          created_at?: string
+          field_changed?: string
+          id?: string
+          new_value?: string | null
+          old_value?: string | null
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_history_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_recurrence_configs: {
+        Row: {
+          course_id: string | null
+          created_at: string | null
+          created_by_user_id: string
+          description: string | null
+          end_date: string | null
+          id: string
+          is_active: boolean | null
+          last_generated_at: string | null
+          next_generation_at: string | null
+          pattern: Database["public"]["Enums"]["recurrence_pattern"]
+          priority: Database["public"]["Enums"]["task_priority"] | null
+          start_date: string
+          student_id: string | null
+          task_type: Database["public"]["Enums"]["task_type"] | null
+          title: string
+          updated_at: string | null
+          weekly_day: number | null
+        }
+        Insert: {
+          course_id?: string | null
+          created_at?: string | null
+          created_by_user_id: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_generated_at?: string | null
+          next_generation_at?: string | null
+          pattern: Database["public"]["Enums"]["recurrence_pattern"]
+          priority?: Database["public"]["Enums"]["task_priority"] | null
+          start_date: string
+          student_id?: string | null
+          task_type?: Database["public"]["Enums"]["task_type"] | null
+          title: string
+          updated_at?: string | null
+          weekly_day?: number | null
+        }
+        Update: {
+          course_id?: string | null
+          created_at?: string | null
+          created_by_user_id?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          last_generated_at?: string | null
+          next_generation_at?: string | null
+          pattern?: Database["public"]["Enums"]["recurrence_pattern"]
+          priority?: Database["public"]["Enums"]["task_priority"] | null
+          start_date?: string
+          student_id?: string | null
+          task_type?: Database["public"]["Enums"]["task_type"] | null
+          title?: string
+          updated_at?: string | null
+          weekly_day?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_recurrence_configs_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_recurrence_configs_created_by_user_id_fkey"
+            columns: ["created_by_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_recurrence_configs_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_tags: {
+        Row: {
+          tag_id: string
+          task_id: string
+        }
+        Insert: {
+          tag_id: string
+          task_id: string
+        }
+        Update: {
+          tag_id?: string
+          task_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_tags_tag_id_fkey"
+            columns: ["tag_id"]
+            isOneToOne: false
+            referencedRelation: "tags"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "task_tags_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
             referencedColumns: ["id"]
           },
         ]
       }
       task_templates: {
         Row: {
-          auto_close_on_action: boolean | null
           auto_message_template: string | null
           created_at: string
           description: string | null
@@ -1352,7 +2137,6 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          auto_close_on_action?: boolean | null
           auto_message_template?: string | null
           created_at?: string
           description?: string | null
@@ -1365,7 +2149,6 @@ export type Database = {
           user_id: string
         }
         Update: {
-          auto_close_on_action?: boolean | null
           auto_message_template?: string | null
           created_at?: string
           description?: string | null
@@ -1434,22 +2217,7 @@ export type Database = {
           title?: string
           updated_at?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "tasks_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tasks_created_by_fkey"
-            columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       user_courses: {
         Row: {
@@ -1530,36 +2298,48 @@ export type Database = {
         Row: {
           claris_llm_settings: Json
           created_at: string
+          enabled_temperatures: Json
+          entity_last_sync: Json
+          entity_temperatures: Json
           id: string
           include_empty_courses: boolean
           include_finished: boolean
-          risk_threshold_days: Json | null
+          risk_threshold_days: Json
           selected_keys: string[]
-          sync_interval_hours: Json | null
+          sync_interval_days: Json
+          sync_interval_hours: Json
           updated_at: string
           user_id: string
         }
         Insert: {
           claris_llm_settings?: Json
           created_at?: string
+          enabled_temperatures?: Json
+          entity_last_sync?: Json
+          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          risk_threshold_days?: Json | null
+          risk_threshold_days?: Json
           selected_keys?: string[]
-          sync_interval_hours?: Json | null
+          sync_interval_days?: Json
+          sync_interval_hours?: Json
           updated_at?: string
           user_id: string
         }
         Update: {
           claris_llm_settings?: Json
           created_at?: string
+          enabled_temperatures?: Json
+          entity_last_sync?: Json
+          entity_temperatures?: Json
           id?: string
           include_empty_courses?: boolean
           include_finished?: boolean
-          risk_threshold_days?: Json | null
+          risk_threshold_days?: Json
           selected_keys?: string[]
-          sync_interval_hours?: Json | null
+          sync_interval_days?: Json
+          sync_interval_hours?: Json
           updated_at?: string
           user_id?: string
         }
@@ -1574,6 +2354,7 @@ export type Database = {
           id: string
           last_login: string | null
           last_sync: string | null
+          message_templates_seeded_at: string | null
           moodle_user_id: string
           moodle_username: string
           updated_at: string | null
@@ -1586,6 +2367,7 @@ export type Database = {
           id?: string
           last_login?: string | null
           last_sync?: string | null
+          message_templates_seeded_at?: string | null
           moodle_user_id: string
           moodle_username: string
           updated_at?: string | null
@@ -1598,6 +2380,7 @@ export type Database = {
           id?: string
           last_login?: string | null
           last_sync?: string | null
+          message_templates_seeded_at?: string | null
           moodle_user_id?: string
           moodle_username?: string
           updated_at?: string | null
@@ -1609,6 +2392,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_next_recurrence_date: {
+        Args: {
+          current_ts: string
+          pattern: Database["public"]["Enums"]["recurrence_pattern"]
+        }
+        Returns: string
+      }
       calculate_student_risk: {
         Args: { p_student_id: string }
         Returns: {
@@ -1636,14 +2426,6 @@ export type Database = {
       }
     }
     Enums: {
-      action_status: "planejada" | "concluida"
-      action_type:
-        | "contato"
-        | "orientacao"
-        | "cobranca"
-        | "suporte_tecnico"
-        | "reuniao"
-        | "outro"
       bulk_message_status:
         | "pending"
         | "processing"
@@ -1651,7 +2433,20 @@ export type Database = {
         | "failed"
         | "cancelled"
       bulk_recipient_status: "pending" | "sent" | "failed"
-      risk_level: "normal" | "atencao" | "risco" | "critico"
+      recurrence_pattern:
+        | "diario"
+        | "semanal"
+        | "quinzenal"
+        | "mensal"
+        | "bimestral"
+        | "trimestral"
+      risk_level: "normal" | "atencao" | "risco" | "critico" | "inativo"
+      task_automation_type:
+        | "manual"
+        | "auto_at_risk"
+        | "auto_missed_assignment"
+        | "auto_uncorrected_activity"
+        | "recurring"
       task_priority: "baixa" | "media" | "alta" | "urgente"
       task_status: "aberta" | "em_andamento" | "resolvida"
       task_type: "moodle" | "interna"
@@ -1782,15 +2577,6 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      action_status: ["planejada", "concluida"],
-      action_type: [
-        "contato",
-        "orientacao",
-        "cobranca",
-        "suporte_tecnico",
-        "reuniao",
-        "outro",
-      ],
       bulk_message_status: [
         "pending",
         "processing",
@@ -1799,10 +2585,26 @@ export const Constants = {
         "cancelled",
       ],
       bulk_recipient_status: ["pending", "sent", "failed"],
-      risk_level: ["normal", "atencao", "risco", "critico"],
+      recurrence_pattern: [
+        "diario",
+        "semanal",
+        "quinzenal",
+        "mensal",
+        "bimestral",
+        "trimestral",
+      ],
+      risk_level: ["normal", "atencao", "risco", "critico", "inativo"],
+      task_automation_type: [
+        "manual",
+        "auto_at_risk",
+        "auto_missed_assignment",
+        "auto_uncorrected_activity",
+        "recurring",
+      ],
       task_priority: ["baixa", "media", "alta", "urgente"],
       task_status: ["aberta", "em_andamento", "resolvida"],
       task_type: ["moodle", "interna"],
     },
   },
 } as const
+

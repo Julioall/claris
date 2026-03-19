@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 
-const RUNNER_CONTAINER = process.env.SUPABASE_RUNNER_CONTAINER || 'moodle-monitor-supabase'
+const RUNNER_CONTAINER = process.env.SUPABASE_RUNNER_CONTAINER || 'claris-supabase'
 
 const seed = {
   courseMoodleId: 'smoke-course-001',
