@@ -94,7 +94,7 @@ services:
 
       # QR Code
       QRCODE_LIMIT: "30"
-      QRCODE_COLOR: "#198754"
+      QRCODE_COLOR: "#000000"
 
       # Webhook (per-instance, auto-configured by whatsapp-instance-manager)
       WEBHOOK_GLOBAL_ENABLED: "false"
