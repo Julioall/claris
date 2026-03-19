@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PUBLIC_DEPLOY_REPO: Julioall/claris-ia
+
 jobs:
   lint:
     name: Lint
@@ -43,63 +46,91 @@ jobs:
     environment: supabase
     steps:
       - uses: actions/checkout@v4
-      - name: Configure GitHub Pages
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v5
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
       - run: npm ci
-      - name: Set GitHub Pages base path
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        shell: bash
-        run: |
-          repo_name="${GITHUB_REPOSITORY#*/}"
-          owner_name="${GITHUB_REPOSITORY_OWNER,,}"
-          repo_name_lower="${repo_name,,}"
-
-          if [ "$repo_name_lower" = "${owner_name}.github.io" ]; then
-            echo "VITE_BASE_PATH=/" >> "$GITHUB_ENV"
-          else
-            echo "VITE_BASE_PATH=/${repo_name}/" >> "$GITHUB_ENV"
-          fi
       - name: Build application
-        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
         env:
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         run: npm run build
-      - name: Build GitHub Pages artifact
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        env:
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        run: npm run build:github-pages
-      - name: Upload GitHub Pages artifact
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./dist
 
-  deploy-pages:
-    name: Deploy GitHub Pages
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+  publish-public-build:
+    name: Publish Public Build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && secrets.PUBLIC_BUILD_DEPLOY_TOKEN != ''
     needs:
       - lint
       - test
       - build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    concurrency:
-      group: github-pages
-      cancel-in-progress: true
-    environment: github-pages
+    environment: supabase
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Set public build base path
+        shell: bash
+        run: |
+          repo_name="${PUBLIC_DEPLOY_REPO#*/}"
+          owner_name="${PUBLIC_DEPLOY_REPO%/*}"
+          repo_name_lower="${repo_name,,}"
+          owner_name_lower="${owner_name,,}"
+
+          if [ "$repo_name_lower" = "${owner_name_lower}.github.io" ]; then
+            echo "VITE_BASE_PATH=/" >> "$GITHUB_ENV"
+          else
+            echo "VITE_BASE_PATH=/${repo_name}/" >> "$GITHUB_ENV"
+          fi
+      - name: Build public artifact
+        env:
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        run: npm run build:github-pages
+      - name: Initialize public repository state
+        shell: bash
+        env:
+          PUBLIC_BUILD_DEPLOY_TOKEN: ${{ secrets.PUBLIC_BUILD_DEPLOY_TOKEN }}
+        run: |
+          rm -rf public-site
+          mkdir -p public-site
+          cd public-site
+
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${PUBLIC_BUILD_DEPLOY_TOKEN}@github.com/${PUBLIC_DEPLOY_REPO}.git"
+
+          if git ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
+            git fetch --depth=1 origin main
+            git checkout -B main FETCH_HEAD
+          else
+            git checkout -B main
+          fi
+      - name: Sync public repository contents
+        run: >
+          node scripts/sync-public-build-repo.mjs
+          --dist-dir dist
+          --target-dir public-site
+          --target-repo ${PUBLIC_DEPLOY_REPO}
+          --source-repo ${GITHUB_REPOSITORY}
+          --source-commit ${GITHUB_SHA}
+      - name: Commit and push public artifact
+        shell: bash
+        run: |
+          cd public-site
+
+          if [ -z "$(git status --short)" ]; then
+            echo "Public repository already up to date."
+            exit 0
+          fi
+
+          git add -A
+          git commit -m "Deploy build from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
+          git push origin HEAD:main

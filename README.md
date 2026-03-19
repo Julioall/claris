@@ -102,9 +102,9 @@ Secrets necessarios no GitHub Actions para esse deploy remoto, configurados no *
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PASSWORD`
 
-O ambiente `supabase` e referenciado diretamente pelo job de deploy (`environment: supabase`). Nao e necessario manter esses secrets no ambiente `github-pages`, que e usado exclusivamente pelo job de publicacao no GitHub Pages.
+O ambiente `supabase` e referenciado diretamente pelo job de deploy (`environment: supabase`).
 
-O workflow resolve automaticamente o projeto remoto a partir do secret `SUPABASE_PROJECT_ID` configurado no ambiente `supabase` (veja a secao [Variaveis de Ambiente GitHub Actions / Pages](#variaveis-de-ambiente-github-actions--pages) abaixo).
+O workflow resolve automaticamente o projeto remoto a partir do secret `SUPABASE_PROJECT_ID` configurado no ambiente `supabase` (veja a secao [Variaveis de Ambiente GitHub Actions / Public Build](#variaveis-de-ambiente-github-actions--public-build) abaixo).
 
 Tambem e possivel disparar manualmente o deploy remoto via `workflow_dispatch` no workflow [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml).
 
@@ -144,7 +144,7 @@ Variáveis opcionais:
 docker compose down
 ```
 
-## Variaveis de Ambiente GitHub Actions / Pages
+## Variaveis de Ambiente GitHub Actions / Public Build
 
 Os valores do Supabase usados no build do Vite (`VITE_SUPABASE_*`) **nao devem ser commitados no repositorio**. Configure-os como **secrets** no ambiente `supabase` do GitHub para que os workflows de build e deploy os utilizem automaticamente.
 
@@ -161,7 +161,27 @@ Todos os secrets abaixo devem ser adicionados em **Settings → Environments →
 | `SUPABASE_ACCESS_TOKEN` | Token de acesso para deploy via CLI |
 | `SUPABASE_PASSWORD` | Senha do banco de dados Supabase |
 
-> O ambiente `supabase` e usado tanto pelo job de **build/Pages** (`ci.yml`) quanto pelo job de **deploy remoto** (`supabase-deploy.yml`). Os secrets sao injetados como variaveis de ambiente com o prefixo `VITE_` necessario para o Vite durante o build.
+> O ambiente `supabase` e usado pelo job de **build** e pelo job de **deploy remoto** (`supabase-deploy.yml`). Os secrets sao injetados como variaveis de ambiente com o prefixo `VITE_` necessario para o Vite durante o build.
+
+### Publicacao do build em repositorio publico
+
+O fluxo de CI publica o build otimizado em `Julioall/claris-ia`, mantendo este repositorio como origem privada do codigo-fonte.
+
+- o repositorio publico recebe apenas os artefatos estaticos do `dist/`, sincronizados para `site/`;
+- o deploy do GitHub Pages acontece no proprio repositorio publico, por um workflow versionado junto com os artefatos;
+- alteracoes manuais no repositorio publico podem ser sobrescritas no proximo deploy.
+
+Para habilitar essa publicacao automatica, adicione no repositorio privado o secret abaixo em **Settings -> Environments -> supabase -> Environment secrets**:
+
+| Secret | Descricao |
+|---|---|
+| `PUBLIC_BUILD_DEPLOY_TOKEN` | Fine-grained PAT com permissao `Contents: Read and write` no repositorio `Julioall/claris-ia` |
+
+Observacoes:
+
+- se o token nao estiver configurado, o workflow de CI continua validando lint/test/build, mas pula a publicacao no repositorio publico;
+- o repositorio `Julioall/claris-ia` precisa ficar com **Settings -> Pages -> Source = GitHub Actions**;
+- o build publico continua expondo o JavaScript cliente, entao segredos e logica sensivel devem permanecer no Supabase / Edge Functions, nunca no frontend.
 
 ### Desenvolvimento local
 
@@ -179,9 +199,7 @@ O arquivo `.env` esta no `.gitignore` e **nunca deve ser commitado**.
 
 O repositorio utiliza GitHub Actions (`.github/workflows/ci.yml`) para rodar lint, testes e build automaticamente em cada push ou pull request para a branch `main`.
 
-Em push para `main`, o mesmo workflow tambem publica a aplicacao no GitHub Pages. O build de deploy calcula automaticamente o subcaminho do repositorio e gera um `404.html` a partir do `index.html` para manter o roteamento do React Router funcionando em refresh e links diretos.
-
-Se for a primeira publicacao do repositorio no GitHub Pages, confirme em **Settings -> Pages** que a fonte de deploy esta como **GitHub Actions**.
+Em push para `main`, o mesmo workflow pode publicar o build otimizado em `Julioall/claris-ia`, desde que o secret `PUBLIC_BUILD_DEPLOY_TOKEN` esteja configurado. O build de deploy calcula automaticamente o subcaminho do repositorio publico e gera um `404.html` a partir do `index.html` para manter o roteamento do React Router funcionando em refresh e links diretos.
 
 ## Supabase Remoto
 
