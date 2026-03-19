@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -168,12 +168,14 @@ function QrCodeDialog({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const completedRef = useRef(false);
+  const instanceId = instance?.id ?? null;
+  const instanceConnectionStatus = instance?.connection_status ?? null;
 
-  const fetchQr = async () => {
-    if (!instance) return;
+  const fetchQr = useCallback(async () => {
+    if (!instanceId) return;
     setLoading(true);
     try {
-      const res = await callInstanceManager('qrcode', { instance_id: instance.id });
+      const res = await callInstanceManager('qrcode', { instance_id: instanceId });
       const payload = ((res.qrcode as Record<string, unknown>) ?? {});
       const qr = (typeof payload.base64 === 'string' && payload.base64)
         || (typeof payload.code === 'string' && payload.code)
@@ -208,13 +210,13 @@ function QrCodeDialog({
     } finally {
       setLoading(false);
     }
-  };
+  }, [instanceId]);
 
   useEffect(() => {
-    if (!open || !instance) return;
+    if (!open || !instanceId) return;
 
     completedRef.current = false;
-    if (instance.connection_status === 'connected') {
+    if (instanceConnectionStatus === 'connected') {
       onClose();
       return;
     }
@@ -225,14 +227,14 @@ function QrCodeDialog({
       if (disposed || completedRef.current) return;
 
       try {
-        const res = await callInstanceManager('status', { instance_id: instance.id, silent: true });
+        const res = await callInstanceManager('status', { instance_id: instanceId, silent: true });
         if (disposed || completedRef.current) return;
 
         if (res.connection_status === 'connected') {
           completedRef.current = true;
           setStatusMessage('WhatsApp conectado. Fechando...');
           void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
-          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', instance.id] });
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', instanceId] });
           closeTimer = window.setTimeout(() => {
             if (!disposed) onClose();
           }, 900);
@@ -263,19 +265,17 @@ function QrCodeDialog({
         window.clearTimeout(closeTimer);
       }
     };
-  }, [instance?.id, instance?.connection_status, onClose, open, queryClient]);
+  }, [fetchQr, instanceConnectionStatus, instanceId, onClose, open, queryClient]);
 
-  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
-    if (!open || !instance) return;
+    if (!open || !instanceId) return;
 
     completedRef.current = false;
     setQrData(null);
     setPairingCode(null);
     setStatusMessage('Solicitando QR Code...');
     void fetchQr();
-  }, [open, instance?.id]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  }, [fetchQr, instanceId, open]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -538,16 +538,20 @@ export default function MeusServicos() {
     connectMutation.mutate(myInstance.id);
   };
 
+  const pendingInstanceId = myInstance?.connection_status === 'pending_connection'
+    ? myInstance.id
+    : null;
+
   useEffect(() => {
-    if (!myInstance || myInstance.connection_status !== 'pending_connection') return;
+    if (!pendingInstanceId) return;
 
     let disposed = false;
     const syncStatus = async () => {
       try {
-        await callInstanceManager('status', { instance_id: myInstance.id, silent: true });
+        await callInstanceManager('status', { instance_id: pendingInstanceId, silent: true });
         if (!disposed) {
           void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
-          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', myInstance.id] });
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', pendingInstanceId] });
         }
       } catch {
         // Silent background sync while the instance is pairing.
@@ -563,7 +567,7 @@ export default function MeusServicos() {
       disposed = true;
       window.clearInterval(intervalId);
     };
-  }, [myInstance?.connection_status, myInstance?.id, queryClient]);
+  }, [pendingInstanceId, queryClient]);
 
   if (isLoading) {
     return (

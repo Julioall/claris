@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -119,12 +119,14 @@ function QrCodeDialog({
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const completedRef = useRef(false);
+  const instanceId = instance?.id ?? null;
+  const instanceConnectionStatus = instance?.connection_status ?? null;
 
-  const fetchQr = async () => {
-    if (!instance) return;
+  const fetchQr = useCallback(async () => {
+    if (!instanceId) return;
     setLoading(true);
     try {
-      const res = await callInstanceManager('qrcode', { instance_id: instance.id });
+      const res = await callInstanceManager('qrcode', { instance_id: instanceId });
       const payload = ((res.qrcode as Record<string, unknown>) ?? {});
       const qr = (typeof payload.base64 === 'string' && payload.base64)
         || (typeof payload.code === 'string' && payload.code)
@@ -159,13 +161,13 @@ function QrCodeDialog({
     } finally {
       setLoading(false);
     }
-  };
+  }, [instanceId]);
 
   useEffect(() => {
-    if (!open || !instance) return;
+    if (!open || !instanceId) return;
 
     completedRef.current = false;
-    if (instance.connection_status === 'connected') {
+    if (instanceConnectionStatus === 'connected') {
       onClose();
       return;
     }
@@ -176,7 +178,7 @@ function QrCodeDialog({
       if (disposed || completedRef.current) return;
 
       try {
-        const res = await callInstanceManager('status', { instance_id: instance.id, silent: true });
+        const res = await callInstanceManager('status', { instance_id: instanceId, silent: true });
         if (disposed || completedRef.current) return;
 
         if (res.connection_status === 'connected') {
@@ -213,19 +215,17 @@ function QrCodeDialog({
         window.clearTimeout(closeTimer);
       }
     };
-  }, [instance?.id, instance?.connection_status, onClose, open, queryClient]);
+  }, [fetchQr, instanceConnectionStatus, instanceId, onClose, open, queryClient]);
 
-  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
-    if (!open || !instance) return;
+    if (!open || !instanceId) return;
 
     completedRef.current = false;
     setQrData(null);
     setPairingCode(null);
     setStatusMessage('Solicitando QR Code...');
     void fetchQr();
-  }, [open, instance?.id]);
-  /* eslint-enable react-hooks/exhaustive-deps */
+  }, [fetchQr, instanceId, open]);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
