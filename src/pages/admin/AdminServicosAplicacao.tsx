@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  Plus, Pencil, Trash2, QrCode, Wifi, WifiOff, Lock, Unlock,
+  Plus, Pencil, Trash2, Wifi, WifiOff, Lock, Unlock,
   RefreshCw, AlertTriangle, CheckCircle2, Clock, MessageCircle
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -113,10 +113,12 @@ function QrCodeDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [qrData, setQrData] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const completedRef = useRef(false);
 
   const fetchQr = async () => {
     if (!instance) return;
@@ -135,9 +137,9 @@ function QrCodeDialog({
       setPairingCode(pairing);
 
       if (qr) {
-        setStatusMessage(null);
+        setStatusMessage('QR exibido. Aguardando confirmação da conexão...');
       } else if (pairing) {
-        setStatusMessage('Código de pareamento disponível abaixo.');
+        setStatusMessage('Código de pareamento disponível abaixo. Aguardando conexão...');
       } else if (res.pending === true || payload.count === 0) {
         setStatusMessage(
           'A conexão foi iniciada, mas a Evolution ainda não liberou o QR Code. Aguarde alguns segundos e atualize.'
@@ -159,10 +161,65 @@ function QrCodeDialog({
     }
   };
 
+  useEffect(() => {
+    if (!open || !instance) return;
+
+    completedRef.current = false;
+    if (instance.connection_status === 'connected') {
+      onClose();
+      return;
+    }
+    let disposed = false;
+    let closeTimer: number | null = null;
+
+    const pollStatus = async () => {
+      if (disposed || completedRef.current) return;
+
+      try {
+        const res = await callInstanceManager('status', { instance_id: instance.id, silent: true });
+        if (disposed || completedRef.current) return;
+
+        if (res.connection_status === 'connected') {
+          completedRef.current = true;
+          setStatusMessage('WhatsApp conectado. Fechando...');
+          void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
+          closeTimer = window.setTimeout(() => {
+            if (!disposed) onClose();
+          }, 900);
+        }
+      } catch {
+        // Silent polling: manual QR fetch already exposes actionable errors.
+      }
+    };
+
+    const refreshQr = async () => {
+      if (disposed || completedRef.current) return;
+      await fetchQr();
+    };
+
+    void pollStatus();
+    const statusIntervalId = window.setInterval(() => {
+      void pollStatus();
+    }, 3000);
+    const qrIntervalId = window.setInterval(() => {
+      void refreshQr();
+    }, 15000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(statusIntervalId);
+      window.clearInterval(qrIntervalId);
+      if (closeTimer !== null) {
+        window.clearTimeout(closeTimer);
+      }
+    };
+  }, [instance?.id, instance?.connection_status, onClose, open, queryClient]);
+
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!open || !instance) return;
 
+    completedRef.current = false;
     setQrData(null);
     setPairingCode(null);
     setStatusMessage('Solicitando QR Code...');
@@ -195,14 +252,15 @@ function QrCodeDialog({
           ) : (
             <div className="w-64 h-64 rounded border flex items-center justify-center bg-muted">
               <p className="text-sm text-muted-foreground text-center px-4">
-                {statusMessage ?? 'Clique em “Gerar QR Code” para iniciar a conexão'}
+                {statusMessage ?? 'Aguardando QR Code...'}
               </p>
             </div>
           )}
-          <Button onClick={() => void fetchQr()} disabled={loading} className="w-full">
-            {loading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <QrCode className="h-4 w-4 mr-2" />}
-            {qrData ? 'Atualizar QR Code' : 'Gerar QR Code'}
-          </Button>
+          {(qrData || pairingCode) && statusMessage && (
+            <p className="text-xs text-muted-foreground text-center px-4">
+              {statusMessage}
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -300,9 +358,10 @@ export default function AdminServicosAplicacao() {
 
   const connectMutation = useMutation({
     mutationFn: async (id: string) => callInstanceManager('connect', { instance_id: id }),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
       toast({ title: 'Conexão iniciada' });
+      setQrInstance(instances.find((inst) => inst.id === id) ?? null);
     },
     onError: (err) => {
       toast({
@@ -369,6 +428,47 @@ export default function AdminServicosAplicacao() {
       });
     },
   });
+
+  const handleConnectClick = (inst: ServiceInstance) => {
+    if (inst.connection_status === 'pending_connection') {
+      setQrInstance(inst);
+      return;
+    }
+
+    connectMutation.mutate(inst.id);
+  };
+
+  useEffect(() => {
+    const pendingInstanceIds = instances
+      .filter((inst) => inst.connection_status === 'pending_connection')
+      .map((inst) => inst.id);
+
+    if (pendingInstanceIds.length === 0) return;
+
+    let disposed = false;
+    const syncStatuses = async () => {
+      try {
+        await Promise.all(
+          pendingInstanceIds.map((id) => callInstanceManager('status', { instance_id: id, silent: true }))
+        );
+        if (!disposed) {
+          void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
+        }
+      } catch {
+        // Silent background sync while one or more instances are pairing.
+      }
+    };
+
+    void syncStatuses();
+    const intervalId = window.setInterval(() => {
+      void syncStatuses();
+    }, 4000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [instances, queryClient]);
 
   const openCreate = () => {
     setEditingInstance(null);
@@ -501,15 +601,6 @@ export default function AdminServicosAplicacao() {
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-7 w-7"
-                          title="QR Code"
-                          onClick={() => setQrInstance(inst)}
-                        >
-                          <QrCode className="h-3.5 w-3.5" />
-                        </Button>
                         {inst.connection_status === 'connected' ? (
                           <Button
                             size="icon"
@@ -527,7 +618,7 @@ export default function AdminServicosAplicacao() {
                             variant="ghost"
                             className="h-7 w-7"
                             title="Conectar"
-                            onClick={() => connectMutation.mutate(inst.id)}
+                            onClick={() => handleConnectClick(inst)}
                             disabled={connectMutation.isPending}
                           >
                             <Wifi className="h-3.5 w-3.5" />

@@ -32,6 +32,7 @@ interface RequestBody {
   name?: string
   description?: string
   scope?: 'personal' | 'shared'
+  silent?: boolean
   // For create/update
   evolution_instance_name?: string
   phone_number?: string
@@ -530,6 +531,7 @@ async function handleStatus(
     return errorResponse('Forbidden', 403)
   }
 
+  const silent = body.silent === true
   let evolutionStatus: Record<string, unknown> = {}
   let connectionStatus = instance.connection_status
   let healthStatus = instance.health_status
@@ -567,28 +569,30 @@ async function handleStatus(
       connection_status: connectionStatus,
       health_status: healthStatus,
       last_sync_at: now,
-      updated_by_user_id: userId,
+      ...(silent ? {} : { updated_by_user_id: userId }),
     })
     .eq('id', instance.id)
 
-  // Log health check
-  await db.from('app_service_instance_health_logs').insert({
-    instance_id: instance.id,
-    health_status: healthStatus,
-    connection_status: connectionStatus,
-    details: evolutionStatus,
-    checked_at: now,
-  })
+  if (!silent) {
+    // Log health check only for explicit/manual syncs.
+    await db.from('app_service_instance_health_logs').insert({
+      instance_id: instance.id,
+      health_status: healthStatus,
+      connection_status: connectionStatus,
+      details: evolutionStatus,
+      checked_at: now,
+    })
 
-  await db.from('app_service_instance_events').insert({
-    instance_id: instance.id,
-    instance_scope: instance.scope,
-    event_type: 'status_synced',
-    origin: 'user',
-    context: { connection_status: connectionStatus, health_status: healthStatus },
-    status: 'success',
-    actor_user_id: userId,
-  })
+    await db.from('app_service_instance_events').insert({
+      instance_id: instance.id,
+      instance_scope: instance.scope,
+      event_type: 'status_synced',
+      origin: 'user',
+      context: { connection_status: connectionStatus, health_status: healthStatus },
+      status: 'success',
+      actor_user_id: userId,
+    })
+  }
 
   return jsonResponse({
     connection_status: connectionStatus,

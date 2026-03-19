@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  QrCode, Wifi, WifiOff, RefreshCw, AlertTriangle, CheckCircle2,
+  Wifi, WifiOff, RefreshCw, AlertTriangle, CheckCircle2,
   Pencil, Trash2, MessageCircle, Plus, Info, Clock
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
@@ -162,10 +162,12 @@ function QrCodeDialog({
   open: boolean;
   onClose: () => void;
 }) {
+  const queryClient = useQueryClient();
   const [qrData, setQrData] = useState<string | null>(null);
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const completedRef = useRef(false);
 
   const fetchQr = async () => {
     if (!instance) return;
@@ -184,9 +186,9 @@ function QrCodeDialog({
       setPairingCode(pairing);
 
       if (qr) {
-        setStatusMessage(null);
+        setStatusMessage('QR exibido. Aguardando confirmação da conexão...');
       } else if (pairing) {
-        setStatusMessage('Código de pareamento disponível abaixo.');
+        setStatusMessage('Código de pareamento disponível abaixo. Aguardando conexão...');
       } else if (res.pending === true || payload.count === 0) {
         setStatusMessage(
           'A conexão foi iniciada, mas a Evolution ainda não liberou o QR Code. Aguarde alguns segundos e atualize.'
@@ -208,10 +210,66 @@ function QrCodeDialog({
     }
   };
 
+  useEffect(() => {
+    if (!open || !instance) return;
+
+    completedRef.current = false;
+    if (instance.connection_status === 'connected') {
+      onClose();
+      return;
+    }
+    let disposed = false;
+    let closeTimer: number | null = null;
+
+    const pollStatus = async () => {
+      if (disposed || completedRef.current) return;
+
+      try {
+        const res = await callInstanceManager('status', { instance_id: instance.id, silent: true });
+        if (disposed || completedRef.current) return;
+
+        if (res.connection_status === 'connected') {
+          completedRef.current = true;
+          setStatusMessage('WhatsApp conectado. Fechando...');
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', instance.id] });
+          closeTimer = window.setTimeout(() => {
+            if (!disposed) onClose();
+          }, 900);
+        }
+      } catch {
+        // Silent polling: manual QR fetch already exposes actionable errors.
+      }
+    };
+
+    const refreshQr = async () => {
+      if (disposed || completedRef.current) return;
+      await fetchQr();
+    };
+
+    void pollStatus();
+    const statusIntervalId = window.setInterval(() => {
+      void pollStatus();
+    }, 3000);
+    const qrIntervalId = window.setInterval(() => {
+      void refreshQr();
+    }, 15000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(statusIntervalId);
+      window.clearInterval(qrIntervalId);
+      if (closeTimer !== null) {
+        window.clearTimeout(closeTimer);
+      }
+    };
+  }, [instance?.id, instance?.connection_status, onClose, open, queryClient]);
+
   /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!open || !instance) return;
 
+    completedRef.current = false;
     setQrData(null);
     setPairingCode(null);
     setStatusMessage('Solicitando QR Code...');
@@ -248,14 +306,15 @@ function QrCodeDialog({
           ) : (
             <div className="w-64 h-64 rounded border flex items-center justify-center bg-muted">
               <p className="text-sm text-muted-foreground text-center px-4">
-                {statusMessage ?? 'Clique abaixo para gerar o QR Code'}
+                {statusMessage ?? 'Aguardando QR Code...'}
               </p>
             </div>
           )}
-          <Button onClick={() => void fetchQr()} disabled={loading} className="w-full">
-            {loading ? <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> : <QrCode className="h-4 w-4 mr-2" />}
-            {qrData ? 'Atualizar QR Code' : 'Gerar QR Code'}
-          </Button>
+          {(qrData || pairingCode) && statusMessage && (
+            <p className="text-xs text-muted-foreground text-center px-4">
+              {statusMessage}
+            </p>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -468,6 +527,44 @@ export default function MeusServicos() {
     },
   });
 
+  const handleConnectClick = () => {
+    if (!myInstance) return;
+
+    if (myInstance.connection_status === 'pending_connection') {
+      setQrOpen(true);
+      return;
+    }
+
+    connectMutation.mutate(myInstance.id);
+  };
+
+  useEffect(() => {
+    if (!myInstance || myInstance.connection_status !== 'pending_connection') return;
+
+    let disposed = false;
+    const syncStatus = async () => {
+      try {
+        await callInstanceManager('status', { instance_id: myInstance.id, silent: true });
+        if (!disposed) {
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', myInstance.id] });
+        }
+      } catch {
+        // Silent background sync while the instance is pairing.
+      }
+    };
+
+    void syncStatus();
+    const intervalId = window.setInterval(() => {
+      void syncStatus();
+    }, 4000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [myInstance?.connection_status, myInstance?.id, queryClient]);
+
   if (isLoading) {
     return (
       <div className="p-8 text-center text-muted-foreground">Carregando...</div>
@@ -621,7 +718,7 @@ export default function MeusServicos() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => connectMutation.mutate(myInstance.id)}
+                  onClick={handleConnectClick}
                   disabled={connectMutation.isPending || myInstance.is_blocked}
                 >
                   <Wifi className="h-4 w-4 mr-2" />
@@ -638,16 +735,6 @@ export default function MeusServicos() {
                   Desconectar
                 </Button>
               )}
-
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setQrOpen(true)}
-                disabled={myInstance.is_blocked}
-              >
-                <QrCode className="h-4 w-4 mr-2" />
-                QR Code
-              </Button>
 
               <Button
                 variant="outline"
