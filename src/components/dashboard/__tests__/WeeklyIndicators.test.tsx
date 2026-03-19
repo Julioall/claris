@@ -31,8 +31,8 @@ describe("WeeklyIndicators", () => {
     render(
       <WeeklyIndicators
         summary={{
-          pending_tasks: 9,
-          overdue_tasks: 2,
+          today_events: 3,
+          today_tasks: 2,
           activities_to_review: 5,
           active_normal_students: 2,
           pending_submission_assignments: 2,
@@ -45,7 +45,8 @@ describe("WeeklyIndicators", () => {
 
     expect(screen.getByText(/sinais do monitoramento/i)).toBeInTheDocument();
     expect(screen.getAllByTestId("stat-card")).toHaveLength(5);
-    expect(screen.getByText(/exigem atenção/i)).toBeInTheDocument();
+    expect(screen.getByText(/na agenda/i)).toBeInTheDocument();
+    expect(screen.getByText(/com vencimento hoje/i)).toBeInTheDocument();
     expect(screen.getByText(/envio pendente: 2 • correção pendente: 5/i)).toBeInTheDocument();
     expect(screen.getByText("trend:3")).toBeInTheDocument();
   });
@@ -54,8 +55,8 @@ describe("WeeklyIndicators", () => {
     render(
       <WeeklyIndicators
         summary={{
-          pending_tasks: 1,
-          overdue_tasks: 0,
+          today_events: 0,
+          today_tasks: 0,
           activities_to_review: 0,
           active_normal_students: 0,
           pending_submission_assignments: 0,

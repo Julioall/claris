@@ -12,9 +12,18 @@ const userCoursesEqRoleMock = vi.fn();
 const studentCoursesSelectMock = vi.fn();
 const studentCoursesInMock = vi.fn();
 
-const pendingTasksSelectMock = vi.fn();
-const pendingTasksInMock = vi.fn();
-const pendingTasksNeqMock = vi.fn();
+// calendar_events today
+const calEventsSelectMock = vi.fn();
+const calEventsEqOwnerMock = vi.fn();
+const calEventsGteMock = vi.fn();
+const calEventsLteMock = vi.fn();
+
+// tasks today
+const tasksSelectMock = vi.fn();
+const tasksOrMock = vi.fn();
+const tasksGteMock = vi.fn();
+const tasksLteMock = vi.fn();
+const tasksNeqMock = vi.fn();
 
 const studentsSelectMock = vi.fn();
 const studentsInIdMock = vi.fn();
@@ -76,8 +85,12 @@ function setupFromMock() {
       return { select: studentCoursesSelectMock };
     }
 
-    if (table === "pending_tasks") {
-      return { select: pendingTasksSelectMock };
+    if (table === "calendar_events") {
+      return { select: calEventsSelectMock };
+    }
+
+    if (table === "tasks") {
+      return { select: tasksSelectMock };
     }
 
     if (table === "students") {
@@ -125,13 +138,18 @@ describe("useDashboardData", () => {
       error: null,
     });
 
-    // pending_tasks is now a count-only query
-    pendingTasksSelectMock.mockReturnValue({ in: pendingTasksInMock });
-    pendingTasksInMock.mockReturnValue({ neq: pendingTasksNeqMock });
-    pendingTasksNeqMock.mockResolvedValue({
-      count: 2,
-      error: null,
-    });
+    // calendar_events today: select -> eq -> gte -> lte -> { count, error }
+    calEventsSelectMock.mockReturnValue({ eq: calEventsEqOwnerMock });
+    calEventsEqOwnerMock.mockReturnValue({ gte: calEventsGteMock });
+    calEventsGteMock.mockReturnValue({ lte: calEventsLteMock });
+    calEventsLteMock.mockResolvedValue({ count: 2, error: null });
+
+    // tasks today: select -> or -> gte -> lte -> neq -> { count, error }
+    tasksSelectMock.mockReturnValue({ or: tasksOrMock });
+    tasksOrMock.mockReturnValue({ gte: tasksGteMock });
+    tasksGteMock.mockReturnValue({ lte: tasksLteMock });
+    tasksLteMock.mockReturnValue({ neq: tasksNeqMock });
+    tasksNeqMock.mockResolvedValue({ count: 3, error: null });
 
     studentsSelectMock.mockReturnValue({ in: studentsInIdMock });
     studentsInIdMock.mockImplementation(() => ({
@@ -276,8 +294,8 @@ describe("useDashboardData", () => {
     });
 
     expect(result.current.summary).toEqual({
-      pending_tasks: 0,
-      overdue_tasks: 0,
+      today_events: 0,
+      today_tasks: 0,
       activities_to_review: 0,
       active_normal_students: 0,
       pending_submission_assignments: 0,
@@ -299,8 +317,8 @@ describe("useDashboardData", () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.summary).toEqual({
-      pending_tasks: 2,
-      overdue_tasks: 0,
+      today_events: 2,
+      today_tasks: 3,
       activities_to_review: 2,
       active_normal_students: 0,
       pending_submission_assignments: 1,
