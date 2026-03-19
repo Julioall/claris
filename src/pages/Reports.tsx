@@ -53,6 +53,7 @@ interface ActivityGradeRow {
 interface ActivityDetailRow {
   student_id: string;
   course_id: string;
+  moodle_activity_id: string;
   activity_name: string;
   activity_type: string | null;
   status: string | null;
@@ -140,7 +141,7 @@ const getGradeCellStyle = (grade: number) => {
     border: BORDER_STYLE,
   };
 
-  if (grade >= 60) {
+  if (grade > 59) {
     return {
       ...base,
       fill: { patternType: 'solid', fgColor: { rgb: 'FFC6EFCE' } },
@@ -149,6 +150,35 @@ const getGradeCellStyle = (grade: number) => {
   }
 
   if (grade >= 40) {
+    return {
+      ...base,
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFFFEB9C' } },
+      font: { color: { rgb: 'FF9C6500' } },
+    };
+  }
+
+  return {
+    ...base,
+    fill: { patternType: 'solid', fgColor: { rgb: 'FFFFC7CE' } },
+    font: { color: { rgb: 'FF9C0006' } },
+  };
+};
+
+const getLastAccessCellStyle = (daysWithoutAccess: number) => {
+  const base = {
+    alignment: { vertical: 'center', horizontal: 'center' },
+    border: BORDER_STYLE,
+  };
+
+  if (daysWithoutAccess < 3) {
+    return {
+      ...base,
+      fill: { patternType: 'solid', fgColor: { rgb: 'FFC6EFCE' } },
+      font: { color: { rgb: 'FF006100' } },
+    };
+  }
+
+  if (daysWithoutAccess <= 7) {
     return {
       ...base,
       fill: { patternType: 'solid', fgColor: { rgb: 'FFFFEB9C' } },
@@ -206,6 +236,23 @@ const getNormalizedActivityStatus = (activity: ActivityGradeRow): Exclude<Report
 };
 
 const getReportActivityStatusLabel = (status: ReportActivityStatus) => REPORT_ACTIVITY_STATUS_LABELS[status];
+
+function buildCourseActivityKey(courseId: string, moodleActivityId: string) {
+  return `${courseId}::${moodleActivityId}`;
+}
+
+function buildEvaluativeActivityKeys(activities: ActivityDetailRow[]) {
+  const evaluativeActivityKeys = new Set<string>();
+
+  for (const activity of activities) {
+    if (activity.hidden) continue;
+    if ((activity.grade_max ?? 0) <= 0) continue;
+
+    evaluativeActivityKeys.add(buildCourseActivityKey(activity.course_id, activity.moodle_activity_id));
+  }
+
+  return evaluativeActivityKeys;
+}
 
 export default function Reports() {
   const { user } = useAuth();
@@ -607,6 +654,13 @@ export default function Reports() {
               ...suspendedStyle,
             };
 
+            if (isLastAccessColumn && typeof cell.v === 'number' && !isSuspendedRow) {
+              cell.s = {
+                ...(cell.s || {}),
+                ...getLastAccessCellStyle(cell.v),
+              };
+            }
+
             const isGradeColumn = !isStudentColumn && !isLastAccessColumn;
 
             if (isGradeColumn && typeof cell.v === 'number') {
@@ -687,7 +741,7 @@ export default function Reports() {
       while (true) {
         const { data, error } = await supabase
           .from('student_activities')
-          .select('student_id, course_id, activity_name, activity_type, status, grade, grade_max, due_date, hidden, completed_at, graded_at, submitted_at')
+          .select('student_id, course_id, moodle_activity_id, activity_name, activity_type, status, grade, grade_max, due_date, hidden, completed_at, graded_at, submitted_at')
           .in('course_id', selectedUnitIds)
           .neq('activity_type', 'scorm')
           .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
@@ -705,9 +759,13 @@ export default function Reports() {
       const unitStartMap = new Map(unitsWithEndDates.map(u => [u.id, u.start_date]));
 
       const now = new Date();
+      const evaluativeActivityKeys = buildEvaluativeActivityKeys(allActivities);
 
-      // Filter: only visible, non-quiz activities that are pending within the unit period
+      // Filter: only gradebook-evaluative, visible, non-quiz activities that are pending within the unit period
       const pendingActivities = allActivities.filter(a => {
+        if (!evaluativeActivityKeys.has(buildCourseActivityKey(a.course_id, a.moodle_activity_id))) {
+          return false;
+        }
         if (a.hidden) return false;
         if (a.activity_type === 'quiz') return false;
 
@@ -986,6 +1044,7 @@ export default function Reports() {
 function applyBasicStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
   const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
   if (!range) return;
+  const LAST_ACCESS_COL = 1;
 
   for (let r = range.s.r; r <= range.e.r; r++) {
     for (let c = range.s.c; c <= range.e.c; c++) {
@@ -997,6 +1056,10 @@ function applyBasicStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
         cell.s = { ...(cell.s || {}), ...HEADER_CELL_STYLE };
       } else {
         cell.s = { ...(cell.s || {}), ...(c === 0 ? STUDENT_CELL_STYLE : BODY_CELL_STYLE) };
+
+        if (c === LAST_ACCESS_COL && typeof cell.v === 'number') {
+          cell.s = { ...(cell.s || {}), ...getLastAccessCellStyle(cell.v) };
+        }
       }
     }
   }
@@ -1006,6 +1069,7 @@ function applyPendingStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
   const range = ws['!ref'] ? XLSX.utils.decode_range(ws['!ref']) : null;
   if (!range) return;
 
+  const LAST_ACCESS_COL = 1;
   const STATUS_COL = 5; // 'Status' column index (Aluno, Último Acesso (dias), UC, Atividade, Tipo, Status)
 
   for (let r = range.s.r; r <= range.e.r; r++) {
@@ -1019,6 +1083,10 @@ function applyPendingStyles(XLSX: typeof XLSXType, ws: ExcelWorksheet) {
       } else {
         const base = c === 0 ? STUDENT_CELL_STYLE : BODY_CELL_STYLE;
         cell.s = { ...(cell.s || {}), ...base };
+
+        if (c === LAST_ACCESS_COL && typeof cell.v === 'number') {
+          cell.s = { ...(cell.s || {}), ...getLastAccessCellStyle(cell.v) };
+        }
 
         if (c === STATUS_COL && cell.v === 'Pendente de Correção') {
           cell.s = {
