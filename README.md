@@ -37,6 +37,11 @@ Servicos esperados:
 - Supabase Studio: `http://127.0.0.1:54323`
 - Supabase Mailpit: `http://127.0.0.1:54324`
 
+Observacao para WhatsApp / Evolution API:
+
+- o compose local usa a imagem oficial `evoapicloud/evolution-api:latest`;
+- a imagem antiga `atendai/evolution-api:latest` fica parada na `v2.2.3` e pode deixar `GET /instance/connect/...` preso em `{"count":0}` sem gerar QR Code ou pairing code.
+
 ## O que acontece no boot
 
 O container `supabase` executa automaticamente:
@@ -152,6 +157,7 @@ Todos os secrets abaixo devem ser adicionados em **Settings → Environments →
 | `SUPABASE_PROJECT_ID` | ID do projeto Supabase (ex.: `mmddjuiemvywwqspjovg`) |
 | `SUPABASE_PUBLISHABLE_KEY` | Chave publica (anon key) do Supabase |
 | `SUPABASE_URL` | URL do projeto Supabase (ex.: `https://<project-id>.supabase.co`) |
+| `SUPABASE_PUBLIC_URL` | URL publica usada pelas Edge Functions para registrar webhooks externos (ex.: `https://<project-id>.supabase.co`) |
 | `SUPABASE_ACCESS_TOKEN` | Token de acesso para deploy via CLI |
 | `SUPABASE_PASSWORD` | Senha do banco de dados Supabase |
 
@@ -270,3 +276,4 @@ permissions:
 ## Observacoes
 
 - `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321` para o ambiente local.
+- `SUPABASE_PUBLIC_URL` deve apontar para a URL alcancavel pela Evolution API ao registrar webhooks. No local com Docker Compose, o padrao e `http://127.0.0.1:54321`.

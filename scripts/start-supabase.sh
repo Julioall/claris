@@ -77,6 +77,39 @@ sync_edge_database_types() {
   log "Edge Function types synchronized."
 }
 
+set_function_secrets() {
+  env_file="${WORKDIR}/supabase/functions/.env"
+  touch "${env_file}"
+
+  write_secret() {
+    _key="$1"
+    _val="$2"
+    [ -z "${_val}" ] && return
+    # Remove any existing entry for this key, then append the new value
+    { grep -v "^${_key}=" "${env_file}" 2>/dev/null || true; echo "${_key}=${_val}"; } > "${env_file}.tmp"
+    mv "${env_file}.tmp" "${env_file}"
+  }
+
+  # Edge functions run inside the supabase_edge_runtime container on the
+  # supabase_network_local bridge network. From there, 127.0.0.1 is the
+  # container's own loopback – NOT the host. The bridge gateway IP is the
+  # correct address to reach host-network services (like Evolution API).
+  evo_url="${EVOLUTION_API_URL:-http://127.0.0.1:8081}"
+  bridge_gw="$(docker network inspect supabase_network_local \
+    --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)"
+  if [ -n "${bridge_gw}" ]; then
+    evo_url="http://${bridge_gw}:8081"
+    log "Bridge gateway detected (${bridge_gw}): edge functions will call Evolution API at ${evo_url}."
+  fi
+
+  write_secret "EVOLUTION_API_URL" "${evo_url}"
+  write_secret "EVOLUTION_API_KEY" "${EVOLUTION_API_KEY:-}"
+  write_secret "SUPABASE_PUBLIC_URL" "${SUPABASE_PUBLIC_URL:-${SUPABASE_API_URL}}"
+  write_secret "WEBHOOK_SECRET"    "${WEBHOOK_SECRET:-}"
+
+  log "Edge function secrets written to ${env_file}."
+}
+
 wait_for_api() {
   health_url="${SUPABASE_API_URL%/}${SUPABASE_API_HEALTH_PATH}"
   retries="${SUPABASE_API_WAIT_SECONDS}"
@@ -129,6 +162,9 @@ generate_app_database_types
 
 log "Syncing generated Supabase types into Edge Functions..."
 sync_edge_database_types
+
+log "Configuring edge function secrets..."
+set_function_secrets
 
 log "Supabase stack is running at ${SUPABASE_API_URL}."
 while :; do

@@ -14,6 +14,11 @@ services:
     environment:
       RUNNER_CONTAINER_NAME: claris-supabase
       SUPABASE_API_URL: http://127.0.0.1:54321
+      SUPABASE_PUBLIC_URL: "${SUPABASE_PUBLIC_URL:-http://127.0.0.1:54321}"
+      # Evolution API / WhatsApp – forwarded as edge function secrets
+      EVOLUTION_API_URL: "http://127.0.0.1:8081"
+      EVOLUTION_API_KEY: "${EVOLUTION_API_KEY:-claris-evolution-local-key}"
+      WEBHOOK_SECRET: "${WEBHOOK_SECRET:-claris-webhook-secret-local}"
     volumes:
       - ./:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
@@ -45,3 +50,79 @@ services:
       - ./public:/app/public:delegated
       - ./index.html:/app/index.html:delegated
     restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # Evolution API v2 – WhatsApp multi-device provider
+  # ---------------------------------------------------------------------------
+  # Docs: https://doc.evolution-api.com
+  # Runs on host network (port 8081) so it can reach Supabase Postgres
+  # at localhost:54322 and the Supabase Edge Functions at localhost:54321.
+  # Use the official image. The legacy `atendai/evolution-api:latest`
+  # currently resolves to v2.2.3, which can get stuck returning
+  # `{"count":0}` without a QR/pairing code.
+  # ---------------------------------------------------------------------------
+  evolution-api:
+    image: evoapicloud/evolution-api:latest
+    container_name: claris-evolution
+    network_mode: host
+    environment:
+      SERVER_PORT: "8081"
+      SERVER_URL: "http://localhost:8081"
+      CORS_ORIGIN: "*"
+      CORS_METHODS: "POST,GET,PUT,DELETE,PATCH"
+      CORS_CREDENTIALS: "true"
+      LOG_LEVEL: "ERROR"
+      LOG_COLOR: "true"
+      LOG_BAILEYS: "error"
+
+      # Database – reuse Supabase Postgres (port 54322 = direct DB port)
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: "postgresql"
+      DATABASE_CONNECTION_URI: "${EVOLUTION_DB_URI:-postgresql://postgres:postgres@localhost:54322/postgres?schema=evolution}"
+      DATABASE_SAVE_DATA_INSTANCE: "true"
+      DATABASE_SAVE_DATA_NEW_MESSAGE: "true"
+      DATABASE_SAVE_MESSAGE_UPDATE: "true"
+      DATABASE_SAVE_DATA_CONTACTS: "true"
+      DATABASE_SAVE_DATA_CHATS: "true"
+      DATABASE_SAVE_DATA_LABELS: "true"
+      DATABASE_SAVE_DATA_HISTORIC: "true"
+      DATABASE_CONNECTION_CLIENT_NAME: "claris_evolution"
+
+      # Authentication
+      AUTHENTICATION_TYPE: "apikey"
+      AUTHENTICATION_API_KEY: "${EVOLUTION_API_KEY:-claris-evolution-local-key}"
+
+      # QR Code
+      QRCODE_LIMIT: "30"
+      QRCODE_COLOR: "#198754"
+
+      # Webhook (per-instance, auto-configured by whatsapp-instance-manager)
+      WEBHOOK_GLOBAL_ENABLED: "false"
+
+      # Localisation
+      LANGUAGE: "pt-BR"
+
+      # Cache – use local memory, no Redis required for dev
+      CACHE_REDIS_ENABLED: "false"
+      CACHE_LOCAL_ENABLED: "true"
+
+      # Integrations not used
+      RABBITMQ_ENABLED: "false"
+      SQS_ENABLED: "false"
+      WEBSOCKET_ENABLED: "false"
+      PUSHER_ENABLED: "false"
+    volumes:
+      - evolution_instances:/evolution/instances
+    depends_on:
+      supabase:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:8081/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  evolution_instances:

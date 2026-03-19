@@ -80,3 +80,9 @@ verify_jwt = false
 
 [functions.generate-proactive-suggestions]
 verify_jwt = false
+
+[functions.receive-whatsapp-webhook]
+verify_jwt = false
+
+[functions.whatsapp-instance-manager]
+verify_jwt = false

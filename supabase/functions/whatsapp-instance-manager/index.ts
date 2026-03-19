@@ -34,6 +34,7 @@ interface RequestBody {
   scope?: 'personal' | 'shared'
   // For create/update
   evolution_instance_name?: string
+  phone_number?: string
   send_window?: Record<string, unknown>
   limits?: Record<string, unknown>
   admin_notes?: string
@@ -50,6 +51,127 @@ function getEvolutionBaseUrl(): string {
 
 function getEvolutionApiKey(): string {
   return Deno.env.get('EVOLUTION_API_KEY') ?? ''
+}
+
+function normalizeBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '')
+}
+
+function getWebhookBaseUrl(): string {
+  const publicUrl = normalizeBaseUrl(Deno.env.get('SUPABASE_PUBLIC_URL') ?? '')
+  if (publicUrl) return publicUrl
+
+  const supabaseUrl = normalizeBaseUrl(Deno.env.get('SUPABASE_URL') ?? '')
+  if (!supabaseUrl) return ''
+
+  try {
+    if (new URL(supabaseUrl).hostname === 'kong') {
+      return ''
+    }
+  } catch {
+    return ''
+  }
+
+  return supabaseUrl
+}
+
+function getWebhookUrl(): string {
+  const baseUrl = getWebhookBaseUrl()
+  return baseUrl ? `${baseUrl}/functions/v1/receive-whatsapp-webhook` : ''
+}
+
+function getWebhookHeaders(): Record<string, string> {
+  const webhookSecret = Deno.env.get('WEBHOOK_SECRET') ?? ''
+  return webhookSecret ? { 'X-Webhook-Secret': webhookSecret } : {}
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getQrPayload(data: unknown): Record<string, unknown> | null {
+  return data && typeof data === 'object' ? data as Record<string, unknown> : null
+}
+
+function getPhoneNumberFromInstance(instance: Record<string, unknown>): string | null {
+  const metadata = instance.metadata
+  if (!metadata || typeof metadata !== 'object') return null
+
+  const phoneNumber = (metadata as Record<string, unknown>).phone_number
+  if (typeof phoneNumber !== 'string') return null
+
+  const digitsOnly = phoneNumber.replace(/\D/g, '')
+  return digitsOnly || null
+}
+
+function buildConnectPath(instanceName: string, phoneNumber?: string | null): string {
+  const normalizedPhoneNumber = phoneNumber?.replace(/\D/g, '') ?? ''
+  if (!normalizedPhoneNumber) {
+    return `/instance/connect/${instanceName}`
+  }
+
+  const params = new URLSearchParams({ number: normalizedPhoneNumber })
+  return `/instance/connect/${instanceName}?${params.toString()}`
+}
+
+function summarizeQrResponse(data: unknown): Record<string, unknown> {
+  const payload = getQrPayload(data)
+  if (!payload) {
+    return { hasPayload: false, type: typeof data }
+  }
+
+  return {
+    hasPayload: true,
+    keys: Object.keys(payload),
+    count: typeof payload.count === 'number' ? payload.count : null,
+    hasBase64: typeof payload.base64 === 'string' && payload.base64.trim().length > 0,
+    hasCode: typeof payload.code === 'string' && payload.code.trim().length > 0,
+    hasPairingCode: typeof payload.pairingCode === 'string' && payload.pairingCode.trim().length > 0,
+  }
+}
+
+function hasQrCodeData(data: unknown): boolean {
+  const payload = getQrPayload(data)
+  if (!payload) return false
+
+  const base64 = payload.base64
+  if (typeof base64 === 'string' && base64.trim()) return true
+
+  const code = payload.code
+  if (typeof code === 'string' && code.trim()) return true
+
+  const pairingCode = payload.pairingCode
+  if (typeof pairingCode === 'string' && pairingCode.trim()) return true
+
+  return false
+}
+
+async function requestQrCodeWithRetry(
+  instanceName: string,
+  phoneNumber?: string | null,
+  attempts = 6,
+  delayMs = 1500
+): Promise<{ data: unknown; ready: boolean; attemptsUsed: number }> {
+  let lastData: unknown = {}
+  const connectPath = buildConnectPath(instanceName, phoneNumber)
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    lastData = await evolutionRequest(connectPath, 'GET')
+    console.log(
+      `QR code attempt ${attempt}/${attempts} for ${instanceName}:`,
+      summarizeQrResponse(lastData),
+    )
+
+    if (hasQrCodeData(lastData)) {
+      return { data: lastData, ready: true, attemptsUsed: attempt }
+    }
+
+    if (attempt < attempts) {
+      await sleep(delayMs)
+    }
+  }
+
+  return { data: lastData, ready: false, attemptsUsed: attempts }
 }
 
 async function evolutionRequest(
@@ -82,12 +204,81 @@ async function evolutionRequest(
 }
 
 // ---------------------------------------------------------------------------
+// Helpers – ensure instance exists in Evolution API
+// ---------------------------------------------------------------------------
+
+/**
+ * Checks whether the instance exists in Evolution API.
+ * If not (e.g. Evolution was offline when the instance was created), recreates
+ * it so that connect / QR code operations can proceed.
+ */
+async function ensureEvolutionInstance(
+  db: ReturnType<typeof createServiceClient>,
+  instance: Record<string, unknown>
+): Promise<void> {
+  const instanceName = instance.evolution_instance_name as string
+  if (!instanceName) return
+
+  // Try connectionState – if it returns 404 the instance is missing
+  try {
+    await evolutionRequest(`/instance/connectionState/${instanceName}`, 'GET')
+    return // exists, nothing to do
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (!msg.includes('404')) throw err // unexpected error, re-throw
+  }
+
+  // Instance missing in Evolution API – recreate it
+  console.log(`Instance ${instanceName} not found in Evolution API – recreating.`)
+  let externalId: string | null = null
+  try {
+    const created = (await evolutionRequest('/instance/create', 'POST', {
+      instanceName,
+      qrcode: true,
+      integration: 'WHATSAPP-BAILEYS',
+    })) as Record<string, unknown>
+    const evoInstance = created.instance
+    if (evoInstance && typeof evoInstance === 'object') {
+      const obj = evoInstance as Record<string, unknown>
+      externalId = typeof obj.instanceId === 'string' ? obj.instanceId : null
+    }
+  } catch (createErr) {
+    console.error('Failed to recreate instance in Evolution API:', createErr)
+    return
+  }
+
+  // Configure webhook
+  const webhookUrl = getWebhookUrl()
+  if (webhookUrl) {
+    try {
+      await evolutionRequest(`/webhook/set/${instanceName}`, 'POST', {
+        webhook: {
+          enabled: true,
+          url: webhookUrl,
+          webhookByEvents: false,
+          webhookBase64: false,
+          headers: getWebhookHeaders(),
+          events: ['QRCODE_UPDATED', 'CONNECTION_UPDATE', 'MESSAGES_UPSERT', 'MESSAGES_UPDATE', 'SEND_MESSAGE'],
+        },
+      })
+    } catch (whErr) {
+      console.warn('Webhook re-configuration failed (non-fatal):', whErr)
+    }
+  }
+
+  // Update DB with new external_id if we got one
+  if (externalId) {
+    await db.from('app_service_instances').update({ external_id: externalId }).eq('id', instance.id)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Helpers – Admin check
 // ---------------------------------------------------------------------------
 
 async function isAdmin(db: ReturnType<typeof createServiceClient>, userId: string): Promise<boolean> {
   const { data } = await db
-    .from('user_roles')
+    .from('admin_user_roles')
     .select('role')
     .eq('user_id', userId)
     .eq('role', 'admin')
@@ -164,6 +355,9 @@ async function handleCreate(
   const instanceName = body.evolution_instance_name ?? `claris-${scope === 'personal' ? 'personal' : 'shared'}-${randomSuffix}`
   const displayName = body.name ?? (scope === 'personal' ? 'WhatsApp Pessoal' : 'WhatsApp Compartilhado')
 
+  // Sanitise phone number: keep digits only (Evolution API expects e.g. 5511999999999)
+  const phoneNumber = body.phone_number ? body.phone_number.replace(/\D/g, '') : undefined
+
   // Create in Evolution API
   let evolutionData: Record<string, unknown> = {}
   let externalId: string | null = null
@@ -172,11 +366,37 @@ async function handleCreate(
       instanceName,
       qrcode: true,
       integration: 'WHATSAPP-BAILEYS',
+      ...(phoneNumber ? { number: phoneNumber } : {}),
     })) as Record<string, unknown>
     const evoInstance = evolutionData.instance
     if (evoInstance && typeof evoInstance === 'object') {
       const instanceObj = evoInstance as Record<string, unknown>
       externalId = typeof instanceObj.instanceId === 'string' ? instanceObj.instanceId : null
+    }
+
+    // Auto-configure webhook so Evolution API can push status updates back
+    const webhookUrl = getWebhookUrl()
+    if (webhookUrl) {
+      try {
+        await evolutionRequest(`/webhook/set/${instanceName}`, 'POST', {
+          webhook: {
+            enabled: true,
+            url: webhookUrl,
+            webhookByEvents: false,
+            webhookBase64: false,
+            headers: getWebhookHeaders(),
+            events: [
+              'QRCODE_UPDATED',
+              'CONNECTION_UPDATE',
+              'MESSAGES_UPSERT',
+              'MESSAGES_UPDATE',
+              'SEND_MESSAGE',
+            ],
+          },
+        })
+      } catch (webhookErr) {
+        console.warn('Auto-webhook configuration failed (non-fatal):', webhookErr)
+      }
     }
   } catch (err) {
     console.error('Evolution API create failed:', err)
@@ -199,7 +419,7 @@ async function handleCreate(
       health_status: 'healthy',
       send_window: body.send_window ?? null,
       limits: body.limits ?? null,
-      metadata: body.metadata ?? {},
+      metadata: { ...(body.metadata ?? {}), ...(phoneNumber ? { phone_number: phoneNumber } : {}) },
       created_by_user_id: userId,
       updated_by_user_id: userId,
     })
@@ -249,12 +469,20 @@ async function handleConnect(
     if (!admin) return errorResponse('Only administrators can connect shared instances', 403)
   }
 
+  // Ensure instance exists in Evolution API (auto-recreate if it was lost)
+  await ensureEvolutionInstance(db, instance as Record<string, unknown>)
+
+  const phoneNumber = getPhoneNumberFromInstance(instance as Record<string, unknown>)
   let evolutionData: unknown = {}
   try {
-    evolutionData = await evolutionRequest(
-      `/instance/connect/${instance.evolution_instance_name}`,
-      'GET'
-    )
+    const connectPath = buildConnectPath(instance.evolution_instance_name, phoneNumber)
+    console.log(`Starting Evolution connect for ${instance.evolution_instance_name}:`, {
+      instanceId: instance.id,
+      phoneNumber,
+      connectPath,
+    })
+    evolutionData = await evolutionRequest(connectPath, 'GET')
+    console.log(`Evolution connect response for ${instance.evolution_instance_name}:`, summarizeQrResponse(evolutionData))
   } catch (err) {
     console.error('Evolution connect error:', err)
   }
@@ -392,12 +620,36 @@ async function handleQrCode(
     if (!admin) return errorResponse('Only administrators can access shared instance QR code', 403)
   }
 
+  // Ensure instance exists in Evolution API (auto-recreate if it was lost)
+  await ensureEvolutionInstance(db, instance as Record<string, unknown>)
+
   try {
-    const data = await evolutionRequest(
-      `/instance/connect/${instance.evolution_instance_name}`,
-      'GET'
+    const phoneNumber = getPhoneNumberFromInstance(instance as Record<string, unknown>)
+    console.log(`Fetching QR code for ${instance.evolution_instance_name}:`, {
+      instanceId: instance.id,
+      phoneNumber,
+    })
+    const { data, ready, attemptsUsed } = await requestQrCodeWithRetry(
+      instance.evolution_instance_name,
+      phoneNumber,
     )
-    return jsonResponse({ qrcode: data })
+    console.log(`Finished QR code fetch for ${instance.evolution_instance_name}:`, {
+      ready,
+      attemptsUsed,
+      response: summarizeQrResponse(data),
+    })
+
+    return jsonResponse(
+      {
+        qrcode: data,
+        pending: !ready,
+        attempts: attemptsUsed,
+        message: ready
+          ? 'QR Code disponível.'
+          : 'A conexão foi iniciada, mas a Evolution API ainda não retornou o QR Code. Tente novamente em alguns segundos.',
+      },
+      ready ? 200 : 202,
+    )
   } catch (err) {
     return errorResponse(`Failed to get QR code: ${err instanceof Error ? err.message : 'Unknown error'}`, 500)
   }
@@ -425,8 +677,10 @@ async function handleConfigureWebhook(
     return errorResponse('Forbidden', 403)
   }
 
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
-  const webhookUrl = `${supabaseUrl}/functions/v1/receive-whatsapp-webhook`
+  const webhookUrl = getWebhookUrl()
+  if (!webhookUrl) {
+    return errorResponse('Webhook URL not configured. Set SUPABASE_PUBLIC_URL or SUPABASE_URL.', 500)
+  }
 
   try {
     const data = await evolutionRequest(
@@ -438,6 +692,7 @@ async function handleConfigureWebhook(
           url: webhookUrl,
           webhookByEvents: false,
           webhookBase64: false,
+          headers: getWebhookHeaders(),
           events: [
             'QRCODE_UPDATED',
             'CONNECTION_UPDATE',

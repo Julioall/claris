@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -114,6 +114,8 @@ function QrCodeDialog({
   onClose: () => void;
 }) {
   const [qrData, setQrData] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchQr = async () => {
@@ -121,11 +123,32 @@ function QrCodeDialog({
     setLoading(true);
     try {
       const res = await callInstanceManager('qrcode', { instance_id: instance.id });
-      const qr = (res.qrcode as Record<string, unknown>)?.base64 as string
-        ?? (res.qrcode as Record<string, unknown>)?.code as string
-        ?? null;
+      const payload = ((res.qrcode as Record<string, unknown>) ?? {});
+      const qr = (typeof payload.base64 === 'string' && payload.base64)
+        || (typeof payload.code === 'string' && payload.code)
+        || null;
+      const pairing = typeof payload.pairingCode === 'string' && payload.pairingCode
+        ? payload.pairingCode
+        : null;
+
       setQrData(qr);
+      setPairingCode(pairing);
+
+      if (qr) {
+        setStatusMessage(null);
+      } else if (pairing) {
+        setStatusMessage('Código de pareamento disponível abaixo.');
+      } else if (res.pending === true || payload.count === 0) {
+        setStatusMessage(
+          'A conexão foi iniciada, mas a Evolution ainda não liberou o QR Code. Aguarde alguns segundos e atualize.'
+        );
+      } else if (typeof res.message === 'string' && res.message) {
+        setStatusMessage(res.message);
+      } else {
+        setStatusMessage('Nenhum QR Code foi retornado pela Evolution API.');
+      }
     } catch (err) {
+      setStatusMessage(null);
       toast({
         title: 'Erro ao obter QR Code',
         description: err instanceof Error ? err.message : 'Erro desconhecido',
@@ -135,6 +158,17 @@ function QrCodeDialog({
       setLoading(false);
     }
   };
+
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    if (!open || !instance) return;
+
+    setQrData(null);
+    setPairingCode(null);
+    setStatusMessage('Solicitando QR Code...');
+    void fetchQr();
+  }, [open, instance?.id]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -149,10 +183,19 @@ function QrCodeDialog({
               alt="QR Code WhatsApp"
               className="w-64 h-64 rounded border"
             />
+          ) : pairingCode ? (
+            <div className="w-64 rounded border p-6 text-center space-y-2 bg-muted/30">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Código de pareamento
+              </p>
+              <p className="font-mono text-3xl font-semibold tracking-[0.3em] pl-[0.3em]">
+                {pairingCode}
+              </p>
+            </div>
           ) : (
             <div className="w-64 h-64 rounded border flex items-center justify-center bg-muted">
               <p className="text-sm text-muted-foreground text-center px-4">
-                Clique em &ldquo;Gerar QR Code&rdquo; para iniciar a conexão
+                {statusMessage ?? 'Clique em “Gerar QR Code” para iniciar a conexão'}
               </p>
             </div>
           )}

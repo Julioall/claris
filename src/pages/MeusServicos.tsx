@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +37,7 @@ interface ServiceInstance {
   last_sync_at: string | null;
   created_at: string;
   owner_user_id: string | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface InstanceEvent {
@@ -72,6 +73,32 @@ async function callInstanceManager(action: string, params: Record<string, unknow
   const json = await res.json() as Record<string, unknown>;
   if (!res.ok) throw new Error((json.error as string) ?? 'Erro desconhecido');
   return json;
+}
+
+function parseQrResponse(res: Record<string, unknown>) {
+  const payload = ((res.qrcode as Record<string, unknown>) ?? {});
+  const qrData = (typeof payload.base64 === 'string' && payload.base64)
+    || (typeof payload.code === 'string' && payload.code)
+    || null;
+  const pairingCode = typeof payload.pairingCode === 'string' && payload.pairingCode
+    ? payload.pairingCode
+    : null;
+
+  let statusMessage: string | null = null;
+  if (!qrData) {
+    if (pairingCode) {
+      statusMessage = 'CÃ³digo de pareamento disponÃ­vel abaixo.';
+    } else if (res.pending === true || payload.count === 0) {
+      statusMessage =
+        'A conexÃ£o foi iniciada, mas a Evolution ainda nÃ£o liberou o QR Code. Aguarde alguns segundos e atualize.';
+    } else if (typeof res.message === 'string' && res.message) {
+      statusMessage = res.message;
+    } else {
+      statusMessage = 'Nenhum QR Code foi retornado pela Evolution API.';
+    }
+  }
+
+  return { qrData, pairingCode, statusMessage };
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +163,8 @@ function QrCodeDialog({
   onClose: () => void;
 }) {
   const [qrData, setQrData] = useState<string | null>(null);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const fetchQr = async () => {
@@ -143,11 +172,32 @@ function QrCodeDialog({
     setLoading(true);
     try {
       const res = await callInstanceManager('qrcode', { instance_id: instance.id });
-      const qr = (res.qrcode as Record<string, unknown>)?.base64 as string
-        ?? (res.qrcode as Record<string, unknown>)?.code as string
-        ?? null;
+      const payload = ((res.qrcode as Record<string, unknown>) ?? {});
+      const qr = (typeof payload.base64 === 'string' && payload.base64)
+        || (typeof payload.code === 'string' && payload.code)
+        || null;
+      const pairing = typeof payload.pairingCode === 'string' && payload.pairingCode
+        ? payload.pairingCode
+        : null;
+
       setQrData(qr);
+      setPairingCode(pairing);
+
+      if (qr) {
+        setStatusMessage(null);
+      } else if (pairing) {
+        setStatusMessage('Código de pareamento disponível abaixo.');
+      } else if (res.pending === true || payload.count === 0) {
+        setStatusMessage(
+          'A conexão foi iniciada, mas a Evolution ainda não liberou o QR Code. Aguarde alguns segundos e atualize.'
+        );
+      } else if (typeof res.message === 'string' && res.message) {
+        setStatusMessage(res.message);
+      } else {
+        setStatusMessage('Nenhum QR Code foi retornado pela Evolution API.');
+      }
     } catch (err) {
+      setStatusMessage(null);
       toast({
         title: 'Erro ao obter QR Code',
         description: err instanceof Error ? err.message : 'Erro desconhecido',
@@ -157,6 +207,17 @@ function QrCodeDialog({
       setLoading(false);
     }
   };
+
+  /* eslint-disable react-hooks/exhaustive-deps */
+  useEffect(() => {
+    if (!open || !instance) return;
+
+    setQrData(null);
+    setPairingCode(null);
+    setStatusMessage('Solicitando QR Code...');
+    void fetchQr();
+  }, [open, instance?.id]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -175,10 +236,19 @@ function QrCodeDialog({
               alt="QR Code WhatsApp"
               className="w-64 h-64 rounded border"
             />
+          ) : pairingCode ? (
+            <div className="w-64 rounded border p-6 text-center space-y-2 bg-muted/30">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                Código de pareamento
+              </p>
+              <p className="font-mono text-3xl font-semibold tracking-[0.3em] pl-[0.3em]">
+                {pairingCode}
+              </p>
+            </div>
           ) : (
             <div className="w-64 h-64 rounded border flex items-center justify-center bg-muted">
               <p className="text-sm text-muted-foreground text-center px-4">
-                Clique abaixo para gerar o QR Code
+                {statusMessage ?? 'Clique abaixo para gerar o QR Code'}
               </p>
             </div>
           )}
@@ -280,6 +350,9 @@ export default function MeusServicos() {
   const queryClient = useQueryClient();
   const [qrOpen, setQrOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createPhone, setCreatePhone] = useState('');
+  const [createName, setCreateName] = useState('');
 
   const { data: myInstance, isLoading } = useQuery({
     queryKey: ['my-whatsapp-instance'],
@@ -313,10 +386,17 @@ export default function MeusServicos() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async () =>
-      callInstanceManager('create', { scope: 'personal', name: 'WhatsApp Pessoal' }),
+    mutationFn: async ({ phone, name }: { phone: string; name: string }) =>
+      callInstanceManager('create', {
+        scope: 'personal',
+        name: name.trim() || 'WhatsApp Pessoal',
+        phone_number: phone.trim(),
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+      setCreateDialogOpen(false);
+      setCreatePhone('');
+      setCreateName('');
       toast({ title: 'Instância criada! Agora conecte seu WhatsApp.' });
     },
     onError: (err) => {
@@ -436,14 +516,10 @@ export default function MeusServicos() {
                     </p>
                   </div>
                   <Button
-                    onClick={() => createMutation.mutate()}
+                    onClick={() => setCreateDialogOpen(true)}
                     disabled={createMutation.isPending}
                   >
-                    {createMutation.isPending ? (
-                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Plus className="h-4 w-4 mr-2" />
-                    )}
+                    <Plus className="h-4 w-4 mr-2" />
                     Criar minha instância WhatsApp
                   </Button>
                 </div>
@@ -494,6 +570,14 @@ export default function MeusServicos() {
                   <div>
                     <p className="text-xs text-muted-foreground">Criado em</p>
                     <p>{format(new Date(myInstance.created_at), "dd/MM/yyyy", { locale: ptBR })}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Telefone</p>
+                    <p className="font-medium">
+                      {typeof myInstance.metadata?.phone_number === 'string' && myInstance.metadata.phone_number
+                        ? `+${myInstance.metadata.phone_number}`
+                        : <span className="text-muted-foreground">Não informado</span>}
+                    </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Última sincronização</p>
@@ -645,6 +729,68 @@ export default function MeusServicos() {
         onClose={() => setEditOpen(false)}
         onSaved={() => void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] })}
       />
+
+      {/* Create Instance Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={(v) => { if (!createMutation.isPending) setCreateDialogOpen(v); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Criar instância WhatsApp</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="create-phone">Número de telefone <span className="text-destructive">*</span></Label>
+              <Input
+                id="create-phone"
+                type="tel"
+                placeholder="+55 11 99999-9999"
+                value={createPhone}
+                onChange={(e) => setCreatePhone(e.target.value)}
+                disabled={createMutation.isPending}
+              />
+              <p className="text-xs text-muted-foreground">
+                Informe o número com código do país (ex: +55 11 99999-9999)
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="create-name">Nome da instância</Label>
+              <Input
+                id="create-name"
+                placeholder="WhatsApp Pessoal"
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                disabled={createMutation.isPending}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCreateDialogOpen(false)}
+              disabled={createMutation.isPending}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                const digits = createPhone.replace(/\D/g, '');
+                if (!digits || digits.length < 10) {
+                  toast({ title: 'Informe um número de telefone válido', variant: 'destructive' });
+                  return;
+                }
+                createMutation.mutate({ phone: digits, name: createName });
+              }}
+              disabled={createMutation.isPending || !createPhone.trim()}
+            >
+              {createMutation.isPending ? (
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4 mr-2" />
+              )}
+              Criar instância
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

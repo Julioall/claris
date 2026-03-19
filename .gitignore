@@ -2,6 +2,8 @@
 .env
 .env.*
 !.env.example
+# Edge function secrets (generated at container startup)
+supabase/functions/.env
 
 # Logs
 logs
