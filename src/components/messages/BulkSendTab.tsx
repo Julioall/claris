@@ -986,7 +986,7 @@ export function BulkSendTab() {
           <ScrollArea className="max-h-80">
             {templates.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">
-                Nenhum modelo criado. Crie um na aba "Modelos".
+                Nenhum modelo criado. Crie um na aba "Modelos" desta tela.
               </p>
             ) : (
               <div className="space-y-2">

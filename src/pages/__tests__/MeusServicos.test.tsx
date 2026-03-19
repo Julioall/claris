@@ -128,12 +128,12 @@ describe("MeusServicos page", () => {
     });
   });
 
-  it("shows QR code button when instance exists", async () => {
+  it("shows disconnect action when the instance is already connected", async () => {
     setupWithInstance();
     renderWithClient(<MeusServicos />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /qr code/i })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /desconectar/i })).toBeInTheDocument();
     });
   });
 

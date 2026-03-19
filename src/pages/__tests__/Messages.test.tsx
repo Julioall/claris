@@ -117,4 +117,23 @@ describe("Messages page", () => {
       "/alunos/s-1",
     );
   });
+
+  it("keeps bulk send and templates outside of Messages while linking to Automacoes", () => {
+    renderPage();
+
+    expect(
+      screen.queryByRole("tab", { name: /envio em massa/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("tab", { name: /modelos/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /envio em massa/i })).toHaveAttribute(
+      "href",
+      "/automacoes?tab=envio-massa",
+    );
+    expect(screen.getByRole("link", { name: /modelos/i })).toHaveAttribute(
+      "href",
+      "/automacoes?tab=modelos",
+    );
+  });
 });
