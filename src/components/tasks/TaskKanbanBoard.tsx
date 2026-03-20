@@ -1,4 +1,4 @@
-import { type MouseEvent } from 'react';
+import { useState, type DragEvent, type MouseEvent } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -44,6 +44,8 @@ interface TaskKanbanBoardProps {
   onCreateInColumn?: (status: TaskStatus) => void;
 }
 
+const TASK_DRAG_MIME = 'application/x-claris-task';
+
 export function TaskKanbanBoard({
   tasks,
   isLoading,
@@ -53,6 +55,9 @@ export function TaskKanbanBoard({
   onTaskClick,
   onCreateInColumn,
 }: TaskKanbanBoardProps) {
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [dropTargetStatus, setDropTargetStatus] = useState<TaskStatus | null>(null);
+
   if (isLoading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 min-h-[400px]">
@@ -73,14 +78,76 @@ export function TaskKanbanBoard({
   const tasksByStatus = (status: TaskStatus) =>
     tasks.filter(t => t.status === status);
 
+  const clearDragState = () => {
+    setDraggingTaskId(null);
+    setDropTargetStatus(null);
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLDivElement>, task: Task) => {
+    setDraggingTaskId(task.id);
+    setDropTargetStatus(null);
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(TASK_DRAG_MIME, task.id);
+    event.dataTransfer.setData('text/plain', task.id);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>, status: TaskStatus) => {
+    if (!draggingTaskId) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+
+    const draggedTask = tasks.find(task => task.id === draggingTaskId);
+    const nextDropTarget = draggedTask?.status === status ? null : status;
+
+    if (dropTargetStatus !== nextDropTarget) {
+      setDropTargetStatus(nextDropTarget);
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>, status: TaskStatus) => {
+    event.preventDefault();
+
+    const taskId = event.dataTransfer.getData(TASK_DRAG_MIME) || draggingTaskId;
+    const draggedTask = tasks.find(task => task.id === taskId);
+
+    clearDragState();
+
+    if (!draggedTask || draggedTask.status === status) return;
+
+    onStatusChange(draggedTask.id, status);
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>, status: TaskStatus) => {
+    const nextTarget = event.relatedTarget;
+
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    if (dropTargetStatus === status) {
+      setDropTargetStatus(null);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       {COLUMNS.map(col => {
         const colTasks = tasksByStatus(col.status);
+        const isDropTarget = dropTargetStatus === col.status;
         return (
           <div
             key={col.status}
-            className={cn('flex flex-col rounded-lg border-2 min-h-[300px]', col.color)}
+            role="region"
+            aria-label={`Coluna ${col.label}`}
+            onDragOver={event => handleDragOver(event, col.status)}
+            onDrop={event => handleDrop(event, col.status)}
+            onDragLeave={event => handleDragLeave(event, col.status)}
+            className={cn(
+              'flex flex-col rounded-lg border-2 min-h-[300px] transition-colors',
+              col.color,
+              isDropTarget && 'border-primary bg-primary/5'
+            )}
           >
             {/* Column header */}
             <div className={cn('flex items-center justify-between rounded-t-md px-3 py-2', col.headerClass)}>
@@ -106,19 +173,40 @@ export function TaskKanbanBoard({
             {/* Cards */}
             <div className="flex-1 space-y-2 p-2">
               {colTasks.length === 0 ? (
-                <div className="flex h-24 items-center justify-center rounded border border-dashed text-xs text-muted-foreground">
-                  Nenhuma tarefa
+                <div
+                  className={cn(
+                    'flex h-24 items-center justify-center rounded border border-dashed text-xs text-muted-foreground transition-colors',
+                    isDropTarget && 'border-primary/60 text-primary'
+                  )}
+                >
+                  {isDropTarget ? 'Solte a tarefa aqui' : 'Nenhuma tarefa'}
                 </div>
               ) : (
                 colTasks.map(task => (
-                  <TaskCard
+                  <div
                     key={task.id}
-                    task={task}
-                    onEdit={onEdit}
-                    onDelete={onDelete}
-                    onStatusChange={onStatusChange}
-                    onClick={onTaskClick}
-                  />
+                    draggable
+                    aria-grabbed={draggingTaskId === task.id}
+                    onDragStart={event => handleDragStart(event, task)}
+                    onDragEnd={clearDragState}
+                    className={cn(
+                      'rounded-lg cursor-grab active:cursor-grabbing',
+                      draggingTaskId === task.id && 'cursor-grabbing',
+                      draggingTaskId === task.id && 'opacity-60'
+                    )}
+                  >
+                    <TaskCard
+                      task={task}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                      onStatusChange={onStatusChange}
+                      onClick={onTaskClick}
+                      className={cn(
+                        'cursor-grab active:cursor-grabbing',
+                        draggingTaskId === task.id && 'cursor-grabbing'
+                      )}
+                    />
+                  </div>
                 ))
               )}
             </div>

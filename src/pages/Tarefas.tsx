@@ -75,6 +75,9 @@ export default function Tarefas() {
   };
 
   const handleStatusChange = (id: string, status: TaskStatus) => {
+    const currentTask = tasks.find(task => task.id === id);
+    if (currentTask?.status === status) return;
+
     updateTask({ id, input: { status } });
   };
 

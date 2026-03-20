@@ -111,10 +111,18 @@ export interface WeeklySummary {
 }
 
 // ── Tasks module ─────────────────────────────────────────────
-// These types support BOTH the existing `pending_tasks` DB table (Portuguese enums)
-// and the planned `tasks` table (English enums). Components should handle both.
-export type TaskStatus = 'aberta' | 'em_andamento' | 'resolvida' | 'todo' | 'in_progress' | 'done';
-export type TaskPriority = 'baixa' | 'media' | 'alta' | 'urgente' | 'low' | 'medium' | 'high' | 'urgent';
+// `tasks` uses the English enums below; `pending_tasks` keeps the legacy Portuguese enums.
+export const TASK_STATUS_VALUES = ['todo', 'in_progress', 'done'] as const;
+export type TaskStatus = (typeof TASK_STATUS_VALUES)[number];
+
+export const TASK_PRIORITY_VALUES = ['low', 'medium', 'high', 'urgent'] as const;
+export type TaskPriority = (typeof TASK_PRIORITY_VALUES)[number];
+
+export const PENDING_TASK_STATUS_VALUES = ['aberta', 'em_andamento', 'resolvida'] as const;
+export type PendingTaskStatus = (typeof PENDING_TASK_STATUS_VALUES)[number];
+
+export const PENDING_TASK_PRIORITY_VALUES = ['baixa', 'media', 'alta', 'urgente'] as const;
+export type PendingTaskPriority = (typeof PENDING_TASK_PRIORITY_VALUES)[number];
 
 export interface Tag {
   id: string;

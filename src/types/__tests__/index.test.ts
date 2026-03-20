@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import type {
-  RiskLevel,
-  TaskStatus,
-  TaskPriority,
-  TaskType,
+  PendingTaskPriority,
+  PendingTaskStatus,
   RecurrencePattern,
+  RiskLevel,
+  TaskPriority,
+  TaskStatus,
+  TaskType,
 } from '../index';
 
 describe('Type contracts', () => {
@@ -14,12 +16,22 @@ describe('Type contracts', () => {
   });
 
   it('TaskStatus values are valid', () => {
-    const statuses: TaskStatus[] = ['aberta', 'em_andamento', 'resolvida'];
+    const statuses: TaskStatus[] = ['todo', 'in_progress', 'done'];
     expect(statuses).toHaveLength(3);
   });
 
   it('TaskPriority values are valid', () => {
-    const priorities: TaskPriority[] = ['baixa', 'media', 'alta', 'urgente'];
+    const priorities: TaskPriority[] = ['low', 'medium', 'high', 'urgent'];
+    expect(priorities).toHaveLength(4);
+  });
+
+  it('PendingTaskStatus values are valid', () => {
+    const statuses: PendingTaskStatus[] = ['aberta', 'em_andamento', 'resolvida'];
+    expect(statuses).toHaveLength(3);
+  });
+
+  it('PendingTaskPriority values are valid', () => {
+    const priorities: PendingTaskPriority[] = ['baixa', 'media', 'alta', 'urgente'];
     expect(priorities).toHaveLength(4);
   });
 

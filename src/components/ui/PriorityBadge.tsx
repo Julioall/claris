@@ -1,5 +1,6 @@
+import { TASK_PRIORITY_LABELS } from '@/lib/tasks';
 import { cn } from '@/lib/utils';
-import { TaskPriority } from '@/types';
+import type { TaskPriority } from '@/types';
 
 interface PriorityBadgeProps {
   priority: TaskPriority;
@@ -7,30 +8,24 @@ interface PriorityBadgeProps {
   className?: string;
 }
 
-const priorityConfig: Record<string, { label: string; className: string }> = {
-  baixa: { label: 'Baixa', className: 'priority-baixa bg-muted' },
-  low: { label: 'Baixa', className: 'priority-baixa bg-muted' },
-  media: { label: 'Média', className: 'priority-media bg-status-pending-bg' },
-  medium: { label: 'Média', className: 'priority-media bg-status-pending-bg' },
-  alta: { label: 'Alta', className: 'priority-alta bg-risk-risco-bg' },
-  high: { label: 'Alta', className: 'priority-alta bg-risk-risco-bg' },
-  urgente: { label: 'Urgente', className: 'priority-urgente bg-risk-critico-bg' },
-  urgent: { label: 'Urgente', className: 'priority-urgente bg-risk-critico-bg' },
+const priorityStyles: Record<TaskPriority, string> = {
+  low: 'priority-baixa bg-muted',
+  medium: 'priority-media bg-status-pending-bg',
+  high: 'priority-alta bg-risk-risco-bg',
+  urgent: 'priority-urgente bg-risk-critico-bg',
 };
 
 export function PriorityBadge({ priority, size = 'md', className }: PriorityBadgeProps) {
-  const config = priorityConfig[priority] ?? priorityConfig.media;
-  
   return (
     <span
       className={cn(
         'inline-flex items-center rounded font-medium',
-        config.className,
+        priorityStyles[priority],
         size === 'sm' ? 'text-xs px-1.5 py-0.5' : 'text-xs px-2 py-1',
-        className
+        className,
       )}
     >
-      {config.label}
+      {TASK_PRIORITY_LABELS[priority]}
     </span>
   );
 }

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { normalizeTaskPriority, normalizeTaskStatus } from '@/lib/tasks';
 import type { Task, TaskComment, Tag, TaskStatus, TaskPriority } from '@/types';
 
 export interface CreateTaskInput {
@@ -23,8 +24,8 @@ function toTask(row: any): Task {
     id: row.id,
     title: row.title,
     description: row.description,
-    status: row.status as TaskStatus,
-    priority: row.priority as TaskPriority,
+    status: normalizeTaskStatus(row.status),
+    priority: normalizeTaskPriority(row.priority),
     assigned_to: row.assigned_to,
     created_by: row.created_by,
     due_date: row.due_date,

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { tasksService, type CreateTaskInput, type UpdateTaskInput } from '@/services/tasks.service';
 import { useAuth } from '@/contexts/AuthContext';
+import type { Task } from '@/types';
 import { toast } from 'sonner';
 
 const TASKS_KEY = ['tasks'];
@@ -28,11 +29,47 @@ export function useTasks() {
   const updateMutation = useMutation({
     mutationFn: ({ id, input }: { id: string; input: UpdateTaskInput }) =>
       tasksService.updateTask(id, input),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: TASKS_KEY });
+    onMutate: async ({ id, input }) => {
+      await qc.cancelQueries({ queryKey: TASKS_KEY });
+
+      const previousTasks = qc.getQueryData<Task[]>(TASKS_KEY) ?? [];
+
+      qc.setQueryData<Task[]>(TASKS_KEY, (current = []) =>
+        current.map(task => (
+          task.id === id
+            ? {
+                ...task,
+                ...input,
+                updated_at: new Date().toISOString(),
+              }
+            : task
+        ))
+      );
+
+      return { previousTasks };
+    },
+    onSuccess: (updatedTask) => {
+      qc.setQueryData<Task[]>(TASKS_KEY, (current = []) =>
+        current.map(task => (
+          task.id === updatedTask.id
+            ? {
+                ...task,
+                ...updatedTask,
+              }
+            : task
+        ))
+      );
       toast.success('Tarefa atualizada');
     },
-    onError: () => toast.error('Erro ao atualizar tarefa'),
+    onError: (_error, _variables, context) => {
+      if (context?.previousTasks) {
+        qc.setQueryData(TASKS_KEY, context.previousTasks);
+      }
+      toast.error('Erro ao atualizar tarefa');
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: TASKS_KEY });
+    }
   });
 
   const deleteMutation = useMutation({

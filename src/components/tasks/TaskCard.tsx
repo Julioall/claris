@@ -27,9 +27,10 @@ interface TaskCardProps {
   onDelete?: (id: string) => void;
   onStatusChange?: (id: string, status: Task['status']) => void;
   onClick?: (task: Task) => void;
+  className?: string;
 }
 
-export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: TaskCardProps) {
+export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick, className }: TaskCardProps) {
   const isOverdue = task.due_date && task.status !== 'done' && isPast(parseISO(task.due_date));
 
   // Combine relation tags and AI text tags for display
@@ -44,7 +45,8 @@ export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick }: Ta
       className={cn(
         'group rounded-lg border bg-card p-4 shadow-sm transition-all hover:shadow-md',
         task.status === 'done' && 'opacity-70',
-        onClick && 'cursor-pointer'
+        onClick && 'cursor-pointer',
+        className
       )}
       onClick={() => onClick?.(task)}
     >
