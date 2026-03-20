@@ -60,7 +60,7 @@ jobs:
 
   publish-public-build:
     name: Publish Public Build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && secrets.PUBLIC_BUILD_DEPLOY_TOKEN != ''
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs:
       - lint
       - test
@@ -68,13 +68,29 @@ jobs:
     runs-on: ubuntu-latest
     environment: supabase
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Check public deploy token
+        id: check-token
+        shell: bash
+        env:
+          PUBLIC_BUILD_DEPLOY_TOKEN: ${{ secrets.PUBLIC_BUILD_DEPLOY_TOKEN }}
+        run: |
+          if [ -n "${PUBLIC_BUILD_DEPLOY_TOKEN}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::PUBLIC_BUILD_DEPLOY_TOKEN is not configured. Skipping public build publish."
+          fi
+      - if: steps.check-token.outputs.available == 'true'
+        uses: actions/checkout@v4
+      - if: steps.check-token.outputs.available == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-      - run: npm ci
+      - if: steps.check-token.outputs.available == 'true'
+        run: npm ci
       - name: Set public build base path
+        if: steps.check-token.outputs.available == 'true'
         shell: bash
         run: |
           repo_name="${PUBLIC_DEPLOY_REPO#*/}"
@@ -88,12 +104,14 @@ jobs:
             echo "VITE_BASE_PATH=/${repo_name}/" >> "$GITHUB_ENV"
           fi
       - name: Build public artifact
+        if: steps.check-token.outputs.available == 'true'
         env:
           VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         run: npm run build:github-pages
       - name: Initialize public repository state
+        if: steps.check-token.outputs.available == 'true'
         shell: bash
         env:
           PUBLIC_BUILD_DEPLOY_TOKEN: ${{ secrets.PUBLIC_BUILD_DEPLOY_TOKEN }}
@@ -114,6 +132,7 @@ jobs:
             git checkout -B main
           fi
       - name: Sync public repository contents
+        if: steps.check-token.outputs.available == 'true'
         run: >
           node scripts/sync-public-build-repo.mjs
           --dist-dir dist
@@ -122,6 +141,7 @@ jobs:
           --source-repo ${GITHUB_REPOSITORY}
           --source-commit ${GITHUB_SHA}
       - name: Commit and push public artifact
+        if: steps.check-token.outputs.available == 'true'
         shell: bash
         run: |
           cd public-site
