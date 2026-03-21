@@ -81,7 +81,7 @@ Uma fase so e considerada concluida quando:
 
 ### Fase S1: Mensagens e Automacoes
 
-Status: `in_progress`
+Status: `completed`
 
 Objetivo:
 
@@ -93,12 +93,15 @@ Progresso atual:
 - `src/features/messages/api/` agora concentra audience loading, templates, envios recentes e disparo inicial do job de envio em massa
 - `src/features/automations/api/` agora concentra listagem de jobs, detalhes, destinatarios, agendamentos e lookup de instancias de WhatsApp
 - `ScheduledMessagesTab` passou a persistir `channel` e `whatsapp_instance_id` dentro de `filter_context`, evitando perder esse contexto ao reabrir um agendamento
+- o fluxo manual de envio em massa agora chama apenas a Edge Function `bulk-message-send`, que passou a criar o job, registrar recipients, validar duplicidade e iniciar o processamento no backend
+- `bulk_message_jobs.origin` foi versionado por migration e passou a distinguir jobs `manual` vs `ia`, fechando o TODO de origem em `BulkJobsTab`
+- os executores da Claris IA passaram a criar jobs com `origin = 'ia'`, reaproveitando a mesma fronteira de dominio para duplicidade e criacao de recipients
 
-Pendencias para concluir a fase:
+Fechamento da fase:
 
-- mover a criacao de job + recipients + disparo inicial para uma unica operacao de backend, evitando orquestracao parcial no frontend
-- adicionar a migration de `bulk_message_jobs.origin` para diferenciar origem manual vs IA
-- revisar se ainda ha acessos diretos ao Supabase nesse fluxo fora dos repositories novos e atualizar testes adicionais se o backend mudar
+- o fluxo alvo deixou de depender de orquestracao parcial no frontend para criar job + recipients + disparo inicial
+- a origem manual vs IA agora esta refletida no schema, nos tipos gerados, na UI operacional e nos jobs criados pela Claris IA
+- a validacao desta fase foi executada com `npm.cmd run lint`, `npm.cmd run typecheck`, `npm.cmd test` e `npm.cmd run smoke:edge`
 
 Escopo alvo:
 

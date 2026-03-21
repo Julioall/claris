@@ -70,6 +70,7 @@ src/
 - `src/features/whatsapp/` agora concentra a page de conversa em tempo real via Evolution.
 - `src/features/automations/` agora concentra a page hub de automacoes e seus componentes operacionais especificos.
 - `src/features/messages/api/` e `src/features/automations/api/` agora concentram templates, audiencia, envios recentes, jobs, destinatarios, agendamentos e lookup operacional de instancias, reduzindo o acoplamento direto entre UI e Supabase nesses fluxos.
+- o envio em massa manual agora delega a criacao de `bulk_message_jobs`, `bulk_message_recipients`, validacao de duplicidade e disparo inicial para a Edge Function `bulk-message-send`, enquanto a UI operacional passou a exibir `origin` real (`manual` vs `ia`) dos jobs.
 - `src/features/services/` agora concentra `MyServicesPage` e o fluxo de gestao da instancia pessoal de servicos externos.
 - `src/features/settings/` agora concentra `SettingsPage`, os cards de configuracao do usuario e a configuracao de tema compartilhada com o shell.
 - `src/features/reports/` agora concentra `ReportsPage` e o fluxo de exportacao academica.

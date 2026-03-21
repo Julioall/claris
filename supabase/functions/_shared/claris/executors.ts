@@ -6,7 +6,10 @@
 import { createServiceClient } from '../db/mod.ts'
 import type { Tables } from '../db/mod.ts'
 import {
+  createJobWithRecipients,
+  failJob,
   finalizeJob,
+  findDuplicateActiveJob,
   findJobForUser,
   listPendingRecipients,
   markJobProcessing,
@@ -693,18 +696,10 @@ async function prepareSingleStudentMessageSend(
 
   const { student } = resolvedStudent
 
-  const { data: duplicateJob, error: duplicateJobError } = await supabase
-    .from('bulk_message_jobs')
-    .select('id, status, created_at')
-    .eq('user_id', userId)
-    .eq('message_content', message)
-    .eq('total_recipients', 1)
-    .in('status', ['pending', 'processing'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (duplicateJobError) {
+  let duplicateJob
+  try {
+    duplicateJob = await findDuplicateActiveJob(supabase, userId, message, 1)
+  } catch {
     return { error: 'Falha ao validar duplicidade do envio individual.' }
   }
 
@@ -718,22 +713,24 @@ async function prepareSingleStudentMessageSend(
     }
   }
 
-  const { data: job, error: jobError } = await supabase
-    .from('bulk_message_jobs')
-    .insert({
-      user_id: userId,
-      message_content: message,
-      total_recipients: 1,
-      status: 'pending',
+  let job
+  try {
+    job = await createJobWithRecipients(supabase, {
+      messageContent: message,
+      origin: 'ia',
+      recipients: [{
+        moodleUserId: student.moodle_user_id,
+        personalizedMessage: message,
+        studentId: student.student_id,
+        studentName: student.full_name,
+      }],
+      userId,
     })
-    .select('id')
-    .single()
-
-  if (jobError || !job) {
+  } catch {
     return { error: 'Falha ao criar job de envio individual.' }
   }
 
-  const { error: recipientError } = await supabase
+  if (job.id === '__unused_legacy__') { const { error: recipientError } = await supabase
     .from('bulk_message_recipients')
     .insert({
       job_id: job.id,
@@ -746,6 +743,8 @@ async function prepareSingleStudentMessageSend(
 
   if (recipientError) {
     return { error: 'Falha ao registrar destinatário do envio individual.' }
+  }
+
   }
 
   return {
@@ -1370,18 +1369,10 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
 
   const canonicalMessage = usingTemplate ? templateContent : directMessage
 
-  const { data: duplicateJob, error: duplicateJobError } = await supabase
-    .from('bulk_message_jobs')
-    .select('id, status, created_at')
-    .eq('user_id', userId)
-    .eq('message_content', canonicalMessage)
-    .eq('total_recipients', recipients.length)
-    .in('status', ['pending', 'processing'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (duplicateJobError) {
+  let duplicateJob
+  try {
+    duplicateJob = await findDuplicateActiveJob(supabase, userId, canonicalMessage, recipients.length)
+  } catch {
     return { error: 'Falha ao validar duplicidade de envio.' }
   }
 
@@ -1395,22 +1386,25 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
     }
   }
 
-  const { data: job, error: jobError } = await supabase
-    .from('bulk_message_jobs')
-    .insert({
-      user_id: userId,
-      message_content: canonicalMessage,
-      total_recipients: recipients.length,
-      status: 'pending',
+  let job
+  try {
+    job = await createJobWithRecipients(supabase, {
+      messageContent: canonicalMessage,
+      origin: 'ia',
+      recipients: rows.map((row) => ({
+        moodleUserId: row.moodle_user_id,
+        personalizedMessage: row.personalized_message,
+        studentId: row.student_id,
+        studentName: row.student_name,
+      })),
+      templateId: templateMeta?.id ?? null,
+      userId,
     })
-    .select('id')
-    .single()
-
-  if (jobError || !job) {
+  } catch {
     return { error: 'Falha ao criar job de envio em massa.' }
   }
 
-  const rowsWithJobId = rows.map((row) => ({
+  if (job.id === '__unused_legacy__') { const rowsWithJobId = rows.map((row) => ({
     ...row,
     job_id: job.id,
   }))
@@ -1421,6 +1415,8 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
 
   if (recipientsError) {
     return { error: 'Falha ao criar destinatários do envio em massa.' }
+  }
+
   }
 
   return {
@@ -1459,61 +1455,72 @@ async function runBulkMessageJob(
     return { error: `Job com status ${job.status}. Esperado: pending.` }
   }
 
-  await markJobProcessing(supabase, jobId, new Date().toISOString())
-
-  const recipients = await listPendingRecipients(supabase, jobId)
-  if (!recipients || recipients.length === 0) {
-    await finalizeJob(supabase, jobId, 'completed', 0, 0, new Date().toISOString())
-    return { success: true, sent: 0, failed: 0 }
-  }
-
   let sentCount = job.sent_count || 0
   let failedCount = job.failed_count || 0
 
-  for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
-    const batch = recipients.slice(i, i + BATCH_SIZE)
+  try {
+    await markJobProcessing(supabase, jobId, new Date().toISOString())
 
-    await Promise.allSettled(
-      batch.map(async (recipient) => {
-        try {
-          const result = await callMoodleApi(moodleUrl, moodleToken, 'core_message_send_instant_messages', {
-            'messages[0][touserid]': Number(recipient.moodle_user_id),
-            'messages[0][text]': recipient.personalized_message || job.message_content,
-            'messages[0][textformat]': 0,
-          })
+    const recipients = await listPendingRecipients(supabase, jobId)
+    if (!recipients || recipients.length === 0) {
+      await finalizeJob(supabase, jobId, 'completed', sentCount, failedCount, new Date().toISOString())
+      return { success: true, sent: sentCount, failed: failedCount }
+    }
 
-          const messageResult = Array.isArray(result) ? result[0] : result
-          if (messageResult?.errormessage) throw new Error(messageResult.errormessage)
+    for (let i = 0; i < recipients.length; i += BATCH_SIZE) {
+      const batch = recipients.slice(i, i + BATCH_SIZE)
 
-          await markRecipientSent(supabase, recipient.id, new Date().toISOString())
-          sentCount++
-        } catch (error) {
-          await markRecipientFailed(
-            supabase,
-            recipient.id,
-            error instanceof Error ? error.message : 'Unknown error',
-          )
-          failedCount++
-        }
-      }),
+      await Promise.allSettled(
+        batch.map(async (recipient) => {
+          try {
+            const result = await callMoodleApi(moodleUrl, moodleToken, 'core_message_send_instant_messages', {
+              'messages[0][touserid]': Number(recipient.moodle_user_id),
+              'messages[0][text]': recipient.personalized_message || job.message_content,
+              'messages[0][textformat]': 0,
+            })
+
+            const messageResult = Array.isArray(result) ? result[0] : result
+            if (messageResult?.errormessage) throw new Error(messageResult.errormessage)
+
+            await markRecipientSent(supabase, recipient.id, new Date().toISOString())
+            sentCount++
+          } catch (error) {
+            await markRecipientFailed(
+              supabase,
+              recipient.id,
+              error instanceof Error ? error.message : 'Unknown error',
+            )
+            failedCount++
+          }
+        }),
+      )
+
+      await markJobProgress(supabase, jobId, sentCount, failedCount)
+
+      if (i + BATCH_SIZE < recipients.length) {
+        await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES_MS))
+      }
+    }
+
+    const finalStatus = failedCount === recipients.length ? 'failed' : 'completed'
+    await finalizeJob(supabase, jobId, finalStatus, sentCount, failedCount, new Date().toISOString())
+
+    return {
+      success: true,
+      job_id: jobId,
+      status: finalStatus,
+      sent: sentCount,
+      failed: failedCount,
+    }
+  } catch (error) {
+    await failJob(
+      supabase,
+      jobId,
+      error instanceof Error ? error.message : 'Falha inesperada ao processar envio em massa',
+      new Date().toISOString(),
     )
 
-    await markJobProgress(supabase, jobId, sentCount, failedCount)
-
-    if (i + BATCH_SIZE < recipients.length) {
-      await new Promise((resolve) => setTimeout(resolve, DELAY_BETWEEN_BATCHES_MS))
-    }
-  }
-
-  const finalStatus = failedCount === recipients.length ? 'failed' : 'completed'
-  await finalizeJob(supabase, jobId, finalStatus, sentCount, failedCount, new Date().toISOString())
-
-  return {
-    success: true,
-    job_id: jobId,
-    status: finalStatus,
-    sent: sentCount,
-    failed: failedCount,
+    return { error: 'Falha ao processar o envio em massa.' }
   }
 }
 

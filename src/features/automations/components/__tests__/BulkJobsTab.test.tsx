@@ -50,6 +50,7 @@ describe('BulkJobsTab', () => {
         total_recipients: 10,
         sent_count: 4,
         failed_count: 0,
+        origin: 'manual',
         status: 'processing',
         created_at: '2026-03-21T10:00:00.000Z',
         started_at: '2026-03-21T10:01:00.000Z',
@@ -64,6 +65,7 @@ describe('BulkJobsTab', () => {
         total_recipients: 5,
         sent_count: 5,
         failed_count: 0,
+        origin: 'ia',
         status: 'completed',
         created_at: '2026-03-20T10:00:00.000Z',
         started_at: '2026-03-20T10:01:00.000Z',
@@ -86,6 +88,8 @@ describe('BulkJobsTab', () => {
 
     expect(screen.getByText(/primeiro envio em massa/i)).toBeInTheDocument();
     expect(screen.getByText(/segundo aviso importante/i)).toBeInTheDocument();
+    expect(screen.getByText(/^manual$/i)).toBeInTheDocument();
+    expect(screen.getByText(/claris ia/i)).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(/buscar por conte/i), 'segundo');
 

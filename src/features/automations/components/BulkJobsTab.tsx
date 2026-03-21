@@ -42,12 +42,13 @@ function getStatusBadge(status: string) {
   );
 }
 
-function getOriginBadge(_userId: string, _currentUserId: string | undefined) {
-  // TODO: extend bulk_message_jobs with an `origin` column (manual vs ia) in a
-  // follow-up migration to properly distinguish AI-created jobs from manual ones.
+function getOriginBadge(origin: string) {
   return (
-    <Badge variant="outline" className="text-xs bg-muted/40">
-      Manual
+    <Badge
+      variant="outline"
+      className={`text-xs ${origin === 'ia' ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300' : 'bg-muted/40'}`}
+    >
+      {origin === 'ia' ? 'Claris IA' : 'Manual'}
     </Badge>
   );
 }
@@ -139,7 +140,7 @@ export function BulkJobsTab() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         {getStatusBadge(job.status)}
-                        {getOriginBadge(job.user_id, user?.id)}
+                        {getOriginBadge(job.origin)}
                         <span className="text-xs text-muted-foreground">
                           {format(parseISO(job.created_at), "d MMM yyyy 'às' HH:mm", { locale: ptBR })}
                         </span>

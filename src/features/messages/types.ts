@@ -53,6 +53,7 @@ export interface BulkMessageJobPreview {
   total_recipients: number;
   sent_count: number;
   failed_count: number;
+  origin: 'manual' | 'ia';
   status: Enums<'bulk_message_status'>;
   created_at: string;
 }

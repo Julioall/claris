@@ -1,5 +1,4 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
 
 import type {
   BulkMessageJobPreview,
@@ -61,6 +60,11 @@ interface StartBulkMessageSendInput {
 export type StartBulkMessageSendResult =
   | { kind: 'duplicate'; jobId: string }
   | { kind: 'started'; jobId: string };
+
+interface StartBulkMessageSendFunctionResult {
+  jobId?: string;
+  kind?: string;
+}
 
 function emptyAudienceData(): BulkSendAudienceData {
   return {
@@ -251,7 +255,7 @@ export async function listRecentBulkMessageJobsForUser(
 ): Promise<BulkMessageJobPreview[]> {
   const { data, error } = await supabase
     .from('bulk_message_jobs')
-    .select('id, message_content, total_recipients, sent_count, failed_count, status, created_at')
+    .select('id, message_content, total_recipients, sent_count, failed_count, status, created_at, origin')
     .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -270,82 +274,38 @@ export async function startBulkMessageSend(
 
   const normalizedMessage = input.messageContent.trim();
 
-  const { data: existingJob, error: existingJobError } = await supabase
-    .from('bulk_message_jobs')
-    .select('id')
-    .eq('user_id', input.userId)
-    .eq('message_content', normalizedMessage)
-    .eq('total_recipients', input.recipients.length)
-    .in('status', ['pending', 'processing'])
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existingJobError) throw existingJobError;
-
-  if (existingJob) {
-    return {
-      kind: 'duplicate',
-      jobId: existingJob.id,
-    };
-  }
-
-  const jobInsert: TablesInsert<'bulk_message_jobs'> = {
-    user_id: input.userId,
-    message_content: normalizedMessage,
-    total_recipients: input.recipients.length,
-    status: 'pending',
-  };
-
-  const { data: job, error: jobError } = await supabase
-    .from('bulk_message_jobs')
-    .insert(jobInsert)
-    .select('id')
-    .single();
-
-  if (jobError || !job) {
-    throw jobError || new Error('Falha ao criar job de envio em massa');
-  }
-
-  const recipientsInsert: TablesInsert<'bulk_message_recipients'>[] = input.recipients.map((recipient) => ({
-    job_id: job.id,
-    student_id: recipient.studentId,
-    moodle_user_id: recipient.moodleUserId,
-    student_name: recipient.studentName,
-    personalized_message: recipient.personalizedMessage,
-    status: 'pending',
-  }));
-
-  const { error: recipientsError } = await supabase.from('bulk_message_recipients').insert(recipientsInsert);
-
-  if (recipientsError) throw recipientsError;
-
-  const { error: invokeError } = await supabase.functions.invoke('bulk-message-send', {
+  const { data, error } = await supabase.functions.invoke('bulk-message-send', {
     body: {
-      job_id: job.id,
+      message_content: normalizedMessage,
       moodleUrl: input.moodleUrl,
+      origin: 'manual',
+      recipients: input.recipients.map((recipient) => ({
+        moodle_user_id: recipient.moodleUserId,
+        personalized_message: recipient.personalizedMessage,
+        student_id: recipient.studentId,
+        student_name: recipient.studentName,
+      })),
       token: input.moodleToken,
     },
   });
 
-  if (invokeError) {
-    const failedUpdate: TablesUpdate<'bulk_message_jobs'> = {
-      status: 'failed',
-      error_message: `Falha ao iniciar processamento: ${invokeError.message}`,
-      completed_at: new Date().toISOString(),
+  if (error) throw error;
+
+  const result = (data || {}) as StartBulkMessageSendFunctionResult;
+
+  if (result.kind === 'duplicate' && typeof result.jobId === 'string') {
+    return {
+      kind: 'duplicate',
+      jobId: result.jobId,
     };
-
-    await supabase
-      .from('bulk_message_jobs')
-      .update(failedUpdate)
-      .eq('id', job.id)
-      .eq('user_id', input.userId);
-
-    throw invokeError;
   }
 
-  return {
-    kind: 'started',
-    jobId: job.id,
-  };
+  if (result.kind === 'started' && typeof result.jobId === 'string') {
+    return {
+      kind: 'started',
+      jobId: result.jobId,
+    };
+  }
+
+  throw new Error('Resposta invalida da edge function bulk-message-send');
 }
