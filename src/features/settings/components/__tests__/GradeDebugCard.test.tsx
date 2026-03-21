@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { GradeDebugCard } from "@/components/settings/GradeDebugCard";
+import { GradeDebugCard } from "@/features/settings/components/GradeDebugCard";
 
 const useMoodleSessionMock = vi.fn();
 const fromMock = vi.fn();

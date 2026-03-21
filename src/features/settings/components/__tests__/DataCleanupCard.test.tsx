@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { DataCleanupCard } from "@/components/settings/DataCleanupCard";
+import { DataCleanupCard } from "@/features/settings/components/DataCleanupCard";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();

@@ -254,7 +254,7 @@ function buildEvaluativeActivityKeys(activities: ActivityDetailRow[]) {
   return evaluativeActivityKeys;
 }
 
-export default function Reports() {
+export default function ReportsPage() {
   const { user } = useAuth();
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);

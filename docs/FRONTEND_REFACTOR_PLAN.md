@@ -181,23 +181,21 @@ Observacoes:
 
 ### Fase 9: Settings e Reports
 
-Status: `planned`
+Status: `completed`
 
-Objetivo:
+Escopo concluido:
 
-- mover areas de configuracao nao-admin e relatorios para slices dedicados
+- `SettingsPage` foi movida para `src/features/settings/pages/`
+- `ThemeCard`, `DataCleanupCard` e `GradeDebugCard` foram movidos para `src/features/settings/components/`
+- a configuracao visual compartilhada foi extraida para `src/features/settings/lib/color-theme.ts`
+- `ReportsPage` foi movida para `src/features/reports/pages/`
+- `ColorThemeApplier`, rotas lazy e testes passaram a consumir os slices diretamente
+- wrappers antigos de `src/pages/Settings.tsx`, `src/pages/Reports.tsx` e `src/components/settings/` foram removidos
 
-Arquivos alvo:
+Observacoes:
 
-- `src/pages/Settings.tsx`
-- `src/pages/Reports.tsx`
-- `src/components/settings/*`
-- helpers e mapeamentos ligados a relatorios
-
-Possiveis slices:
-
-- `src/features/settings/`
-- `src/features/reports/`
+- o helper de tema ficou em `features/settings/lib/` porque o shell global ainda precisa aplicar a paleta antes do carregamento das telas
+- os helpers internos de relatorios permanecem no arquivo da page por enquanto; a fase fechou a reorganizacao estrutural sem alterar o comportamento do export Excel
 
 ### Fase 10: Auth Rename e Fechamento Estrutural
 
@@ -255,13 +253,13 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 
 ## Proxima Fase Recomendada
 
-Proxima fase a executar: `Fase 9: Settings e Reports`
+Proxima fase a executar: `Fase 10: Auth Rename e Fechamento Estrutural`
 
 Motivo:
 
-- os fluxos de comunicacao e operacao ja foram isolados em slices dedicados
-- restam principalmente `settings` e `reports` fora de `features/`, alem do rename estrutural do auth
-- fechar `settings` e `reports` agora reduz o passivo funcional antes da etapa de renomeacao estrutural e limpeza final
+- os dominios funcionais remanescentes ja foram trazidos para `features/`
+- o principal passivo estrutural agora e o auth ainda morar em `src/modules/auth/`
+- renomear o auth antes da limpeza final reduz a chance de a fase 11 acumular churn desnecessario
 
 ## Ao Concluir Uma Fase
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import Reports from '@/pages/Reports';
+import ReportsPage from '@/features/reports/pages/ReportsPage';
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
@@ -294,7 +294,7 @@ describe('Reports page', () => {
     reportType?: 'notas' | 'pendencias';
   }) => {
     const user = userEvent.setup();
-    render(<Reports />);
+    render(<ReportsPage />);
 
     await waitFor(() => {
       expect(screen.getAllByRole('combobox')).toHaveLength(2);

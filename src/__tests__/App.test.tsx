@@ -78,11 +78,11 @@ vi.mock("@/features/whatsapp/pages/WhatsAppPage", () => ({
   default: () => <div>WhatsApp Page</div>,
 }));
 
-vi.mock("@/pages/Settings", () => ({
+vi.mock("@/features/settings/pages/SettingsPage", () => ({
   default: () => <div>Settings Page</div>,
 }));
 
-vi.mock("@/pages/Reports", () => ({
+vi.mock("@/features/reports/pages/ReportsPage", () => ({
   default: () => <div>Reports Page</div>,
 }));
 

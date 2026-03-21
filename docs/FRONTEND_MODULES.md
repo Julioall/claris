@@ -70,6 +70,8 @@ src/
 - `src/features/whatsapp/` agora concentra a page de conversa em tempo real via Evolution.
 - `src/features/automations/` agora concentra a page hub de automacoes e seus componentes operacionais especificos.
 - `src/features/services/` agora concentra `MyServicesPage` e o fluxo de gestao da instancia pessoal de servicos externos.
+- `src/features/settings/` agora concentra `SettingsPage`, os cards de configuracao do usuario e a configuracao de tema compartilhada com o shell.
+- `src/features/reports/` agora concentra `ReportsPage` e o fluxo de exportacao academica.
 - `src/features/admin/` agora concentra as pages administrativas, enquanto `src/app/routes/admin/` concentra `AdminRoute` e `AdminLayout` como shell de roteamento.
 - `src/lib/claris-settings.ts` e `src/components/ui/claris-logo.tsx` permanecem compartilhados por ainda atenderem mais de um dominio.
 - `src/modules/auth/` e a referencia atual de slice extraido; ele pode continuar como esta no curto prazo e ser renomeado para `src/features/auth/` em etapa posterior.

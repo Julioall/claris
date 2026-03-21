@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Settings from "@/pages/Settings";
+import SettingsPage from "@/features/settings/pages/SettingsPage";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
@@ -55,7 +55,7 @@ describe("Settings page", () => {
   });
 
   it("shows profile, theme and sync for all users", async () => {
-    render(<Settings />);
+    render(<SettingsPage />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: /configuracoes/i }),
@@ -71,7 +71,7 @@ describe("Settings page", () => {
 
   it("triggers initial general sync", async () => {
     const user = userEvent.setup();
-    render(<Settings />);
+    render(<SettingsPage />);
 
     await user.click(screen.getByRole("button", { name: /sincronizacao geral inicial/i }));
     expect(syncDataMock).toHaveBeenCalledTimes(1);
@@ -79,7 +79,7 @@ describe("Settings page", () => {
 
   it("allows logout", async () => {
     const user = userEvent.setup();
-    render(<Settings />);
+    render(<SettingsPage />);
 
     await user.click(screen.getByRole("button", { name: /sair da conta/i }));
     expect(logoutMock).toHaveBeenCalledTimes(1);

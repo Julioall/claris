@@ -7,7 +7,7 @@ import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { ThemeCard } from '@/components/settings/ThemeCard';
+import { ThemeCard } from '@/features/settings/components/ThemeCard';
 import { supabase } from '@/integrations/supabase/client';
 import {
   DEFAULT_MOODLE_SERVICE,
@@ -15,7 +15,7 @@ import {
   fetchGlobalAppSettings,
 } from '@/lib/global-app-settings';
 
-export default function Settings() {
+export default function SettingsPage() {
   const { user, logout, lastSync, syncData, isSyncing, isOfflineMode, courses } = useAuth();
   const [moodleConnectionUrl, setMoodleConnectionUrl] = useState(DEFAULT_MOODLE_URL);
 
