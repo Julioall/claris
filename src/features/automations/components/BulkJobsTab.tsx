@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Eye, CheckCircle2, AlertCircle, Clock, Loader2, Search, Filter } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,22 +11,10 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Progress } from '@/components/ui/progress';
+import { listBulkJobs } from '@/features/automations/api/automations.repository';
+import { automationsKeys } from '@/features/automations/query-keys';
+import type { BulkJobListItem } from '@/features/automations/types';
 import { JobDetailDialog } from './JobDetailDialog';
-
-interface BulkJob {
-  id: string;
-  message_content: string;
-  total_recipients: number;
-  sent_count: number;
-  failed_count: number;
-  status: string;
-  created_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  error_message: string | null;
-  template_id: string | null;
-  user_id: string;
-}
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Todos os status' },
@@ -39,7 +26,7 @@ const STATUS_OPTIONS = [
 ];
 
 function getStatusBadge(status: string) {
-  const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
+  const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: ReactNode }> = {
     pending: { label: 'Na fila', variant: 'outline', icon: <Clock className="h-3 w-3" /> },
     processing: { label: 'Enviando...', variant: 'default', icon: <Loader2 className="h-3 w-3 animate-spin" /> },
     completed: { label: 'Concluído', variant: 'secondary', icon: <CheckCircle2 className="h-3 w-3" /> },
@@ -72,25 +59,11 @@ export function BulkJobsTab() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const { data: jobs = [], isLoading } = useQuery({
-    queryKey: ['bulk-jobs', statusFilter],
-    queryFn: async () => {
-      let query = supabase
-        .from('bulk_message_jobs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
-
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter as never);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as BulkJob[];
-    },
+    queryKey: automationsKeys.bulkJobs(statusFilter),
+    queryFn: () => listBulkJobs(statusFilter),
     enabled: !!user,
     refetchInterval: (query) => {
-      const jobs = query.state.data as BulkJob[] | undefined;
+      const jobs = query.state.data as BulkJobListItem[] | undefined;
       const hasActive = jobs?.some(j => j.status === 'pending' || j.status === 'processing');
       return hasActive ? 5000 : false;
     },

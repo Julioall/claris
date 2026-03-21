@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Plus, Trash2, CalendarClock, AlertCircle, Pencil, MessageCircle } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,30 +32,18 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-
-interface ScheduledMessage {
-  id: string;
-  title: string;
-  message_content: string;
-  scheduled_at: string;
-  status: string;
-  origin: string;
-  recipient_count: number | null;
-  sent_count: number;
-  failed_count: number;
-  notes: string | null;
-  created_at: string;
-}
-
-interface ScheduledMessageFormValues {
-  title: string;
-  message_content: string;
-  scheduled_at: string;
-  recipient_count?: number;
-  notes?: string;
-  channel: 'moodle' | 'whatsapp';
-  whatsapp_instance_id?: string;
-}
+import {
+  cancelScheduledMessage,
+  createScheduledMessage,
+  listAccessibleWhatsappInstances,
+  listScheduledMessages,
+  updateScheduledMessage,
+} from '@/features/automations/api/automations.repository';
+import { automationsKeys } from '@/features/automations/query-keys';
+import type {
+  ScheduledMessage,
+  ScheduledMessageFormValues,
+} from '@/features/automations/types';
 
 function getStatusBadge(status: string) {
   const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -98,66 +85,21 @@ export function ScheduledMessagesTab() {
 
   // Fetch accessible WhatsApp instances for the current user
   const { data: whatsappInstances = [] } = useQuery({
-    queryKey: ['accessible-whatsapp-instances'],
-    queryFn: async () => {
-      if (!user) return [];
-      const { data, error } = await supabase
-        .from('app_service_instances' as never)
-        .select('id, name, scope, connection_status, is_active, is_blocked, owner_user_id')
-        .eq('service_type', 'whatsapp')
-        .eq('is_active', true)
-        .eq('is_blocked', false)
-        .or(`owner_user_id.eq.${user.id},scope.eq.shared`)
-        .order('scope', { ascending: false }); // personal first
-      if (error) return [];
-      return (data ?? []) as Array<{
-        id: string;
-        name: string;
-        scope: string;
-        connection_status: string;
-        is_active: boolean;
-        is_blocked: boolean;
-        owner_user_id: string | null;
-      }>;
-    },
+    queryKey: automationsKeys.accessibleWhatsappInstances(user?.id),
+    queryFn: () => listAccessibleWhatsappInstances(user!.id),
     enabled: !!user,
   });
 
   const { data: messages = [], isLoading } = useQuery({
-    queryKey: ['scheduled-messages'],
-    queryFn: async () => {
-      // `as never` is needed because `scheduled_messages` is a new table added by the
-      // 20260317230000 migration and the auto-generated Supabase types haven't been
-      // regenerated yet. Once `npx supabase gen types typescript` is run, these casts
-      // can be replaced with proper typed references.
-      const { data, error } = await supabase
-        .from('scheduled_messages' as never)
-        .select('*')
-        .order('scheduled_at', { ascending: true });
-      if (error) throw error;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return (data ?? []) as any[] as ScheduledMessage[];
-    },
+    queryKey: automationsKeys.scheduledMessages(user?.id),
+    queryFn: () => listScheduledMessages(),
     enabled: !!user,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (values: ScheduledMessageFormValues) => {
-      const { error } = await supabase
-        .from('scheduled_messages' as never)
-        .insert({
-          user_id: user!.id,
-          title: values.title.trim(),
-          message_content: values.message_content.trim(),
-          scheduled_at: new Date(values.scheduled_at).toISOString(),
-          recipient_count: values.recipient_count ?? null,
-          notes: values.notes?.trim() || null,
-          origin: 'manual',
-        } as never);
-      if (error) throw error;
-    },
+    mutationFn: (values: ScheduledMessageFormValues) => createScheduledMessage(user!.id, values),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['scheduled-messages'] });
+      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages(user?.id) });
       toast.success('Agendamento criado');
       closeForm();
     },
@@ -165,21 +107,10 @@ export function ScheduledMessagesTab() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, values }: { id: string; values: ScheduledMessageFormValues }) => {
-      const { error } = await supabase
-        .from('scheduled_messages' as never)
-        .update({
-          title: values.title.trim(),
-          message_content: values.message_content.trim(),
-          scheduled_at: new Date(values.scheduled_at).toISOString(),
-          recipient_count: values.recipient_count ?? null,
-          notes: values.notes?.trim() || null,
-        } as never)
-        .eq('id', id);
-      if (error) throw error;
-    },
+    mutationFn: ({ id, values }: { id: string; values: ScheduledMessageFormValues }) =>
+      updateScheduledMessage(id, values),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['scheduled-messages'] });
+      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages(user?.id) });
       toast.success('Agendamento atualizado');
       closeForm();
     },
@@ -187,15 +118,9 @@ export function ScheduledMessagesTab() {
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('scheduled_messages' as never)
-        .update({ status: 'cancelled' } as never)
-        .eq('id', id);
-      if (error) throw error;
-    },
+    mutationFn: (id: string) => cancelScheduledMessage(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['scheduled-messages'] });
+      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages(user?.id) });
       toast.success('Agendamento cancelado');
       setDeleteId(null);
     },
@@ -218,7 +143,8 @@ export function ScheduledMessagesTab() {
       scheduled_at: localDt,
       recipient_count: msg.recipient_count ?? undefined,
       notes: msg.notes ?? '',
-      channel: (((msg as unknown) as Record<string, unknown>).channel as 'moodle' | 'whatsapp') ?? 'moodle',
+      channel: msg.channel,
+      whatsapp_instance_id: msg.whatsapp_instance_id,
     });
     setFormOpen(true);
   };

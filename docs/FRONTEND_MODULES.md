@@ -3,6 +3,7 @@
 Este documento descreve a direcao de modularizacao do frontend sem exigir uma migracao big bang.
 
 Para a ordem de execucao e continuidade entre sessoes, consultar [FRONTEND_REFACTOR_PLAN.md](./FRONTEND_REFACTOR_PLAN.md).
+Para o ciclo pos-refactor voltado a acesso a dados e Supabase, consultar [SUPABASE_CONSOLIDATION_PLAN.md](./SUPABASE_CONSOLIDATION_PLAN.md).
 
 ## Objetivos
 
@@ -68,6 +69,7 @@ src/
 - `src/features/messages/` agora concentra a page de mensagens Moodle e os componentes de envio em massa, modelos e variaveis dinamicas.
 - `src/features/whatsapp/` agora concentra a page de conversa em tempo real via Evolution.
 - `src/features/automations/` agora concentra a page hub de automacoes e seus componentes operacionais especificos.
+- `src/features/messages/api/` e `src/features/automations/api/` agora concentram templates, audiencia, envios recentes, jobs, destinatarios, agendamentos e lookup operacional de instancias, reduzindo o acoplamento direto entre UI e Supabase nesses fluxos.
 - `src/features/services/` agora concentra `MyServicesPage` e o fluxo de gestao da instancia pessoal de servicos externos.
 - `src/features/settings/` agora concentra `SettingsPage`, os cards de configuracao do usuario e a configuracao de tema compartilhada com o shell.
 - `src/features/reports/` agora concentra `ReportsPage` e o fluxo de exportacao academica.
@@ -77,6 +79,7 @@ src/
 - `src/features/auth/` concentra sessao Moodle, sync, risco e servicos de autenticacao como slice de dominio.
 - `src/pages/` ficou reduzido ao shell publico (`Index`, `Login`, `NotFound`), `src/hooks/` retem apenas hooks realmente transversais e `src/services/` nao concentra mais services de dominio.
 - o antigo barrel global em `src/types/` deixou de fazer parte da convencao; contratos compartilhados devem nascer no slice correto ou em fontes realmente proprietarias do shell/integracao.
+- o principal passivo arquitetural restante esta na fronteira de dados: ainda ha queries e mutations diretas ao Supabase dentro de pages e components que precisam migrar para `api/`, `application/` ou hooks do slice.
 
 ## Sequencia recomendada
 
@@ -86,6 +89,7 @@ src/
 4. substituir carregamento manual por hooks de dominio baseados em React Query
 5. manter contratos de tipo nos slices e evitar recriar barrels globais
 6. remover wrappers legados remanescentes de `src/pages/`, `src/hooks/`, `src/services/` e `src/lib/` conforme os imports antigos forem eliminados
+7. no ciclo pos-refactor, reduzir acesso direto ao Supabase em `pages/` e `components/`, consolidando a fronteira em `api/`, `application/`, `infrastructure/` e Edge Functions
 
 ## Fora de escopo desta etapa
 

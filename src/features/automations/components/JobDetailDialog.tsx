@@ -1,8 +1,8 @@
+import type { ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CheckCircle2, AlertCircle, Clock, Loader2 } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Spinner } from '@/components/ui/spinner';
@@ -15,33 +15,15 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
-
-interface BulkJobDetail {
-  id: string;
-  message_content: string;
-  total_recipients: number;
-  sent_count: number;
-  failed_count: number;
-  status: string;
-  created_at: string;
-  started_at: string | null;
-  completed_at: string | null;
-  error_message: string | null;
-  template_id: string | null;
-}
-
-interface Recipient {
-  id: string;
-  student_name: string;
-  moodle_user_id: string;
-  status: string;
-  personalized_message: string | null;
-  sent_at: string | null;
-  error_message: string | null;
-}
+import {
+  getBulkJobDetail,
+  listBulkJobRecipients,
+} from '@/features/automations/api/automations.repository';
+import { automationsKeys } from '@/features/automations/query-keys';
+import type { BulkJobDetail, BulkJobRecipient } from '@/features/automations/types';
 
 function RecipientStatusBadge({ status }: { status: string }) {
-  const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
+  const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: ReactNode }> = {
     pending: { label: 'Pendente', variant: 'outline', icon: <Clock className="h-3 w-3" /> },
     sent: { label: 'Enviado', variant: 'secondary', icon: <CheckCircle2 className="h-3 w-3" /> },
     failed: { label: 'Falhou', variant: 'destructive', icon: <AlertCircle className="h-3 w-3" /> },
@@ -63,30 +45,14 @@ interface JobDetailDialogProps {
 
 export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const { data: job, isLoading: jobLoading } = useQuery({
-    queryKey: ['bulk-job-detail', jobId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('bulk_message_jobs')
-        .select('*')
-        .eq('id', jobId!)
-        .single();
-      if (error) throw error;
-      return data as BulkJobDetail;
-    },
+    queryKey: automationsKeys.bulkJobDetail(jobId),
+    queryFn: () => getBulkJobDetail(jobId!),
     enabled: !!jobId,
   });
 
   const { data: recipients = [], isLoading: recipientsLoading } = useQuery({
-    queryKey: ['bulk-job-recipients', jobId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('bulk_message_recipients')
-        .select('*')
-        .eq('job_id', jobId!)
-        .order('student_name', { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Recipient[];
-    },
+    queryKey: automationsKeys.bulkJobRecipients(jobId),
+    queryFn: () => listBulkJobRecipients(jobId!),
     enabled: !!jobId,
     refetchInterval: job?.status === 'processing' ? 3000 : false,
   });

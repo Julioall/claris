@@ -34,21 +34,17 @@ import {
 } from '@/components/ui/alert-dialog';
 import { DynamicVariableInput, DYNAMIC_VARIABLES } from './DynamicVariableInput';
 import { HighlightedVariableText } from './HighlightedVariableText';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { MESSAGE_TEMPLATE_CATEGORIES } from '@/lib/message-template-defaults';
-import { ensureDefaultMessageTemplates } from '@/lib/message-template-seeding';
-
-interface MessageTemplate {
-  id: string;
-  title: string;
-  content: string;
-  category: string | null;
-  is_favorite: boolean | null;
-  created_at: string;
-  updated_at: string;
-}
+import {
+  createMessageTemplate,
+  deleteMessageTemplate,
+  listMessageTemplatesForUser,
+  setMessageTemplateFavorite,
+  updateMessageTemplate,
+} from '@/features/messages/api/message-templates.repository';
+import type { MessageTemplate } from '@/features/messages/types';
 
 export function MessageTemplatesTab() {
   const { user } = useAuth();
@@ -67,16 +63,7 @@ export function MessageTemplatesTab() {
     if (!user) return;
     setIsLoading(true);
     try {
-      await ensureDefaultMessageTemplates(user.id);
-
-      const { data, error } = await supabase
-        .from('message_templates')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('is_favorite', { ascending: false })
-        .order('updated_at', { ascending: false });
-      if (error) throw error;
-      setTemplates((data || []) as MessageTemplate[]);
+      setTemplates(await listMessageTemplatesForUser(user.id));
     } catch {
       toast.error('Erro ao carregar modelos');
     } finally {
@@ -107,22 +94,22 @@ export function MessageTemplatesTab() {
     setIsSaving(true);
     try {
       if (editingTemplate) {
-        const { error } = await supabase
-          .from('message_templates')
-          .update({ title: formTitle.trim(), content: formContent.trim(), category: formCategory, updated_at: new Date().toISOString() })
-          .eq('id', editingTemplate.id)
-          .eq('user_id', user.id);
-        if (error) throw error;
+        await updateMessageTemplate(user.id, editingTemplate.id, {
+          title: formTitle,
+          content: formContent,
+          category: formCategory,
+        });
         toast.success('Modelo atualizado');
       } else {
-        const { error } = await supabase
-          .from('message_templates')
-          .insert({ user_id: user.id, title: formTitle.trim(), content: formContent.trim(), category: formCategory });
-        if (error) throw error;
+        await createMessageTemplate(user.id, {
+          title: formTitle,
+          content: formContent,
+          category: formCategory,
+        });
         toast.success('Modelo criado');
       }
       setEditDialogOpen(false);
-      fetchTemplates();
+      await fetchTemplates();
     } catch {
       toast.error('Erro ao salvar modelo');
     } finally {
@@ -133,16 +120,11 @@ export function MessageTemplatesTab() {
   const handleDelete = async () => {
     if (!editingTemplate || !user) return;
     try {
-      const { error } = await supabase
-        .from('message_templates')
-        .delete()
-        .eq('id', editingTemplate.id)
-        .eq('user_id', user.id);
-      if (error) throw error;
+      await deleteMessageTemplate(user.id, editingTemplate.id);
       toast.success('Modelo excluído');
       setDeleteDialogOpen(false);
       setEditDialogOpen(false);
-      fetchTemplates();
+      await fetchTemplates();
     } catch {
       toast.error('Erro ao excluir modelo');
     }
@@ -151,13 +133,8 @@ export function MessageTemplatesTab() {
   const toggleFavorite = async (t: MessageTemplate) => {
     if (!user) return;
     try {
-      const { error } = await supabase
-        .from('message_templates')
-        .update({ is_favorite: !t.is_favorite })
-        .eq('id', t.id)
-        .eq('user_id', user.id);
-      if (error) throw error;
-      fetchTemplates();
+      await setMessageTemplateFavorite(user.id, t.id, !t.is_favorite);
+      await fetchTemplates();
     } catch {
       toast.error('Erro ao atualizar favorito');
     }

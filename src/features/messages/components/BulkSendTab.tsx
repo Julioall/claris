@@ -23,7 +23,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DynamicVariableInput, resolveVariables, DYNAMIC_VARIABLES } from './DynamicVariableInput';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import { toast } from 'sonner';
@@ -37,50 +36,19 @@ import {
   type DynamicVariableKey,
 } from '@/lib/message-template-context';
 import { MESSAGE_TEMPLATE_CATEGORIES } from '@/lib/message-template-defaults';
-import { ensureDefaultMessageTemplates } from '@/lib/message-template-seeding';
-
-interface StudentCourseOption {
-  course_id: string;
-  course_name: string;
-  category?: string;
-  last_access?: string | null;
-  start_date?: string | null;
-  enrollment_status?: string | null;
-}
-
-interface StudentOption {
-  id: string;
-  full_name: string;
-  email?: string | null;
-  moodle_user_id: string;
-  current_risk_level?: string | null;
-  last_access?: string | null;
-  enrollment_status?: string;
-  courses: StudentCourseOption[];
-}
-
-interface TemplateOption {
-  id: string;
-  title: string;
-  content: string;
-  category: string | null;
-  is_favorite: boolean | null;
-}
-
-interface BulkJob {
-  id: string;
-  message_content: string;
-  total_recipients: number;
-  sent_count: number;
-  failed_count: number;
-  status: string;
-  created_at: string;
-}
-
-interface GradeLookupValue {
-  gradeFormatted?: string | null;
-  gradePercentage?: number | null;
-}
+import {
+  buildStudentCourseKey,
+  listBulkSendAudienceForUser,
+  listRecentBulkMessageJobsForUser,
+  startBulkMessageSend,
+} from '@/features/messages/api/bulk-messaging.repository';
+import { listMessageTemplateOptionsForUser } from '@/features/messages/api/message-templates.repository';
+import type {
+  BulkMessageJobPreview,
+  GradeLookupValue,
+  MessageTemplateOption,
+  StudentOption,
+} from '@/features/messages/types';
 
 const variableLabels = new Map(DYNAMIC_VARIABLES.map(variable => [variable.key, variable.label]));
 const categoryLabels = new Map(MESSAGE_TEMPLATE_CATEGORIES.map(category => [category.value, category.label]));
@@ -94,10 +62,6 @@ const riskLevelLabels: Record<string, string> = {
 };
 
 const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
-
-function buildStudentCourseKey(studentId: string, courseId: string) {
-  return `${studentId}:${courseId}`;
-}
 
 function getVariableLabel(key: DynamicVariableKey) {
   return variableLabels.get(key) || key;
@@ -156,11 +120,11 @@ export function BulkSendTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
   const [messageContent, setMessageContent] = useState('');
-  const [templates, setTemplates] = useState<TemplateOption[]>([]);
+  const [templates, setTemplates] = useState<MessageTemplateOption[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [recentJobs, setRecentJobs] = useState<BulkJob[]>([]);
+  const [recentJobs, setRecentJobs] = useState<BulkMessageJobPreview[]>([]);
 
   const [filterSchool, setFilterSchool] = useState<string>('todos');
   const [filterCourse, setFilterCourse] = useState<string>('todos');
@@ -181,174 +145,10 @@ export function BulkSendTab() {
     setIsLoadingStudents(true);
 
     try {
-      const { data: userCourses, error: userCoursesError } = await supabase
-        .from('user_courses')
-        .select('course_id, courses(id, name, category, start_date)')
-        .eq('user_id', user.id)
-        .eq('role', 'tutor');
-
-      if (userCoursesError) throw userCoursesError;
-
-      if (!userCourses?.length) {
-        setStudents([]);
-        setGradeLookup({});
-        setPendingLookup({});
-        return;
-      }
-
-      const courseMap = new Map<string, { id: string; name: string; category?: string; start_date?: string | null }>();
-      userCourses.forEach(userCourse => {
-        const course = userCourse.courses as { id: string; name: string; category?: string; start_date?: string | null } | null;
-        if (course) {
-          courseMap.set(course.id, {
-            id: course.id,
-            name: course.name,
-            category: course.category,
-            start_date: course.start_date,
-          });
-        }
-      });
-
-      const courseIds = Array.from(courseMap.keys());
-
-      const { data: studentCourses, error: studentCoursesError } = await supabase
-        .from('student_courses')
-        .select('student_id, course_id, enrollment_status, last_access, students(id, full_name, email, moodle_user_id, current_risk_level, last_access)')
-        .in('course_id', courseIds);
-
-      if (studentCoursesError) throw studentCoursesError;
-
-      if (!studentCourses?.length) {
-        setStudents([]);
-        setGradeLookup({});
-        setPendingLookup({});
-        return;
-      }
-
-      const now = new Date();
-      const studentMap = new Map<string, StudentOption>();
-      const statusMap = new Map<string, { validStatuses: Set<string>; allStatuses: Set<string> }>();
-
-      const resolveEnrollmentStatus = (statusEntry?: { validStatuses: Set<string>; allStatuses: Set<string> }): string => {
-        if (!statusEntry) return 'inativo';
-
-        const validStatuses = statusEntry.validStatuses;
-        const allStatuses = statusEntry.allStatuses;
-
-        if (validStatuses.size > 0) {
-          if (validStatuses.has('suspenso')) return 'suspenso';
-          if (validStatuses.has('concluido')) return 'concluido';
-          if (validStatuses.has('ativo')) return 'ativo';
-          return 'inativo';
-        }
-
-        if (allStatuses.has('concluido')) return 'concluido';
-        if (allStatuses.has('ativo')) return 'ativo';
-        if (allStatuses.has('suspenso')) return 'suspenso';
-        return 'inativo';
-      };
-
-      studentCourses.forEach(studentCourse => {
-        const student = studentCourse.students as {
-          id: string;
-          full_name: string;
-          email?: string | null;
-          moodle_user_id: string;
-          current_risk_level?: string | null;
-          last_access?: string | null;
-        } | null;
-
-        if (!student) return;
-
-        const course = courseMap.get(studentCourse.course_id);
-        const enrollmentStatus = ((studentCourse as { enrollment_status?: string | null }).enrollment_status || 'ativo').toLowerCase();
-        const isValidCourse = !course?.start_date || new Date(course.start_date) <= now;
-
-        if (!statusMap.has(student.id)) {
-          statusMap.set(student.id, {
-            validStatuses: isValidCourse ? new Set([enrollmentStatus]) : new Set<string>(),
-            allStatuses: new Set([enrollmentStatus]),
-          });
-        } else {
-          const current = statusMap.get(student.id)!;
-          current.allStatuses.add(enrollmentStatus);
-          if (isValidCourse) {
-            current.validStatuses.add(enrollmentStatus);
-          }
-        }
-
-        if (!studentMap.has(student.id)) {
-          studentMap.set(student.id, {
-            id: student.id,
-            full_name: student.full_name,
-            email: student.email,
-            moodle_user_id: student.moodle_user_id,
-            current_risk_level: student.current_risk_level,
-            last_access: student.last_access,
-            enrollment_status: 'ativo',
-            courses: [],
-          });
-        }
-
-        if (course) {
-          studentMap.get(student.id)?.courses.push({
-            course_id: course.id,
-            course_name: course.name,
-            category: course.category || undefined,
-            last_access: studentCourse.last_access,
-            start_date: course.start_date,
-            enrollment_status: enrollmentStatus,
-          });
-        }
-      });
-
-      const studentsWithStatus = Array.from(studentMap.values()).map(student => ({
-        ...student,
-        enrollment_status: resolveEnrollmentStatus(statusMap.get(student.id)),
-      }));
-
-      const studentIds = Array.from(new Set(studentCourses.map(studentCourse => studentCourse.student_id)));
-
-      const [{ data: grades, error: gradesError }, { data: pendingActivities, error: pendingActivitiesError }] = await Promise.all([
-        supabase
-          .from('student_course_grades')
-          .select('student_id, course_id, grade_formatted, grade_percentage')
-          .in('course_id', courseIds)
-          .in('student_id', studentIds),
-        supabase
-          .from('student_activities')
-          .select('student_id, course_id, submitted_at, completed_at, status, hidden')
-          .in('course_id', courseIds)
-          .in('student_id', studentIds)
-          .eq('hidden', false),
-      ]);
-
-      if (gradesError) throw gradesError;
-      if (pendingActivitiesError) throw pendingActivitiesError;
-
-      const nextGradeLookup: Record<string, GradeLookupValue> = {};
-      (grades || []).forEach(grade => {
-        nextGradeLookup[buildStudentCourseKey(grade.student_id, grade.course_id)] = {
-          gradeFormatted: grade.grade_formatted,
-          gradePercentage: grade.grade_percentage,
-        };
-      });
-
-      const nextPendingLookup: Record<string, number> = {};
-      (pendingActivities || []).forEach(activity => {
-        const isSubmitted = Boolean(activity.submitted_at);
-        const isCompleted = Boolean(activity.completed_at) || ['completed', 'concluida', 'finalizada'].includes(String(activity.status || '').toLowerCase());
-        const isPending = !isSubmitted && !isCompleted;
-
-        if (!isPending) return;
-
-        const key = buildStudentCourseKey(activity.student_id, activity.course_id);
-        nextPendingLookup[key] = (nextPendingLookup[key] || 0) + 1;
-      });
-
-      setStudents(studentsWithStatus.sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR')));
-      setGradeLookup(nextGradeLookup);
-      setPendingLookup(nextPendingLookup);
+      const audience = await listBulkSendAudienceForUser(user.id);
+      setStudents(audience.students);
+      setGradeLookup(audience.gradeLookup);
+      setPendingLookup(audience.pendingLookup);
     } catch (error) {
       console.error(error);
       setStudents([]);
@@ -364,18 +164,7 @@ export function BulkSendTab() {
     if (!user) return;
 
     try {
-      await ensureDefaultMessageTemplates(user.id);
-
-      const { data, error } = await supabase
-        .from('message_templates')
-        .select('id, title, content, category, is_favorite')
-        .eq('user_id', user.id)
-        .order('is_favorite', { ascending: false })
-        .order('title');
-
-      if (error) throw error;
-
-      setTemplates((data || []) as TemplateOption[]);
+      setTemplates(await listMessageTemplateOptionsForUser(user.id));
     } catch (error) {
       console.error(error);
       toast.error('Erro ao carregar modelos');
@@ -386,16 +175,7 @@ export function BulkSendTab() {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('bulk_message_jobs')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
-
-      if (error) throw error;
-
-      setRecentJobs((data || []) as BulkJob[]);
+      setRecentJobs(await listRecentBulkMessageJobsForUser(user.id));
     } catch (error) {
       console.error(error);
       if (!options?.silent) {
@@ -600,7 +380,7 @@ export function BulkSendTab() {
     };
   }, [currentFilters, gradeLookup, pendingLookup, user]);
 
-  const applyTemplate = (template: TemplateOption) => {
+  const applyTemplate = (template: MessageTemplateOption) => {
     const unavailableVariables = templateUnavailableVariables.get(template.id) || [];
 
     if (unavailableVariables.length > 0) {
@@ -639,67 +419,23 @@ export function BulkSendTab() {
     setIsSending(true);
 
     try {
-      const normalizedMessage = messageContent.trim();
+      const result = await startBulkMessageSend({
+        userId: user.id,
+        messageContent,
+        moodleUrl: moodleSession.moodleUrl,
+        moodleToken: moodleSession.moodleToken,
+        recipients: selectedStudents.map((student) => ({
+          studentId: student.id,
+          moodleUserId: student.moodle_user_id,
+          studentName: student.full_name,
+          personalizedMessage: resolveVariables(messageContent, buildStudentVariableData(student)),
+        })),
+      });
 
-      const { data: existingJob, error: existingJobError } = await supabase
-        .from('bulk_message_jobs')
-        .select('id, status, created_at')
-        .eq('user_id', user.id)
-        .eq('message_content', normalizedMessage)
-        .eq('total_recipients', selectedStudents.length)
-        .in('status', ['pending', 'processing'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingJobError) throw existingJobError;
-
-      if (existingJob) {
+      if (result.kind === 'duplicate') {
         toast.error('Envio semelhante ja existe na fila/processamento. Evite duplicar o disparo.');
         await fetchRecentJobs();
         return;
-      }
-
-      const { data: job, error: jobErr } = await supabase
-        .from('bulk_message_jobs')
-        .insert({
-          user_id: user.id,
-          message_content: normalizedMessage,
-          total_recipients: selectedStudents.length,
-          status: 'pending',
-        })
-        .select('id')
-        .single();
-
-      if (jobErr || !job) throw jobErr || new Error('Falha ao criar job');
-
-      const recipients = selectedStudents.map(student => ({
-          job_id: job.id,
-          student_id: student.id,
-          moodle_user_id: student.moodle_user_id,
-          student_name: student.full_name,
-          personalized_message: resolveVariables(messageContent, buildStudentVariableData(student)),
-          status: 'pending' as const,
-        }));
-
-      const { error: recipErr } = await supabase.from('bulk_message_recipients').insert(recipients);
-      if (recipErr) throw recipErr;
-
-      const { error: invokeErr } = await supabase.functions.invoke('bulk-message-send', {
-        body: { job_id: job.id, moodleUrl: moodleSession.moodleUrl, token: moodleSession.moodleToken },
-      });
-      if (invokeErr) {
-        await supabase
-          .from('bulk_message_jobs')
-          .update({
-            status: 'failed',
-            error_message: `Falha ao iniciar processamento: ${invokeErr.message}`,
-            completed_at: new Date().toISOString(),
-          })
-          .eq('id', job.id)
-          .eq('user_id', user.id);
-
-        throw invokeErr;
       }
 
       toast.success(`Envio em massa iniciado para ${selectedStudents.length} alunos`);

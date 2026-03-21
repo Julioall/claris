@@ -4,6 +4,8 @@ Atualizado em `2026-03-21`.
 
 Este documento e o plano operacional da refatoracao do frontend. Ele deve ser lido antes de continuar a modularizacao em outra sessao ou com outra IA.
 
+Para o ciclo seguinte, focado na fronteira de dados com Supabase, consultar [SUPABASE_CONSOLIDATION_PLAN.md](./SUPABASE_CONSOLIDATION_PLAN.md).
+
 ## Objetivo
 
 Levar o frontend de uma organizacao por pastas tecnicas para uma organizacao por dominio, com:
@@ -253,6 +255,10 @@ Motivo:
 - os slices principais ja estao alinhados na convencao final de `features/`
 - `src/pages/`, `src/hooks/`, `src/services/` e o antigo barrel global de tipos ficaram reduzidos ao papel esperado no estado final
 - o trabalho seguinte passa a ser manutencao incremental: warnings de teste, endurecimento de TypeScript e atualizacao de documentacao historica quando fizer sentido
+
+Proximo plano operacional:
+
+- consolidacao da fronteira de dados entre frontend e Supabase em [SUPABASE_CONSOLIDATION_PLAN.md](./SUPABASE_CONSOLIDATION_PLAN.md)
 
 ## Ao Concluir Uma Fase
 

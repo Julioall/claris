@@ -76,7 +76,7 @@ supabase/
 - Reference slices already live under `src/features/agenda/`, `src/features/auth/`, `src/features/automations/`, `src/features/claris/`, `src/features/courses/`, `src/features/dashboard/`, `src/features/messages/`, `src/features/reports/`, `src/features/services/`, `src/features/settings/`, `src/features/students/`, `src/features/tasks/`, `src/features/whatsapp/`, and `src/features/admin/`.
 - `src/pages/` is reserved for public shell pages, and `src/hooks/` should stay limited to truly cross-domain hooks or shell concerns.
 - Keep domain contracts inside `src/features/<domain>/types.ts`; do not recreate a shared compatibility barrel under `src/types/`.
-- For staged continuity and maintenance follow-up, consult `docs/FRONTEND_REFACTOR_PLAN.md`.
+- For staged continuity and maintenance follow-up, consult `docs/FRONTEND_REFACTOR_PLAN.md` and `docs/SUPABASE_CONSOLIDATION_PLAN.md`.
 
 ## Coding Conventions
 
@@ -95,7 +95,8 @@ supabase/
 - Use **TanStack Query** for server state.
 - Prefer domain hooks in `src/features/<domain>/hooks/`.
 - Keep auth/session/sync integration logic in `src/features/auth/` instead of growing `AuthContext.tsx`.
-- Import the Supabase client from `@/integrations/supabase/client`.
+- Do not add `supabase.from(...)` or `supabase.functions.invoke(...)` directly inside feature pages or UI components when the domain already has a slice; prefer `api/`, `application/`, `infrastructure/`, and domain hooks.
+- Import the Supabase client from `@/integrations/supabase/client` only inside the data boundary or explicit cross-domain exceptions.
 
 ### Styling
 - Use Tailwind CSS utility classes and `cn()` from `@/lib/utils` for conditional class merging.
