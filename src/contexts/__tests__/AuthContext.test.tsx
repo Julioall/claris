@@ -465,7 +465,7 @@ describe("AuthContext", () => {
       expect.anything(),
     );
     expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({ title: expect.stringMatching(/sincronização inicial concluída/i) }),
+      expect.objectContaining({ title: expect.stringMatching(/sincronizacao inicial concluida/i) }),
     );
 
     await waitFor(() => {
@@ -474,7 +474,7 @@ describe("AuthContext", () => {
     expect(fromInsertMock).toHaveBeenCalledWith(
       expect.objectContaining({
         event_type: "sync_finish",
-        title: "Sincronização concluída",
+        title: "Sincronizacao concluida",
       }),
     );
   });
@@ -502,8 +502,7 @@ describe("AuthContext", () => {
       await authRef!.login("tutor", "pass", "https://moodle.local");
     });
 
-    // Simulate stored chat history for this user
-    localStorage.setItem("claris_chat_history:u-logout", JSON.stringify([{ role: "user", content: "Olá" }]));
+    localStorage.setItem("claris_chat_history:u-logout", JSON.stringify([{ role: "user", content: "OlÃ¡" }]));
 
     await act(async () => {
       await authRef!.logout();

@@ -33,6 +33,7 @@ const AGENDA_TOOL_NAMES = [
 const TASK_TOOL_NAMES = [
   'get_pending_tasks',
   'create_task',
+  'batch_create_tasks',
   'update_task',
   'change_task_status',
   'add_tag_to_task',
@@ -84,7 +85,7 @@ const SYSTEM_PROMPT_LINES = [
   'Quando houver risco ou pendencia, explique o motivo e sugira a acao concreta mais util.',
   'Pode agir sem confirmar: checklist, lembrete interno, tarefa pessoal, notificacao interna e save_suggestion.',
   'Precisa confirmar antes: criar ou alterar agenda compartilhada, enviar mensagem a terceiros, excluir tarefa ou evento, ou qualquer acao com impacto institucional.',
-  'Para listas, cronogramas ou varios eventos de uma vez, prefira batch_create_events.',
+  'Para listas de tarefas, checklists ou varios eventos de uma vez, prefira batch_create_tasks e batch_create_events.',
   'Para mensagens em lote, sempre prepare antes e so confirme depois de confirmacao explicita do usuario na mensagem mais recente.',
   'Para envio individual com nomes ambiguos, use find_students_for_messaging e reutilize o student_id retornado.',
   'Quando o usuario pedir ajuda sobre a plataforma, use get_platform_help.',
@@ -171,6 +172,8 @@ export function selectClarisToolsForMessage(input: ToolSelectionInput): ToolDefi
     hasAnyKeyword(combinedText, [
       'tarefa',
       'tarefas',
+      'lista de tarefas',
+      'plano de acao',
       'pendencia',
       'pendencias',
       'checklist',

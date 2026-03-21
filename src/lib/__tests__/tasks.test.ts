@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeTaskPriority, normalizeTaskStatus } from '../tasks';
+import { matchesTaskDateWindow, normalizeTaskPriority, normalizeTaskStatus } from '../tasks';
 
 describe('task normalization', () => {
   it('keeps current task statuses unchanged', () => {
@@ -33,5 +33,18 @@ describe('task normalization', () => {
     expect(normalizeTaskPriority('unknown')).toBe('medium');
     expect(normalizeTaskStatus(undefined)).toBe('todo');
     expect(normalizeTaskPriority(undefined)).toBe('medium');
+  });
+
+  it('matches due dates against the selected task period window', () => {
+    const referenceDate = new Date('2026-03-20T12:00:00');
+
+    expect(matchesTaskDateWindow('2026-03-20', 'day', referenceDate)).toBe(true);
+    expect(matchesTaskDateWindow('2026-03-21', 'day', referenceDate)).toBe(false);
+    expect(matchesTaskDateWindow('2026-03-21', 'week', referenceDate)).toBe(true);
+    expect(matchesTaskDateWindow('2026-03-30', 'week', referenceDate)).toBe(false);
+    expect(matchesTaskDateWindow('2026-03-30', 'month', referenceDate)).toBe(true);
+    expect(matchesTaskDateWindow('2026-04-01', 'month', referenceDate)).toBe(false);
+    expect(matchesTaskDateWindow(undefined, 'all', referenceDate)).toBe(true);
+    expect(matchesTaskDateWindow(undefined, 'day', referenceDate)).toBe(false);
   });
 });

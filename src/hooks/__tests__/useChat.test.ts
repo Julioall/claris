@@ -2,15 +2,15 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { useChat } from "@/hooks/useChat";
 
-const useAuthMock = vi.fn();
+const useMoodleSessionMock = vi.fn();
 const invokeMock = vi.fn();
 const fromMock = vi.fn();
 const selectStudentsMock = vi.fn();
 const inStudentsMock = vi.fn();
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => useAuthMock(),
+vi.mock("@/modules/auth/context/MoodleSessionContext", () => ({
+  useMoodleSession: () => useMoodleSessionMock(),
 }));
 
 vi.mock("@/hooks/useTrackEvent", () => ({
@@ -47,11 +47,9 @@ describe("useChat", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    useAuthMock.mockReturnValue({
-      moodleSession: {
-        moodleUrl: "https://moodle.example.com",
-        moodleToken: "token-123",
-      },
+    useMoodleSessionMock.mockReturnValue({
+      moodleUrl: "https://moodle.example.com",
+      moodleToken: "token-123",
     });
 
     setupStudentsChain();
@@ -224,7 +222,7 @@ describe("useChat", () => {
   });
 
   it("returns false when no session or when message text is blank", async () => {
-    useAuthMock.mockReturnValue({ moodleSession: null });
+    useMoodleSessionMock.mockReturnValue(null);
 
     const { result } = renderHook(() => useChat());
 
@@ -236,11 +234,9 @@ describe("useChat", () => {
     expect(noSessionResult).toBe(false);
     expect(invokeMock).not.toHaveBeenCalled();
 
-    useAuthMock.mockReturnValue({
-      moodleSession: {
-        moodleUrl: "https://moodle.example.com",
-        moodleToken: "token-123",
-      },
+    useMoodleSessionMock.mockReturnValue({
+      moodleUrl: "https://moodle.example.com",
+      moodleToken: "token-123",
     });
 
     const { result: resultWithSession } = renderHook(() => useChat());

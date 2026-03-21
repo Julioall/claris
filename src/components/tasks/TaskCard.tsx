@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Calendar, Edit2, Trash2, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Task } from '@/types';
-import { format, isPast, parseISO } from 'date-fns';
+import { endOfDay, format, isPast, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 const PRIORITY_STYLES: Record<string, string> = {
@@ -31,7 +31,7 @@ interface TaskCardProps {
 }
 
 export function TaskCard({ task, onEdit, onDelete, onStatusChange, onClick, className }: TaskCardProps) {
-  const isOverdue = task.due_date && task.status !== 'done' && isPast(parseISO(task.due_date));
+  const isOverdue = task.due_date && task.status !== 'done' && isPast(endOfDay(parseISO(task.due_date)));
 
   // Combine relation tags and AI text tags for display
   const relationTagLabels = (task.tags ?? []).map(t => t.label);

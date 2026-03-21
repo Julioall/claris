@@ -27,6 +27,17 @@ describe('claris chat configuration', () => {
     expect(toolNames).not.toContain('batch_create_events');
   });
 
+  it('selects task batch tools for checklists and task lists', () => {
+    const tools = selectClarisToolsForMessage({
+      latestUserMessage: 'Crie uma lista de tarefas para acompanhar os alunos em risco esta semana.',
+    });
+    const toolNames = tools.map((tool) => tool.function.name);
+
+    expect(toolNames).toContain('batch_create_tasks');
+    expect(toolNames).toContain('list_tasks');
+    expect(toolNames).not.toContain('batch_create_events');
+  });
+
   it('falls back to the full tool catalog when the request is generic', () => {
     const tools = selectClarisToolsForMessage({
       latestUserMessage: 'Oi',
@@ -42,6 +53,7 @@ describe('claris chat configuration', () => {
     const prompt = buildClarisSystemPrompt(tools);
 
     expect(prompt).toContain('Ferramentas ativas nesta conversa:');
+    expect(prompt).toContain('batch_create_tasks');
     expect(prompt).toContain('list_tasks');
     expect(prompt).not.toContain('Camada 4');
   });

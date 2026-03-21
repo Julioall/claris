@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
 import { useTrackEvent } from '@/hooks/useTrackEvent';
 import { useErrorLog } from '@/hooks/useErrorLog';
+import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
 
 export interface ChatMessage {
   id: string;
@@ -78,7 +78,7 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string | nul
 }
 
 export function useChat() {
-  const { moodleSession: session } = useAuth();
+  const session = useMoodleSession();
   const { track } = useTrackEvent();
   const { logError } = useErrorLog();
   const [isLoading, setIsLoading] = useState(false);

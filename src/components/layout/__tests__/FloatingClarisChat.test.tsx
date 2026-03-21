@@ -41,10 +41,13 @@ vi.mock('@/integrations/supabase/client', () => ({
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 'user-1' },
-    moodleSession: {
-      moodleUrl: 'https://moodle.example.com',
-      moodleToken: 'token-123',
-    },
+  }),
+}));
+
+vi.mock('@/modules/auth/context/MoodleSessionContext', () => ({
+  useMoodleSession: () => ({
+    moodleUrl: 'https://moodle.example.com',
+    moodleToken: 'token-123',
   }),
 }));
 
