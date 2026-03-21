@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   DropdownMenu,
@@ -420,11 +421,11 @@ async function deleteConversationRow(id: string, userId: string) {
 export interface FloatingClarisChatProps { variant?: 'floating' | 'page'; }
 
 export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatProps) {
-  const auth = useAuth() as { moodleSession?: { moodleUrl: string; moodleToken: string } | null; user?: { id: string } | null };
+  const auth = useAuth() as { user?: { id: string } | null };
+  const moodleSession = useMoodleSession();
   const { isAdmin } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
-  const moodleSession = auth.moodleSession ?? null;
   const userId = auth.user?.id ?? 'anonymous';
   const isFloating = variant === 'floating';
   const historyStorageKey = `${CLARIS_HISTORY_STORAGE_PREFIX}:${userId}`;

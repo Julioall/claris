@@ -25,6 +25,7 @@ import {
 import { DynamicVariableInput, resolveVariables, DYNAMIC_VARIABLES } from './DynamicVariableInput';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { buildCourseCategoryFilterOptions, parseCourseCategoryPath } from '@/lib/course-category';
@@ -37,11 +38,6 @@ import {
 } from '@/lib/message-template-context';
 import { MESSAGE_TEMPLATE_CATEGORIES } from '@/lib/message-template-defaults';
 import { ensureDefaultMessageTemplates } from '@/lib/message-template-seeding';
-
-function useMoodleSession() {
-  const auth = useAuth() as { moodleSession?: { moodleToken: string; moodleUrl: string } | null };
-  return auth.moodleSession || null;
-}
 
 interface StudentCourseOption {
   course_id: string;

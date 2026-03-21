@@ -193,7 +193,7 @@ export interface AuthContextType {
   isSyncing: boolean;
   isAuthenticated: boolean;
   login: (username: string, password: string, moodleUrl: string, service?: string) => Promise<boolean>;
-  logout: () => void;
+  logout: () => Promise<void>;
   syncData: () => Promise<void>;
   lastSync: string | null;
 }

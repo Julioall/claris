@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { GradeDebugCard } from "@/components/settings/GradeDebugCard";
 
-const useAuthMock = vi.fn();
+const useMoodleSessionMock = vi.fn();
 const fromMock = vi.fn();
 const invokeMock = vi.fn();
 
@@ -18,8 +18,8 @@ const studentCoursesLimitMock = vi.fn();
 
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => useAuthMock(),
+vi.mock("@/modules/auth/context/MoodleSessionContext", () => ({
+  useMoodleSession: () => useMoodleSessionMock(),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -42,11 +42,9 @@ describe("GradeDebugCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    useAuthMock.mockReturnValue({
-      moodleSession: {
-        moodleUrl: "https://moodle.example.com",
-        moodleToken: "token-123",
-      },
+    useMoodleSessionMock.mockReturnValue({
+      moodleUrl: "https://moodle.example.com",
+      moodleToken: "token-123",
     });
 
     fromMock.mockImplementation((table: string) => {

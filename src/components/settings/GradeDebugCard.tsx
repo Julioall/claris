@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
 
 interface CourseOption {
   id: string;
@@ -22,7 +22,7 @@ interface StudentOption {
 }
 
 export function GradeDebugCard() {
-  const { moodleSession } = useAuth();
+  const moodleSession = useMoodleSession();
   const [isOpen, setIsOpen] = useState(false);
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [students, setStudents] = useState<StudentOption[]>([]);

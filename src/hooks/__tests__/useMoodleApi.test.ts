@@ -50,6 +50,7 @@ describe("useMoodleApi", () => {
         moodleUrl: "https://moodle.local",
         username: "julio",
         password: "secret",
+        service: "moodle_mobile_app",
       },
     });
     expect(loginResult).toEqual({
