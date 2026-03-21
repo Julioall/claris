@@ -1,9 +1,13 @@
-import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Video, Users, AlignLeft, PackageCheck, GraduationCap, HelpCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import type { CalendarEvent, CalendarEventType } from '@/types';
+import type { CalendarEvent, Task } from '@/types';
+import { buildAgendaItems, getAgendaItemsOnDate, type AgendaItem } from '@/lib/agenda';
+import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/tasks';
+import { AGENDA_TASK_APPEARANCE, CALENDAR_EVENT_APPEARANCE } from './agenda-item-appearance';
 import {
   format,
   startOfMonth,
@@ -12,7 +16,6 @@ import {
   startOfWeek,
   endOfWeek,
   isSameMonth,
-  parseISO,
   addMonths,
   subMonths,
   isToday,
@@ -20,28 +23,53 @@ import {
 } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const TYPE_CONFIG: Record<CalendarEventType, { label: string; icon: React.ElementType; chip: string }> = {
-  manual:    { label: 'Geral',        icon: AlignLeft,   chip: 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-200' },
-  webclass:  { label: 'WebAula',      icon: Video,       chip: 'bg-blue-200 text-blue-800 dark:bg-blue-800 dark:text-blue-200' },
-  meeting:   { label: 'Reunião',      icon: Users,       chip: 'bg-violet-200 text-violet-800 dark:bg-violet-800 dark:text-violet-200' },
-  alignment: { label: 'Alinhamento',  icon: Users,       chip: 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200' },
-  delivery:  { label: 'Entrega',      icon: PackageCheck, chip: 'bg-emerald-200 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200' },
-  training:  { label: 'Treinamento',  icon: GraduationCap, chip: 'bg-fuchsia-200 text-fuchsia-800 dark:bg-fuchsia-800 dark:text-fuchsia-200' },
-  other:     { label: 'Outro',        icon: HelpCircle,  chip: 'bg-muted text-muted-foreground' },
-};
-
-const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab'];
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, monthIndex) => {
+  const rawMonthLabel = format(new Date(2026, monthIndex, 1), 'MMMM', { locale: ptBR });
+  return {
+    value: String(monthIndex),
+    label: rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1),
+  };
+});
 
 interface AgendaCalendarViewProps {
   events: CalendarEvent[];
+  tasks?: Task[];
   onEdit: (event: CalendarEvent) => void;
   onDelete: (id: string) => void;
   onCreateOnDate?: (dateStr: string) => void;
+  onTaskClick?: (task: Task) => void;
 }
 
-export function AgendaCalendarView({ events, onEdit, onCreateOnDate }: AgendaCalendarViewProps) {
+function getAgendaItemAppearance(item: AgendaItem) {
+  if (item.kind === 'event') {
+    return CALENDAR_EVENT_APPEARANCE[item.event.type] ?? CALENDAR_EVENT_APPEARANCE.other;
+  }
+
+  return AGENDA_TASK_APPEARANCE;
+}
+
+function getAgendaItemMeta(item: AgendaItem) {
+  if (item.kind === 'event') {
+    const startLabel = format(new Date(item.event.start_at), 'HH:mm');
+    const endLabel = item.event.end_at ? format(new Date(item.event.end_at), 'HH:mm') : null;
+    return endLabel ? `${startLabel} → ${endLabel}` : startLabel;
+  }
+
+  return `${TASK_STATUS_LABELS[item.task.status]} · ${TASK_PRIORITY_LABELS[item.task.priority]}`;
+}
+
+export function AgendaCalendarView({
+  events,
+  tasks = [],
+  onEdit,
+  onCreateOnDate,
+  onTaskClick,
+}: AgendaCalendarViewProps) {
   const [currentMonth, setCurrentMonth] = useState(() => startOfMonth(new Date()));
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+
+  const agendaItems = useMemo(() => buildAgendaItems(events, tasks), [events, tasks]);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -49,45 +77,99 @@ export function AgendaCalendarView({ events, onEdit, onCreateOnDate }: AgendaCal
   const calEnd = endOfWeek(monthEnd, { weekStartsOn: 0 });
   const days = eachDayOfInterval({ start: calStart, end: calEnd });
 
-  // Use local date string comparison to avoid timezone boundary issues.
-  // Supabase returns UTC timestamps; comparing YYYY-MM-DD strings in local time
-  // ensures events align with the day the user picks on the calendar grid.
-  const eventDateKey = (ev: CalendarEvent) => {
-    const d = parseISO(ev.start_at);
-    return format(d, 'yyyy-MM-dd');
-  };
-
   const dayKey = (day: Date) => format(day, 'yyyy-MM-dd');
 
-  const eventsOnDay = (day: Date) =>
-    events.filter(ev => eventDateKey(ev) === dayKey(day));
+  const itemsOnDay = (day: Date) => getAgendaItemsOnDate(agendaItems, dayKey(day));
 
-  const selectedDayEvents = selectedDate ? eventsOnDay(selectedDate) : [];
+  const selectedDayItems = selectedDate ? itemsOnDay(selectedDate) : [];
+  const yearOptions = useMemo(() => {
+    const referenceYears = agendaItems.map((item) => new Date(item.startsAt).getFullYear());
+    referenceYears.push(currentMonth.getFullYear(), new Date().getFullYear());
 
-  const prevMonth = () => { setCurrentMonth(subMonths(currentMonth, 1)); setSelectedDate(null); };
-  const nextMonth = () => { setCurrentMonth(addMonths(currentMonth, 1)); setSelectedDate(null); };
-  const goToday = () => { setCurrentMonth(startOfMonth(new Date())); setSelectedDate(new Date()); };
+    const minYear = Math.min(...referenceYears) - 1;
+    const maxYear = Math.max(...referenceYears) + 1;
+
+    return Array.from({ length: maxYear - minYear + 1 }, (_, index) => minYear + index);
+  }, [agendaItems, currentMonth]);
+
+  const prevMonth = () => {
+    setCurrentMonth(subMonths(currentMonth, 1));
+    setSelectedDate(null);
+  };
+
+  const nextMonth = () => {
+    setCurrentMonth(addMonths(currentMonth, 1));
+    setSelectedDate(null);
+  };
+
+  const goToday = () => {
+    setCurrentMonth(startOfMonth(new Date()));
+    setSelectedDate(new Date());
+  };
+
+  const handleMonthSelect = (monthValue: string) => {
+    setCurrentMonth(new Date(currentMonth.getFullYear(), Number(monthValue), 1));
+    setSelectedDate(null);
+  };
+
+  const handleYearSelect = (yearValue: string) => {
+    setCurrentMonth(new Date(Number(yearValue), currentMonth.getMonth(), 1));
+    setSelectedDate(null);
+  };
 
   const handleDayClick = (day: Date) => {
-    setSelectedDate(prev => prev && isSameDay(prev, day) ? null : day);
+    setSelectedDate((previousDate) => (previousDate && isSameDay(previousDate, day) ? null : day));
   };
 
   const handleCreateOnDate = (day: Date) => {
     if (onCreateOnDate) {
-      const localStr = format(day, "yyyy-MM-dd'T'08:00");
-      onCreateOnDate(localStr);
+      const localDate = format(day, "yyyy-MM-dd'T'08:00");
+      onCreateOnDate(localDate);
     }
+  };
+
+  const handleItemClick = (item: AgendaItem) => {
+    if (item.kind === 'event') {
+      onEdit(item.event);
+      return;
+    }
+
+    onTaskClick?.(item.task);
   };
 
   return (
     <div className="space-y-4">
-      {/* Month navigation */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold capitalize">
-          {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-        </h2>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <Select value={String(currentMonth.getMonth())} onValueChange={handleMonthSelect}>
+            <SelectTrigger aria-label="Selecionar mes" className="h-8 w-40 text-xs">
+              <SelectValue placeholder="Mes" />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTH_OPTIONS.map((month) => (
+                <SelectItem key={month.value} value={month.value}>
+                  {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={String(currentMonth.getFullYear())} onValueChange={handleYearSelect}>
+            <SelectTrigger aria-label="Selecionar ano" className="h-8 w-28 text-xs">
+              <SelectValue placeholder="Ano" />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((year) => (
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="outline" onClick={goToday} className="h-8 text-xs px-2">
+          <Button size="sm" variant="outline" onClick={goToday} className="h-8 px-2 text-xs">
             Hoje
           </Button>
           <Button size="icon" variant="outline" className="h-8 w-8" onClick={prevMonth}>
@@ -99,57 +181,54 @@ export function AgendaCalendarView({ events, onEdit, onCreateOnDate }: AgendaCal
         </div>
       </div>
 
-      {/* Calendar grid */}
-      <div className="rounded-lg border overflow-hidden">
-        {/* Weekday headers */}
+      <div className="overflow-hidden rounded-lg border">
         <div className="grid grid-cols-7 border-b bg-muted/40">
-          {WEEKDAYS.map(wd => (
-            <div key={wd} className="py-2 text-center text-[11px] font-medium text-muted-foreground">
-              {wd}
+          {WEEKDAYS.map((weekday) => (
+            <div key={weekday} className="py-2 text-center text-[11px] font-medium text-muted-foreground">
+              {weekday}
             </div>
           ))}
         </div>
 
-        {/* Day cells */}
         <div className="grid grid-cols-7">
-          {days.map((day, idx) => {
-            const dayEvents = eventsOnDay(day);
-            const isCurrentMonth = isSameMonth(day, currentMonth);
-            const isSelected = selectedDate && isSameDay(day, selectedDate);
-            const today = isToday(day);
+          {days.map((day, index) => {
+            const dayItems = itemsOnDay(day);
+            const isCurrentMonthDay = isSameMonth(day, currentMonth);
+            const isSelected = Boolean(selectedDate) && isSameDay(day, selectedDate);
+            const isTodayCell = isToday(day);
 
             return (
               <div
-                key={idx}
+                key={index}
                 onClick={() => handleDayClick(day)}
                 className={cn(
-                  'group relative min-h-[80px] border-b border-r p-1 cursor-pointer transition-colors',
-                  !isCurrentMonth && 'bg-muted/20',
+                  'group relative min-h-[80px] cursor-pointer border-b border-r p-1 transition-colors hover:bg-muted/40',
+                  !isCurrentMonthDay && 'bg-muted/20',
                   isSelected && 'bg-primary/5',
-                  today && 'ring-inset ring-2 ring-primary/30',
-                  'hover:bg-muted/40',
-                  // remove right border on last column
-                  (idx + 1) % 7 === 0 && 'border-r-0',
+                  isTodayCell && 'ring-2 ring-primary/30 ring-inset',
+                  (index + 1) % 7 === 0 && 'border-r-0',
                 )}
               >
-                {/* Day number */}
                 <div className="flex items-center justify-between">
                   <span
                     className={cn(
                       'inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-medium',
-                      today && 'bg-primary text-primary-foreground',
-                      !today && !isCurrentMonth && 'text-muted-foreground/50',
-                      !today && isCurrentMonth && 'text-foreground',
+                      isTodayCell && 'bg-primary text-primary-foreground',
+                      !isTodayCell && !isCurrentMonthDay && 'text-muted-foreground/50',
+                      !isTodayCell && isCurrentMonthDay && 'text-foreground',
                     )}
                   >
                     {format(day, 'd')}
                   </span>
-                  {onCreateOnDate && isCurrentMonth && (
+                  {onCreateOnDate && isCurrentMonthDay && (
                     <Button
                       size="icon"
                       variant="ghost"
-                      className="h-4 w-4 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
-                      onClick={e => { e.stopPropagation(); handleCreateOnDate(day); }}
+                      className="h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleCreateOnDate(day);
+                      }}
                       title="Novo evento"
                     >
                       <Plus className="h-3 w-3" />
@@ -157,27 +236,30 @@ export function AgendaCalendarView({ events, onEdit, onCreateOnDate }: AgendaCal
                   )}
                 </div>
 
-                {/* Event chips */}
                 <div className="mt-0.5 space-y-0.5">
-                  {dayEvents.slice(0, 3).map(ev => {
-                    const cfg = TYPE_CONFIG[ev.type] ?? TYPE_CONFIG.other;
+                  {dayItems.slice(0, 3).map((item) => {
+                    const appearance = getAgendaItemAppearance(item);
+
                     return (
                       <button
-                        key={ev.id}
-                        onClick={e => { e.stopPropagation(); onEdit(ev); }}
+                        key={`${item.kind}-${item.id}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleItemClick(item);
+                        }}
                         className={cn(
-                          'w-full truncate rounded px-1 py-0.5 text-left text-[10px] font-medium transition-opacity hover:opacity-80',
-                          cfg.chip,
+                          'w-full truncate rounded border px-1 py-0.5 text-left text-[10px] font-medium transition-opacity hover:opacity-80',
+                          appearance.tone,
                         )}
-                        title={ev.title}
+                        title={item.title}
                       >
-                        {ev.title}
+                        {item.title}
                       </button>
                     );
                   })}
-                  {dayEvents.length > 3 && (
-                    <span className="block text-[10px] text-muted-foreground pl-1">
-                      +{dayEvents.length - 3} mais
+                  {dayItems.length > 3 && (
+                    <span className="block pl-1 text-[10px] text-muted-foreground">
+                      +{dayItems.length - 3} mais
                     </span>
                   )}
                 </div>
@@ -187,51 +269,51 @@ export function AgendaCalendarView({ events, onEdit, onCreateOnDate }: AgendaCal
         </div>
       </div>
 
-      {/* Selected day events */}
       {selectedDate && (
-        <div className="rounded-lg border p-4 space-y-3">
+        <div className="space-y-3 rounded-lg border p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold">
               {format(selectedDate, "EEEE, d 'de' MMMM", { locale: ptBR })}
             </h3>
             {onCreateOnDate && (
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleCreateOnDate(selectedDate)}>
+              <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => handleCreateOnDate(selectedDate)}>
                 <Plus className="h-3 w-3" />
                 Novo evento
               </Button>
             )}
           </div>
 
-          {selectedDayEvents.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Nenhum evento neste dia.</p>
+          {selectedDayItems.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nenhum compromisso neste dia.</p>
           ) : (
             <div className="space-y-2">
-              {selectedDayEvents.map(ev => {
-                const cfg = TYPE_CONFIG[ev.type] ?? TYPE_CONFIG.other;
-                const Icon = cfg.icon;
+              {selectedDayItems.map((item) => {
+                const appearance = getAgendaItemAppearance(item);
+                const Icon = appearance.icon;
+
                 return (
-                  <div
-                    key={ev.id}
-                    className="flex items-start gap-3 rounded-lg border bg-card p-3 hover:shadow-sm transition-shadow cursor-pointer"
-                    onClick={() => onEdit(ev)}
+                  <button
+                    key={`${item.kind}-${item.id}`}
+                    type="button"
+                    className="flex w-full items-start gap-3 rounded-lg border bg-card p-3 text-left transition-shadow hover:shadow-sm"
+                    onClick={() => handleItemClick(item)}
                   >
-                    <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full', cfg.chip)}>
+                    <div className={cn('flex h-7 w-7 shrink-0 items-center justify-center rounded-full border', appearance.tone)}>
                       <Icon className="h-3.5 w-3.5" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{ev.title}</p>
-                      {ev.description && <p className="text-xs text-muted-foreground line-clamp-1">{ev.description}</p>}
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">
-                          {format(parseISO(ev.start_at), 'HH:mm')}
-                          {ev.end_at && ` → ${format(parseISO(ev.end_at), 'HH:mm')}`}
-                        </span>
-                        <Badge variant="outline" className={cn('text-[10px] px-1.5 py-0', cfg.chip)}>
-                          {cfg.label}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">{item.title}</p>
+                      {item.description && (
+                        <p className="line-clamp-1 text-xs text-muted-foreground">{item.description}</p>
+                      )}
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{getAgendaItemMeta(item)}</span>
+                        <Badge variant="outline" className={cn('px-1.5 py-0 text-[10px]', appearance.tone)}>
+                          {appearance.label}
                         </Badge>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>

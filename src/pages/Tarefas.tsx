@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { CheckSquare, Plus, ListFilter, Tag as TagIcon, Sparkles, List, LayoutDashboard } from 'lucide-react';
+import { CheckSquare, Plus, ListFilter, Tag as TagIcon, Sparkles, List, LayoutDashboard, CalendarRange } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -14,6 +14,7 @@ import { TaskForm } from '@/components/tasks/TaskForm';
 import { TaskDetailDrawer } from '@/components/tasks/TaskDetailDrawer';
 import { useTasks } from '@/hooks/useTasks';
 import type { Task, TaskStatus, TaskPriority } from '@/types';
+import { matchesTaskDateWindow, TASK_DATE_WINDOW_OPTIONS, type TaskDateWindow } from '@/lib/tasks';
 
 type StatusFilter = 'all' | TaskStatus;
 type ViewMode = 'list' | 'kanban';
@@ -27,9 +28,10 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
 
 export default function Tarefas() {
   const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } = useTasks();
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [priorityFilter, setPriorityFilter] = useState<'all' | TaskPriority>('all');
+  const [dateWindow, setDateWindow] = useState<TaskDateWindow>('day');
   const [tagSearch, setTagSearch] = useState('');
   const [aiOnly, setAiOnly] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -38,10 +40,10 @@ export default function Tarefas() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
 
-  const filtered = useMemo(() => {
+  const baseFiltered = useMemo(() => {
     const tagQ = tagSearch.trim().toLowerCase();
     return tasks.filter(t => {
-      if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+      if (!matchesTaskDateWindow(t.due_date, dateWindow)) return false;
       if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
       if (aiOnly && !t.suggested_by_ai) return false;
       if (tagQ) {
@@ -53,14 +55,22 @@ export default function Tarefas() {
       }
       return true;
     });
-  }, [tasks, statusFilter, priorityFilter, tagSearch, aiOnly]);
+  }, [tasks, dateWindow, priorityFilter, tagSearch, aiOnly]);
+
+  const filtered = useMemo(() => {
+    if (statusFilter === 'all') {
+      return baseFiltered;
+    }
+
+    return baseFiltered.filter((task) => task.status === statusFilter);
+  }, [baseFiltered, statusFilter]);
 
   const counts = useMemo(() => ({
-    all: tasks.length,
-    todo: tasks.filter(t => t.status === 'todo').length,
-    in_progress: tasks.filter(t => t.status === 'in_progress').length,
-    done: tasks.filter(t => t.status === 'done').length,
-  }), [tasks]);
+    all: baseFiltered.length,
+    todo: baseFiltered.filter(t => t.status === 'todo').length,
+    in_progress: baseFiltered.filter(t => t.status === 'in_progress').length,
+    done: baseFiltered.filter(t => t.status === 'done').length,
+  }), [baseFiltered]);
 
   const openCreate = (status: TaskStatus = 'todo') => { setDefaultStatus(status); setEditingTask(null); setFormOpen(true); };
   const openEdit = (task: Task) => { setEditingTask(task); setFormOpen(true); };
@@ -107,15 +117,6 @@ export default function Tarefas() {
           {/* View toggle */}
           <div className="flex rounded-md border overflow-hidden">
             <Button
-              variant={viewMode === 'list' ? 'default' : 'ghost'}
-              size="sm"
-              className="h-9 rounded-none px-3 gap-1.5 text-xs"
-              onClick={() => setViewMode('list')}
-            >
-              <List className="h-3.5 w-3.5" />
-              Lista
-            </Button>
-            <Button
               variant={viewMode === 'kanban' ? 'default' : 'ghost'}
               size="sm"
               className="h-9 rounded-none px-3 gap-1.5 text-xs"
@@ -123,6 +124,15 @@ export default function Tarefas() {
             >
               <LayoutDashboard className="h-3.5 w-3.5" />
               Kanban
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'ghost'}
+              size="sm"
+              className="h-9 rounded-none px-3 gap-1.5 text-xs"
+              onClick={() => setViewMode('list')}
+            >
+              <List className="h-3.5 w-3.5" />
+              Lista
             </Button>
           </div>
           <Button onClick={() => openCreate()} className="shrink-0">
@@ -197,6 +207,20 @@ export default function Tarefas() {
               <SelectItem value="urgent">Urgente</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={dateWindow} onValueChange={v => setDateWindow(v as TaskDateWindow)}>
+            <SelectTrigger className="w-40 h-9 text-xs">
+              <CalendarRange className="h-3.5 w-3.5 mr-1.5" />
+              <SelectValue placeholder="Periodo" />
+            </SelectTrigger>
+            <SelectContent>
+              {TASK_DATE_WINDOW_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -219,11 +243,13 @@ export default function Tarefas() {
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-16 text-center">
           <CheckSquare className="h-10 w-10 text-muted-foreground/40 mb-3" />
           <p className="text-sm font-medium text-muted-foreground">
-            {statusFilter === 'all' && priorityFilter === 'all' && !tagSearch && !aiOnly
+            {statusFilter === 'all' && priorityFilter === 'all' && dateWindow === 'day' && !tagSearch && !aiOnly
+              ? 'Nenhuma tarefa prevista para hoje'
+              : statusFilter === 'all' && priorityFilter === 'all' && dateWindow === 'all' && !tagSearch && !aiOnly
               ? 'Nenhuma tarefa criada ainda'
               : 'Nenhuma tarefa encontrada com esses filtros'}
           </p>
-          {statusFilter === 'all' && priorityFilter === 'all' && !tagSearch && !aiOnly && (
+          {statusFilter === 'all' && priorityFilter === 'all' && dateWindow === 'all' && !tagSearch && !aiOnly && (
             <Button variant="outline" size="sm" onClick={() => openCreate()} className="mt-4">
               <Plus className="h-4 w-4 mr-1.5" />
               Criar primeira tarefa
