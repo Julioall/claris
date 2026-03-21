@@ -2,11 +2,11 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import type { AuthContextType } from '@/features/auth/types';
 import type { Course } from '@/features/courses/types';
-import { MoodleSessionProvider } from '@/modules/auth/context/MoodleSessionContext';
-import type { MoodleSession } from '@/modules/auth/domain/session';
-import type { CourseScopedSyncEntity, SyncProgress } from '@/modules/auth/domain/sync';
-import { useAuthSession } from '@/modules/auth/hooks/useAuthSession';
-import { useCourseSync } from '@/modules/auth/hooks/useCourseSync';
+import { MoodleSessionProvider } from '@/features/auth/context/MoodleSessionContext';
+import type { MoodleSession } from '@/features/auth/domain/session';
+import type { CourseScopedSyncEntity, SyncProgress } from '@/features/auth/domain/sync';
+import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
+import { useCourseSync } from '@/features/auth/hooks/useCourseSync';
 
 interface ExtendedAuthContextType extends AuthContextType {
   moodleSession: MoodleSession | null;

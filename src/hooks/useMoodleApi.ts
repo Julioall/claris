@@ -3,11 +3,11 @@ import { supabase } from '@/integrations/supabase/client';
 import type { User } from '@/features/auth/types';
 import type { Course } from '@/features/courses/types';
 import type { Student } from '@/features/students/types';
-import type { MoodleSession } from '@/modules/auth/domain/session';
+import type { MoodleSession } from '@/features/auth/domain/session';
 import {
   authenticateMoodleUser,
   fetchMoodleCoursesFromSession,
-} from '@/modules/auth/infrastructure/moodle-api';
+} from '@/features/auth/infrastructure/moodle-api';
 
 interface LoginResult {
   success: boolean;

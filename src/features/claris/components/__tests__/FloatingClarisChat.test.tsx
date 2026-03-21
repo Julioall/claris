@@ -44,7 +44,7 @@ vi.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
-vi.mock('@/modules/auth/context/MoodleSessionContext', () => ({
+vi.mock('@/features/auth/context/MoodleSessionContext', () => ({
   useMoodleSession: () => ({
     moodleUrl: 'https://moodle.example.com',
     moodleToken: 'token-123',

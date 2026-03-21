@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { supabase } from '@/integrations/supabase/client';
-import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
+import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 
 interface CourseOption {
   id: string;

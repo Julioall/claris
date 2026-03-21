@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { recalculateRiskForCourses } from '@/modules/auth/application/risk.service';
+import { recalculateRiskForCourses } from '@/features/auth/application/risk.service';
 
 const rpcMock = vi.fn();
 const fromMock = vi.fn();

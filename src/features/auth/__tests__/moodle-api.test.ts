@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   authenticateMoodleUser,
   invokeMoodleFunctionWithTimeout,
-} from '@/modules/auth/infrastructure/moodle-api';
+} from '@/features/auth/infrastructure/moodle-api';
 
 const invokeMock = vi.fn();
 const getSessionMock = vi.fn();

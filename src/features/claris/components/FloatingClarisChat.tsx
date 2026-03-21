@@ -13,7 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import type { Database, Json } from '@/integrations/supabase/types';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
+import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   DropdownMenu,

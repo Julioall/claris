@@ -74,7 +74,7 @@ src/
 - `src/features/reports/` agora concentra `ReportsPage` e o fluxo de exportacao academica.
 - `src/features/admin/` agora concentra as pages administrativas, enquanto `src/app/routes/admin/` concentra `AdminRoute` e `AdminLayout` como shell de roteamento.
 - `src/lib/claris-settings.ts` e `src/components/ui/claris-logo.tsx` permanecem compartilhados por ainda atenderem mais de um dominio.
-- `src/modules/auth/` e a referencia atual de slice extraido; ele pode continuar como esta no curto prazo e ser renomeado para `src/features/auth/` em etapa posterior.
+- `src/features/auth/` concentra sessao Moodle, sync, risco e servicos de autenticacao como slice de dominio.
 - o restante do frontend ainda esta majoritariamente organizado por pastas tecnicas.
 
 ## Sequencia recomendada

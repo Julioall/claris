@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, BookOpen, Users, ClipboardList, GraduationCap } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
-import type { SyncStep } from '@/modules/auth/domain/sync';
+import type { SyncStep } from '@/features/auth/domain/sync';
 
 interface SyncProgressDialogProps {
   open: boolean;

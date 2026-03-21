@@ -19,7 +19,7 @@ This refactor keeps the public `useAuth()` API compatible, but moves the impleme
 ## Current Slice
 
 ```text
-src/modules/auth/
+src/features/auth/
   application/
     risk.service.ts
     system-notification.service.ts
@@ -43,45 +43,45 @@ src/modules/auth/
 
 - `src/contexts/AuthContext.tsx`
   - only composes hooks and exposes the legacy `useAuth()` contract
-- `src/modules/auth/context/MoodleSessionContext.tsx`
+- `src/features/auth/context/MoodleSessionContext.tsx`
   - dedicated access point for Moodle session consumers
 
 ### Application
 
-- `src/modules/auth/hooks/useAuthSession.ts`
+- `src/features/auth/hooks/useAuthSession.ts`
   - login / logout
   - auth bootstrap from Supabase
   - local session hydration
   - authenticated state
-- `src/modules/auth/hooks/useCourseSync.ts`
+- `src/features/auth/hooks/useCourseSync.ts`
   - initial sync
   - incremental sync
   - sync progress tracking
   - orchestration of risk update and notifications
-- `src/modules/auth/application/risk.service.ts`
+- `src/features/auth/application/risk.service.ts`
   - course risk recalculation
   - fallback from course RPC to student RPC
-- `src/modules/auth/application/system-notification.service.ts`
+- `src/features/auth/application/system-notification.service.ts`
   - writes sync lifecycle notifications
 
 ### Infrastructure
 
-- `src/modules/auth/infrastructure/session-storage.ts`
+- `src/features/auth/infrastructure/session-storage.ts`
   - sessionStorage load/save/clear
-- `src/modules/auth/infrastructure/moodle-api.ts`
+- `src/features/auth/infrastructure/moodle-api.ts`
   - Moodle auth edge call
   - edge HTTP calls with timeout
   - auth headers / publishable key / bearer token
   - function error parsing
-- `src/modules/auth/infrastructure/course-sync.service.ts`
+- `src/features/auth/infrastructure/course-sync.service.ts`
   - course resolution
   - batched student/activity/grade sync execution
 
 ### Domain
 
-- `src/modules/auth/domain/session.ts`
+- `src/features/auth/domain/session.ts`
   - `MoodleSession`, stored session, session context
-- `src/modules/auth/domain/sync.ts`
+- `src/features/auth/domain/sync.ts`
   - sync entities, step state, sync progress model
 
 ## Mapping From The Old AuthContext
@@ -107,7 +107,7 @@ src/modules/auth/
 
 The refactor keeps integration coverage around `AuthContext`, and adds focused unit tests for extracted services:
 
-- `src/modules/auth/__tests__/moodle-api.test.ts`
-- `src/modules/auth/__tests__/risk.service.test.ts`
+- `src/features/auth/__tests__/moodle-api.test.ts`
+- `src/features/auth/__tests__/risk.service.test.ts`
 
 This keeps the provider covered end-to-end while also testing the new seams directly.

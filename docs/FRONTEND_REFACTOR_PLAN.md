@@ -63,12 +63,12 @@ Status: `completed`
 Escopo concluido:
 
 - `AuthContext` virou composition root
-- sessao Moodle, sync, risco e notificacoes foram extraidos para `src/modules/auth/`
+- sessao Moodle, sync, risco e notificacoes foram extraidos para `src/features/auth/`
 - `useMoodleSession()` passou a ser o acesso dedicado a credenciais Moodle
 
 Observacao:
 
-- a renomeacao de `src/modules/auth/` para `src/features/auth/` ficou para fase futura
+- o rename estrutural do auth ficou para fase futura
 
 ### Fase 2: Dominios Base
 
@@ -199,25 +199,18 @@ Observacoes:
 
 ### Fase 10: Auth Rename e Fechamento Estrutural
 
-Status: `planned`
+Status: `completed`
 
-Objetivo:
+Escopo concluido:
 
-- alinhar o auth extraido com a convencao final de `features`
+- o auth foi consolidado em `src/features/auth/`
+- `AuthContext`, hooks utilitarios, componentes que dependem da sessao Moodle e testes passaram a importar o novo caminho
+- a documentacao operacional e arquitetural foi atualizada para a nova convencao
 
-Arquivos alvo:
+Observacoes:
 
-- `src/modules/auth/**/*`
-
-Tarefas:
-
-- renomear `src/modules/auth/` para `src/features/auth/`
-- ajustar imports
-- atualizar docs
-
-Observacao:
-
-- fazer isso apenas depois de estabilizar os dominios restantes, para nao aumentar churn desnecessario
+- `src/features/auth/types.ts` foi preservado no root do slice e agora convive com `application/`, `context/`, `domain/`, `hooks/` e `infrastructure/`
+- o rename foi mantido estritamente estrutural, sem alterar comportamento funcional do login, sessao, sync ou recalculo de risco
 
 ### Fase 11: Limpeza Final e Endurecimento
 
@@ -253,13 +246,13 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 
 ## Proxima Fase Recomendada
 
-Proxima fase a executar: `Fase 10: Auth Rename e Fechamento Estrutural`
+Proxima fase a executar: `Fase 11: Limpeza Final e Endurecimento`
 
 Motivo:
 
-- os dominios funcionais remanescentes ja foram trazidos para `features/`
-- o principal passivo estrutural agora e o auth ainda morar em `src/modules/auth/`
-- renomear o auth antes da limpeza final reduz a chance de a fase 11 acumular churn desnecessario
+- os slices principais ja estao alinhados na convencao final de `features/`
+- agora o passivo e majoritariamente de limpeza, reducao de compatibilidades e endurecimento do projeto
+- essa etapa final deve revisar o que sobrou em `src/pages/`, `src/hooks/`, `src/lib/`, `src/services/` e nos barrels temporarios
 
 ## Ao Concluir Uma Fase
 

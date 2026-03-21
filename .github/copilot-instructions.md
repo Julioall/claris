@@ -65,8 +65,8 @@ supabase/
 
 ### Auth Module
 - `src/contexts/AuthContext.tsx` remains the public composition root for auth-related UI state.
-- The extracted auth slice lives under `src/modules/auth/` and owns session, Moodle credentials, sync orchestration, timeout/error handling, and risk recalculation.
-- New UI that only needs Moodle credentials should prefer `useMoodleSession()` from `src/modules/auth/context/MoodleSessionContext.tsx`.
+- The extracted auth slice lives under `src/features/auth/` and owns session, Moodle credentials, sync orchestration, timeout/error handling, and risk recalculation.
+- New UI that only needs Moodle credentials should prefer `useMoodleSession()` from `src/features/auth/context/MoodleSessionContext.tsx`.
 
 ### App Shell
 - `src/app/providers/` owns app-wide providers and global shell composition.
@@ -97,7 +97,7 @@ supabase/
 ### Data Fetching
 - Use **TanStack Query** (`useQuery`, `useMutation`) for all server state
 - Prefer domain hooks in `src/features/<domain>/hooks/`; keep `src/hooks/` only for truly cross-domain hooks or yet-to-be-migrated domains
-- Keep auth/session/sync integration logic in `src/modules/auth/` instead of growing `AuthContext.tsx`
+- Keep auth/session/sync integration logic in `src/features/auth/` instead of growing `AuthContext.tsx`
 - Supabase client is imported from `@/integrations/supabase/client`
 
 ### Styling

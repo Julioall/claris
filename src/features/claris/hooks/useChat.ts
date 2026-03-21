@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useTrackEvent } from '@/hooks/useTrackEvent';
 import { useErrorLog } from '@/hooks/useErrorLog';
-import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
+import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 
 export interface ChatMessage {
   id: string;

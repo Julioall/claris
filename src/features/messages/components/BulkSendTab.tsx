@@ -25,7 +25,7 @@ import {
 import { DynamicVariableInput, resolveVariables, DYNAMIC_VARIABLES } from './DynamicVariableInput';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMoodleSession } from '@/modules/auth/context/MoodleSessionContext';
+import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { buildCourseCategoryFilterOptions, parseCourseCategoryPath } from '@/lib/course-category';

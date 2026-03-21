@@ -9,7 +9,7 @@ const selectStudentsMock = vi.fn();
 const inStudentsMock = vi.fn();
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-vi.mock("@/modules/auth/context/MoodleSessionContext", () => ({
+vi.mock("@/features/auth/context/MoodleSessionContext", () => ({
   useMoodleSession: () => useMoodleSessionMock(),
 }));
 
