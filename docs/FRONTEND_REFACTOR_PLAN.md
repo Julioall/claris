@@ -106,45 +106,24 @@ Escopo concluido:
 - removidos wrappers de `src/hooks/` para `useCoursesData`, `useAllCoursesData`, `useCoursePanel`, `useStudentsData`, `useStudentProfile`, `useTasks` e `useCalendarEvents`
 - removidos wrappers em `src/services/calendar.service.ts` e `src/lib/agenda.ts`
 
-## Fases Planejadas
-
 ### Fase 5: Dashboard
 
-Status: `planned`
+Status: `completed`
 
-Objetivo:
+Escopo concluido:
 
-- transformar `dashboard` em slice real, nao apenas `types.ts`
+- `DashboardPage` foi movida para `src/features/dashboard/pages/`
+- `useDashboardData` foi movido para `src/features/dashboard/hooks/`
+- componentes especificos do dominio foram movidos para `src/features/dashboard/components/`
+- acesso a dados foi extraido para `src/features/dashboard/api/dashboard.repository.ts`
+- query keys do dominio foram adicionadas em `src/features/dashboard/query-keys.ts`
+- rota lazy e testes passaram a importar o slice diretamente
 
-Arquivos alvo:
+Observacao:
 
-- `src/pages/Dashboard.tsx`
-- `src/hooks/useDashboardData.ts`
-- `src/components/dashboard/*`
+- `src/components/dashboard/ClarisSuggestions.tsx` permaneceu fora desta fase e sera tratado na `Fase 7: Claris`
 
-Estrutura alvo:
-
-```text
-src/features/dashboard/
-  components/
-  hooks/
-  pages/
-  types.ts
-```
-
-Tarefas:
-
-- mover `Dashboard.tsx` para `src/features/dashboard/pages/DashboardPage.tsx`
-- mover `useDashboardData` para `src/features/dashboard/hooks/useDashboardData.ts`
-- decidir quais componentes de `src/components/dashboard/` sao especificos do dominio e mover para o slice
-- manter apenas componentes realmente reaproveitaveis fora do slice
-- atualizar rotas, testes e imports
-
-Definicao de conclusao:
-
-- rota usa `DashboardPage` do slice
-- testes de dashboard nao importam wrapper legado
-- nao restam imports de runtime para `src/hooks/useDashboardData.ts`
+## Fases Planejadas
 
 ### Fase 6: Admin
 
@@ -327,13 +306,13 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 
 ## Proxima Fase Recomendada
 
-Proxima fase a executar: `Fase 5: Dashboard`
+Proxima fase a executar: `Fase 6: Admin`
 
 Motivo:
 
-- o dominio ja tem `types.ts`, mas ainda nao virou slice completo
-- o corte e menor e menos arriscado do que `admin` e `claris`
-- depois dele, o caminho fica mais claro para `admin` e `claris`
+- o dashboard ja virou slice real e liberou o proximo corte estrutural relevante
+- `admin` ainda concentra pages e hooks espalhados fora de `src/features/`
+- resolver `admin` antes de `claris` reduz o churn no shell e deixa o dominio de assistente para uma fase mais isolada
 
 ## Ao Concluir Uma Fase
 

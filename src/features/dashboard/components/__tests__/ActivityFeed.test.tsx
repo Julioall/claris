@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { ActivityFeed } from "@/features/dashboard/components/ActivityFeed";
 
 describe("ActivityFeed", () => {
   it("renders activity items including unknown event types", () => {

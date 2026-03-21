@@ -64,7 +64,7 @@ src/
 - `src/features/agenda/` concentra page, hook, query keys, helpers e tipos do dominio de agenda, sem depender mais dos wrappers antigos de `src/pages/`, `src/hooks/`, `src/services/` e `src/lib/`.
 - `src/features/students/` concentra page, hooks, repository e tipos do dominio de alunos, e os consumidores principais ja usam o slice diretamente.
 - `src/features/tasks/` concentra page, hooks, repository e tipos do dominio de tarefas, e o roteamento ja aponta direto para o slice.
-- `src/features/dashboard/types.ts` ja concentra os tipos do dashboard.
+- `src/features/dashboard/` agora concentra page, hook, repository, query keys, componentes e tipos do dashboard, e o roteamento ja aponta direto para o slice.
 - `src/modules/auth/` e a referencia atual de slice extraido; ele pode continuar como esta no curto prazo e ser renomeado para `src/features/auth/` em etapa posterior.
 - o restante do frontend ainda esta majoritariamente organizado por pastas tecnicas.
 

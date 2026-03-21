@@ -1,50 +1,53 @@
 import { useState } from 'react';
 import { Calendar, Filter } from 'lucide-react';
+
 import { Spinner } from '@/components/ui/spinner';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { WeeklyIndicators } from '@/components/dashboard/WeeklyIndicators';
-import { PriorityList } from '@/components/dashboard/PriorityList';
-import { CourseOverview } from '@/components/dashboard/CourseOverview';
-import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
-import { ActivitiesToReview } from '@/components/dashboard/ActivitiesToReview';
 import { ClarisSuggestions } from '@/components/dashboard/ClarisSuggestions';
 import { useCoursesData } from '@/features/courses/hooks/useCoursesData';
-import { useDashboardData } from '@/hooks/useDashboardData';
+import type { WeeklySummary } from '@/features/dashboard/types';
 
-export default function Dashboard() {
+import { ActivityFeed } from '../components/ActivityFeed';
+import { ActivitiesToReview } from '../components/ActivitiesToReview';
+import { CourseOverview } from '../components/CourseOverview';
+import { PriorityList } from '../components/PriorityList';
+import { WeeklyIndicators } from '../components/WeeklyIndicators';
+import { useDashboardData } from '../hooks/useDashboardData';
+
+const EMPTY_SUMMARY: WeeklySummary = {
+  today_events: 0,
+  today_tasks: 0,
+  activities_to_review: 0,
+  active_normal_students: 0,
+  pending_submission_assignments: 0,
+  pending_correction_assignments: 0,
+  students_at_risk: 0,
+  new_at_risk_this_week: 0,
+};
+
+export default function DashboardPage() {
   const [selectedWeek, setSelectedWeek] = useState<'current' | 'last'>('current');
   const [selectedCourse, setSelectedCourse] = useState('all');
 
-  const { 
-    summary, 
-    criticalStudents, 
+  const {
+    summary,
+    criticalStudents,
     activitiesToReview,
     activityFeed,
-    isLoading 
+    isLoading,
   } = useDashboardData(selectedWeek, selectedCourse);
 
   const { courses, isLoading: coursesLoading } = useCoursesData();
 
-  const defaultSummary = {
-    today_events: 0,
-    today_tasks: 0,
-    activities_to_review: 0,
-    active_normal_students: 0,
-    pending_submission_assignments: 0,
-    pending_correction_assignments: 0,
-    students_at_risk: 0,
-    new_at_risk_this_week: 0,
-  };
-
   if (isLoading || coursesLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Spinner className="h-8 w-8" />
       </div>
     );
@@ -63,9 +66,9 @@ export default function Dashboard() {
 
         {/* Filters */}
         <div className="flex items-center gap-2">
-          <Select value={selectedWeek} onValueChange={(v) => setSelectedWeek(v as 'current' | 'last')}>
+          <Select value={selectedWeek} onValueChange={(value) => setSelectedWeek(value as 'current' | 'last')}>
             <SelectTrigger className="w-[160px]">
-              <Calendar className="h-4 w-4 mr-2" />
+              <Calendar className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Selecione" />
             </SelectTrigger>
             <SelectContent>
@@ -76,12 +79,12 @@ export default function Dashboard() {
 
           <Select value={selectedCourse} onValueChange={setSelectedCourse}>
             <SelectTrigger className="w-[180px]">
-              <Filter className="h-4 w-4 mr-2" />
+              <Filter className="mr-2 h-4 w-4" />
               <SelectValue placeholder="Todos os cursos" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os cursos</SelectItem>
-              {courses.map(course => (
+              {courses.map((course) => (
                 <SelectItem key={course.id} value={course.id}>
                   {course.short_name || course.name}
                 </SelectItem>
@@ -92,16 +95,14 @@ export default function Dashboard() {
       </div>
 
       {/* Weekly Indicators */}
-      <WeeklyIndicators summary={summary || defaultSummary} />
+      <WeeklyIndicators summary={summary || EMPTY_SUMMARY} />
 
       {/* Claris IA proactive suggestions panel */}
       <ClarisSuggestions />
 
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-2">
-        <PriorityList 
-          criticalStudents={criticalStudents}
-        />
+        <PriorityList criticalStudents={criticalStudents} />
 
         <ActivitiesToReview activities={activitiesToReview} />
       </div>

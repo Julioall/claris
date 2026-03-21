@@ -1,18 +1,17 @@
-import { Link } from 'react-router-dom';
 import {
-  Activity, 
-  CheckCircle2, 
-  AlertTriangle, 
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
   FileText,
   MessageSquare,
-  TrendingUp,
-  TrendingDown
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { ActivityFeedItem } from '@/features/dashboard/types';
-import { format, formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+
+import type { ActivityFeedItem } from '../types';
 
 interface ActivityFeedProps {
   items: ActivityFeedItem[];
@@ -48,22 +47,24 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
           {items.map((item, index) => {
             const config = getEventConfig(item.event_type);
             const Icon = config.icon;
-            
+
             return (
               <div key={item.id} className="relative">
                 {/* Timeline connector */}
                 {index < items.length - 1 && (
                   <div className="absolute left-4 top-10 -bottom-1 w-0.5 bg-border" />
                 )}
-                
+
                 <div className="flex gap-3 py-2">
-                  <div className={cn(
-                    'h-8 w-8 rounded-full flex items-center justify-center shrink-0',
-                    config.className
-                  )}>
+                  <div
+                    className={cn(
+                      'h-8 w-8 rounded-full flex shrink-0 items-center justify-center',
+                      config.className,
+                    )}
+                  >
                     <Icon className="h-4 w-4" />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{item.title}</p>
                     {item.description && (
                       <p className="text-xs text-muted-foreground truncate">

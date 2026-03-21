@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { WeeklyIndicators } from "@/components/dashboard/WeeklyIndicators";
+import { WeeklyIndicators } from "@/features/dashboard/components/WeeklyIndicators";
 
 vi.mock("@/components/ui/StatCard", () => ({
   StatCard: ({

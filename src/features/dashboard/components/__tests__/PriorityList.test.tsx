@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { PriorityList } from "@/components/dashboard/PriorityList";
+import { PriorityList } from "@/features/dashboard/components/PriorityList";
 import type { Student } from "@/features/students/types";
 
 vi.mock("@/components/ui/scroll-area", () => ({
@@ -12,7 +12,11 @@ vi.mock("@/components/ui/scroll-area", () => ({
 }));
 
 function renderWithRouter(ui: ReactNode) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      {ui}
+    </MemoryRouter>,
+  );
 }
 
 const baseTimestamp = "2026-02-20T12:00:00.000Z";

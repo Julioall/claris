@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import Dashboard from "@/pages/Dashboard";
+import DashboardPage from "@/features/dashboard/pages/DashboardPage";
 
 const useDashboardDataMock = vi.fn();
 const useCoursesDataMock = vi.fn();
 
-vi.mock("@/hooks/useDashboardData", () => ({
+vi.mock("@/features/dashboard/hooks/useDashboardData", () => ({
   useDashboardData: (...args: unknown[]) => useDashboardDataMock(...args),
 }));
 
@@ -13,13 +13,13 @@ vi.mock("@/features/courses/hooks/useCoursesData", () => ({
   useCoursesData: (...args: unknown[]) => useCoursesDataMock(...args),
 }));
 
-vi.mock("@/components/dashboard/WeeklyIndicators", () => ({
+vi.mock("@/features/dashboard/components/WeeklyIndicators", () => ({
   WeeklyIndicators: ({ summary }: { summary: { today_tasks: number } }) => (
     <div data-testid="weekly-indicators">{summary.today_tasks}</div>
   ),
 }));
 
-vi.mock("@/components/dashboard/PriorityList", () => ({
+vi.mock("@/features/dashboard/components/PriorityList", () => ({
   PriorityList: ({
     criticalStudents,
   }: {
@@ -27,19 +27,19 @@ vi.mock("@/components/dashboard/PriorityList", () => ({
   }) => <div data-testid="priority-list">{criticalStudents.length}</div>,
 }));
 
-vi.mock("@/components/dashboard/CourseOverview", () => ({
+vi.mock("@/features/dashboard/components/CourseOverview", () => ({
   CourseOverview: ({ courses }: { courses: Array<{ id: string }> }) => (
     <div data-testid="course-overview">{courses.length}</div>
   ),
 }));
 
-vi.mock("@/components/dashboard/ActivitiesToReview", () => ({
+vi.mock("@/features/dashboard/components/ActivitiesToReview", () => ({
   ActivitiesToReview: ({ activities }: { activities: Array<{ id: string }> }) => (
     <div data-testid="activities-to-review">{activities.length}</div>
   ),
 }));
 
-vi.mock("@/components/dashboard/ActivityFeed", () => ({
+vi.mock("@/features/dashboard/components/ActivityFeed", () => ({
   ActivityFeed: ({ items }: { items: Array<{ id: string }> }) => (
     <div data-testid="activity-feed">{items.length}</div>
   ),
@@ -88,12 +88,12 @@ describe("Dashboard page", () => {
       isLoading: false,
     });
 
-    const { container } = render(<Dashboard />);
+    const { container } = render(<DashboardPage />);
     expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
   it("renders dashboard sections when data is loaded", () => {
-    render(<Dashboard />);
+    render(<DashboardPage />);
 
     expect(screen.getByText(/painel de monitoramento/i)).toBeInTheDocument();
     expect(screen.getByTestId("weekly-indicators")).toHaveTextContent("0");

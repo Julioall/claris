@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { CourseOverview } from "@/components/dashboard/CourseOverview";
+import { CourseOverview } from "@/features/dashboard/components/CourseOverview";
 
 vi.mock("@/components/ui/scroll-area", () => ({
   ScrollArea: ({ children }: { children: ReactNode }) => (
@@ -11,7 +11,11 @@ vi.mock("@/components/ui/scroll-area", () => ({
 }));
 
 function renderWithRouter(ui: ReactNode) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+  return render(
+    <MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      {ui}
+    </MemoryRouter>,
+  );
 }
 
 describe("CourseOverview", () => {

@@ -11,7 +11,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RiskBadge } from '@/components/ui/RiskBadge';
-import type { DashboardReviewActivity } from '@/features/dashboard/types';
+
+import type { DashboardReviewActivity } from '../types';
 
 interface ActivitiesToReviewProps {
   activities: DashboardReviewActivity[];

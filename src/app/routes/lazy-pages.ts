@@ -1,7 +1,7 @@
 import { lazy } from 'react';
 
 export const LoginPage = lazy(() => import('@/pages/Login'));
-export const DashboardPage = lazy(() => import('@/pages/Dashboard'));
+export const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
 export const MyCoursesPage = lazy(() => import('@/features/courses/pages/MyCoursesPage'));
 export const SchoolsPage = lazy(() => import('@/features/courses/pages/SchoolsPage'));
 export const CoursePanelPage = lazy(() => import('@/features/courses/pages/CoursePanelPage'));

@@ -2,6 +2,8 @@ import type { User } from '@/features/auth/types';
 import type { Course } from '@/features/courses/types';
 import type { RiskLevel, Student } from '@/features/students/types';
 
+export type DashboardWeekFilter = 'current' | 'last';
+
 export interface ActivityFeedItem {
   id: string;
   user_id?: string;
@@ -37,6 +39,13 @@ export interface WeeklySummary {
   pending_correction_assignments: number;
   students_at_risk: number;
   new_at_risk_this_week: number;
+}
+
+export interface DashboardData {
+  summary: WeeklySummary;
+  criticalStudents: Student[];
+  activitiesToReview: DashboardReviewActivity[];
+  activityFeed: ActivityFeedItem[];
 }
 
 export type DashboardRiskLevel = RiskLevel;

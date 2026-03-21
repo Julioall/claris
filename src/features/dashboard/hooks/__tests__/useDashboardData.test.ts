@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { useDashboardData } from "@/hooks/useDashboardData";
+import { useDashboardData } from "@/features/dashboard/hooks/useDashboardData";
+import { createQueryClientWrapper } from "@/test/query-client";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
@@ -273,8 +274,9 @@ describe("useDashboardData", () => {
 
   it("returns early when user is not authenticated", async () => {
     useAuthMock.mockReturnValue({ user: null });
+    const { wrapper } = createQueryClientWrapper();
 
-    const { result } = renderHook(() => useDashboardData());
+    const { result } = renderHook(() => useDashboardData(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -286,8 +288,9 @@ describe("useDashboardData", () => {
 
   it("returns empty dashboard summary when user has no tutor courses", async () => {
     userCoursesEqRoleMock.mockResolvedValueOnce({ data: [], error: null });
+    const { wrapper } = createQueryClientWrapper();
 
-    const { result } = renderHook(() => useDashboardData());
+    const { result } = renderHook(() => useDashboardData(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -309,7 +312,8 @@ describe("useDashboardData", () => {
   });
 
   it("loads dashboard metrics correctly", async () => {
-    const { result } = renderHook(() => useDashboardData("current", "all"));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useDashboardData("current", "all"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);

@@ -38,7 +38,7 @@ vi.mock("@/pages/Login", () => ({
   default: () => <div>Login Page</div>,
 }));
 
-vi.mock("@/pages/Dashboard", () => ({
+vi.mock("@/features/dashboard/pages/DashboardPage", () => ({
   default: () => <div>Dashboard Page</div>,
 }));
 
