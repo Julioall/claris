@@ -2,32 +2,32 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import Automacoes from "@/pages/Automacoes";
+import AutomacoesPage from "@/features/automations/pages/AutomacoesPage";
 
-vi.mock("@/components/automacoes/BulkJobsTab", () => ({
+vi.mock("@/features/automations/components/BulkJobsTab", () => ({
   BulkJobsTab: () => <div data-testid="bulk-jobs-tab">Bulk jobs</div>,
 }));
 
-vi.mock("@/components/automacoes/ScheduledMessagesTab", () => ({
+vi.mock("@/features/automations/components/ScheduledMessagesTab", () => ({
   ScheduledMessagesTab: () => <div data-testid="scheduled-messages-tab">Agendamentos</div>,
 }));
 
-vi.mock("@/components/automacoes/RotinasTab", () => ({
+vi.mock("@/features/automations/components/RotinasTab", () => ({
   RotinasTab: () => <div data-testid="rotinas-tab">Rotinas</div>,
 }));
 
-vi.mock("@/components/messages/BulkSendTab", () => ({
+vi.mock("@/features/messages/components/BulkSendTab", () => ({
   BulkSendTab: () => <div data-testid="bulk-send-tab">Envio em massa</div>,
 }));
 
-vi.mock("@/components/messages/MessageTemplatesTab", () => ({
+vi.mock("@/features/messages/components/MessageTemplatesTab", () => ({
   MessageTemplatesTab: () => <div data-testid="message-templates-tab">Modelos</div>,
 }));
 
 function renderPage(initialEntries?: string[]) {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Automacoes />
+      <AutomacoesPage />
     </MemoryRouter>,
   );
 }

@@ -404,7 +404,7 @@ function EditNameDialog({
 // Main Page
 // ---------------------------------------------------------------------------
 
-export default function MeusServicos() {
+export default function MyServicesPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [qrOpen, setQrOpen] = useState(false);

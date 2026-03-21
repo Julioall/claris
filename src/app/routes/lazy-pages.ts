@@ -9,13 +9,13 @@ export const StudentsPage = lazy(() => import('@/features/students/pages/Student
 export const StudentProfilePage = lazy(() => import('@/features/students/pages/StudentProfilePage'));
 export const TasksPage = lazy(() => import('@/features/tasks/pages/TasksPage'));
 export const AgendaPage = lazy(() => import('@/features/agenda/pages/AgendaPage'));
-export const MessagesPage = lazy(() => import('@/pages/Messages'));
-export const WhatsAppPage = lazy(() => import('@/pages/WhatsApp'));
+export const MessagesPage = lazy(() => import('@/features/messages/pages/MessagesPage'));
+export const WhatsAppPage = lazy(() => import('@/features/whatsapp/pages/WhatsAppPage'));
 export const SettingsPage = lazy(() => import('@/pages/Settings'));
 export const ReportsPage = lazy(() => import('@/pages/Reports'));
 export const ClarisPage = lazy(() => import('@/features/claris/pages/ClarisPage'));
-export const AutomationsPage = lazy(() => import('@/pages/Automacoes'));
-export const MyServicesPage = lazy(() => import('@/pages/MeusServicos'));
+export const AutomationsPage = lazy(() => import('@/features/automations/pages/AutomacoesPage'));
+export const MyServicesPage = lazy(() => import('@/features/services/pages/MyServicesPage'));
 export const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 
 export const AdminDashboardPage = lazy(() => import('@/features/admin/pages/AdminDashboard'));

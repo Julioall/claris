@@ -64,7 +64,7 @@ function ConversationItem({
   );
 }
 
-export default function Messages() {
+export default function MessagesPage() {
   const { conversations, isLoading, error, fetchConversations } = useChat();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);

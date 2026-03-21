@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import MeusServicos from "@/pages/MeusServicos";
+import MyServicesPage from "@/features/services/pages/MyServicesPage";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
@@ -104,7 +104,7 @@ describe("MeusServicos page", () => {
 
   it("renders the page title", async () => {
     setupNoInstance();
-    renderWithClient(<MeusServicos />);
+    renderWithClient(<MyServicesPage />);
     await waitFor(() => {
       expect(screen.getByText(/meus servi/i)).toBeInTheDocument();
     });
@@ -112,7 +112,7 @@ describe("MeusServicos page", () => {
 
   it("shows create button when no instance exists", async () => {
     setupNoInstance();
-    renderWithClient(<MeusServicos />);
+    renderWithClient(<MyServicesPage />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /criar minha inst/i })).toBeInTheDocument();
@@ -121,7 +121,7 @@ describe("MeusServicos page", () => {
 
   it("shows instance details when instance exists", async () => {
     setupWithInstance();
-    renderWithClient(<MeusServicos />);
+    renderWithClient(<MyServicesPage />);
 
     await waitFor(() => {
       expect(screen.getByText("WhatsApp Pessoal")).toBeInTheDocument();
@@ -130,7 +130,7 @@ describe("MeusServicos page", () => {
 
   it("shows disconnect action when the instance is already connected", async () => {
     setupWithInstance();
-    renderWithClient(<MeusServicos />);
+    renderWithClient(<MyServicesPage />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /desconectar/i })).toBeInTheDocument();
@@ -139,7 +139,7 @@ describe("MeusServicos page", () => {
 
   it("shows future services placeholder", async () => {
     setupNoInstance();
-    renderWithClient(<MeusServicos />);
+    renderWithClient(<MyServicesPage />);
 
     await waitFor(() => {
       expect(screen.getByText(/microsoft/i)).toBeInTheDocument();

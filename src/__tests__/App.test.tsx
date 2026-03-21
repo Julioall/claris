@@ -70,11 +70,11 @@ vi.mock("@/features/agenda/pages/AgendaPage", () => ({
   default: () => <div>Agenda Page</div>,
 }));
 
-vi.mock("@/pages/Messages", () => ({
+vi.mock("@/features/messages/pages/MessagesPage", () => ({
   default: () => <div>Messages Page</div>,
 }));
 
-vi.mock("@/pages/WhatsApp", () => ({
+vi.mock("@/features/whatsapp/pages/WhatsAppPage", () => ({
   default: () => <div>WhatsApp Page</div>,
 }));
 
@@ -94,11 +94,11 @@ vi.mock("@/pages/NotFound", () => ({
   default: () => <div>NotFound Page</div>,
 }));
 
-vi.mock("@/pages/Automacoes", () => ({
+vi.mock("@/features/automations/pages/AutomacoesPage", () => ({
   default: () => <div>Automacoes Page</div>,
 }));
 
-vi.mock("@/pages/MeusServicos", () => ({
+vi.mock("@/features/services/pages/MyServicesPage", () => ({
   default: () => <div>MeusServicos Page</div>,
 }));
 

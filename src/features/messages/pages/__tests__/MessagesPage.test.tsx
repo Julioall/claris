@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import type { ReactNode } from "react";
-import Messages from "@/pages/Messages";
+import MessagesPage from "@/features/messages/pages/MessagesPage";
 
 const useChatMock = vi.fn();
 const fetchConversationsMock = vi.fn();
@@ -35,7 +35,7 @@ vi.mock("@/components/ui/scroll-area", () => ({
 function renderPage() {
   return render(
     <MemoryRouter>
-      <Messages />
+      <MessagesPage />
     </MemoryRouter>,
   );
 }

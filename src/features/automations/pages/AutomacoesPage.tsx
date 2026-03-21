@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Zap, Send, Calendar, RotateCcw, FileText } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BulkJobsTab } from '@/components/automacoes/BulkJobsTab';
-import { ScheduledMessagesTab } from '@/components/automacoes/ScheduledMessagesTab';
-import { RotinasTab } from '@/components/automacoes/RotinasTab';
-import { BulkSendTab } from '@/components/messages/BulkSendTab';
-import { MessageTemplatesTab } from '@/components/messages/MessageTemplatesTab';
+import { BulkSendTab } from '@/features/messages/components/BulkSendTab';
+import { MessageTemplatesTab } from '@/features/messages/components/MessageTemplatesTab';
 import { useSearchParams } from 'react-router-dom';
+import { BulkJobsTab } from '../components/BulkJobsTab';
+import { ScheduledMessagesTab } from '../components/ScheduledMessagesTab';
+import { RotinasTab } from '../components/RotinasTab';
 
 const automationTabs = ['envio-massa', 'jobs', 'modelos', 'agendamentos', 'rotinas'] as const;
 
@@ -16,7 +16,7 @@ function getAutomationTab(value: string | null): AutomationTab {
   return automationTabs.includes(value as AutomationTab) ? (value as AutomationTab) : 'jobs';
 }
 
-export default function Automacoes() {
+export default function AutomacoesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<AutomationTab>(() => getAutomationTab(searchParams.get('tab')));
 

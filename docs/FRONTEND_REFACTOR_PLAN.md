@@ -162,31 +162,22 @@ Observacoes:
 
 ### Fase 8: Comunicacao e Operacao
 
-Status: `planned`
+Status: `completed`
 
-Objetivo:
+Escopo concluido:
 
-- modularizar as areas de mensagens e operacao que hoje ainda estao espalhadas
+- `MessagesPage` foi movida para `src/features/messages/pages/`
+- `BulkSendTab`, `MessageTemplatesTab`, `DynamicVariableInput` e helpers visuais de mensagens foram movidos para `src/features/messages/components/`
+- `WhatsAppPage` foi movida para `src/features/whatsapp/pages/`
+- `AutomacoesPage` e seus componentes especificos foram movidos para `src/features/automations/`
+- `MyServicesPage` foi movida para `src/features/services/pages/`
+- rotas lazy e testes passaram a importar os slices diretamente
+- wrappers antigos de `src/pages/`, `src/components/messages/` e `src/components/automacoes/` foram removidos
 
-Arquivos alvo:
+Observacoes:
 
-- `src/pages/Messages.tsx`
-- `src/pages/WhatsApp.tsx`
-- `src/pages/Automacoes.tsx`
-- `src/pages/MeusServicos.tsx`
-- `src/components/messages/*`
-
-Possiveis slices:
-
-- `src/features/messages/`
-- `src/features/whatsapp/`
-- `src/features/operations/` ou `src/features/services/`
-
-Tarefas:
-
-- decidir o corte de dominios antes de mover arquivos
-- evitar misturar mensagens internas, whatsapp e servicos externos no mesmo slice sem criterio
-- atualizar testes por dominio
+- a fase foi fechada em quatro slices separados (`messages`, `whatsapp`, `automations` e `services`) para evitar misturar mensageria Moodle, conversas via Evolution e operacao de servicos externos no mesmo dominio
+- `AutomacoesPage` continua compondo tabs vindas de `messages` e `automations`, funcionando como hub sem voltar a concentrar implementacao tecnica fora dos slices
 
 ### Fase 9: Settings e Reports
 
@@ -264,13 +255,13 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 
 ## Proxima Fase Recomendada
 
-Proxima fase a executar: `Fase 8: Comunicacao e Operacao`
+Proxima fase a executar: `Fase 9: Settings e Reports`
 
 Motivo:
 
-- `claris` ja foi consolidado e o shell agora consome o slice diretamente
-- `messages`, `whatsapp`, `automacoes` e `meus servicos` ainda permanecem em `src/pages/` e merecem corte de dominio explicito
-- essa etapa reduz o restante do acoplamento entre paginas operacionais e componentes compartilhados antes de mexer em settings, reports e auth
+- os fluxos de comunicacao e operacao ja foram isolados em slices dedicados
+- restam principalmente `settings` e `reports` fora de `features/`, alem do rename estrutural do auth
+- fechar `settings` e `reports` agora reduz o passivo funcional antes da etapa de renomeacao estrutural e limpeza final
 
 ## Ao Concluir Uma Fase
 

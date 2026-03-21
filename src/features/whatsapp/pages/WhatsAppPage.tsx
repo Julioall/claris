@@ -456,7 +456,7 @@ function MessageComposer({
   );
 }
 
-export default function WhatsApp() {
+export default function WhatsAppPage() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);

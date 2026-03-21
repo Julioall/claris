@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
-import { DynamicVariableInput } from '@/components/messages/DynamicVariableInput';
+import { DynamicVariableInput } from '@/features/messages/components/DynamicVariableInput';
 
 function DynamicVariableInputHarness() {
   const [value, setValue] = useState('');

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import WhatsApp from "@/pages/WhatsApp";
+import WhatsAppPage from "@/features/whatsapp/pages/WhatsAppPage";
 
 const fromMock = vi.fn();
 const invokeMock = vi.fn();
@@ -103,7 +103,7 @@ function renderPage() {
   return render(
     <QueryClientProvider client={queryClient}>
       <MemoryRouter>
-        <WhatsApp />
+        <WhatsAppPage />
       </MemoryRouter>
     </QueryClientProvider>,
   );

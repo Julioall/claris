@@ -12,7 +12,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Progress } from '@/components/ui/progress';
-import { JobDetailDialog } from '@/components/automacoes/JobDetailDialog';
+import { JobDetailDialog } from './JobDetailDialog';
 
 interface BulkJob {
   id: string;
