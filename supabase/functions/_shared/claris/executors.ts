@@ -54,6 +54,15 @@ async function auditAiAction(
       }))
     }
 
+    if (Array.isArray(safeArgs.tasks)) {
+      safeArgs.tasks = safeArgs.tasks.slice(0, 25).map((task) => ({
+        title: typeof task.title === 'string' ? task.title.slice(0, 120) : undefined,
+        due_date: task.due_date,
+        priority: task.priority,
+        entity_type: task.entity_type,
+      }))
+    }
+
     await supabase.from('claris_ai_actions').insert({
       user_id: userId,
       tool_name: toolName,
@@ -96,6 +105,16 @@ export interface ToolCallArgs {
   entity_id?: string
   origin_reason?: string
   tags?: string[]
+  tasks?: Array<{
+    title?: string
+    description?: string
+    priority?: 'low' | 'medium' | 'high' | 'urgent'
+    due_date?: string
+    entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
+    entity_id?: string
+    origin_reason?: string
+    tags?: string[]
+  }>
   // Calendar/event fields
   event_id?: string
   start_at?: string
@@ -189,6 +208,8 @@ export async function executeToolCall(
     // Task management
     case 'create_task':
       return createTask(userId, args, supabase)
+    case 'batch_create_tasks':
+      return batchCreateTasks(userId, args, supabase)
     case 'update_task':
       return updateTask(userId, args, supabase)
     case 'change_task_status':
@@ -1580,6 +1601,79 @@ async function createTask(userId: string, args: ToolCallArgs, supabase: Supabase
 
   await auditAiAction(userId, 'create_task', args, `task created: id=${data.id} title="${data.title}"`, supabase)
   return { success: true, created: true, task: data }
+}
+
+async function batchCreateTasks(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const tasks = Array.isArray(args.tasks) ? args.tasks : []
+  if (tasks.length === 0) {
+    return { error: 'Campo tasks e obrigatorio para criar tarefas em lote.' }
+  }
+
+  if (tasks.length > 100) {
+    return { error: 'O lote excede o maximo de 100 tarefas por chamada.' }
+  }
+
+  const priorityMap: Record<string, string> = {
+    urgent: 'urgent', urgente: 'urgent',
+    high: 'high', alta: 'high',
+    medium: 'medium', media: 'medium',
+    low: 'low', baixa: 'low',
+  }
+
+  const inserts: Record<string, unknown>[] = []
+
+  for (const [index, task] of tasks.entries()) {
+    const title = (task.title ?? '').trim()
+    if (!title) {
+      return { error: `Tarefa ${index + 1}: Campo title e obrigatorio para criar uma tarefa.` }
+    }
+
+    const insert: Record<string, unknown> = {
+      title,
+      created_by: userId,
+      assigned_to: userId,
+      status: 'todo',
+      priority: priorityMap[task.priority ?? ''] ?? 'medium',
+      suggested_by_ai: true,
+    }
+
+    if (task.description) insert.description = task.description.trim()
+    if (task.due_date) insert.due_date = task.due_date
+    if (task.entity_type) insert.entity_type = task.entity_type
+    if (task.entity_id) insert.entity_id = task.entity_id
+    if (task.origin_reason) insert.origin_reason = String(task.origin_reason).trim()
+
+    if (Array.isArray(task.tags) && task.tags.length > 0) {
+      const tags = task.tags
+        .map((tag) => String(tag).trim())
+        .filter(Boolean)
+        .slice(0, 25)
+
+      if (tags.length > 0) {
+        insert.tags = Array.from(new Set(tags))
+      }
+    }
+
+    inserts.push(insert)
+  }
+
+  const { data, error } = await supabase
+    .from('tasks')
+    .insert(inserts)
+    .select('id, title, status, priority, due_date, description, entity_type, entity_id, origin_reason, tags')
+
+  if (error || !data) {
+    await auditAiAction(userId, 'batch_create_tasks', args, 'error: falha ao criar tarefas em lote', supabase)
+    return { error: 'Falha ao criar tarefas em lote.' }
+  }
+
+  await auditAiAction(userId, 'batch_create_tasks', args, `batch tasks created: count=${data.length}`, supabase)
+  return {
+    success: true,
+    created: true,
+    count: data.length,
+    tasks: data,
+  }
 }
 
 async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase) {

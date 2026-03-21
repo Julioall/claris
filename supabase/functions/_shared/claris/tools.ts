@@ -410,6 +410,65 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'batch_create_tasks',
+      description:
+        'Cria varias tarefas de uma vez. Use quando o usuario enviar uma lista, checklist, plano de acao ou pedir para criar multiplas tarefas em lote. Sempre inclua title em cada item e, quando houver contexto, preencha entity_type, entity_id, origin_reason e tags.',
+      parameters: {
+        type: 'object',
+        properties: {
+          tasks: {
+            type: 'array',
+            description: 'Lista de tarefas a criar em lote.',
+            items: {
+              type: 'object',
+              properties: {
+                title: {
+                  type: 'string',
+                  description: 'Titulo objetivo da tarefa.',
+                },
+                description: {
+                  type: 'string',
+                  description: 'Descricao detalhada da tarefa.',
+                },
+                priority: {
+                  type: 'string',
+                  enum: ['low', 'medium', 'high', 'urgent'],
+                  description: 'Prioridade da tarefa. Padrao: medium.',
+                },
+                due_date: {
+                  type: 'string',
+                  description: 'Data limite (YYYY-MM-DD). Opcional.',
+                },
+                entity_type: {
+                  type: 'string',
+                  enum: ['student', 'course', 'uc', 'class', 'custom'],
+                  description: 'Tipo de entidade relacionada quando houver contexto.',
+                },
+                entity_id: {
+                  type: 'string',
+                  description: 'ID da entidade relacionada quando houver contexto.',
+                },
+                origin_reason: {
+                  type: 'string',
+                  description: 'Motivo que originou a tarefa com contexto.',
+                },
+                tags: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Tags para categorizacao e preservacao do contexto.',
+                },
+              },
+              required: ['title'],
+            },
+          },
+        },
+        required: ['tasks'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'update_task',
       description:
         'Atualiza campos de uma tarefa existente (título, descrição, prioridade, prazo, etc.). Use quando o usuário pedir para editar ou modificar uma tarefa.',
