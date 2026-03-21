@@ -63,6 +63,11 @@ supabase/
     └── claris-llm-test/
 ```
 
+### Auth Module
+- `src/contexts/AuthContext.tsx` remains the public composition root for auth-related UI state.
+- The extracted auth slice lives under `src/modules/auth/` and owns session, Moodle credentials, sync orchestration, timeout/error handling, and risk recalculation.
+- New UI that only needs Moodle credentials should prefer `useMoodleSession()` from `src/modules/auth/context/MoodleSessionContext.tsx`.
+
 ## Coding Conventions
 
 ### TypeScript
@@ -80,6 +85,7 @@ supabase/
 ### Data Fetching
 - Use **TanStack Query** (`useQuery`, `useMutation`) for all server state
 - Custom hooks in `src/hooks/` encapsulate data fetching logic
+- Keep auth/session/sync integration logic in `src/modules/auth/` instead of growing `AuthContext.tsx`
 - Supabase client is imported from `@/integrations/supabase/client`
 
 ### Styling

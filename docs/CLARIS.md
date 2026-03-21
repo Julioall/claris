@@ -378,6 +378,12 @@ Todas as tabelas possuem políticas RLS para garantir que:
 
 ---
 
+### Implementacao atual
+
+- `src/contexts/AuthContext.tsx` segue como ponto publico de composicao para login, logout e estado autenticado.
+- A sessao do Moodle, sincronizacao e chamadas compartilhadas de integracao ficam concentradas em `src/modules/auth/`.
+- Consumidores que so precisam de credenciais Moodle devem usar `useMoodleSession()` em vez de ampliar `useAuth()`.
+
 ## Roadmap Futuro
 
 ### Próximas Funcionalidades
@@ -393,6 +399,8 @@ Todas as tabelas possuem políticas RLS para garantir que:
 ---
 
 ## Estrutura de Arquivos
+
+Observacao: a arvore abaixo e esquematica. A implementacao atual de autenticacao, sessao Moodle, sincronizacao e servicos relacionados esta concentrada em `src/modules/auth/`, com `AuthContext.tsx` atuando apenas como camada de composicao publica.
 
 ```
 src/
