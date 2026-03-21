@@ -43,7 +43,6 @@ src/
   lib/
   pages/
   hooks/
-  types/
 ```
 
 ## Regras
@@ -55,7 +54,7 @@ src/
 - `src/features/<dominio>/pages` guarda telas do dominio ou adaptadores de rota.
 - `src/features/<dominio>/types.ts` e a fonte primaria dos contratos TypeScript daquele dominio.
 - `src/components/ui/` fica reservado para primitives genericas e reaproveitaveis.
-- `src/types/index.ts` deve existir apenas como barrel de compatibilidade temporaria durante a migracao.
+- novos contratos nao devem nascer fora do slice do dominio.
 
 ## Estado atual
 
@@ -73,9 +72,11 @@ src/
 - `src/features/settings/` agora concentra `SettingsPage`, os cards de configuracao do usuario e a configuracao de tema compartilhada com o shell.
 - `src/features/reports/` agora concentra `ReportsPage` e o fluxo de exportacao academica.
 - `src/features/admin/` agora concentra as pages administrativas, enquanto `src/app/routes/admin/` concentra `AdminRoute` e `AdminLayout` como shell de roteamento.
+- `src/features/students/` tambem concentra `useStudentHistory`, e `src/features/tasks/api/` agora concentra `tasks.service.ts`.
 - `src/lib/claris-settings.ts` e `src/components/ui/claris-logo.tsx` permanecem compartilhados por ainda atenderem mais de um dominio.
 - `src/features/auth/` concentra sessao Moodle, sync, risco e servicos de autenticacao como slice de dominio.
-- o restante do frontend ainda esta majoritariamente organizado por pastas tecnicas.
+- `src/pages/` ficou reduzido ao shell publico (`Index`, `Login`, `NotFound`), `src/hooks/` retem apenas hooks realmente transversais e `src/services/` nao concentra mais services de dominio.
+- o antigo barrel global em `src/types/` deixou de fazer parte da convencao; contratos compartilhados devem nascer no slice correto ou em fontes realmente proprietarias do shell/integracao.
 
 ## Sequencia recomendada
 
@@ -83,7 +84,7 @@ src/
 2. mover novas features para `src/features/<dominio>/...`
 3. migrar dominios mais acoplados, comecando por `students`, `tasks`, `courses` e `agenda`
 4. substituir carregamento manual por hooks de dominio baseados em React Query
-5. reduzir `src/types/index.ts` conforme os tipos forem migrando para cada dominio
+5. manter contratos de tipo nos slices e evitar recriar barrels globais
 6. remover wrappers legados remanescentes de `src/pages/`, `src/hooks/`, `src/services/` e `src/lib/` conforme os imports antigos forem eliminados
 
 ## Fora de escopo desta etapa

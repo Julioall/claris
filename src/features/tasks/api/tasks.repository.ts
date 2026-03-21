@@ -1,4 +1,4 @@
-import { tasksService, type CreateTaskInput, type UpdateTaskInput } from '@/services/tasks.service';
+import { tasksService, type CreateTaskInput, type UpdateTaskInput } from './tasks.service';
 
 export type { CreateTaskInput, UpdateTaskInput };
 

@@ -16,6 +16,7 @@
     "supabase:functions:deploy": "node scripts/deploy-supabase-functions.mjs",
     "supabase:functions:deploy:claris": "node scripts/deploy-supabase-functions.mjs claris-llm-test claris-chat",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

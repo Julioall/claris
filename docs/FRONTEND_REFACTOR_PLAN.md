@@ -11,14 +11,14 @@ Levar o frontend de uma organizacao por pastas tecnicas para uma organizacao por
 - `src/app/` para shell global
 - `src/features/<dominio>/` para regra de negocio, hooks, pages, repository e tipos
 - `src/components/ui/` apenas para componentes realmente genericos
-- `src/types/index.ts` apenas como barrel de compatibilidade temporaria
+- contratos TypeScript devem viver no slice do dominio; evitar barrels globais
 
 ## Como Retomar
 
 1. ler [FRONTEND_MODULES.md](./FRONTEND_MODULES.md)
 2. ler este arquivo inteiro
 3. rodar `git status --short`
-4. escolher a proxima fase com status `planned`
+4. escolher a proxima fase com status `planned`; se nao houver nenhuma, tratar o trabalho como manutencao pos-refactor
 5. executar a fase sem recriar wrappers removidos
 6. atualizar este arquivo ao final da fase
 7. validar com `npm.cmd run lint` e `npm.cmd test`
@@ -29,7 +29,7 @@ Levar o frontend de uma organizacao por pastas tecnicas para uma organizacao por
 - preferir imports diretos do slice, nao wrappers de compatibilidade
 - remover wrapper legado quando nao houver mais referencia de runtime
 - manter `src/hooks/` apenas para hooks transversais ou dominios ainda nao migrados
-- manter `src/types/index.ts` apenas como compatibilidade; novos contratos devem nascer no slice
+- manter contratos novos dentro do slice; evitar compatibilidades globais desnecessarias
 - depois de cada fase, atualizar este documento com status, observacoes e validacao
 
 ## Definicao de Conclusao por Fase
@@ -93,8 +93,7 @@ Status: `completed`
 Escopo concluido:
 
 - tipos de `auth`, `courses`, `students`, `tasks`, `agenda` e `dashboard` foram movidos para os slices
-- `src/types/index.ts` virou barrel de compatibilidade
-- imports de runtime principais sairam de `@/types`
+- contratos principais ja sairam dos barrels globais de tipos
 
 ### Fase 4: Remocao de Wrappers Legados dos Dominios Migrados
 
@@ -214,19 +213,20 @@ Observacoes:
 
 ### Fase 11: Limpeza Final e Endurecimento
 
-Status: `planned`
+Status: `completed`
 
-Objetivo:
+Escopo concluido:
 
-- encerrar compatibilidades temporarias e subir o nivel de seguranca do projeto
+- `src/features/tasks/api/tasks.service.ts` passou a concentrar o service de tarefas, removendo o remanescente de `src/services/`
+- `useStudentHistory` foi movido para `src/features/students/hooks/`, eliminando o ultimo hook de dominio que ainda estava em `src/hooks/`
+- `Index.tsx`, `Login.tsx` e `NotFound.tsx` foram mantidos em `src/pages/` como pages de shell publico
+- o barrel global `src/types/index.ts` e seu teste foram removidos; novos contratos devem continuar slice-local
+- `typecheck` foi adicionado em `package.json` e no pipeline de CI com `tsc --noEmit`
 
-Tarefas:
+Observacoes:
 
-- revisar o que ainda sobra em `src/pages/`, `src/hooks/`, `src/services/` e `src/lib/`
-- decidir o destino final de `Index.tsx`, `Login.tsx` e `NotFound.tsx`
-- reduzir ainda mais `src/types/index.ts`
-- adicionar `tsc --noEmit` no CI quando o passivo de tipos permitir
-- atacar flags de TypeScript em etapas: `strictNullChecks`, `noImplicitAny`, `noUnusedLocals`, depois `strict`
+- `src/hooks/` ficou reservado a hooks transversais ou ainda ligados ao shell, como `use-toast`, `use-mobile`, `useTrackEvent`, `usePermissions`, `useMoodleApi` e `useErrorLog`
+- a etapa fechou a modularizacao estrutural sem ativar ainda flags mais agressivas de TypeScript
 
 ## O Que Pode Permanecer Fora de Features
 
@@ -242,17 +242,17 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 - warnings antigos de React Router future flags nos testes
 - avisos de acessibilidade em dialogs de alguns testes
 - documentacao historica antiga em `docs/tasks-agenda-rebuild.md` e `docs/tasks-refactor-cleanup.md` pode ficar defasada em relacao ao estado atual
-- `src/types/index.ts` ainda existe por compatibilidade e deve encolher com o tempo
+- flags mais agressivas de TypeScript (`strictNullChecks`, `noImplicitAny`, `noUnusedLocals` e depois `strict`) seguem como endurecimento futuro, separado do refactor estrutural
 
 ## Proxima Fase Recomendada
 
-Proxima fase a executar: `Fase 11: Limpeza Final e Endurecimento`
+Nao ha nova fase estrutural planejada neste ciclo.
 
 Motivo:
 
 - os slices principais ja estao alinhados na convencao final de `features/`
-- agora o passivo e majoritariamente de limpeza, reducao de compatibilidades e endurecimento do projeto
-- essa etapa final deve revisar o que sobrou em `src/pages/`, `src/hooks/`, `src/lib/`, `src/services/` e nos barrels temporarios
+- `src/pages/`, `src/hooks/`, `src/services/` e o antigo barrel global de tipos ficaram reduzidos ao papel esperado no estado final
+- o trabalho seguinte passa a ser manutencao incremental: warnings de teste, endurecimento de TypeScript e atualizacao de documentacao historica quando fizer sentido
 
 ## Ao Concluir Uma Fase
 
