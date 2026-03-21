@@ -1,6 +1,6 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Edit2, Trash2, Clock, Video, Users, AlignLeft, PackageCheck, HelpCircle } from 'lucide-react';
+import { Edit2, Trash2, Clock, Video, Users, AlignLeft, PackageCheck, GraduationCap, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CalendarEvent, CalendarEventType } from '@/types';
 import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns';
@@ -12,6 +12,7 @@ const TYPE_CONFIG: Record<CalendarEventType, { label: string; icon: React.Elemen
   meeting: { label: 'Reunião', icon: Users, color: 'bg-violet-100 text-violet-700 dark:bg-violet-900 dark:text-violet-300' },
   alignment: { label: 'Alinhamento', icon: Users, color: 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' },
   delivery: { label: 'Entrega', icon: PackageCheck, color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' },
+  training: { label: 'Treinamento', icon: GraduationCap, color: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900 dark:text-fuchsia-300' },
   other: { label: 'Outro', icon: HelpCircle, color: 'bg-muted text-muted-foreground' },
 };
 

@@ -13,7 +13,7 @@ const schema = z.object({
   description: z.string().optional(),
   start_at: z.string().min(1, 'Data de início obrigatória'),
   end_at: z.string().optional(),
-  type: z.enum(['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'other']),
+  type: z.enum(['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'training', 'other']),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -24,6 +24,7 @@ const TYPE_OPTIONS: { value: CalendarEventType; label: string }[] = [
   { value: 'meeting', label: 'Reunião' },
   { value: 'alignment', label: 'Alinhamento' },
   { value: 'delivery', label: 'Entrega' },
+  { value: 'training', label: 'Treinamento' },
   { value: 'other', label: 'Outro' },
 ];
 

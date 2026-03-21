@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus, Video, Users, AlignLeft, PackageCheck, HelpCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Video, Users, AlignLeft, PackageCheck, GraduationCap, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -26,6 +26,7 @@ const TYPE_CONFIG: Record<CalendarEventType, { label: string; icon: React.Elemen
   meeting:   { label: 'Reunião',      icon: Users,       chip: 'bg-violet-200 text-violet-800 dark:bg-violet-800 dark:text-violet-200' },
   alignment: { label: 'Alinhamento',  icon: Users,       chip: 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200' },
   delivery:  { label: 'Entrega',      icon: PackageCheck, chip: 'bg-emerald-200 text-emerald-800 dark:bg-emerald-800 dark:text-emerald-200' },
+  training:  { label: 'Treinamento',  icon: GraduationCap, chip: 'bg-fuchsia-200 text-fuchsia-800 dark:bg-fuchsia-800 dark:text-fuchsia-200' },
   other:     { label: 'Outro',        icon: HelpCircle,  chip: 'bg-muted text-muted-foreground' },
 };
 

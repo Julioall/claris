@@ -164,7 +164,7 @@ export interface TaskComment {
 }
 
 // ── Agenda module ─────────────────────────────────────────────
-export type CalendarEventType = 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'other';
+export type CalendarEventType = 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'training' | 'other';
 export type ExternalSource = 'manual' | 'teams' | 'future_sync';
 export type SyncStatus = 'none' | 'synced' | 'pending' | 'error';
 

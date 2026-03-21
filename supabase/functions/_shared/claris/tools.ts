@@ -565,7 +565,7 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           },
           type: {
             type: 'string',
-            enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'other'],
+            enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'training', 'other'],
             description: 'Tipo do evento. Padrão: manual.',
           },
           location: {
@@ -599,6 +599,78 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'batch_create_events',
+      description:
+        'Cria vários eventos de agenda em uma única chamada. Use sempre que o usuário enviar uma lista de eventos, um cronograma, vários alinhamentos ou múltiplas web aulas para cadastrar de uma vez.',
+      parameters: {
+        type: 'object',
+        properties: {
+          events: {
+            type: 'array',
+            description: 'Lista de eventos a criar em lote.',
+            items: {
+              type: 'object',
+              properties: {
+                title: {
+                  type: 'string',
+                  description: 'Título do evento.',
+                },
+                description: {
+                  type: 'string',
+                  description: 'Descrição ou pauta do evento.',
+                },
+                start_at: {
+                  type: 'string',
+                  description: 'Data/hora de início em ISO 8601.',
+                },
+                end_at: {
+                  type: 'string',
+                  description: 'Data/hora de término em ISO 8601. Opcional.',
+                },
+                all_day: {
+                  type: 'boolean',
+                  description: 'Indica se o evento é de dia inteiro.',
+                },
+                type: {
+                  type: 'string',
+                  enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'training', 'other'],
+                  description: 'Tipo do evento. Padrão: manual.',
+                },
+                location: {
+                  type: 'string',
+                  description: 'Local ou link do evento.',
+                },
+                related_entity_type: {
+                  type: 'string',
+                  enum: ['student', 'course', 'uc', 'class', 'custom'],
+                  description: 'Tipo de entidade relacionada ao evento. Opcional.',
+                },
+                related_entity_id: {
+                  type: 'string',
+                  description: 'ID da entidade relacionada. Opcional.',
+                },
+                tags: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Tags do evento.',
+                },
+                ia_source: {
+                  type: 'string',
+                  enum: ['manual', 'ia', 'sugestao_confirmada'],
+                  description: 'Origem do evento. Padrão: ia.',
+                },
+              },
+              required: ['title', 'start_at'],
+            },
+          },
+        },
+        required: ['events'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'update_event',
       description:
         'Atualiza campos de um evento existente na agenda. Use quando o usuário pedir para editar, reagendar ou modificar um evento.',
@@ -624,6 +696,11 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           end_at: {
             type: 'string',
             description: 'Nova data/hora de término (ISO 8601).',
+          },
+          type: {
+            type: 'string',
+            enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'training', 'other'],
+            description: 'Novo tipo do evento.',
           },
           all_day: {
             type: 'boolean',
@@ -680,7 +757,7 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           },
           type: {
             type: 'string',
-            enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'other'],
+            enum: ['manual', 'webclass', 'meeting', 'alignment', 'delivery', 'training', 'other'],
             description: 'Filtrar por tipo de evento.',
           },
           limit: {

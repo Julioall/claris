@@ -45,6 +45,15 @@ async function auditAiAction(
       safeArgs.message = safeArgs.message.slice(0, 500) + '…'
     }
 
+    if (Array.isArray(safeArgs.events)) {
+      safeArgs.events = safeArgs.events.slice(0, 25).map((event) => ({
+        title: typeof event.title === 'string' ? event.title.slice(0, 120) : undefined,
+        start_at: event.start_at,
+        end_at: event.end_at,
+        type: event.type,
+      }))
+    }
+
     await supabase.from('claris_ai_actions').insert({
       user_id: userId,
       tool_name: toolName,
@@ -93,10 +102,23 @@ export interface ToolCallArgs {
   end_at?: string
   all_day?: boolean
   location?: string
-  type?: 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'other'
+  type?: 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'training' | 'other'
   related_entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
   related_entity_id?: string
   ia_source?: 'manual' | 'ia' | 'sugestao_confirmada'
+  events?: Array<{
+    title?: string
+    description?: string
+    start_at?: string
+    end_at?: string
+    all_day?: boolean
+    location?: string
+    type?: 'manual' | 'webclass' | 'meeting' | 'alignment' | 'delivery' | 'training' | 'other'
+    related_entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
+    related_entity_id?: string
+    tags?: string[]
+    ia_source?: 'manual' | 'ia' | 'sugestao_confirmada'
+  }>
   start_date?: string
   end_date?: string
   // Phase 2 – context reading
@@ -178,6 +200,8 @@ export async function executeToolCall(
     // Calendar / agenda management
     case 'create_event':
       return createEvent(userId, args, supabase)
+    case 'batch_create_events':
+      return batchCreateEvents(userId, args, supabase)
     case 'update_event':
       return updateEvent(userId, args, supabase)
     case 'delete_event':
@@ -1701,30 +1725,75 @@ async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase)
 // Calendar / agenda executors
 // ---------------------------------------------------------------------------
 
-async function createEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
-  const title = (args.title ?? '').trim()
-  const startAt = (args.start_at ?? '').trim()
+type CalendarEventToolType = NonNullable<ToolCallArgs['type']>
+
+type CalendarEventToolInput = {
+  title?: string
+  description?: string
+  start_at?: string
+  end_at?: string
+  all_day?: boolean
+  location?: string
+  type?: CalendarEventToolType
+  related_entity_type?: ToolCallArgs['related_entity_type']
+  related_entity_id?: string
+  tags?: string[]
+  ia_source?: ToolCallArgs['ia_source']
+}
+
+const CALENDAR_EVENT_TYPES = new Set<CalendarEventToolType>([
+  'manual',
+  'webclass',
+  'meeting',
+  'alignment',
+  'delivery',
+  'training',
+  'other',
+])
+
+function buildCalendarEventInsert(userId: string, input: CalendarEventToolInput) {
+  const title = (input.title ?? '').trim()
+  const startAt = (input.start_at ?? '').trim()
 
   if (!title) return { error: 'Campo title é obrigatório para criar um evento.' }
   if (!startAt) return { error: 'Campo start_at é obrigatório para criar um evento.' }
 
+  const eventType = input.type && CALENDAR_EVENT_TYPES.has(input.type) ? input.type : 'manual'
   const insert: Record<string, unknown> = {
     title,
     start_at: startAt,
     owner: userId,
-    type: args.type ?? 'manual',
+    type: eventType,
     external_source: 'manual',
-    all_day: args.all_day ?? false,
-    ia_source: args.ia_source ?? 'ia',
+    all_day: input.all_day ?? false,
+    ia_source: input.ia_source ?? 'ia',
   }
 
-  if (args.description) insert.description = args.description.trim()
-  if (args.end_at) insert.end_at = args.end_at
-  if (args.location) insert.location = args.location.trim()
-  if (args.related_entity_type) insert.related_entity_type = args.related_entity_type
-  if (args.related_entity_id) insert.related_entity_id = args.related_entity_id
-  if (args.tags && args.tags.length > 0) insert.tags = args.tags
+  if (input.description) insert.description = input.description.trim()
+  if (input.end_at) insert.end_at = input.end_at
+  if (input.location) insert.location = input.location.trim()
+  if (input.related_entity_type) insert.related_entity_type = input.related_entity_type
+  if (input.related_entity_id) insert.related_entity_id = input.related_entity_id
 
+  if (Array.isArray(input.tags) && input.tags.length > 0) {
+    const tags = input.tags
+      .filter((tag): tag is string => typeof tag === 'string')
+      .map((tag) => tag.trim())
+      .filter(Boolean)
+      .slice(0, 25)
+
+    if (tags.length > 0) {
+      insert.tags = Array.from(new Set(tags))
+    }
+  }
+
+  return { insert }
+}
+
+async function createEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const built = buildCalendarEventInsert(userId, args)
+  if ('error' in built) return built
+  const { insert } = built
   const { data, error } = await supabase
     .from('calendar_events')
     .insert(insert)
@@ -1744,6 +1813,47 @@ async function createEvent(userId: string, args: ToolCallArgs, supabase: Supabas
   }
 }
 
+async function batchCreateEvents(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const events = Array.isArray(args.events) ? args.events : []
+
+  if (events.length === 0) {
+    return { error: 'Campo events é obrigatório para criar eventos em lote.' }
+  }
+
+  if (events.length > 100) {
+    return { error: 'O lote excede o máximo de 100 eventos por chamada.' }
+  }
+
+  const inserts: Record<string, unknown>[] = []
+
+  for (const [index, event] of events.entries()) {
+    const built = buildCalendarEventInsert(userId, event)
+    if ('error' in built) {
+      return { error: `Evento ${index + 1}: ${built.error}` }
+    }
+
+    inserts.push(built.insert)
+  }
+
+  const { data, error } = await supabase
+    .from('calendar_events')
+    .insert(inserts)
+    .select('id, title, start_at, end_at, type, all_day, location, ia_source, related_entity_type, related_entity_id, tags')
+
+  if (error || !data) {
+    await auditAiAction(userId, 'batch_create_events', args, 'error: falha ao criar eventos em lote', supabase)
+    return { error: 'Falha ao criar eventos em lote.' }
+  }
+
+  await auditAiAction(userId, 'batch_create_events', args, `batch events created: count=${data.length}`, supabase)
+  return {
+    success: true,
+    created: true,
+    count: data.length,
+    events: data,
+  }
+}
+
 async function updateEvent(userId: string, args: ToolCallArgs, supabase: Supabase) {
   const eventId = (args.event_id ?? '').trim()
   if (!eventId) return { error: 'Campo event_id é obrigatório para atualizar um evento.' }
@@ -1753,6 +1863,7 @@ async function updateEvent(userId: string, args: ToolCallArgs, supabase: Supabas
   if (args.description !== undefined) updates.description = args.description?.trim() ?? null
   if (args.start_at) updates.start_at = args.start_at
   if (args.end_at !== undefined) updates.end_at = args.end_at || null
+  if (args.type && CALENDAR_EVENT_TYPES.has(args.type)) updates.type = args.type
   if (args.all_day !== undefined) updates.all_day = args.all_day
   if (args.location !== undefined) updates.location = args.location?.trim() ?? null
   if (args.tags) updates.tags = args.tags

@@ -2,8 +2,13 @@
  * Claris IA — Agent loop.
  * Calls the LLM, handles tool_calls, and iterates until a final text reply.
  */
-import { CLARIS_TOOLS } from './tools.ts'
+import { CLARIS_TOOLS, ToolDefinition } from './tools.ts'
 import { executeToolCall, ToolCallArgs, ToolExecutionContext } from './executors.ts'
+import {
+  buildRequestMessagesForModel,
+  summarizeToolResultForModel,
+  type LoopChatMessage,
+} from './loop-optimization.ts'
 
 export interface LLMSettings {
   provider: string
@@ -21,13 +26,7 @@ interface ToolCall {
   }
 }
 
-interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string | null
-  tool_calls?: ToolCall[]
-  tool_call_id?: string
-  name?: string
-}
+export type ChatMessage = LoopChatMessage
 
 export interface ClarisUiAction {
   id: string
@@ -65,7 +64,7 @@ export interface ClarisStatCardsBlock {
 export type ClarisRichBlock = ClarisDataTableBlock | ClarisStatCardsBlock
 
 /** Maximum number of tool-call iterations to prevent infinite loops. */
-const MAX_ITERATIONS = 5
+const MAX_ITERATIONS = 15
 
 // ---------------------------------------------------------------------------
 // Rich block helpers
@@ -342,6 +341,7 @@ export async function runClarisLoop(
   userId: string,
   context: ToolExecutionContext,
   timeoutMs = 60000,
+  tools: ToolDefinition[] = CLARIS_TOOLS,
 ): Promise<{ reply: string; latencyMs: number; uiActions: ClarisUiAction[]; richBlocks: ClarisRichBlock[] }> {
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
@@ -354,6 +354,7 @@ export async function runClarisLoop(
 
   try {
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+      const requestMessages = buildRequestMessagesForModel(history)
       const response = await fetch(`${settings.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -363,10 +364,10 @@ export async function runClarisLoop(
         body: JSON.stringify({
           model: settings.model,
           temperature: 0.3,
-          max_tokens: 800,
-          tools: CLARIS_TOOLS,
+          max_tokens: 4000,
+          tools,
           tool_choice: 'auto',
-          messages: history,
+          messages: requestMessages,
         }),
         signal: controller.signal,
       })
@@ -422,7 +423,8 @@ export async function runClarisLoop(
         history.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify(toolResult),
+          name: toolCall.function.name,
+          content: summarizeToolResultForModel(toolCall.function.name, toolResult),
         })
 
         const actionsFromTool = collectUiActions(toolResult)
