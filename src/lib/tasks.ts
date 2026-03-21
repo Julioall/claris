@@ -9,7 +9,7 @@ import {
   type PendingTaskStatus,
   type TaskPriority,
   type TaskStatus,
-} from '@/types';
+} from '@/features/tasks/types';
 
 export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   todo: 'A fazer',

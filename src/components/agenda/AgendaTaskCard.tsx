@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Clock } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/types';
+import type { Task } from '@/features/tasks/types';
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/tasks';
 import { AGENDA_TASK_APPEARANCE } from './agenda-item-appearance';
 import { endOfDay, format, isPast, isToday, isTomorrow, parseISO } from 'date-fns';

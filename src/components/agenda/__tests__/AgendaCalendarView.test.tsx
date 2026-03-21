@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { AgendaCalendarView } from '../AgendaCalendarView';
-import type { CalendarEvent, Task } from '@/types';
+import type { CalendarEvent } from '@/features/agenda/types';
+import type { Task } from '@/features/tasks/types';
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {

@@ -1,13 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  WeeklySummary,
-  Student,
-  ActivityFeedItem,
-  DashboardReviewActivity,
-  RiskLevel,
-} from '@/types';
+import type { ActivityFeedItem, DashboardReviewActivity, WeeklySummary } from '@/features/dashboard/types';
+import type { RiskLevel, Student } from '@/features/students/types';
 import { startOfWeek, subWeeks, startOfDay, endOfDay } from 'date-fns';
 
 type FeedStudentSummary = {

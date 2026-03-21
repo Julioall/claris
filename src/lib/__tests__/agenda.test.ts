@@ -5,8 +5,9 @@ import {
   buildAgendaItems,
   getAgendaItemsOnDate,
   groupAgendaItemsByPeriod,
-} from '../agenda';
-import type { CalendarEvent, Task } from '@/types';
+} from '@/features/agenda/lib/agenda';
+import type { CalendarEvent } from '@/features/agenda/types';
+import type { Task } from '@/features/tasks/types';
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {

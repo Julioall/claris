@@ -1,8 +1,8 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Edit2, Trash2, Clock } from 'lucide-react';
+import type { CalendarEvent } from '@/features/agenda/types';
 import { cn } from '@/lib/utils';
-import type { CalendarEvent } from '@/types';
 import { format, parseISO, isToday, isTomorrow, isPast } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { CALENDAR_EVENT_APPEARANCE } from './agenda-item-appearance';

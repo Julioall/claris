@@ -7,8 +7,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { TagInput } from '@/components/ui/TagInput';
 import { Send, MessageCircle, Tag as TagIcon, Sparkles } from 'lucide-react';
-import { useTaskDetail } from '@/hooks/useTasks';
-import type { Task } from '@/types';
+import { useTaskDetail } from '@/features/tasks/hooks/useTasks';
+import type { Task } from '@/features/tasks/types';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 

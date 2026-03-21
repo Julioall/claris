@@ -3,7 +3,7 @@ import { BookOpen, Users, AlertTriangle, ExternalLink, Clock } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Course } from '@/types';
+import type { Course } from '@/features/courses/types';
 import { getCourseLifecycleStatus } from '@/lib/course-dates';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';

@@ -6,7 +6,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
-import { WeeklySummary } from '@/types';
+import type { WeeklySummary } from '@/features/dashboard/types';
 
 interface WeeklyIndicatorsProps {
   summary: WeeklySummary;

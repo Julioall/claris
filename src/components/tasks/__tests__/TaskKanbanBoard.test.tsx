@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { TaskKanbanBoard } from '../TaskKanbanBoard';
-import type { Task } from '@/types';
+import type { Task } from '@/features/tasks/types';
 
 function createDataTransfer(): DataTransfer {
   const data = new Map<string, string>();

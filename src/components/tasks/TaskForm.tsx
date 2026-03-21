@@ -6,8 +6,8 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { TASK_PRIORITY_VALUES, TASK_STATUS_VALUES, type Task } from '@/features/tasks/types';
 import { normalizeTaskPriority, normalizeTaskStatus, TASK_PRIORITY_OPTIONS, TASK_STATUS_OPTIONS } from '@/lib/tasks';
-import { TASK_PRIORITY_VALUES, TASK_STATUS_VALUES, type Task } from '@/types';
 
 const schema = z.object({
   title: z.string().min(1, 'Título obrigatório').max(200),

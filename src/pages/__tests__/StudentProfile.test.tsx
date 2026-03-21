@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import StudentProfile from "@/pages/StudentProfile";
+import StudentProfile from "@/features/students/pages/StudentProfilePage";
 
 const useStudentProfileMock = vi.fn();
 
-vi.mock("@/hooks/useStudentProfile", () => ({
+vi.mock("@/features/students/hooks/useStudentProfile", () => ({
   useStudentProfile: (...args: unknown[]) => useStudentProfileMock(...args),
 }));
 

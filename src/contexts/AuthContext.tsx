@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo, useState } from 'react';
 
-import type { AuthContextType, Course } from '@/types';
+import type { AuthContextType } from '@/features/auth/types';
+import type { Course } from '@/features/courses/types';
 import { MoodleSessionProvider } from '@/modules/auth/context/MoodleSessionContext';
 import type { MoodleSession } from '@/modules/auth/domain/session';
 import type { CourseScopedSyncEntity, SyncProgress } from '@/modules/auth/domain/sync';

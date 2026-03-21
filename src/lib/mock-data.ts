@@ -1,8 +1,10 @@
 // Mock data for development and demonstration
 import { 
-  Course, Student,
-  ActivityFeedItem, WeeklySummary, RiskLevel 
-} from '@/types';
+  type ActivityFeedItem,
+  type WeeklySummary,
+} from '@/features/dashboard/types';
+import type { Course } from '@/features/courses/types';
+import type { RiskLevel, Student } from '@/features/students/types';
 
 // Helper to generate dates
 const daysAgo = (days: number) => {

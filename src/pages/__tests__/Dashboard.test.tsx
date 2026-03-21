@@ -9,7 +9,7 @@ vi.mock("@/hooks/useDashboardData", () => ({
   useDashboardData: (...args: unknown[]) => useDashboardDataMock(...args),
 }));
 
-vi.mock("@/hooks/useCoursesData", () => ({
+vi.mock("@/features/courses/hooks/useCoursesData", () => ({
   useCoursesData: (...args: unknown[]) => useCoursesDataMock(...args),
 }));
 

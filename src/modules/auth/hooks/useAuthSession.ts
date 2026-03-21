@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { supabase } from '@/integrations/supabase/client';
+import type { User } from '@/features/auth/types';
 import { toast } from '@/hooks/use-toast';
 import { resolveFunctionsInvokeErrorMessage } from '@/lib/moodle-errors';
 import { trackEvent } from '@/lib/tracking';
-import type { User } from '@/types';
 
 import { isInvalidRefreshTokenError, type MoodleSession, type SessionContext } from '../domain/session';
 import { authenticateMoodleUser } from '../infrastructure/moodle-api';

@@ -4,7 +4,8 @@ import {
   resolveFunctionsInvokeErrorMessage,
   resolveMoodleErrorMessage,
 } from '@/lib/moodle-errors';
-import type { Course, User } from '@/types';
+import type { User } from '@/features/auth/types';
+import type { Course } from '@/features/courses/types';
 
 import type { MoodleSession } from '../domain/session';
 

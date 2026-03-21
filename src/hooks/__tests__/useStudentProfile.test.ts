@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useStudentProfile } from "@/hooks/useStudentProfile";
+import { useStudentProfile } from "@/features/students/hooks/useStudentProfile";
+import { createQueryClientWrapper } from "@/test/query-client";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
@@ -64,7 +65,8 @@ describe("useStudentProfile", () => {
   });
 
   it("loads student profile", async () => {
-    const { result } = renderHook(() => useStudentProfile("s-1"));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -78,7 +80,8 @@ describe("useStudentProfile", () => {
   });
 
   it("returns early when student id is missing", async () => {
-    const { result } = renderHook(() => useStudentProfile(undefined));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentProfile(undefined), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -91,7 +94,8 @@ describe("useStudentProfile", () => {
   it("returns early when user is not authenticated", async () => {
     useAuthMock.mockReturnValue({ user: null });
 
-    const { result } = renderHook(() => useStudentProfile("s-1"));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -107,7 +111,8 @@ describe("useStudentProfile", () => {
       error: { code: "PGRST116", message: "No rows" },
     });
 
-    const { result } = renderHook(() => useStudentProfile("unknown"));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentProfile("unknown"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.error?.toLowerCase()).toMatch(/n.o encontrado/);
@@ -122,7 +127,8 @@ describe("useStudentProfile", () => {
       error: new Error("fetch failed"),
     });
 
-    const { result } = renderHook(() => useStudentProfile("s-1"));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.error).toBeTruthy();
@@ -130,7 +136,8 @@ describe("useStudentProfile", () => {
   });
 
   it("supports explicit refetch", async () => {
-    const { result } = renderHook(() => useStudentProfile("s-1"));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);

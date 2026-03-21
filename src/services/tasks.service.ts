@@ -1,6 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Tag, Task, TaskComment, TaskPriority, TaskStatus } from '@/features/tasks/types';
 import { normalizeTaskPriority, normalizeTaskStatus } from '@/lib/tasks';
-import type { Task, TaskComment, Tag, TaskStatus, TaskPriority } from '@/types';
 
 export interface CreateTaskInput {
   title: string;

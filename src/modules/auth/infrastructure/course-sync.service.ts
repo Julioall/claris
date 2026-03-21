@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { Course } from '@/types';
+import type { Course } from '@/features/courses/types';
 
 import { BATCH_DELAY_MS, STEP_BATCH_CONFIG, STEP_FUNCTION_MAP, type CourseScopedSyncEntity } from '../domain/sync';
 import type { MoodleSession } from '../domain/session';

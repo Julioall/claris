@@ -1,17 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import Agenda from '@/pages/Agenda';
-import type { CalendarEvent, Task } from '@/types';
+import Agenda from '@/features/agenda/pages/AgendaPage';
+import type { CalendarEvent } from '@/features/agenda/types';
+import type { Task } from '@/features/tasks/types';
 
 const useCalendarEventsMock = vi.fn();
 const useTasksMock = vi.fn();
 
-vi.mock('@/hooks/useCalendarEvents', () => ({
+vi.mock('@/features/agenda/hooks/useCalendarEvents', () => ({
   useCalendarEvents: (...args: unknown[]) => useCalendarEventsMock(...args),
 }));
 
-vi.mock('@/hooks/useTasks', () => ({
+vi.mock('@/features/tasks/hooks/useTasks', () => ({
   useTasks: (...args: unknown[]) => useTasksMock(...args),
 }));
 

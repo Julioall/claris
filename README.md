@@ -20,6 +20,7 @@ cp .env.example .env
 - [docs/MOODLE_API.md](docs/MOODLE_API.md): referencias de integracao com Moodle.
 - [docs/SUPABASE_RLS.md](docs/SUPABASE_RLS.md): estado canonico de RLS por dominio no schema local.
 - [docs/auth-architecture.md](docs/auth-architecture.md): separacao atual do modulo de autenticacao, sessao Moodle e sincronizacao.
+- [docs/FRONTEND_MODULES.md](docs/FRONTEND_MODULES.md): direcao de modularizacao do frontend por `app/` e `features/`.
 
 ## Requisito
 

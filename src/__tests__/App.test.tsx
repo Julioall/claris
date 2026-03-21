@@ -42,31 +42,31 @@ vi.mock("@/pages/Dashboard", () => ({
   default: () => <div>Dashboard Page</div>,
 }));
 
-vi.mock("@/pages/MyCourses", () => ({
+vi.mock("@/features/courses/pages/MyCoursesPage", () => ({
   default: () => <div>MyCourses Page</div>,
 }));
 
-vi.mock("@/pages/Schools", () => ({
+vi.mock("@/features/courses/pages/SchoolsPage", () => ({
   default: () => <div>Schools Page</div>,
 }));
 
-vi.mock("@/pages/CoursePanel", () => ({
+vi.mock("@/features/courses/pages/CoursePanelPage", () => ({
   default: () => <div>CoursePanel Page</div>,
 }));
 
-vi.mock("@/pages/Students", () => ({
+vi.mock("@/features/students/pages/StudentsPage", () => ({
   default: () => <div>Students Page</div>,
 }));
 
-vi.mock("@/pages/StudentProfile", () => ({
+vi.mock("@/features/students/pages/StudentProfilePage", () => ({
   default: () => <div>StudentProfile Page</div>,
 }));
 
-vi.mock("@/pages/Tarefas", () => ({
+vi.mock("@/features/tasks/pages/TasksPage", () => ({
   default: () => <div>Tarefas Page</div>,
 }));
 
-vi.mock("@/pages/Agenda", () => ({
+vi.mock("@/features/agenda/pages/AgendaPage", () => ({
   default: () => <div>Agenda Page</div>,
 }));
 
@@ -131,15 +131,15 @@ describe("App routing", () => {
     expect(container.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
   });
 
-  it("redirects unauthenticated users to login page", () => {
+  it("redirects unauthenticated users to login page", async () => {
     setPath("/");
     render(<App />);
 
-    expect(screen.getByText("Login Page")).toBeInTheDocument();
+    expect(await screen.findByText("Login Page")).toBeInTheDocument();
     expect(screen.queryByText("Dashboard Page")).not.toBeInTheDocument();
   });
 
-  it("redirects authenticated users away from login to dashboard", () => {
+  it("redirects authenticated users away from login to dashboard", async () => {
     setPath("/login");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -148,11 +148,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Dashboard Page")).toBeInTheDocument();
+    expect(await screen.findByText("Dashboard Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders a protected nested route for authenticated users", () => {
+  it("renders a protected nested route for authenticated users", async () => {
     setPath("/mensagens");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -161,11 +161,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Messages Page")).toBeInTheDocument();
+    expect(await screen.findByText("Messages Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders whatsapp page for authenticated users", () => {
+  it("renders whatsapp page for authenticated users", async () => {
     setPath("/whatsapp");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -174,11 +174,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("WhatsApp Page")).toBeInTheDocument();
+    expect(await screen.findByText("WhatsApp Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders reports page for authenticated users", () => {
+  it("renders reports page for authenticated users", async () => {
     setPath("/relatorios");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -187,11 +187,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Reports Page")).toBeInTheDocument();
+    expect(await screen.findByText("Reports Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders claris page for authenticated users", () => {
+  it("renders claris page for authenticated users", async () => {
     setPath("/claris");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -200,11 +200,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Claris Page")).toBeInTheDocument();
+    expect(await screen.findByText("Claris Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders tarefas page for authenticated users", () => {
+  it("renders tarefas page for authenticated users", async () => {
     setPath("/tarefas");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -213,11 +213,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Tarefas Page")).toBeInTheDocument();
+    expect(await screen.findByText("Tarefas Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders agenda page for authenticated users", () => {
+  it("renders agenda page for authenticated users", async () => {
     setPath("/agenda");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -226,11 +226,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Agenda Page")).toBeInTheDocument();
+    expect(await screen.findByText("Agenda Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders not found page for unknown route", () => {
+  it("renders not found page for unknown route", async () => {
     setPath("/rota-inexistente");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -239,10 +239,10 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("NotFound Page")).toBeInTheDocument();
+    expect(await screen.findByText("NotFound Page")).toBeInTheDocument();
   });
 
-  it("renders meus-servicos page for authenticated users", () => {
+  it("renders meus-servicos page for authenticated users", async () => {
     setPath("/meus-servicos");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -251,11 +251,11 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("MeusServicos Page")).toBeInTheDocument();
+    expect(await screen.findByText("MeusServicos Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders automacoes page for authenticated users", () => {
+  it("renders automacoes page for authenticated users", async () => {
     setPath("/automacoes");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -264,7 +264,7 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(screen.getByText("Automacoes Page")).toBeInTheDocument();
+    expect(await screen.findByText("Automacoes Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 });

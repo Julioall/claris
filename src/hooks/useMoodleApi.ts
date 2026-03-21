@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { User, Course, Student } from '@/types';
+import type { User } from '@/features/auth/types';
+import type { Course } from '@/features/courses/types';
+import type { Student } from '@/features/students/types';
 import type { MoodleSession } from '@/modules/auth/domain/session';
 import {
   authenticateMoodleUser,

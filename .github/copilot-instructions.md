@@ -68,12 +68,24 @@ supabase/
 - The extracted auth slice lives under `src/modules/auth/` and owns session, Moodle credentials, sync orchestration, timeout/error handling, and risk recalculation.
 - New UI that only needs Moodle credentials should prefer `useMoodleSession()` from `src/modules/auth/context/MoodleSessionContext.tsx`.
 
+### App Shell
+- `src/app/providers/` owns app-wide providers and global shell composition.
+- `src/app/routes/` owns route groups, route guards, lazy page loading, and router setup.
+- Keep `src/App.tsx` thin; it should wire `AppProviders` and `AppRouter`, not define business rules.
+
+### Feature Modules
+- Prefer `src/features/<domain>/...` for new domain work instead of adding more logic to `src/pages/`, `src/hooks/`, or `src/lib/`.
+- `src/features/agenda/`, `src/features/courses/`, `src/features/students/`, and `src/features/tasks/` are the current reference slices for page + hook + repository organization.
+- Some legacy files in `src/pages/` and `src/hooks/` may still exist for unmigrated domains, but migrated slices should be imported directly and new logic should not be added there by default.
+- For staged continuity, consult `docs/FRONTEND_REFACTOR_PLAN.md` before continuing the frontend modularization work.
+
 ## Coding Conventions
 
 ### TypeScript
 - Strict TypeScript throughout; prefer explicit types over `any`
 - Use the `@/` path alias for `src/` imports (e.g., `import { cn } from "@/lib/utils"`)
-- Shared types are defined in `src/types/index.ts`
+- Prefer domain types from `src/features/<domain>/types.ts`
+- `src/types/index.ts` is a compatibility barrel during migration; do not add new domain contracts there by default
 - Supabase database types are auto-generated in `src/integrations/supabase/types.ts` — do not manually edit this file
 
 ### React Components
@@ -84,7 +96,7 @@ supabase/
 
 ### Data Fetching
 - Use **TanStack Query** (`useQuery`, `useMutation`) for all server state
-- Custom hooks in `src/hooks/` encapsulate data fetching logic
+- Prefer domain hooks in `src/features/<domain>/hooks/`; keep `src/hooks/` only for truly cross-domain hooks or yet-to-be-migrated domains
 - Keep auth/session/sync integration logic in `src/modules/auth/` instead of growing `AuthContext.tsx`
 - Supabase client is imported from `@/integrations/supabase/client`
 

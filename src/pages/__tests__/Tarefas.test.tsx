@@ -1,11 +1,11 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import Tarefas from '@/pages/Tarefas';
-import type { Task } from '@/types';
+import Tarefas from '@/features/tasks/pages/TasksPage';
+import type { Task } from '@/features/tasks/types';
 
 const useTasksMock = vi.fn();
 
-vi.mock('@/hooks/useTasks', () => ({
+vi.mock('@/features/tasks/hooks/useTasks', () => ({
   useTasks: (...args: unknown[]) => useTasksMock(...args),
 }));
 

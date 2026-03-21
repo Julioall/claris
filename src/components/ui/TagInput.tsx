@@ -4,7 +4,7 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import type { Tag } from '@/types';
+import type { Tag } from '@/features/tasks/types';
 
 interface TagSuggestion {
   label: string;

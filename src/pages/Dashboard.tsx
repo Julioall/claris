@@ -14,8 +14,8 @@ import { CourseOverview } from '@/components/dashboard/CourseOverview';
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { ActivitiesToReview } from '@/components/dashboard/ActivitiesToReview';
 import { ClarisSuggestions } from '@/components/dashboard/ClarisSuggestions';
+import { useCoursesData } from '@/features/courses/hooks/useCoursesData';
 import { useDashboardData } from '@/hooks/useDashboardData';
-import { useCoursesData } from '@/hooks/useCoursesData';
 
 export default function Dashboard() {
   const [selectedWeek, setSelectedWeek] = useState<'current' | 'last'>('current');

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { 
+import {
   Activity, 
   CheckCircle2, 
   AlertTriangle, 
@@ -9,7 +9,7 @@ import {
   TrendingDown
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ActivityFeedItem } from '@/types';
+import type { ActivityFeedItem } from '@/features/dashboard/types';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';

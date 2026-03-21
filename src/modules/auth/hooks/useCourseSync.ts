@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import type { Course } from '@/features/courses/types';
 import { toast } from '@/hooks/use-toast';
 import { logError, trackEvent } from '@/lib/tracking';
-import type { Course } from '@/types';
 
 import type { SessionContext } from '../domain/session';
 import {
