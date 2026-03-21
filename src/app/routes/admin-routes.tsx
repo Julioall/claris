@@ -1,8 +1,5 @@
 import { Route } from 'react-router-dom';
 
-import { AdminLayout } from '@/components/admin/AdminLayout';
-import { AdminRoute } from '@/components/admin/AdminRoute';
-
 import {
   AdminApplicationServicesPage,
   AdminClarisConversationsPage,
@@ -14,6 +11,8 @@ import {
   AdminSupportPage,
   AdminUsersPage,
 } from './lazy-pages';
+import { AdminLayout } from './admin/AdminLayout';
+import { AdminRoute } from './admin/AdminRoute';
 
 export function renderAdminRoutes() {
   return (

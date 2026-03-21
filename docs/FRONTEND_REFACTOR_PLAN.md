@@ -123,45 +123,23 @@ Observacao:
 
 - `src/components/dashboard/ClarisSuggestions.tsx` permaneceu fora desta fase e sera tratado na `Fase 7: Claris`
 
-## Fases Planejadas
-
 ### Fase 6: Admin
 
-Status: `planned`
+Status: `completed`
 
-Objetivo:
+Escopo concluido:
 
-- consolidar o dominio administrativo em `src/features/admin/`
+- pages administrativas foram movidas para `src/features/admin/pages/`
+- testes administrativos passaram a importar o slice diretamente
+- lazy routes administrativas passaram a apontar para `src/features/admin/pages/`
+- `AdminRoute` e `AdminLayout` foram movidos para `src/app/routes/admin/` por serem parte do shell de roteamento
 
-Arquivos alvo:
+Observacoes:
 
-- `src/pages/admin/*`
-- `src/hooks/useErrorLog.ts`
-- `src/hooks/usePermissions.ts`
-- `src/components/admin/*`
-- componentes e helpers fortemente ligados a configuracao administrativa
+- `usePermissions` permaneceu em `src/hooks/` porque ainda e usado no shell (`AppSidebar`, `FloatingClarisChat` e guardas de rota)
+- `useErrorLog` permaneceu em `src/hooks/` porque ainda e consumido fora do admin
 
-Estrutura alvo:
-
-```text
-src/features/admin/
-  components/
-  hooks/
-  pages/
-  types.ts
-```
-
-Tarefas:
-
-- mover pages administrativas para o slice
-- mover hooks de erro/permissao se eles forem dominio admin e nao transversais
-- revisar se `AdminRoute` e `AdminLayout` ficam em `app/` ou no slice
-- atualizar `admin-routes.tsx`
-- atualizar testes admin
-
-Observacao:
-
-- se `AdminRoute` for entendido como regra global de roteamento, ele pode permanecer fora do slice
+## Fases Planejadas
 
 ### Fase 7: Claris
 
@@ -306,13 +284,13 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 
 ## Proxima Fase Recomendada
 
-Proxima fase a executar: `Fase 6: Admin`
+Proxima fase a executar: `Fase 7: Claris`
 
 Motivo:
 
-- o dashboard ja virou slice real e liberou o proximo corte estrutural relevante
-- `admin` ainda concentra pages e hooks espalhados fora de `src/features/`
-- resolver `admin` antes de `claris` reduz o churn no shell e deixa o dominio de assistente para uma fase mais isolada
+- `dashboard` e `admin` ja foram isolados sem dependencias estruturais restantes
+- `claris` ainda concentra page, hooks, card de sugestoes e chat flutuante espalhados entre `pages`, `hooks`, `components/layout` e `components/dashboard`
+- consolidar `claris` agora reduz acoplamento cruzado antes da fase de comunicacao e operacao
 
 ## Ao Concluir Uma Fase
 

@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import AdminLogsErros from "@/pages/admin/AdminLogsErros";
+import AdminLogsErros from "@/features/admin/pages/AdminLogsErros";
 
 const fromMock = vi.fn();
 const toastMock = vi.fn();

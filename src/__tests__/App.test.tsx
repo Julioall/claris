@@ -102,7 +102,7 @@ vi.mock("@/pages/MeusServicos", () => ({
   default: () => <div>MeusServicos Page</div>,
 }));
 
-vi.mock("@/pages/admin/AdminServicosAplicacao", () => ({
+vi.mock("@/features/admin/pages/AdminServicosAplicacao", () => ({
   default: () => <div>AdminServicosAplicacao Page</div>,
 }));
 
