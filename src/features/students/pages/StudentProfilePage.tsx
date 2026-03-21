@@ -12,7 +12,6 @@ import {
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 
-import { ChatWindow } from '@/components/chat/ChatWindow';
 import { StudentGradesTab } from '@/components/student/StudentGradesTab';
 import { StudentHistoryTab } from '@/components/student/StudentHistoryTab';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RiskBadge } from '@/components/ui/RiskBadge';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ChatWindow } from '@/features/claris/components/ChatWindow';
 
 import { useStudentProfile } from '../hooks/useStudentProfile';
 

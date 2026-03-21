@@ -65,7 +65,9 @@ src/
 - `src/features/students/` concentra page, hooks, repository e tipos do dominio de alunos, e os consumidores principais ja usam o slice diretamente.
 - `src/features/tasks/` concentra page, hooks, repository e tipos do dominio de tarefas, e o roteamento ja aponta direto para o slice.
 - `src/features/dashboard/` agora concentra page, hook, repository, query keys, componentes e tipos do dashboard, e o roteamento ja aponta direto para o slice.
+- `src/features/claris/` agora concentra page, hooks e componentes do assistente, enquanto o layout global e o dashboard apenas montam o slice.
 - `src/features/admin/` agora concentra as pages administrativas, enquanto `src/app/routes/admin/` concentra `AdminRoute` e `AdminLayout` como shell de roteamento.
+- `src/lib/claris-settings.ts` e `src/components/ui/claris-logo.tsx` permanecem compartilhados por ainda atenderem mais de um dominio.
 - `src/modules/auth/` e a referencia atual de slice extraido; ele pode continuar como esta no curto prazo e ser renomeado para `src/features/auth/` em etapa posterior.
 - o restante do frontend ainda esta majoritariamente organizado por pastas tecnicas.
 

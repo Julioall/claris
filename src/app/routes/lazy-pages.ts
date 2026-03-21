@@ -13,7 +13,7 @@ export const MessagesPage = lazy(() => import('@/pages/Messages'));
 export const WhatsAppPage = lazy(() => import('@/pages/WhatsApp'));
 export const SettingsPage = lazy(() => import('@/pages/Settings'));
 export const ReportsPage = lazy(() => import('@/pages/Reports'));
-export const ClarisPage = lazy(() => import('@/pages/Claris'));
+export const ClarisPage = lazy(() => import('@/features/claris/pages/ClarisPage'));
 export const AutomationsPage = lazy(() => import('@/pages/Automacoes'));
 export const MyServicesPage = lazy(() => import('@/pages/MeusServicos'));
 export const NotFoundPage = lazy(() => import('@/pages/NotFound'));

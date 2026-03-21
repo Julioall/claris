@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useClarisSuggestions, type ClarisSuggestion, type TriggerEngine } from '@/hooks/useClarisSuggestions';
+import { useClarisSuggestions, type ClarisSuggestion, type TriggerEngine } from '../hooks/useClarisSuggestions';
 
 const PRIORITY_STYLES: Record<string, { badge: string; border: string }> = {
   urgent: { badge: 'bg-risk-critico/15 text-risk-critico border-risk-critico/30', border: 'border-l-risk-critico' },

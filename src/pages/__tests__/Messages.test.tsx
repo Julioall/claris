@@ -8,11 +8,11 @@ import Messages from "@/pages/Messages";
 const useChatMock = vi.fn();
 const fetchConversationsMock = vi.fn();
 
-vi.mock("@/hooks/useChat", () => ({
+vi.mock("@/features/claris/hooks/useChat", () => ({
   useChat: () => useChatMock(),
 }));
 
-vi.mock("@/components/chat/ChatWindow", () => ({
+vi.mock("@/features/claris/components/ChatWindow", () => ({
   ChatWindow: ({
     studentName,
     moodleUserId,

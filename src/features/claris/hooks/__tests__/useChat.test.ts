@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { useChat } from "@/hooks/useChat";
+import { useChat } from "@/features/claris/hooks/useChat";
 
 const useMoodleSessionMock = vi.fn();
 const invokeMock = vi.fn();

@@ -2,13 +2,13 @@ import { forwardRef, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ChatWindow } from "@/components/chat/ChatWindow";
+import { ChatWindow } from "@/features/claris/components/ChatWindow";
 
 const useChatMock = vi.fn();
 const fetchMessagesMock = vi.fn();
 const sendMessageMock = vi.fn();
 
-vi.mock("@/hooks/useChat", () => ({
+vi.mock("@/features/claris/hooks/useChat", () => ({
   useChat: () => useChatMock(),
 }));
 

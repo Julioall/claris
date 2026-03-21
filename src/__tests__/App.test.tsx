@@ -86,7 +86,7 @@ vi.mock("@/pages/Reports", () => ({
   default: () => <div>Reports Page</div>,
 }));
 
-vi.mock("@/pages/Claris", () => ({
+vi.mock("@/features/claris/pages/ClarisPage", () => ({
   default: () => <div>Claris Page</div>,
 }));
 

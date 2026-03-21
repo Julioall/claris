@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ClarisSuggestions } from '@/components/dashboard/ClarisSuggestions';
+import { ClarisSuggestions } from '@/features/claris/components/ClarisSuggestions';
 import { useCoursesData } from '@/features/courses/hooks/useCoursesData';
 import type { WeeklySummary } from '@/features/dashboard/types';
 

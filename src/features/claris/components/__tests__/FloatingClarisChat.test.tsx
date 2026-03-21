@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
-import { FloatingClarisChat } from '@/components/layout/FloatingClarisChat';
+import { FloatingClarisChat } from '@/features/claris/components/FloatingClarisChat';
 import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
 
 const ROUTER_FUTURE = {

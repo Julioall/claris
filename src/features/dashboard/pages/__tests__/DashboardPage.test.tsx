@@ -45,7 +45,7 @@ vi.mock("@/features/dashboard/components/ActivityFeed", () => ({
   ),
 }));
 
-vi.mock("@/components/dashboard/ClarisSuggestions", () => ({
+vi.mock("@/features/claris/components/ClarisSuggestions", () => ({
   ClarisSuggestions: () => <div data-testid="claris-suggestions" />,
 }));
 

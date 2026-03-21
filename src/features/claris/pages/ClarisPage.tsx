@@ -1,6 +1,6 @@
-import { FloatingClarisChat } from '@/components/layout/FloatingClarisChat';
+import { FloatingClarisChat } from '../components/FloatingClarisChat';
 
-export default function Claris() {
+export default function ClarisPage() {
   return (
     <div className="flex h-[calc(100vh-8.5rem)] min-h-[620px] flex-col gap-2 animate-fade-in">
       <div>

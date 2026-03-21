@@ -143,42 +143,22 @@ Observacoes:
 
 ### Fase 7: Claris
 
-Status: `planned`
+Status: `completed`
 
-Objetivo:
+Escopo concluido:
 
-- consolidar experiencia de chat/assistente em `src/features/claris/`
+- `ClarisPage` foi movida para `src/features/claris/pages/`
+- `useChat` e `useClarisSuggestions` foram movidos para `src/features/claris/hooks/`
+- `ChatWindow`, `FloatingClarisChat` e `ClarisSuggestions` foram movidos para `src/features/claris/components/`
+- layout global, dashboard, rotas lazy e consumidores de chat passaram a montar o slice diretamente
+- testes do chat, floating chat, dashboard, layout, mensagens, perfil do aluno e roteamento foram atualizados para os novos imports
+- wrappers antigos de `src/pages/`, `src/hooks/`, `src/components/chat/`, `src/components/layout/FloatingClarisChat.tsx` e `src/components/dashboard/ClarisSuggestions.tsx` foram removidos
 
-Arquivos alvo:
+Observacoes:
 
-- `src/pages/Claris.tsx`
-- `src/hooks/useChat.ts`
-- `src/hooks/useClarisSuggestions.ts`
-- `src/components/chat/*`
-- `src/components/layout/FloatingClarisChat.tsx`
-- `src/components/dashboard/ClarisSuggestions.tsx`
-- libs e contratos relacionados a payload/loop/chat
-
-Estrutura alvo:
-
-```text
-src/features/claris/
-  components/
-  hooks/
-  pages/
-  lib/
-  types.ts
-```
-
-Tarefas:
-
-- separar chat de pagina, chat flutuante e sugestoes proativas como partes do mesmo dominio
-- definir o que fica no slice e o que fica no layout global apenas como ponto de montagem
-- atualizar testes do chat e do floating chat
-
-Observacao:
-
-- esta fase cruza frontend e contratos consumidos pelas edge functions; mudar com cuidado
+- `src/lib/claris-settings.ts` permaneceu compartilhado porque ainda e usado fora do slice, inclusive no admin
+- `src/components/ui/claris-logo.tsx` permaneceu em `src/components/ui/` por ser primitive visual reutilizavel
+- esta fase continua acoplada aos contratos consumidos pelas edge functions, entao mudancas futuras devem manter cuidado com compatibilidade
 
 ### Fase 8: Comunicacao e Operacao
 
@@ -284,13 +264,13 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 
 ## Proxima Fase Recomendada
 
-Proxima fase a executar: `Fase 7: Claris`
+Proxima fase a executar: `Fase 8: Comunicacao e Operacao`
 
 Motivo:
 
-- `dashboard` e `admin` ja foram isolados sem dependencias estruturais restantes
-- `claris` ainda concentra page, hooks, card de sugestoes e chat flutuante espalhados entre `pages`, `hooks`, `components/layout` e `components/dashboard`
-- consolidar `claris` agora reduz acoplamento cruzado antes da fase de comunicacao e operacao
+- `claris` ja foi consolidado e o shell agora consome o slice diretamente
+- `messages`, `whatsapp`, `automacoes` e `meus servicos` ainda permanecem em `src/pages/` e merecem corte de dominio explicito
+- essa etapa reduz o restante do acoplamento entre paginas operacionais e componentes compartilhados antes de mexer em settings, reports e auth
 
 ## Ao Concluir Uma Fase
 

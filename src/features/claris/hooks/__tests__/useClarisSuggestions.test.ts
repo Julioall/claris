@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { createElement } from "react";
-import { useClarisSuggestions } from "@/hooks/useClarisSuggestions";
+import { useClarisSuggestions } from "@/features/claris/hooks/useClarisSuggestions";
 
 // ─── Module mocks ──────────────────────────────────────────────────────────
 const useAuthMock = vi.fn();

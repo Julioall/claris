@@ -44,7 +44,7 @@ vi.mock("@/components/sync/SyncProgressDialog", () => ({
   ),
 }));
 
-vi.mock("@/components/layout/FloatingClarisChat", () => ({
+vi.mock("@/features/claris/components/FloatingClarisChat", () => ({
   FloatingClarisChat: () => <div data-testid="floating-claris-chat" />,
 }));
 

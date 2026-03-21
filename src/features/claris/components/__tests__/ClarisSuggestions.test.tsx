@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ClarisSuggestions } from "@/components/dashboard/ClarisSuggestions";
-import type { ClarisSuggestion } from "@/hooks/useClarisSuggestions";
+import { ClarisSuggestions } from "@/features/claris/components/ClarisSuggestions";
+import type { ClarisSuggestion } from "@/features/claris/hooks/useClarisSuggestions";
 
 const useClarisSuggestionsMock = vi.fn();
 
-vi.mock("@/hooks/useClarisSuggestions", () => ({
+vi.mock("@/features/claris/hooks/useClarisSuggestions", () => ({
   useClarisSuggestions: () => useClarisSuggestionsMock(),
 }));
 

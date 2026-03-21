@@ -22,7 +22,7 @@ vi.mock("@/components/student/StudentHistoryTab", () => ({
   ),
 }));
 
-vi.mock("@/components/chat/ChatWindow", () => ({
+vi.mock("@/features/claris/components/ChatWindow", () => ({
   ChatWindow: ({
     studentName,
     moodleUserId,
