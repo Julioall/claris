@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
+import { searchStudents, searchCourses, searchCategories } from './api/tagInput';
 import type { Tag } from '@/features/tasks/types';
 
 interface TagSuggestion {
@@ -123,63 +123,33 @@ export function TagInput({ tags, onAdd, onRemove, placeholder = 'Adicionar tag..
   const closeMenu = useCallback(() => {
     setShowMenu(false);
     setSuggestions([]);
-    setPrefixHints([]);
-    setSelectedIndex(0);
-    activePrefix.current = null;
-  }, []);
-
-  const addTag = useCallback((suggestion: TagSuggestion) => {
-    onAdd({ label: suggestion.label, prefix: suggestion.prefix, entityId: suggestion.entityId, entityType: suggestion.entityType });
-    setValue('');
-    closeMenu();
-    inputRef.current?.focus();
-  }, [onAdd, closeMenu]);
-
-  const addFreeTag = useCallback((label: string) => {
-    const trimmed = label.trim();
-    if (!trimmed) return;
-    onAdd({ label: trimmed, entityType: 'custom' });
-    setValue('');
-    closeMenu();
-  }, [onAdd, closeMenu]);
-
-  useEffect(() => {
-    if (!showMenu || activePrefix.current === null) return;
-    const prefix = activePrefix.current;
-    const search = value.replace(new RegExp(`^/${prefix}:?`), '');
-
-    const timer = setTimeout(() => {
-      let cancelled = false;
-      fetchEntitySuggestions(prefix, search)
-        .then(results => { if (!cancelled) setSuggestions(results); })
-        .catch(() => { if (!cancelled) setSuggestions([]); });
-      return () => { cancelled = true; };
-    }, 200);
-
-    return () => clearTimeout(timer);
-  }, [value, showMenu]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.value;
-    setValue(v);
-
-    if (v === '/') {
-      setPrefixHints(PREFIX_HINTS);
-      setSuggestions([]);
-      setShowMenu(true);
-      setSelectedIndex(0);
-      activePrefix.current = null;
-      return;
+    if (prefix === 'aluno') {
+      const { data } = await searchStudents(q);
+      return ((data ?? []) as any[]).map((s: any) => ({ label: s.full_name, prefix: 'aluno', entityId: s.id, entityType: 'aluno' }));
     }
-
-    if (v.startsWith('/')) {
-      const parts = v.slice(1).split(':');
-      const typedPrefix = parts[0].toLowerCase();
-      const matched = PREFIX_HINTS.find(h => h.prefix.startsWith(typedPrefix));
-      if (parts.length === 1) {
-        const filtered = PREFIX_HINTS.filter(h => h.prefix.startsWith(typedPrefix));
-        setPrefixHints(filtered);
-        setSuggestions([]);
+    if (prefix === 'uc') {
+      const { data } = await searchCourses(q);
+      return ((data ?? []) as any[]).map((c: any) => ({ label: c.short_name ?? c.name, prefix: 'uc', entityId: c.id, entityType: 'uc' }));
+    }
+    if (prefix === 'turma') {
+      const { data } = await searchCourses(q);
+      return ((data ?? []) as any[]).map((c: any) => ({ label: c.short_name ?? c.name, prefix: 'turma', entityId: c.id, entityType: 'turma' }));
+    }
+    if (prefix === 'curso' || prefix === 'escola') {
+      const { data } = await searchCategories(q);
+      const seen = new Set<string>();
+      const results: TagSuggestion[] = [];
+      ((data ?? []) as any[]).forEach((c: any) => {
+        if (!c.category) return;
+        const parts = (c.category as string).split(' > ').map((p: string) => p.trim());
+        const name = prefix === 'escola' ? parts[1] : parts[2];
+        if (name && name.toLowerCase().includes(q) && !seen.has(name)) {
+          seen.add(name);
+          results.push({ label: name, prefix, entityId: name, entityType: prefix });
+        }
+      });
+      return results;
+    }
         setShowMenu(filtered.length > 0);
         activePrefix.current = null;
         setSelectedIndex(0);

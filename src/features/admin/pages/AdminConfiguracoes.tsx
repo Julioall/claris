@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Separator } from '@/components/ui/separator';
 import { supabase } from '@/integrations/supabase/client';
+import { testClarisLLM } from '../api/settings';
 import { toast } from '@/hooks/use-toast';
 import {
   CLARIS_CONFIGURED_STORAGE_KEY,
@@ -204,9 +205,7 @@ export default function AdminConfiguracoes() {
         return;
       }
 
-      const { data, error } = await supabase.functions.invoke('claris-llm-test', {
-        body: { provider: clarisSettings.provider, model: clarisSettings.model, baseUrl: clarisSettings.baseUrl, apiKey: clarisSettings.apiKey.trim() || undefined },
-      });
+      const { data, error } = await testClarisLLM(clarisSettings.apiKey.trim() || undefined);
       if (error) throw error;
       const latencyLabel = typeof data?.latencyMs === 'number' ? ` (${Math.round(data.latencyMs)} ms)` : '';
       toast({ title: 'Conexao validada', description: `Conexao com o provedor LLM validada com sucesso${latencyLabel}.` });

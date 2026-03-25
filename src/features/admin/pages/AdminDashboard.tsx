@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchAppUsageEventsCount, fetchAppErrorLogsCount } from '../api/metrics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Activity, AlertTriangle, LifeBuoy, MessageSquare, Users } from 'lucide-react';
 import { format, subDays, startOfDay } from 'date-fns';
@@ -32,8 +32,7 @@ export default function AdminDashboard() {
   const { data: usageCount } = useQuery({
     queryKey: ['admin-usage-count'],
     queryFn: async () => {
-      const { count } = await supabase.from('app_usage_events' as never)
-        .select('*', { count: 'exact', head: true });
+      const { count } = await fetchAppUsageEventsCount();
       return count ?? 0;
     },
   });
@@ -41,8 +40,7 @@ export default function AdminDashboard() {
   const { data: errorCount } = useQuery({
     queryKey: ['admin-error-count'],
     queryFn: async () => {
-      const { count } = await supabase.from('app_error_logs' as never)
-        .select('*', { count: 'exact', head: true })
+      const { count } = await fetchAppErrorLogsCount()
         .eq('resolved', false);
       return count ?? 0;
     },

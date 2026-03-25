@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { updateSupportTicket } from '../api/support';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -95,7 +95,7 @@ export default function AdminSuporte() {
     mutationFn: async ({ id, status, notes }: { id: string; status: string; notes: string }) => {
       const update: Record<string, unknown> = { status, admin_notes: notes };
       if (status === 'resolvido') update.resolved_at = new Date().toISOString();
-      const { error } = await supabase.from('support_tickets').update(update).eq('id', id);
+      const { error } = await updateSupportTicket(id, update);
       if (error) throw error;
     },
     onSuccess: () => {

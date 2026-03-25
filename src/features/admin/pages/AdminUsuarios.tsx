@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { deleteAdminUserRole } from '../api/users';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -78,7 +78,7 @@ export default function AdminUsuarios() {
 
   const revokeMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('admin_user_roles').delete().eq('id', id);
+      const { error } = await deleteAdminUserRole(id);
       if (error) throw error;
     },
     onSuccess: () => {

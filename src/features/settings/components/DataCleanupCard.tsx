@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { supabase } from '@/integrations/supabase/client';
+import { cleanupData } from '../api/cleanup';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -106,63 +106,11 @@ const cleanupOptions: CleanupOption[] = [
   },
 ];
 
-// Helper to delete from specific table with proper typing
+
+// Nova função: chama a Edge Function de cleanup
 async function deleteFromTable(tableId: string): Promise<{ success: boolean; error?: string }> {
   try {
-    let error = null;
-    
-    switch (tableId) {
-      case 'activities':
-        ({ error } = await supabase.from('student_activities').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'students':
-        // First delete dependencies
-        await supabase.from('student_courses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('pending_tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('notes').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('risk_history').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('student_activities').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('student_course_grades').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        ({ error } = await supabase.from('students').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'courses':
-        // First delete dependencies
-        await supabase.from('user_courses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('student_courses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        await supabase.from('student_course_grades').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-        ({ error } = await supabase.from('courses').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'pending_tasks':
-        ({ error } = await supabase.from('pending_tasks').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'notes':
-        ({ error } = await supabase.from('notes').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'activity_feed':
-        ({ error } = await supabase.from('activity_feed').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'risk_history':
-        ({ error } = await supabase.from('risk_history').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'user_sync_preferences':
-        ({ error } = await supabase.from('user_sync_preferences').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'user_ignored_courses':
-        ({ error } = await supabase.from('user_ignored_courses').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'user_courses':
-        ({ error } = await supabase.from('user_courses').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'student_courses':
-        ({ error } = await supabase.from('student_courses').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      case 'student_course_grades':
-        ({ error } = await supabase.from('student_course_grades').delete().neq('id', '00000000-0000-0000-0000-000000000000'));
-        break;
-      default:
-        return { success: false, error: 'Tabela desconhecida' };
-    }
-    
+    const { data, error } = await cleanupData();
     if (error) {
       return { success: false, error: error.message };
     }
@@ -305,9 +253,7 @@ export function DataCleanupCard() {
     setShowFullCleanupDialog(false);
 
     try {
-      const { data, error } = await supabase.functions.invoke('data-cleanup', {
-        body: { mode: 'full_cleanup' },
-      });
+      const { data, error } = await cleanupData();
 
       if (error) {
         toast({

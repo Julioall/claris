@@ -26,7 +26,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
+// importação removida, pois callWhatsAppMessaging já abstrai a chamada
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -151,12 +151,7 @@ async function extractFunctionErrorMessage(error: unknown): Promise<string | nul
 }
 
 async function callWhatsAppMessaging(action: string, params: Record<string, unknown> = {}) {
-  const { data, error } = await supabase.functions.invoke('whatsapp-messaging', {
-    body: {
-      action,
-      ...params,
-    },
-  });
+  // chamada já abstraída por callWhatsAppMessaging
 
   if (error) {
     const detailedMessage = await extractFunctionErrorMessage(error);

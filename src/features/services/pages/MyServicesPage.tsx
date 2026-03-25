@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchAppServiceInstances, fetchAppServiceInstanceEvents } from '../api/myServices';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -417,7 +417,7 @@ export default function MyServicesPage() {
     queryKey: ['my-whatsapp-instance'],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await supabase.from('app_service_instances' as never)
+      const { data, error } = await fetchAppServiceInstances()
         .select('*')
         .eq('owner_user_id', user.id)
         .eq('service_type', 'whatsapp')
@@ -433,7 +433,7 @@ export default function MyServicesPage() {
     queryKey: ['my-whatsapp-events', myInstance?.id],
     queryFn: async () => {
       if (!myInstance) return [];
-      const { data, error } = await supabase.from('app_service_instance_events' as never)
+      const { data, error } = await fetchAppServiceInstanceEvents()
         .select('id, event_type, origin, status, context, error_summary, created_at')
         .eq('instance_id', myInstance.id)
         .order('created_at', { ascending: false })

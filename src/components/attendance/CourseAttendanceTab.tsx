@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { CalendarCheck2, Plus } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchAttendanceRecords, fetchStudentCourses } from '@/features/courses/api';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,18 +73,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const fetchRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await (supabase as SupabaseClient)
-      .from('attendance_records')
-      .select(`
-        id,
-        attendance_date,
-        status,
-        notes,
-        students (id, full_name)
-      `)
-      .eq('user_id', user.id)
-      .eq('course_id', courseId)
-      .order('attendance_date', { ascending: false });
+    const { data, error } = await fetchAttendanceRecords(user.id, courseId);
 
     if (error) throw error;
 
@@ -105,12 +94,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   }, [courseId, user]);
 
   const fetchStudents = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('student_courses')
-      .select(`
-        students (id, full_name, email)
-      `)
-      .eq('course_id', courseId);
+    const { data, error } = await fetchStudentCourses(courseId);
 
     if (error) throw error;
 
