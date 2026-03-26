@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { cleanupData } from '../api/cleanup';
+import { cleanupData, cleanupSelection } from '../api/cleanup';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -108,18 +108,6 @@ const cleanupOptions: CleanupOption[] = [
 
 
 // Nova função: chama a Edge Function de cleanup
-async function deleteFromTable(tableId: string): Promise<{ success: boolean; error?: string }> {
-  try {
-    const { data, error } = await cleanupData();
-    if (error) {
-      return { success: false, error: error.message };
-    }
-    return { success: true };
-  } catch (err) {
-    return { success: false, error: err instanceof Error ? err.message : 'Erro desconhecido' };
-  }
-}
-
 export function DataCleanupCard() {
   const { setCourses } = useAuth();
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
@@ -208,7 +196,7 @@ export function DataCleanupCard() {
         const option = cleanupOptions.find(o => o.id === optionId);
         if (!option) continue;
 
-        const result = await deleteFromTable(optionId);
+        const result = await cleanupSelection(optionId);
         
         if (result.success) {
           deletedCount++;
@@ -253,7 +241,7 @@ export function DataCleanupCard() {
     setShowFullCleanupDialog(false);
 
     try {
-      const { data, error } = await cleanupData();
+      const { data, error } = await cleanupData({ mode: 'full_cleanup' });
 
       if (error) {
         toast({

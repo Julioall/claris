@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
 import { CalendarCheck2, Plus } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchAttendanceRecords, fetchStudentCourses } from '@/features/courses/api';
+import {
+  fetchAttendanceRecords,
+  fetchAttendanceRecordsForDate,
+  fetchStudentCourses,
+  saveAttendanceRecords,
+} from '@/features/courses/api';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,13 +122,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
   const loadDateRecords = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await (supabase as SupabaseClient)
-      .from('attendance_records')
-      .select('student_id, status, notes, updated_at')
-      .eq('user_id', user.id)
-      .eq('course_id', courseId)
-      .eq('attendance_date', selectedDate)
-      .order('updated_at', { ascending: false });
+    const { data, error } = await fetchAttendanceRecordsForDate(user.id, courseId, selectedDate);
 
     if (error) throw error;
 
@@ -216,9 +214,7 @@ export function CourseAttendanceTab({ courseId }: CourseAttendanceTabProps) {
     setIsSaving(true);
 
     try {
-      const { error } = await (supabase as SupabaseClient)
-        .from('attendance_records')
-        .upsert(payload, { onConflict: 'user_id,course_id,student_id,attendance_date' });
+      const { error } = await saveAttendanceRecords(payload);
 
       if (error) throw error;
 

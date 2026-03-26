@@ -1,6 +1,11 @@
-import { useState, useEffect } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { updateSupportTicket } from '../api/support';
+import {
+  listSupportTickets,
+  subscribeToSupportTickets,
+  unsubscribeFromSupportTickets,
+  updateSupportTicket,
+} from '../api/support';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -55,37 +60,24 @@ export default function AdminSuporte() {
 
   // Realtime subscription for new tickets
   useEffect(() => {
-    const channel = supabase
-      .channel('admin-support-tickets-realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'support_tickets' },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['admin-support-tickets'] });
-          setNewTicketCount((prev) => prev + 1);
-          toast({ title: 'Novo ticket de suporte recebido!' });
-        },
-      )
-      .subscribe();
+    const channel = subscribeToSupportTickets(() => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-support-tickets'] });
+      setNewTicketCount((prev) => prev + 1);
+      toast({ title: 'Novo ticket de suporte recebido!' });
+    });
 
     return () => {
-      void supabase.removeChannel(channel);
+      void unsubscribeFromSupportTickets(channel);
     };
   }, [queryClient]);
 
   const { data: tickets = [], isLoading } = useQuery({
     queryKey: ['admin-support-tickets', statusFilter, typeFilter],
     queryFn: async () => {
-      let query = supabase
-        .from('support_tickets')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
-
-      if (statusFilter !== 'all') query = query.eq('status', statusFilter);
-      if (typeFilter !== 'all') query = query.eq('type', typeFilter);
-
-      const { data, error } = await query;
+      const { data, error } = await listSupportTickets({
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        type: typeFilter !== 'all' ? typeFilter : undefined,
+      });
       if (error) throw error;
       return (data ?? []) as SupportTicket[];
     },
@@ -192,9 +184,8 @@ export default function AdminSuporte() {
               </TableHeader>
               <TableBody>
                 {filtered.map((ticket) => (
-                  <>
+                  <Fragment key={ticket.id}>
                     <TableRow
-                      key={ticket.id}
                       className="cursor-pointer"
                       onClick={() => setExpandedId(expandedId === ticket.id ? null : ticket.id)}
                     >
@@ -218,7 +209,7 @@ export default function AdminSuporte() {
                       </TableCell>
                     </TableRow>
                     {expandedId === ticket.id && (
-                      <TableRow key={`${ticket.id}-detail`}>
+                      <TableRow>
                         <TableCell colSpan={6} className="bg-muted/30 p-4">
                           <div className="space-y-3">
                             <div>
@@ -270,7 +261,7 @@ export default function AdminSuporte() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>

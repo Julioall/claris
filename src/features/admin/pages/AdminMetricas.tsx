@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { listUsageEvents } from '../api/metrics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -33,18 +33,12 @@ export default function AdminMetricas() {
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['admin-usage-events', typeFilter, userFilter, dateFrom, dateTo],
     queryFn: async () => {
-      let query = supabase
-        .from('app_usage_events')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(500);
-
-      if (typeFilter !== 'all') query = query.eq('event_type', typeFilter);
-      if (userFilter.trim()) query = query.eq('user_id', userFilter.trim());
-      if (dateFrom) query = query.gte('created_at', startOfDay(new Date(dateFrom)).toISOString());
-      if (dateTo) query = query.lte('created_at', endOfDay(new Date(dateTo)).toISOString());
-
-      const { data, error } = await query;
+      const { data, error } = await listUsageEvents({
+        eventType: typeFilter !== 'all' ? typeFilter : undefined,
+        userId: userFilter.trim() || undefined,
+        dateFrom: dateFrom ? startOfDay(new Date(dateFrom)).toISOString() : undefined,
+        dateTo: dateTo ? endOfDay(new Date(dateTo)).toISOString() : undefined,
+      });
       if (error) throw error;
       return (data ?? []) as UsageEvent[];
     },

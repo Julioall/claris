@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { deleteAdminUserRole } from '../api/users';
+import {
+  deleteAdminUserRole,
+  listAdminUserRoles,
+  listAdminUsers,
+  upsertAdminUserRole,
+} from '../api/users';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -33,10 +38,7 @@ export default function AdminUsuarios() {
   const { data: users = [], isLoading: loadingUsers } = useQuery({
     queryKey: ['admin-users'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('users')
-        .select('id, full_name, moodle_username, email')
-        .order('full_name');
+      const { data, error } = await listAdminUsers();
       if (error) throw error;
       return (data ?? []) as User[];
     },
@@ -45,10 +47,7 @@ export default function AdminUsuarios() {
   const { data: roles = [], isLoading: loadingRoles } = useQuery({
     queryKey: ['admin-user-roles'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('admin_user_roles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data, error } = await listAdminUserRoles();
       if (error) throw error;
       return (data ?? []) as AdminUserRole[];
     },
@@ -56,14 +55,7 @@ export default function AdminUsuarios() {
 
   const grantMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const permissions = role === 'admin'
-        ? ['admin', 'support', 'analyst']
-        : role === 'support'
-          ? ['support']
-          : ['analyst'];
-      const { error } = await supabase
-        .from('admin_user_roles')
-        .upsert({ user_id: userId, role, permissions }, { onConflict: 'user_id' });
+      const { error } = await upsertAdminUserRole(userId, role);
       if (error) throw error;
     },
     onSuccess: () => {

@@ -1,7 +1,9 @@
-// API para conversas administrativas
-
 import { supabase } from '@/integrations/supabase/client';
 
-export async function fetchAdminConversations() {
-  return supabase.from('claris_conversations').select('*');
+export async function listAdminConversations(limit = 200) {
+  return supabase
+    .from('claris_conversations')
+    .select('*')
+    .order('updated_at', { ascending: false })
+    .limit(limit);
 }

@@ -26,6 +26,10 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import {
+  callWhatsAppMessaging as invokeWhatsAppMessaging,
+  fetchActiveWhatsAppInstances,
+} from '@/features/whatsapp/api/messaging';
 // importação removida, pois callWhatsAppMessaging já abstrai a chamada
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -136,33 +140,8 @@ function getInstancePhone(instance: WhatsAppInstance | null) {
     : null;
 }
 
-async function extractFunctionErrorMessage(error: unknown): Promise<string | null> {
-  if (!error || typeof error !== 'object') return null;
-
-  const context = (error as { context?: Response }).context;
-  if (!context) return null;
-
-  try {
-    const payload = await context.clone().json();
-    return typeof payload?.error === 'string' ? payload.error : null;
-  } catch {
-    return null;
-  }
-}
-
 async function callWhatsAppMessaging(action: string, params: Record<string, unknown> = {}) {
-  // chamada já abstraída por callWhatsAppMessaging
-
-  if (error) {
-    const detailedMessage = await extractFunctionErrorMessage(error);
-    throw new Error(detailedMessage || error.message);
-  }
-
-  if (data?.error) {
-    throw new Error(String(data.error));
-  }
-
-  return (data ?? {}) as Record<string, unknown>;
+  return invokeWhatsAppMessaging(action, params);
 }
 
 function WhatsAppStatusIcon({ status }: { status?: WhatsAppMessageStatus }) {
@@ -469,12 +448,7 @@ export default function WhatsAppPage() {
   } = useQuery({
     queryKey: ['page-whatsapp-instances'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('app_service_instances')
-        .select('id, name, scope, connection_status, is_active, is_blocked, last_activity_at, created_at, metadata')
-        .eq('service_type', 'whatsapp')
-        .eq('is_active', true)
-        .eq('is_blocked', false);
+      const { data, error } = await fetchActiveWhatsAppInstances();
 
       if (error) throw error;
       return sortInstances((data ?? []) as WhatsAppInstance[]);

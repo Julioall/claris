@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import SettingsPage from "@/features/settings/pages/SettingsPage";
@@ -39,6 +40,21 @@ const setAuthUser = () => {
   });
 };
 
+const renderPage = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SettingsPage />
+    </QueryClientProvider>,
+  );
+};
+
 describe("Settings page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -55,7 +71,7 @@ describe("Settings page", () => {
   });
 
   it("shows profile, theme and sync for all users", async () => {
-    render(<SettingsPage />);
+    renderPage();
 
     expect(
       screen.getByRole("heading", { level: 1, name: /configuracoes/i }),
@@ -71,7 +87,7 @@ describe("Settings page", () => {
 
   it("triggers initial general sync", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    renderPage();
 
     await user.click(screen.getByRole("button", { name: /sincronizacao geral inicial/i }));
     expect(syncDataMock).toHaveBeenCalledTimes(1);
@@ -79,7 +95,7 @@ describe("Settings page", () => {
 
   it("allows logout", async () => {
     const user = userEvent.setup();
-    render(<SettingsPage />);
+    renderPage();
 
     await user.click(screen.getByRole("button", { name: /sair da conta/i }));
     expect(logoutMock).toHaveBeenCalledTimes(1);

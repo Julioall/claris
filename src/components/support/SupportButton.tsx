@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { createSupportTicket } from '@/features/admin/api/support';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
@@ -44,7 +44,7 @@ export function SupportButton({ className, size = 'icon', showLabel = false }: S
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('support_tickets' as never).insert({
+      const { error } = await createSupportTicket({
         user_id: user?.id ?? null,
         type,
         title: title.trim(),
@@ -54,7 +54,7 @@ export function SupportButton({ className, size = 'icon', showLabel = false }: S
           userAgent: navigator.userAgent,
           url: window.location.href,
         },
-      } as never);
+      });
 
       if (error) throw error;
 

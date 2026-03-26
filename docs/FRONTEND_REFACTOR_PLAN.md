@@ -1,6 +1,6 @@
 # Frontend Refactor Plan
 
-Atualizado em `2026-03-21`.
+Atualizado em `2026-03-26`.
 
 Este documento e o plano operacional da refatoracao do frontend. Ele deve ser lido antes de continuar a modularizacao em outra sessao ou com outra IA.
 
@@ -228,7 +228,7 @@ Escopo concluido:
 Observacoes:
 
 - `src/hooks/` ficou reservado a hooks transversais ou ainda ligados ao shell, como `use-toast`, `use-mobile`, `useTrackEvent`, `usePermissions`, `useMoodleApi` e `useErrorLog`
-- a etapa fechou a modularizacao estrutural sem ativar ainda flags mais agressivas de TypeScript
+- o endurecimento de TypeScript foi concluido depois desta fase com `strictNullChecks`, `noImplicitAny`, `noUnusedLocals` e `strict` no app
 
 ## O Que Pode Permanecer Fora de Features
 
@@ -244,7 +244,6 @@ Estes itens podem permanecer fora de `src/features/` mesmo ao final:
 - warnings antigos de React Router future flags nos testes
 - avisos de acessibilidade em dialogs de alguns testes
 - documentacao historica antiga em `docs/tasks-agenda-rebuild.md` e `docs/tasks-refactor-cleanup.md` pode ficar defasada em relacao ao estado atual
-- flags mais agressivas de TypeScript (`strictNullChecks`, `noImplicitAny`, `noUnusedLocals` e depois `strict`) seguem como endurecimento futuro, separado do refactor estrutural
 
 ## Proxima Fase Recomendada
 
@@ -254,7 +253,7 @@ Motivo:
 
 - os slices principais ja estao alinhados na convencao final de `features/`
 - `src/pages/`, `src/hooks/`, `src/services/` e o antigo barrel global de tipos ficaram reduzidos ao papel esperado no estado final
-- o trabalho seguinte passa a ser manutencao incremental: warnings de teste, endurecimento de TypeScript e atualizacao de documentacao historica quando fizer sentido
+- o trabalho seguinte passa a ser manutencao incremental: warnings de teste e atualizacao de documentacao historica quando fizer sentido
 
 Proximo plano operacional:
 

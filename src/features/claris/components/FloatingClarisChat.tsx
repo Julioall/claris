@@ -7,13 +7,21 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ClarisIcon } from '@/components/ui/claris-logo';
 import { cn } from '@/lib/utils';
-import { CLARIS_CONFIGURED_STORAGE_KEY, parseClarisLlmSettings } from '@/lib/claris-settings';
-import { GLOBAL_APP_SETTINGS_ID } from '@/lib/global-app-settings';
-import { supabase } from '@/integrations/supabase/client';
-import type { Database, Json } from '@/integrations/supabase/types';
+import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
+import {
+  fetchClarisAvailability,
+  invokeClarisChat,
+  type ClarisAvailabilityStatus,
+} from '@/features/claris/api/chat';
+import {
+  createClarisConversation,
+  deleteClarisConversation,
+  fetchClarisConversations,
+  updateClarisConversation,
+} from '@/features/claris/api/conversations';
 import { usePermissions } from '@/hooks/usePermissions';
 import {
   DropdownMenu,
@@ -66,12 +74,6 @@ interface ChatMessage {
 }
 
 interface ClarisChatHistoryItem { role: ChatRole; content: string; richBlocks?: ChatRichBlock[]; }
-
-interface ClarisChatFunctionResponse { reply?: unknown; uiActions?: unknown; richBlocks?: unknown; }
-
-type ClarisConversationRow = Database['public']['Tables']['claris_conversations']['Row'];
-type ClarisConversationInsert = Database['public']['Tables']['claris_conversations']['Insert'];
-type ClarisConversationUpdate = Database['public']['Tables']['claris_conversations']['Update'];
 
 // ---- Constants ----
 
@@ -366,55 +368,6 @@ interface ClarisConversationThread {
 }
 
 type FloatingChatVisualState = 'closed' | 'opening' | 'open' | 'closing';
-type ClarisAvailabilityStatus = 'ready' | 'not_configured' | 'invalid';
-
-// ---- Supabase helpers ----
-
-async function fetchConversations(userId: string) {
-  const { data, error } = await supabase
-    .from('claris_conversations')
-    .select('id, title, messages, updated_at, last_context_route')
-    .eq('user_id', userId)
-    .order('updated_at', { ascending: false })
-    .limit(30);
-  if (error) throw error;
-  return data ?? [];
-}
-
-async function insertConversation(userId: string, title: string, messages: Json, lastContextRoute: string) {
-  const payload: ClarisConversationInsert = {
-    user_id: userId,
-    title,
-    messages,
-    last_context_route: lastContextRoute,
-  };
-
-  const { data, error } = await supabase
-    .from('claris_conversations')
-    .insert(payload)
-    .select('id, title, messages, updated_at, last_context_route')
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-async function updateConversation(id: string, userId: string, fields: ClarisConversationUpdate) {
-  const { error } = await supabase
-    .from('claris_conversations')
-    .update(fields)
-    .eq('id', id)
-    .eq('user_id', userId);
-  if (error) throw error;
-}
-
-async function deleteConversationRow(id: string, userId: string) {
-  const { error } = await supabase
-    .from('claris_conversations')
-    .delete()
-    .eq('id', id)
-    .eq('user_id', userId);
-  if (error) throw error;
-}
 
 // ---- Main component ----
 
@@ -470,30 +423,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
 
   const refreshGlobalClarisConfiguration = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('claris_llm_settings')
-        .eq('singleton_id', GLOBAL_APP_SETTINGS_ID)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      const rawSettings = (data?.claris_llm_settings ?? null) as unknown;
-      const parsed = parseClarisLlmSettings(rawSettings);
-      const rawConfiguredFlag = Boolean(
-        rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
-          ? (rawSettings as { configured?: unknown }).configured
-          : false,
-      );
-
-      const status: ClarisAvailabilityStatus = parsed.configured
-        ? 'ready'
-        : rawConfiguredFlag
-          ? 'invalid'
-          : 'not_configured';
-
-      const configured = status === 'ready';
-      localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(configured));
+      const status = await fetchClarisAvailability();
       setClarisAvailability(status);
       return status;
     } catch {
@@ -569,7 +499,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
         fallbackThread = { id: `local-${Date.now()}`, title: deriveConversationTitle(localHistory), history: localHistory, updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true };
       }
       try {
-        const rows = await fetchConversations(userId);
+        const rows = await fetchClarisConversations(userId);
         const remote: ClarisConversationThread[] = rows.map((row) => {
           const history = parseHistoryFromJson(row.messages);
           return { id: row.id, title: row.title || deriveConversationTitle(history), history, updatedAt: row.updated_at, lastContextRoute: row.last_context_route || activeRouteContext };
@@ -616,13 +546,13 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       return [...updated].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     });
     if (activeConversationId.startsWith('local-')) {
-      void insertConversation(userId, titleToPersist, historyToPersist, activeRouteContext).then((data) => {
+      void createClarisConversation(userId, titleToPersist, historyToPersist, activeRouteContext).then((data) => {
         setConversations((prev) => prev.map((c) => c.id === activeConversationId ? { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updated_at, lastContextRoute: data.last_context_route || activeRouteContext } : c));
         setActiveConversationId(data.id);
       }).catch(() => {});
       return;
     }
-    void updateConversation(activeConversationId, userId, { title: titleToPersist, messages: historyToPersist, last_context_route: activeRouteContext });
+    void updateClarisConversation(activeConversationId, userId, { title: titleToPersist, messages: historyToPersist, last_context_route: activeRouteContext });
   }, [activeConversationId, activeConversationTitle, activeRouteContext, historyStorageKey, isHydratingConversations, messages, userId]);
 
   const selectConversation = (id: string) => {
@@ -638,7 +568,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     if (reusable) { setActiveConversationId(reusable.id); setMessages([INITIAL_MESSAGE]); setInputValue(''); return; }
     const localConv: ClarisConversationThread = { id: `local-${Date.now()}`, title: 'Nova conversa', history: [], updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true };
     try {
-      const data = await insertConversation(userId, 'Nova conversa', [], activeRouteContext);
+      const data = await createClarisConversation(userId, 'Nova conversa', [], activeRouteContext);
       const created: ClarisConversationThread = { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updated_at, lastContextRoute: data.last_context_route || activeRouteContext };
       setConversations((prev) => [created, ...prev]); setActiveConversationId(created.id);
     } catch {
@@ -656,7 +586,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     if (!nextTitle) { setEditingConversationError('O título não pode ficar vazio.'); return; }
     setEditingConversationError('');
     setConversations((prev) => prev.map((c) => c.id === editingConversationId ? { ...c, title: nextTitle, updatedAt: new Date().toISOString() } : c));
-    if (!editingConversationId.startsWith('local-')) await updateConversation(editingConversationId, userId, { title: nextTitle });
+    if (!editingConversationId.startsWith('local-')) await updateClarisConversation(editingConversationId, userId, { title: nextTitle });
     cancelRenameConversation();
   };
 
@@ -667,7 +597,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     if (!confirmed) return;
     const remaining = conversations.filter((c) => c.id !== id);
     setConversations(remaining);
-    if (!id.startsWith('local-')) await deleteConversationRow(id, userId);
+    if (!id.startsWith('local-')) await deleteClarisConversation(id, userId);
     if (activeConversationId === id) {
       if (remaining.length > 0) { const next = [...remaining].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]; setActiveConversationId(next.id); setMessages([INITIAL_MESSAGE, ...historyToChatMessages(next.history)]); }
       else await createNewConversation();
@@ -696,11 +626,13 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     }
     setIsSending(true);
     try {
-      const { data, error } = await supabase.functions.invoke('claris-chat', {
-        body: { message: trimmed, history, moodleUrl: moodleSession?.moodleUrl, moodleToken: moodleSession?.moodleToken, action: action ? { kind: action.kind, value: action.value, jobId: action.jobId } : undefined },
+      const typedData = await invokeClarisChat({
+        message: trimmed,
+        history,
+        moodleUrl: moodleSession?.moodleUrl,
+        moodleToken: moodleSession?.moodleToken,
+        action: action ? { kind: action.kind, value: action.value, jobId: action.jobId } : undefined,
       });
-      if (error) throw error;
-      const typedData = (data ?? {}) as ClarisChatFunctionResponse;
       const reply = typeof typedData.reply === 'string' && typedData.reply.trim().length > 0 ? typedData.reply : CLARIS_PLACEHOLDER_REPLY;
       const uiActions = parseUiActions(typedData.uiActions);
       const richBlocks = parseRichBlocks(typedData.richBlocks);

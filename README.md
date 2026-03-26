@@ -1,6 +1,6 @@
 # Claris
 
-Fluxo local padrao com Docker Compose para subir frontend + Supabase local.
+Fluxo local padrao com Docker Compose base para Supabase local e override de desenvolvimento para frontend + integracoes.
 
 ## Variaveis de ambiente
 
@@ -18,18 +18,29 @@ cp .env.example .env
 
 - [docs/ACTIM.md](docs/ACTIM.md): visao funcional e fluxo do produto.
 - [docs/MOODLE_API.md](docs/MOODLE_API.md): referencias de integracao com Moodle.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): arquitetura atual do app, fronteiras de dominio e seguranca.
+- [docs/EDGE_FUNCTIONS.md](docs/EDGE_FUNCTIONS.md): padroes, runtime compartilhado e operacao das Edge Functions.
 - [docs/SUPABASE_RLS.md](docs/SUPABASE_RLS.md): estado canonico de RLS por dominio no schema local.
 - [docs/auth-architecture.md](docs/auth-architecture.md): separacao atual do modulo de autenticacao, sessao Moodle e sincronizacao.
 - [docs/FRONTEND_MODULES.md](docs/FRONTEND_MODULES.md): direcao de modularizacao do frontend por `app/` e `features/`.
+- [docs/DECISIONS/](docs/DECISIONS): ADRs com decisoes estruturais do projeto.
 
 ## Requisito
 
 - Docker Desktop (com Docker Compose)
 
-## Subir tudo
+## Cenarios de compose
+
+Somente Supabase local:
 
 ```bash
-docker compose up --build -d
+docker compose -f docker-compose.yml up --build -d
+```
+
+Stack completa de desenvolvimento:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
 ```
 
 Servicos esperados:
@@ -38,6 +49,7 @@ Servicos esperados:
 - Supabase API: `http://127.0.0.1:54321`
 - Supabase Studio: `http://127.0.0.1:54323`
 - Supabase Mailpit: `http://127.0.0.1:54324`
+- Evolution API: `http://127.0.0.1:8081` quando o `docker-compose.dev.yml` estiver ativo
 
 Observacao para WhatsApp / Evolution API:
 
@@ -59,13 +71,13 @@ O container `supabase` executa automaticamente:
 1. Verificar status dos containers:
 
 ```bash
-docker compose ps
+docker compose -f docker-compose.yml -f docker-compose.dev.yml ps
 ```
 
 1. Ver logs do runner Supabase:
 
 ```bash
-docker compose logs -f supabase
+docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f supabase
 ```
 
 1. Verificar function local (retorno esperado: HTTP 400 por falta de campos, provando que a function esta ativa):
@@ -143,7 +155,7 @@ Variáveis opcionais:
 ## Parar tudo
 
 ```bash
-docker compose down
+docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 ```
 
 ## Variaveis de Ambiente GitHub Actions / Public Build

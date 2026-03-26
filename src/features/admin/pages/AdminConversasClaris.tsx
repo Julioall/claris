@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { listAdminConversations } from '../api/conversations';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -25,11 +25,7 @@ export default function AdminConversasClaris() {
   const { data: conversations = [], isLoading } = useQuery({
     queryKey: ['admin-claris-conversations'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('claris_conversations')
-        .select('*')
-        .order('updated_at', { ascending: false })
-        .limit(200);
+      const { data, error } = await listAdminConversations();
       if (error) throw error;
       return (data ?? []) as Conversation[];
     },
@@ -81,9 +77,8 @@ export default function AdminConversasClaris() {
                 {filtered.map((conv) => {
                   const messages = Array.isArray(conv.messages) ? conv.messages : [];
                   return (
-                    <>
+                    <Fragment key={conv.id}>
                       <TableRow
-                        key={conv.id}
                         className="cursor-pointer"
                         onClick={() => setExpandedId(expandedId === conv.id ? null : conv.id)}
                       >
@@ -98,7 +93,7 @@ export default function AdminConversasClaris() {
                         </TableCell>
                       </TableRow>
                       {expandedId === conv.id && (
-                        <TableRow key={`${conv.id}-detail`}>
+                        <TableRow>
                           <TableCell colSpan={5} className="bg-muted/30 p-4">
                             <div className="space-y-2 max-h-64 overflow-auto">
                               {messages.length === 0 ? (
@@ -121,7 +116,7 @@ export default function AdminConversasClaris() {
                           </TableCell>
                         </TableRow>
                       )}
-                    </>
+                    </Fragment>
                   );
                 })}
               </TableBody>

@@ -6,8 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { supabase } from '@/integrations/supabase/client';
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
+import {
+  debugStudentGrades,
+  listGradeDebugCourses,
+  listGradeDebugStudentsByMoodleCourseId,
+} from '../api';
 
 interface CourseOption {
   id: string;
@@ -34,39 +38,25 @@ export function GradeDebugCard() {
 
   const loadCourses = async () => {
     if (courses.length > 0) return;
-    
-    const { data } = await supabase
-      .from('courses')
-      .select('id, name, moodle_course_id')
-      .order('name');
-    
+
+    const { data } = await listGradeDebugCourses();
+
     if (data) {
-      setCourses(data);
+      setCourses(data as CourseOption[]);
     }
   };
 
   const loadStudents = async (courseId: string) => {
-    const { data: course } = await supabase
-      .from('courses')
-      .select('id')
-      .eq('moodle_course_id', courseId)
-      .single();
-    
-    if (!course) return;
+    const { data, error } = await listGradeDebugStudentsByMoodleCourseId(courseId);
 
-    const { data } = await supabase
-      .from('student_courses')
-      .select('students!inner(id, full_name, moodle_user_id)')
-      .eq('course_id', course.id)
-      .limit(20);
-    
+    if (error) {
+      setStudents([]);
+      setError(error.message);
+      return;
+    }
+
     if (data) {
-      const studentList = data.map((sc: { students: { id: string; full_name: string; moodle_user_id: string } }) => ({
-        id: sc.students.id,
-        full_name: sc.students.full_name,
-        moodle_user_id: sc.students.moodle_user_id,
-      }));
-      setStudents(studentList);
+      setStudents(data as StudentOption[]);
     }
   };
 
@@ -89,14 +79,11 @@ export function GradeDebugCard() {
       const student = students.find(s => s.id === selectedStudent);
       if (!student) throw new Error('Aluno não encontrado');
 
-      const { data, error: invokeError } = await supabase.functions.invoke('moodle-sync-grades', {
-        body: {
-          action: 'debug_grades',
-          moodleUrl: moodleSession.moodleUrl,
-          token: moodleSession.moodleToken,
-          courseId: parseInt(selectedCourse, 10),
-          userId: parseInt(student.moodle_user_id, 10),
-        },
+      const { data, error: invokeError } = await debugStudentGrades({
+        moodleUrl: moodleSession.moodleUrl,
+        token: moodleSession.moodleToken,
+        courseId: parseInt(selectedCourse, 10),
+        userId: parseInt(student.moodle_user_id, 10),
       });
 
       if (invokeError) {

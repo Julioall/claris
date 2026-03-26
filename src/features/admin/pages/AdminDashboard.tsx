@@ -1,5 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchAppUsageEventsCount, fetchAppErrorLogsCount } from '../api/metrics';
+import {
+  fetchAppErrorLogsCount,
+  fetchAppUsageEventsCount,
+  fetchClarisConversationsCount,
+  fetchOpenSupportTicketsCount,
+  fetchUsersCount,
+  listRecentUsageEvents,
+} from '../api/metrics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Activity, AlertTriangle, LifeBuoy, MessageSquare, Users } from 'lucide-react';
 import { format, subDays, startOfDay } from 'date-fns';
@@ -40,8 +47,7 @@ export default function AdminDashboard() {
   const { data: errorCount } = useQuery({
     queryKey: ['admin-error-count'],
     queryFn: async () => {
-      const { count } = await fetchAppErrorLogsCount()
-        .eq('resolved', false);
+      const { count } = await fetchAppErrorLogsCount({ resolved: false });
       return count ?? 0;
     },
   });
@@ -49,9 +55,7 @@ export default function AdminDashboard() {
   const { data: ticketCount } = useQuery({
     queryKey: ['admin-ticket-count'],
     queryFn: async () => {
-      const { count } = await supabase.from('support_tickets' as never)
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'aberto');
+      const { count } = await fetchOpenSupportTicketsCount();
       return count ?? 0;
     },
   });
@@ -59,9 +63,7 @@ export default function AdminDashboard() {
   const { data: conversationCount } = useQuery({
     queryKey: ['admin-conversation-count'],
     queryFn: async () => {
-      const { count } = await supabase
-        .from('claris_conversations')
-        .select('*', { count: 'exact', head: true });
+      const { count } = await fetchClarisConversationsCount();
       return count ?? 0;
     },
   });
@@ -69,9 +71,7 @@ export default function AdminDashboard() {
   const { data: userCount } = useQuery({
     queryKey: ['admin-user-count'],
     queryFn: async () => {
-      const { count } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true });
+      const { count } = await fetchUsersCount();
       return count ?? 0;
     },
   });
@@ -82,10 +82,7 @@ export default function AdminDashboard() {
     queryFn: async () => {
       const since = subDays(new Date(), 6);
       since.setHours(0, 0, 0, 0);
-      const { data } = await supabase.from('app_usage_events' as never)
-        .select('created_at')
-        .gte('created_at', since.toISOString())
-        .order('created_at', { ascending: true });
+      const { data } = await listRecentUsageEvents(since.toISOString());
       return (data ?? []) as { created_at: string }[];
     },
   });

@@ -1,9 +1,15 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import {
+  useCallback,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+} from 'react';
 import { X } from 'lucide-react';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
-import { searchStudents, searchCourses, searchCategories } from './api/tagInput';
+import { searchCategories, searchCourses, searchStudents } from './api/tagInput';
 import type { Tag } from '@/features/tasks/types';
 
 interface TagSuggestion {
@@ -14,14 +20,13 @@ interface TagSuggestion {
 }
 
 const PREFIX_HINTS = [
-  { prefix: 'aluno', label: '/aluno — Aluno', entityType: 'aluno' },
-  { prefix: 'uc', label: '/uc — Unidade Curricular', entityType: 'uc' },
-  { prefix: 'turma', label: '/turma — Turma', entityType: 'turma' },
-  { prefix: 'curso', label: '/curso — Curso', entityType: 'curso' },
-  { prefix: 'escola', label: '/escola — Escola', entityType: 'escola' },
+  { prefix: 'aluno', label: '/aluno - Aluno', entityType: 'aluno' },
+  { prefix: 'uc', label: '/uc - Unidade Curricular', entityType: 'uc' },
+  { prefix: 'turma', label: '/turma - Turma', entityType: 'turma' },
+  { prefix: 'curso', label: '/curso - Curso', entityType: 'curso' },
+  { prefix: 'escola', label: '/escola - Escola', entityType: 'escola' },
 ];
 
-/** Colors applied to tag badges based on entity type */
 const ENTITY_TYPE_CLASSES: Record<string, string> = {
   aluno: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800',
   uc: 'bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800',
@@ -31,74 +36,85 @@ const ENTITY_TYPE_CLASSES: Record<string, string> = {
   custom: 'bg-secondary text-secondary-foreground border-secondary',
 };
 
-/** Returns the human-readable label for a tag, stripping legacy `/prefix:` prefix if present. */
 function getDisplayLabel(tag: Tag): string {
   const { label, prefix } = tag;
+
   if (prefix && label.startsWith(`/${prefix}:`)) {
-    return label.slice(prefix.length + 2); // 2 = length of "/" and ":"
+    return label.slice(prefix.length + 2);
   }
+
   return label;
 }
 
-async function fetchEntitySuggestions(prefix: string, search: string): Promise<TagSuggestion[]> {
-  const q = search.toLowerCase();
-  if (prefix === 'aluno') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase.from('students' as never) as any)
-      .select('id, full_name')
-      .ilike('full_name', `%${q}%`)
-      .limit(10);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((data ?? []) as any[]).map((s: any) => ({ label: s.full_name, prefix: 'aluno', entityId: s.id, entityType: 'aluno' }));
-  }
-  if (prefix === 'uc') {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase.from('courses' as never) as any)
-      .select('id, name, short_name')
-      .ilike('name', `%${q}%`)
-      .limit(10);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((data ?? []) as any[]).map((c: any) => ({ label: c.short_name ?? c.name, prefix: 'uc', entityId: c.id, entityType: 'uc' }));
-  }
-  if (prefix === 'turma') {
-    // Turma links to individual course/UC rows. These are conceptually "class-level" entries
-    // and share the same table as /uc, but differ in the tagging context: /uc refers to a
-    // specific discipline, while /turma refers to the course enrollment group.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase.from('courses' as never) as any)
-      .select('id, name, short_name')
-      .ilike('name', `%${q}%`)
-      .limit(10);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return ((data ?? []) as any[]).map((c: any) => ({ label: c.short_name ?? c.name, prefix: 'turma', entityId: c.id, entityType: 'turma' }));
-  }
-  if (prefix === 'curso' || prefix === 'escola') {
-    // Fetch distinct course-program (parts[2]) or school (parts[1]) names from the
-    // category hierarchy: "Institution > School > Course > Class".
-    // We fetch broadly with ilike and deduplicate in JS, since SQL DISTINCT on a path segment
-    // would require a stored function.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (supabase.from('courses' as never) as any)
-      .select('category')
-      .not('category', 'is', null)
-      .ilike('category', `%${q}%`)
-      .limit(300);
+function mapCategorySuggestions(
+  rows: Array<{ category: string | null }>,
+  prefix: 'curso' | 'escola',
+  query: string,
+) {
+  const normalizedQuery = query.toLowerCase();
+  const seen = new Set<string>();
+  const results: TagSuggestion[] = [];
 
-    const seen = new Set<string>();
-    const results: TagSuggestion[] = [];
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ((data ?? []) as any[]).forEach((c: any) => {
-      if (!c.category) return;
-      const parts = (c.category as string).split(' > ').map((p: string) => p.trim());
-      // parts[0] = institution, parts[1] = school, parts[2] = course/program, parts[3] = class
-      const name = prefix === 'escola' ? parts[1] : parts[2];
-      if (name && name.toLowerCase().includes(q) && !seen.has(name)) {
-        seen.add(name);
-        results.push({ label: name, prefix, entityType: prefix });
-      }
+  rows.forEach((row) => {
+    if (!row.category) return;
+
+    const parts = row.category.split(' > ').map((part) => part.trim());
+    const name = prefix === 'escola' ? parts[1] : parts[2];
+
+    if (!name) return;
+    if (normalizedQuery && !name.toLowerCase().includes(normalizedQuery)) return;
+    if (seen.has(name)) return;
+
+    seen.add(name);
+    results.push({
+      label: name,
+      prefix,
+      entityId: name,
+      entityType: prefix,
     });
-    return results.slice(0, 10);
+  });
+
+  return results.slice(0, 10);
+}
+
+async function fetchEntitySuggestions(prefix: string, search: string): Promise<TagSuggestion[]> {
+  const normalizedSearch = search.trim();
+
+  if (prefix === 'aluno') {
+    const { data } = await searchStudents(normalizedSearch);
+    return (data ?? []).map((student) => ({
+      label: student.full_name,
+      prefix: 'aluno',
+      entityId: student.id,
+      entityType: 'aluno',
+    }));
   }
+
+  if (prefix === 'uc') {
+    const { data } = await searchCourses(normalizedSearch);
+    return (data ?? []).map((course) => ({
+      label: course.short_name ?? course.name,
+      prefix: 'uc',
+      entityId: course.id,
+      entityType: 'uc',
+    }));
+  }
+
+  if (prefix === 'turma') {
+    const { data } = await searchCourses(normalizedSearch);
+    return (data ?? []).map((course) => ({
+      label: course.short_name ?? course.name,
+      prefix: 'turma',
+      entityId: course.id,
+      entityType: 'turma',
+    }));
+  }
+
+  if (prefix === 'curso' || prefix === 'escola') {
+    const { data } = await searchCategories(normalizedSearch);
+    return mapCategorySuggestions(data ?? [], prefix, normalizedSearch);
+  }
+
   return [];
 }
 
@@ -111,103 +127,207 @@ interface TagInputProps {
   className?: string;
 }
 
-export function TagInput({ tags, onAdd, onRemove, placeholder = 'Adicionar tag... (/ para entidades)', disabled, className }: TagInputProps) {
+export function TagInput({
+  tags,
+  onAdd,
+  onRemove,
+  placeholder = 'Adicionar tag... (/ para entidades)',
+  disabled,
+  className,
+}: TagInputProps) {
   const [value, setValue] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
   const [prefixHints, setPrefixHints] = useState<typeof PREFIX_HINTS>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const activePrefix = useRef<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const closeMenu = useCallback(() => {
     setShowMenu(false);
     setSuggestions([]);
-    if (prefix === 'aluno') {
-      const { data } = await searchStudents(q);
-      return ((data ?? []) as any[]).map((s: any) => ({ label: s.full_name, prefix: 'aluno', entityId: s.id, entityType: 'aluno' }));
-    }
-    if (prefix === 'uc') {
-      const { data } = await searchCourses(q);
-      return ((data ?? []) as any[]).map((c: any) => ({ label: c.short_name ?? c.name, prefix: 'uc', entityId: c.id, entityType: 'uc' }));
-    }
-    if (prefix === 'turma') {
-      const { data } = await searchCourses(q);
-      return ((data ?? []) as any[]).map((c: any) => ({ label: c.short_name ?? c.name, prefix: 'turma', entityId: c.id, entityType: 'turma' }));
-    }
-    if (prefix === 'curso' || prefix === 'escola') {
-      const { data } = await searchCategories(q);
-      const seen = new Set<string>();
-      const results: TagSuggestion[] = [];
-      ((data ?? []) as any[]).forEach((c: any) => {
-        if (!c.category) return;
-        const parts = (c.category as string).split(' > ').map((p: string) => p.trim());
-        const name = prefix === 'escola' ? parts[1] : parts[2];
-        if (name && name.toLowerCase().includes(q) && !seen.has(name)) {
-          seen.add(name);
-          results.push({ label: name, prefix, entityId: name, entityType: prefix });
-        }
+    setPrefixHints([]);
+    setSelectedIndex(0);
+  }, []);
+
+  const resetComposer = useCallback(() => {
+    setValue('');
+    closeMenu();
+  }, [closeMenu]);
+
+  const addTag = useCallback((suggestion: TagSuggestion) => {
+    onAdd({
+      label: suggestion.label,
+      prefix: suggestion.prefix,
+      entityId: suggestion.entityId,
+      entityType: suggestion.entityType,
+    });
+    resetComposer();
+  }, [onAdd, resetComposer]);
+
+  const addFreeTag = useCallback((rawValue: string) => {
+    const trimmed = rawValue.trim().replace(/,$/, '');
+    if (!trimmed) return;
+
+    const prefixedTag = trimmed.match(/^\/([^:\s]+):(.*)$/);
+    if (prefixedTag) {
+      const prefix = prefixedTag[1].trim().toLowerCase();
+      const label = prefixedTag[2].trim();
+
+      if (!label) return;
+
+      onAdd({
+        label,
+        prefix,
+        entityType: prefix,
       });
-      return results;
-    }
-        setShowMenu(filtered.length > 0);
-        activePrefix.current = null;
-        setSelectedIndex(0);
-      } else if (matched) {
-        activePrefix.current = matched.prefix;
-        setPrefixHints([]);
-        setShowMenu(true);
-        setSelectedIndex(0);
-      }
+      resetComposer();
       return;
     }
 
-    setShowMenu(false);
-    activePrefix.current = null;
+    onAdd({
+      label: trimmed,
+      entityType: 'custom',
+    });
+    resetComposer();
+  }, [onAdd, resetComposer]);
+
+  const loadSuggestions = useCallback(async (nextValue: string) => {
+    const requestId = ++requestIdRef.current;
+    const trimmed = nextValue.trimStart();
+
+    if (!trimmed) {
+      closeMenu();
+      return;
+    }
+
+    if (trimmed === '/') {
+      setSuggestions([]);
+      setPrefixHints(PREFIX_HINTS);
+      setSelectedIndex(0);
+      setShowMenu(true);
+      return;
+    }
+
+    const prefixMatch = trimmed.match(/^\/([^:\s]*)(?::(.*))?$/);
+    if (!prefixMatch) {
+      closeMenu();
+      return;
+    }
+
+    const rawPrefix = prefixMatch[1].toLowerCase();
+    const rawSearch = prefixMatch[2];
+
+    if (rawSearch === undefined) {
+      const filteredHints = PREFIX_HINTS.filter((hint) => hint.prefix.includes(rawPrefix));
+      setSuggestions([]);
+      setPrefixHints(filteredHints);
+      setSelectedIndex(0);
+      setShowMenu(filteredHints.length > 0);
+      return;
+    }
+
+    const matchedHint = PREFIX_HINTS.find((hint) => hint.prefix === rawPrefix);
+    if (!matchedHint) {
+      closeMenu();
+      return;
+    }
+
+    const nextSuggestions = await fetchEntitySuggestions(matchedHint.prefix, rawSearch);
+    if (requestId !== requestIdRef.current) return;
+
+    setPrefixHints([]);
+    setSuggestions(nextSuggestions);
+    setSelectedIndex(0);
+    setShowMenu(nextSuggestions.length > 0);
+  }, [closeMenu]);
+
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const nextValue = event.target.value;
+    setValue(nextValue);
+    void loadSuggestions(nextValue);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const allItems = [...prefixHints.map(h => ({ label: h.label, prefix: h.prefix, entityType: h.entityType, entityId: undefined as string | undefined })), ...suggestions];
+  const choosePrefixHint = (prefix: string) => {
+    const nextValue = `/${prefix}:`;
+    setValue(nextValue);
+    void loadSuggestions(nextValue);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    const allItems = [
+      ...prefixHints.map((hint) => ({
+        label: hint.label,
+        prefix: hint.prefix,
+        entityId: undefined as string | undefined,
+        entityType: hint.entityType,
+      })),
+      ...suggestions,
+    ];
 
     if (showMenu) {
-      if (e.key === 'ArrowDown') { e.preventDefault(); setSelectedIndex(i => Math.min(i + 1, allItems.length - 1)); return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setSelectedIndex(i => Math.max(i - 1, 0)); return; }
-      if (e.key === 'Enter' && allItems[selectedIndex]) {
-        e.preventDefault();
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setSelectedIndex((current) => Math.min(current + 1, allItems.length - 1));
+        return;
+      }
+
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setSelectedIndex((current) => Math.max(current - 1, 0));
+        return;
+      }
+
+      if (event.key === 'Enter' && allItems[selectedIndex]) {
+        event.preventDefault();
         if (selectedIndex < prefixHints.length) {
-          const ph = prefixHints[selectedIndex];
-          setValue(`/${ph.prefix}:`);
-          activePrefix.current = ph.prefix;
-          setPrefixHints([]);
-          setShowMenu(true);
+          choosePrefixHint(prefixHints[selectedIndex].prefix);
         } else {
           addTag(suggestions[selectedIndex - prefixHints.length]);
         }
         return;
       }
-      if (e.key === 'Escape') { e.preventDefault(); closeMenu(); return; }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
     }
 
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      if (!showMenu) addFreeTag(value);
+    if (event.key === 'Enter' || event.key === ',') {
+      event.preventDefault();
+      if (!showMenu) {
+        addFreeTag(value);
+      }
     }
 
-    if (e.key === 'Backspace' && value === '' && tags.length > 0) {
+    if (event.key === 'Backspace' && value === '' && tags.length > 0) {
       onRemove(tags[tags.length - 1].id);
     }
   };
 
   const allMenuItems = [
-    ...prefixHints.map(h => ({ label: h.label, prefix: h.prefix, entityType: h.entityType, entityId: undefined as string | undefined })),
+    ...prefixHints.map((hint) => ({
+      label: hint.label,
+      prefix: hint.prefix,
+      entityId: undefined as string | undefined,
+      entityType: hint.entityType,
+    })),
     ...suggestions,
   ];
 
   return (
-    <div className={cn('flex flex-wrap gap-1.5 rounded-md border bg-background px-3 py-2 min-h-[2.5rem] items-center', disabled && 'opacity-50 cursor-not-allowed', className)}>
-      {tags.map(tag => {
+    <div
+      className={cn(
+        'flex min-h-[2.5rem] flex-wrap items-center gap-1.5 rounded-md border bg-background px-3 py-2',
+        disabled && 'cursor-not-allowed opacity-50',
+        className,
+      )}
+    >
+      {tags.map((tag) => {
         const typeClass = ENTITY_TYPE_CLASSES[tag.entity_type ?? 'custom'] ?? ENTITY_TYPE_CLASSES.custom;
         const displayLabel = getDisplayLabel(tag);
+
         return (
           <span
             key={tag.id}
@@ -231,10 +351,17 @@ export function TagInput({ tags, onAdd, onRemove, placeholder = 'Adicionar tag..
         );
       })}
 
-      <Popover open={showMenu} onOpenChange={open => { if (!open) closeMenu(); }} modal={false}>
+      <Popover
+        open={showMenu}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeMenu();
+          }
+        }}
+        modal={false}
+      >
         <PopoverAnchor asChild>
           <input
-            ref={inputRef}
             type="text"
             value={value}
             onChange={handleChange}
@@ -245,31 +372,32 @@ export function TagInput({ tags, onAdd, onRemove, placeholder = 'Adicionar tag..
           />
         </PopoverAnchor>
 
-        <PopoverContent align="start" side="bottom" sideOffset={6} className="w-72 p-0" onOpenAutoFocus={e => e.preventDefault()}>
+        <PopoverContent
+          align="start"
+          side="bottom"
+          sideOffset={6}
+          className="w-72 p-0"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
           <Command shouldFilter={false}>
             <CommandList className="max-h-52 p-1">
               <CommandEmpty className="px-3 py-4 text-xs text-muted-foreground">
-                Nenhuma sugestão encontrada
+                Nenhuma sugestao encontrada
               </CommandEmpty>
               {allMenuItems.length > 0 && (
                 <CommandGroup>
-                  {allMenuItems.map((item, idx) => (
+                  {allMenuItems.map((item, index) => (
                     <CommandItem
-                      key={idx}
+                      key={`${item.prefix}-${item.label}-${index}`}
                       value={item.label}
-                      data-index={idx}
-                      className={cn('text-sm', idx === selectedIndex && 'bg-accent text-accent-foreground')}
-                      onMouseDown={e => e.preventDefault()}
-                      onMouseEnter={() => setSelectedIndex(idx)}
+                      className={cn('text-sm', index === selectedIndex && 'bg-accent text-accent-foreground')}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onMouseEnter={() => setSelectedIndex(index)}
                       onSelect={() => {
-                        if (idx < prefixHints.length) {
-                          const ph = prefixHints[idx];
-                          setValue(`/${ph.prefix}:`);
-                          activePrefix.current = ph.prefix;
-                          setPrefixHints([]);
-                          setShowMenu(true);
+                        if (index < prefixHints.length) {
+                          choosePrefixHint(prefixHints[index].prefix);
                         } else {
-                          addTag(suggestions[idx - prefixHints.length]);
+                          addTag(suggestions[index - prefixHints.length]);
                         }
                       }}
                     >

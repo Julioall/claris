@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { callAdminInstanceManager, listSharedServiceInstances } from '../api/services';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -80,6 +80,8 @@ function healthIcon(health: string) {
 }
 
 async function callInstanceManager(action: string, params: Record<string, unknown> = {}) {
+  return callAdminInstanceManager(action, params);
+  /*
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Não autenticado');
 
@@ -98,6 +100,7 @@ async function callInstanceManager(action: string, params: Record<string, unknow
   const json = await res.json() as Record<string, unknown>;
   if (!res.ok) throw new Error((json.error as string) ?? 'Erro desconhecido');
   return json;
+  */
 }
 
 // ---------------------------------------------------------------------------
@@ -281,11 +284,7 @@ export default function AdminServicosAplicacao() {
   const { data: instances = [], isLoading } = useQuery({
     queryKey: ['admin-service-instances'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('app_service_instances')
-        .select('id, name, description, service_type, scope, connection_status, operational_status, health_status, is_active, is_blocked, evolution_instance_name, last_activity_at, last_sync_at, created_at')
-        .eq('scope', 'shared')
-        .order('created_at', { ascending: false });
+      const { data, error } = await listSharedServiceInstances();
       if (error) throw error;
       return (data ?? []) as ServiceInstance[];
     },

@@ -76,11 +76,13 @@ src/
 - `src/features/reports/` agora concentra `ReportsPage` e o fluxo de exportacao academica.
 - `src/features/admin/` agora concentra as pages administrativas, enquanto `src/app/routes/admin/` concentra `AdminRoute` e `AdminLayout` como shell de roteamento.
 - `src/features/students/` tambem concentra `useStudentHistory`, e `src/features/tasks/api/` agora concentra `tasks.service.ts`.
+- `src/features/auth/api/login.ts`, `src/features/courses/api/sync.ts` e `src/features/claris/api/` fecharam os ultimos acessos diretos ao Supabase que ainda estavam em `Login`, `CourseSelectorDialog` e `FloatingClarisChat`.
 - `src/lib/claris-settings.ts` e `src/components/ui/claris-logo.tsx` permanecem compartilhados por ainda atenderem mais de um dominio.
 - `src/features/auth/` concentra sessao Moodle, sync, risco e servicos de autenticacao como slice de dominio.
 - `src/pages/` ficou reduzido ao shell publico (`Index`, `Login`, `NotFound`), `src/hooks/` retem apenas hooks realmente transversais e `src/services/` nao concentra mais services de dominio.
 - o antigo barrel global em `src/types/` deixou de fazer parte da convencao; contratos compartilhados devem nascer no slice correto ou em fontes realmente proprietarias do shell/integracao.
-- o principal passivo arquitetural restante esta na fronteira de dados: ainda ha queries e mutations diretas ao Supabase dentro de pages e components que precisam migrar para `api/`, `application/` ou hooks do slice.
+- a fronteira de dados da UI foi consolidada: pages e components de runtime nao importam mais `@/integrations/supabase/client` diretamente; o CI reforca isso com `npm run guard:supabase-boundary`.
+- o endurecimento de TypeScript foi concluido com `strictNullChecks`, `noImplicitAny`, `noUnusedLocals` e `strict` no app.
 
 ## Sequencia recomendada
 
@@ -90,10 +92,9 @@ src/
 4. substituir carregamento manual por hooks de dominio baseados em React Query
 5. manter contratos de tipo nos slices e evitar recriar barrels globais
 6. remover wrappers legados remanescentes de `src/pages/`, `src/hooks/`, `src/services/` e `src/lib/` conforme os imports antigos forem eliminados
-7. no ciclo pos-refactor, reduzir acesso direto ao Supabase em `pages/` e `components/`, consolidando a fronteira em `api/`, `application/`, `infrastructure/` e Edge Functions
+7. no ciclo pos-refactor, manter a fronteira de dados consolidada em `api/`, `application/`, `infrastructure/` e Edge Functions, sem reintroduzir acesso direto ao Supabase na UI
 
 ## Fora de escopo desta etapa
 
 - renomear toda a base de `src/modules/` para `src/features/`
-- ativar `strict` no TypeScript de uma vez
 - mover toda a integracao Supabase em um unico refactor

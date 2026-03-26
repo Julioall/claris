@@ -1,6 +1,6 @@
 # Supabase Consolidation Plan
 
-Atualizado em `2026-03-21`.
+Atualizado em `2026-03-26`.
 
 Este documento e o plano operacional do ciclo pos-refactor. Ele cobre a consolidacao da fronteira de dados entre frontend e Supabase, sem reabrir a modularizacao estrutural que ja foi concluida.
 
@@ -20,12 +20,11 @@ Reduzir o acoplamento entre UI e banco, com foco em:
 2. ler [SUPABASE_RLS.md](./SUPABASE_RLS.md)
 3. ler este arquivo inteiro
 4. rodar `git status --short`
-5. escolher a proxima fase com status `planned`
-6. executar a fase sem reintroduzir acesso direto ao Supabase em page/componente
-7. atualizar este arquivo ao final da fase
-8. validar com `npm.cmd run lint`, `npm.cmd run test` e `npm.cmd run typecheck`
-9. se houver mudanca em `supabase/functions/` ou `supabase/migrations/`, rodar tambem `npm.cmd run smoke:edge`
-10. commitar a fase antes de iniciar a proxima
+5. tratar este plano como referencia de manutencao, pois nao ha mais fases `planned`
+6. executar novas mudancas sem reintroduzir acesso direto ao Supabase em page/componente
+7. validar com `npm.cmd run guard:supabase-boundary`, `npm.cmd run lint`, `npm.cmd run test` e `npm.cmd run typecheck`
+8. se houver mudanca em `supabase/functions/` ou `supabase/migrations/`, rodar tambem `npm.cmd run smoke:edge`
+9. atualizar este arquivo e [FRONTEND_MODULES.md](./FRONTEND_MODULES.md) quando a convencao evoluir
 
 ## Diagnostico Inicial
 
@@ -120,19 +119,19 @@ Validacao minima:
 
 ### Fase S2: Admin, Settings e Services
 
-Status: `planned`
+Status: `completed`
 
 Objetivo:
 
 - retirar da UI administrativa e operacional o acoplamento direto com tabelas sensiveis
 
-Escopo alvo:
+Fechamento da fase:
 
-- criar `src/features/admin/api/` para `app_settings`, `app_feature_flags`, `support_tickets`, metricas, logs e RBAC
-- extrair `src/features/services/pages/MyServicesPage.tsx` para uma fronteira de dados dedicada do slice
-- fazer `DataCleanupCard` consumir apenas a Edge Function de cleanup, removendo deletes diretos do componente
-- revisar `SettingsPage`, `GradeDebugCard`, `SupportButton` e consumidores afins para mover queries/mutations a `api/`
-- preservar comportamento atual do painel admin, sem reescrever UX nesta fase
+- `src/features/admin/api/` passou a concentrar settings globais, feature flags, tickets, metricas, logs, RBAC, suporte, conversas e operacao de servicos
+- `SettingsPage`, `GradeDebugCard`, `SupportButton` e pages administrativas deixaram de falar com o client do Supabase diretamente
+- `MyServicesPage` e `AdminServicosAplicacao` passaram a operar via `src/features/services/api/` e `src/features/admin/api/services.ts`
+- `DataCleanupCard` ficou limitado a acionar a Edge Function `data-cleanup`
+- o comportamento da UX administrativa foi preservado, com a mudanca focada apenas na fronteira de dados
 
 Validacao minima:
 
@@ -142,18 +141,19 @@ Validacao minima:
 
 ### Fase S3: Read Models Academicos e Shared Components
 
-Status: `planned`
+Status: `completed`
 
 Objetivo:
 
 - atacar as leituras pesadas ainda montadas dentro da UI
 
-Escopo alvo:
+Fechamento da fase:
 
-- extrair a composicao de dados de `ReportsPage` para `src/features/reports/api/` e hooks do dominio
-- avaliar se parte do relatorio deve virar `rpc`, `view` ou composicao server-side para reduzir fan-out de queries
-- mover acessos diretos ao Supabase em `StudentGradesTab`, `CourseAttendanceTab`, `TopBar`, `TagInput` e componentes compartilhados similares
-- padronizar query keys e estados de carga/erro dos novos hooks
+- `ReportsPage` passou a consumir `src/features/reports/api/` para leituras pesadas e exportacao
+- `CourseAttendanceTab`, `TopBar` e `TagInput` deixaram de consultar o Supabase diretamente
+- `CourseSelectorDialog` ganhou fronteira propria em `src/features/courses/api/sync.ts`
+- `FloatingClarisChat` ganhou `src/features/claris/api/` para disponibilidade da Claris, historico e invocacao da function
+- `Login` passou a carregar defaults globais via `src/features/auth/api/login.ts`, mantendo a page publica sem acesso direto ao client
 
 Validacao minima:
 
@@ -163,19 +163,19 @@ Validacao minima:
 
 ### Fase S4: Guardrails e Endurecimento
 
-Status: `planned`
+Status: `completed`
 
 Objetivo:
 
 - impedir regressao arquitetural apos a consolidacao
 
-Escopo alvo:
+Fechamento da fase:
 
-- adicionar guardrail para impedir novos `supabase.from(...)` em `pages/` e `components/` fora das excecoes previstas
-- ampliar testes de contrato para repositories e Edge Functions criticas
-- revisar se a tipagem gerada do Supabase precisa entrar no fluxo operacional de atualizacao
-- manter [SUPABASE_RLS.md](./SUPABASE_RLS.md) sincronizado com o estado final das migrations
-- documentar o estado final da fronteira de dados e os casos de excecao remanescentes
+- o guardrail `scripts/check-supabase-boundary.mjs` passou a bloquear import direto do client do Supabase em `pages/` e `components/` de runtime
+- o CI ganhou o job `Supabase Boundary` com `npm run guard:supabase-boundary`
+- o endurecimento de TypeScript foi concluido com `strictNullChecks`, `noImplicitAny`, `noUnusedLocals` e `strict` no app
+- a arquitetura final ficou documentada em [ARCHITECTURE.md](./ARCHITECTURE.md), [EDGE_FUNCTIONS.md](./EDGE_FUNCTIONS.md) e `docs/DECISIONS/`
+- o ambiente local foi dividido em `docker-compose.yml` e `docker-compose.dev.yml`, reduzindo o acoplamento entre backend local e desenvolvimento integrado
 
 Validacao minima:
 
@@ -184,19 +184,13 @@ Validacao minima:
 
 ## Prioridade Recomendada
 
-Ordem sugerida:
+Todas as fases deste ciclo foram concluidas.
 
-1. `Fase S1: Mensagens e Automacoes`
-2. `Fase S2: Admin, Settings e Services`
-3. `Fase S3: Read Models Academicos e Shared Components`
-4. `Fase S4: Guardrails e Endurecimento`
+Uso recomendado daqui para frente:
 
-Motivo:
-
-- `S1` combina alto acoplamento de UI, fluxo multi-tabela e automacao assicrona
-- `S2` reduz risco operacional em areas sensiveis do produto
-- `S3` limpa os read models mais pesados apos a fronteira transacional estar mais organizada
-- `S4` fecha o ciclo e evita regressao
+- manter o guardrail de fronteira de dados ativo no CI
+- continuar extraindo novos fluxos para `api/`, `application/` e Edge Functions quando surgirem
+- revisar `rpc` ou `view` apenas quando uma leitura pesada nova justificar
 
 ## Debitos Abertos Para Nao Esquecer
 

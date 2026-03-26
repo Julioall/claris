@@ -6,8 +6,13 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Separator } from '@/components/ui/separator';
-import { supabase } from '@/integrations/supabase/client';
-import { testClarisLLM } from '../api/settings';
+import {
+  fetchAdminSettings,
+  saveClarisConnectionSettings,
+  saveMoodleConnectionSettings,
+  saveRiskThresholdSettings,
+  testClarisLLM,
+} from '../api/settings';
 import { toast } from '@/hooks/use-toast';
 import {
   CLARIS_CONFIGURED_STORAGE_KEY,
@@ -20,8 +25,6 @@ import {
   DEFAULT_GLOBAL_APP_SETTINGS,
   DEFAULT_MOODLE_SERVICE,
   DEFAULT_MOODLE_URL,
-  GLOBAL_APP_SETTINGS_ID,
-  fetchGlobalAppSettings,
   normalizeRiskThresholdDays,
 } from '@/lib/global-app-settings';
 
@@ -60,7 +63,7 @@ export default function AdminConfiguracoes() {
     const load = async () => {
       setIsLoadingSettings(true);
       try {
-        const data = await fetchGlobalAppSettings(supabase);
+        const data = await fetchAdminSettings();
         const normalized = normalizeRiskThresholdDays(data.riskThresholdDays);
         setRiskThresholdDays(normalized);
         setLastSavedRiskThresholdDays(normalized);
@@ -108,9 +111,7 @@ export default function AdminConfiguracoes() {
     }
     setIsSavingRisk(true);
     try {
-      const { error } = await supabase
-        .from('app_settings')
-        .upsert({ singleton_id: GLOBAL_APP_SETTINGS_ID, risk_threshold_days: normalized } as never, { onConflict: 'singleton_id' });
+      const { error } = await saveRiskThresholdSettings(normalized);
       if (error) throw error;
       setLastSavedRiskThresholdDays(normalized);
       setRiskThresholdDays(normalized);
@@ -127,12 +128,7 @@ export default function AdminConfiguracoes() {
     const serviceToSave = moodleConnectionService.trim() || DEFAULT_MOODLE_SERVICE;
     setIsSavingMoodle(true);
     try {
-      const { error } = await supabase
-        .from('app_settings')
-        .upsert(
-          { singleton_id: GLOBAL_APP_SETTINGS_ID, moodle_connection_url: urlToSave, moodle_connection_service: serviceToSave },
-          { onConflict: 'singleton_id' },
-        );
+      const { error } = await saveMoodleConnectionSettings(urlToSave, serviceToSave);
       if (error) throw error;
       setMoodleConnectionUrl(urlToSave);
       setMoodleConnectionService(serviceToSave);
@@ -165,9 +161,7 @@ export default function AdminConfiguracoes() {
 
     setIsSavingClaris(true);
     try {
-      const { error } = await supabase
-        .from('app_settings')
-        .upsert({ singleton_id: GLOBAL_APP_SETTINGS_ID, claris_llm_settings: payload }, { onConflict: 'singleton_id' });
+      const { error } = await saveClarisConnectionSettings(payload);
       if (error) throw error;
       storedClarisApiKeyRef.current = effectiveApiKey;
       setHasStoredClarisApiKey(effectiveApiKey.length > 0);
@@ -198,14 +192,12 @@ export default function AdminConfiguracoes() {
 
     setIsTestingClaris(true);
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      if (authError || !authData?.user) {
-        await supabase.auth.signOut();
-        toast({ title: 'Sessao expirada', description: 'Entre novamente e tente testar novamente.', variant: 'destructive' });
-        return;
-      }
-
-      const { data, error } = await testClarisLLM(clarisSettings.apiKey.trim() || undefined);
+      const { data, error } = await testClarisLLM({
+        provider: clarisSettings.provider,
+        model: clarisSettings.model,
+        baseUrl: clarisSettings.baseUrl,
+        apiKey: effectiveApiKey,
+      });
       if (error) throw error;
       const latencyLabel = typeof data?.latencyMs === 'number' ? ` (${Math.round(data.latencyMs)} ms)` : '';
       toast({ title: 'Conexao validada', description: `Conexao com o provedor LLM validada com sucesso${latencyLabel}.` });

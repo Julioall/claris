@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { fetchAppServiceInstances, fetchAppServiceInstanceEvents } from '../api/myServices';
+import {
+  callPersonalInstanceManager,
+  fetchPersonalInstanceEvents,
+  fetchPersonalWhatsAppInstance,
+} from '../api/myServices';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -55,6 +59,8 @@ interface InstanceEvent {
 // ---------------------------------------------------------------------------
 
 async function callInstanceManager(action: string, params: Record<string, unknown> = {}) {
+  return callPersonalInstanceManager(action, params);
+  /*
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) throw new Error('Não autenticado');
 
@@ -73,6 +79,7 @@ async function callInstanceManager(action: string, params: Record<string, unknow
   const json = await res.json() as Record<string, unknown>;
   if (!res.ok) throw new Error((json.error as string) ?? 'Erro desconhecido');
   return json;
+  */
 }
 
 function parseQrResponse(res: Record<string, unknown>) {
@@ -417,12 +424,7 @@ export default function MyServicesPage() {
     queryKey: ['my-whatsapp-instance'],
     queryFn: async () => {
       if (!user) return null;
-      const { data, error } = await fetchAppServiceInstances()
-        .select('*')
-        .eq('owner_user_id', user.id)
-        .eq('service_type', 'whatsapp')
-        .eq('scope', 'personal')
-        .maybeSingle();
+      const { data, error } = await fetchPersonalWhatsAppInstance(user.id);
       if (error) throw error;
       return data as unknown as ServiceInstance | null;
     },
@@ -433,11 +435,7 @@ export default function MyServicesPage() {
     queryKey: ['my-whatsapp-events', myInstance?.id],
     queryFn: async () => {
       if (!myInstance) return [];
-      const { data, error } = await fetchAppServiceInstanceEvents()
-        .select('id, event_type, origin, status, context, error_summary, created_at')
-        .eq('instance_id', myInstance.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      const { data, error } = await fetchPersonalInstanceEvents(myInstance.id);
       if (error) throw error;
       return (data ?? []) as unknown as InstanceEvent[];
     },

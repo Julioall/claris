@@ -1,8 +1,8 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { FileSpreadsheet } from 'lucide-react';
 import type * as XLSXType from 'xlsx-js-style';
 import { Spinner } from '@/components/ui/spinner';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,59 +19,18 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
-
-interface TutorCourse {
-  id: string;
-  name: string;
-  short_name: string | null;
-  category: string | null;
-  start_date: string | null;
-  end_date: string | null;
-}
-
-interface EnrollmentRow {
-  student_id: string;
-  course_id: string;
-  enrollment_status: string | null;
-  students: {
-    full_name: string;
-    last_access: string | null;
-  } | null;
-}
-
-interface ActivityGradeRow {
-  student_id: string;
-  course_id: string;
-  grade: number | null;
-  grade_max: number | null;
-  hidden: boolean;
-  status: string | null;
-  graded_at: string | null;
-  submitted_at: string | null;
-}
-
-interface ActivityDetailRow {
-  student_id: string;
-  course_id: string;
-  moodle_activity_id: string;
-  activity_name: string;
-  activity_type: string | null;
-  status: string | null;
-  grade: number | null;
-  grade_max: number | null;
-  due_date: string | null;
-  hidden: boolean;
-  completed_at: string | null;
-  graded_at: string | null;
-  submitted_at: string | null;
-}
-
-interface CourseTotalRow {
-  student_id: string;
-  course_id: string;
-  grade_raw: number | null;
-  grade_percentage: number | null;
-}
+import {
+  fetchAllReportActivityDetails,
+  fetchAllReportActivityGrades,
+  fetchAllReportCourseTotals,
+  fetchAllReportEnrollments,
+  fetchTutorCourses,
+  type ActivityDetailRow,
+  type ActivityGradeRow,
+  type CourseTotalRow,
+  type EnrollmentRow,
+  type TutorCourse,
+} from '@/features/reports/api';
 
 const SEM_CATEGORIA = 'Sem categoria';
 
@@ -265,7 +224,7 @@ export default function ReportsPage() {
   const [includeSuspendedStudents, setIncludeSuspendedStudents] = useState(true);
 
   useEffect(() => {
-    const fetchTutorCourses = async () => {
+    const loadTutorCourses = async () => {
       if (!user) {
         setTutorCourses([]);
         setIsLoadingCourses(false);
@@ -274,46 +233,8 @@ export default function ReportsPage() {
 
       setIsLoadingCourses(true);
       try {
-        const { data, error } = await supabase
-          .from('user_courses')
-          .select(`
-            course_id,
-            courses!inner (
-              id,
-              name,
-              short_name,
-              category,
-              start_date,
-              end_date
-            )
-          `)
-          .eq('user_id', user.id)
-          .eq('role', 'tutor');
-
-        if (error) throw error;
-
-        const normalizedCourses = (data || [])
-          .map(item => item.courses)
-          .filter((course): course is NonNullable<typeof course> => Boolean(course))
-          .map(course => ({
-            id: course.id,
-            name: course.name,
-            short_name: course.short_name,
-            category: course.category,
-            start_date: course.start_date,
-            end_date: course.end_date,
-          }));
-
-        const uniqueById = new Map<string, TutorCourse>();
-        normalizedCourses.forEach(course => {
-          uniqueById.set(course.id, course);
-        });
-
-        const sortedCourses = Array.from(uniqueById.values()).sort((a, b) =>
-          (a.name || '').localeCompare(b.name || '', 'pt-BR'),
-        );
-
-        setTutorCourses(sortedCourses);
+        const courses = await fetchTutorCourses(user.id);
+        setTutorCourses(courses);
       } catch (err) {
         console.error('Erro ao carregar cursos para relatório:', err);
         toast.error('Erro ao carregar cursos para relatórios');
@@ -322,7 +243,7 @@ export default function ReportsPage() {
       }
     };
 
-    fetchTutorCourses();
+    loadTutorCourses();
   }, [user]);
 
   const availableCourseGroups = useMemo(() => {
@@ -390,75 +311,11 @@ export default function ReportsPage() {
     try {
       const XLSX = await import('xlsx-js-style');
 
-      // Fetch enrollments (paginated)
-      const allEnrollments: EnrollmentRow[] = [];
-      let enrollmentPage = 0;
-      const PAGE_SIZE = 1000;
-      while (true) {
-        const { data, error } = await supabase
-          .from('student_courses')
-          .select(`
-            student_id,
-            course_id,
-            enrollment_status,
-            students!inner(full_name, last_access)
-          `)
-          .in('course_id', selectedUnitIds)
-          .range(enrollmentPage * PAGE_SIZE, (enrollmentPage + 1) * PAGE_SIZE - 1);
-        if (error) throw error;
-        allEnrollments.push(...((data || []) as EnrollmentRow[]));
-        if (!data || data.length < PAGE_SIZE) break;
-        enrollmentPage++;
-      }
-
-      // Fetch activities (paginated)
-      const allActivities: ActivityGradeRow[] = [];
-      let activityPage = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('student_activities')
-          .select(`
-            student_id,
-            course_id,
-            grade,
-            grade_max,
-            hidden,
-            status,
-            graded_at,
-            submitted_at
-          `)
-          .in('course_id', selectedUnitIds)
-          .neq('activity_type', 'scorm')
-          .range(activityPage * PAGE_SIZE, (activityPage + 1) * PAGE_SIZE - 1);
-        if (error) throw error;
-        allActivities.push(...((data || []) as ActivityGradeRow[]));
-        if (!data || data.length < PAGE_SIZE) break;
-        activityPage++;
-      }
-
-      // Fetch course totals from the gradebook sync (paginated)
-      const allCourseTotals: CourseTotalRow[] = [];
-      let courseTotalPage = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('student_course_grades')
-          .select(`
-            student_id,
-            course_id,
-            grade_raw,
-            grade_percentage
-          `)
-          .in('course_id', selectedUnitIds)
-          .range(courseTotalPage * PAGE_SIZE, (courseTotalPage + 1) * PAGE_SIZE - 1);
-        if (error) throw error;
-        allCourseTotals.push(...((data || []) as CourseTotalRow[]));
-        if (!data || data.length < PAGE_SIZE) break;
-        courseTotalPage++;
-      }
-
-      const enrollments = allEnrollments;
-      const activities = allActivities;
-      const courseTotals = allCourseTotals;
+      const [enrollments, activities, courseTotals] = await Promise.all([
+        fetchAllReportEnrollments(selectedUnitIds),
+        fetchAllReportActivityGrades(selectedUnitIds),
+        fetchAllReportCourseTotals(selectedUnitIds),
+      ]);
 
       const summaryByStudentAndCourse = new Map<string, {
         grade: number | null;
@@ -718,38 +575,10 @@ export default function ReportsPage() {
     setIsGenerating(true);
     try {
       const XLSX = await import('xlsx-js-style');
-      const PAGE_SIZE = 1000;
-
-      // Fetch enrollments
-      const allEnrollments: EnrollmentRow[] = [];
-      let page = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('student_courses')
-          .select('student_id, course_id, enrollment_status, students!inner(full_name, last_access)')
-          .in('course_id', selectedUnitIds)
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-        if (error) throw error;
-        allEnrollments.push(...((data || []) as EnrollmentRow[]));
-        if (!data || data.length < PAGE_SIZE) break;
-        page++;
-      }
-
-      // Fetch activities with details
-      const allActivities: ActivityDetailRow[] = [];
-      page = 0;
-      while (true) {
-        const { data, error } = await supabase
-          .from('student_activities')
-          .select('student_id, course_id, moodle_activity_id, activity_name, activity_type, status, grade, grade_max, due_date, hidden, completed_at, graded_at, submitted_at')
-          .in('course_id', selectedUnitIds)
-          .neq('activity_type', 'scorm')
-          .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
-        if (error) throw error;
-        allActivities.push(...((data || []) as ActivityDetailRow[]));
-        if (!data || data.length < PAGE_SIZE) break;
-        page++;
-      }
+      const [allEnrollments, allActivities] = await Promise.all([
+        fetchAllReportEnrollments(selectedUnitIds),
+        fetchAllReportActivityDetails(selectedUnitIds),
+      ]);
 
       // Build units with inferred end dates
       const selectedUnitsRaw = availableUnits.filter(u => selectedUnitIds.includes(u.id));

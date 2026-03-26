@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { User, RefreshCw, LogOut, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,31 +7,20 @@ import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { fetchGlobalSettings } from '@/features/settings/api';
 import { ThemeCard } from '@/features/settings/components/ThemeCard';
-import { supabase } from '@/integrations/supabase/client';
 import {
-  DEFAULT_MOODLE_SERVICE,
   DEFAULT_MOODLE_URL,
-  fetchGlobalAppSettings,
 } from '@/lib/global-app-settings';
 
 export default function SettingsPage() {
   const { user, logout, lastSync, syncData, isSyncing, isOfflineMode, courses } = useAuth();
-  const [moodleConnectionUrl, setMoodleConnectionUrl] = useState(DEFAULT_MOODLE_URL);
+  const { data: globalSettings } = useQuery({
+    queryKey: ['settings', 'global'],
+    queryFn: fetchGlobalSettings,
+  });
 
-  useEffect(() => {
-    const loadSettings = async () => {
-      try {
-        const data = await fetchGlobalAppSettings(supabase);
-        setMoodleConnectionUrl(data.moodleConnectionUrl || DEFAULT_MOODLE_URL);
-      } catch (error) {
-        console.error('Error loading global app settings:', error);
-        setMoodleConnectionUrl(DEFAULT_MOODLE_URL);
-      }
-    };
-
-    loadSettings();
-  }, []);
+  const moodleConnectionUrl = globalSettings?.moodleConnectionUrl || DEFAULT_MOODLE_URL;
 
   const formatDate = (date: string | null) => {
     if (!date) return 'Nunca';

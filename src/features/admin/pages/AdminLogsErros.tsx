@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { listAdminLogs, resolveAdminLog } from '../api/logs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,20 +46,13 @@ export default function AdminLogsErros() {
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['admin-error-logs', severityFilter, categoryFilter, resolvedFilter, dateFrom, dateTo],
     queryFn: async () => {
-      let query = supabase
-        .from('app_error_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200);
-
-      if (severityFilter !== 'all') query = query.eq('severity', severityFilter);
-      if (categoryFilter !== 'all') query = query.eq('category', categoryFilter);
-      if (resolvedFilter === 'open') query = query.eq('resolved', false);
-      if (resolvedFilter === 'resolved') query = query.eq('resolved', true);
-      if (dateFrom) query = query.gte('created_at', startOfDay(new Date(dateFrom)).toISOString());
-      if (dateTo) query = query.lte('created_at', endOfDay(new Date(dateTo)).toISOString());
-
-      const { data, error } = await query;
+      const { data, error } = await listAdminLogs({
+        severity: severityFilter !== 'all' ? severityFilter : undefined,
+        category: categoryFilter !== 'all' ? categoryFilter : undefined,
+        resolved: resolvedFilter === 'all' ? undefined : resolvedFilter === 'resolved',
+        dateFrom: dateFrom ? startOfDay(new Date(dateFrom)).toISOString() : undefined,
+        dateTo: dateTo ? endOfDay(new Date(dateTo)).toISOString() : undefined,
+      });
       if (error) throw error;
       return (data ?? []) as ErrorLog[];
     },
@@ -67,10 +60,7 @@ export default function AdminLogsErros() {
 
   const resolveMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('app_error_logs')
-        .update({ resolved: true, resolved_at: new Date().toISOString() })
-        .eq('id', id);
+      const { error } = await resolveAdminLog(id);
       if (error) throw error;
     },
     onSuccess: () => {

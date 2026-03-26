@@ -10,6 +10,7 @@
     "build": "vite build",
     "build:github-pages": "vite build && node scripts/prepare-github-pages.mjs",
     "build:dev": "vite build --mode development",
+    "guard:supabase-boundary": "node scripts/check-supabase-boundary.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "smoke:edge": "node scripts/smoke-edge-functions.mjs",

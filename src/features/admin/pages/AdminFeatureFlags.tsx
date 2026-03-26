@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import {
+  createFeatureFlag,
+  deleteFeatureFlag,
+  listFeatureFlags,
+  setFeatureFlagEnabled,
+  updateFeatureFlag,
+} from '../api/featureFlags';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,10 +58,7 @@ export default function AdminFeatureFlags() {
   const { data: flags = [], isLoading } = useQuery({
     queryKey: ['admin-feature-flags'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('app_feature_flags')
-        .select('*')
-        .order('key', { ascending: true });
+      const { data, error } = await listFeatureFlags();
       if (error) throw error;
       return (data ?? []) as FeatureFlag[];
     },
@@ -71,26 +74,21 @@ export default function AdminFeatureFlags() {
       }
 
       if (editingFlag) {
-        const { error } = await supabase
-          .from('app_feature_flags')
-          .update({
-            name: values.name,
-            description: values.description || null,
-            enabled: values.enabled,
-            payload,
-          })
-          .eq('id', editingFlag.id);
+        const { error } = await updateFeatureFlag(editingFlag.id, {
+          name: values.name,
+          description: values.description || null,
+          enabled: values.enabled,
+          payload,
+        });
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from('app_feature_flags')
-          .insert({
-            key: values.key,
-            name: values.name,
-            description: values.description || null,
-            enabled: values.enabled,
-            payload,
-          });
+        const { error } = await createFeatureFlag({
+          key: values.key,
+          name: values.name,
+          description: values.description || null,
+          enabled: values.enabled,
+          payload,
+        });
         if (error) throw error;
       }
     },
@@ -112,10 +110,7 @@ export default function AdminFeatureFlags() {
 
   const toggleMutation = useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
-      const { error } = await supabase
-        .from('app_feature_flags')
-        .update({ enabled })
-        .eq('id', id);
+      const { error } = await setFeatureFlagEnabled(id, enabled);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -128,10 +123,7 @@ export default function AdminFeatureFlags() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('app_feature_flags')
-        .delete()
-        .eq('id', id);
+      const { error } = await deleteFeatureFlag(id);
       if (error) throw error;
     },
     onSuccess: () => {
