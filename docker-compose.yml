@@ -26,6 +26,8 @@ services:
       interval: 10s
       timeout: 5s
       retries: 15
-      start_period: 20s
+      # Cold CI runners still need time to pull the full Supabase stack before
+      # Kong exposes the API, so give startup failures a wider grace window.
+      start_period: 5m
     stop_grace_period: 2m
     restart: unless-stopped
