@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { CalendarEvent, CalendarEventType } from '@/types';
+import type { CalendarEvent, CalendarEventType } from '@/features/agenda/types';
 
 const schema = z.object({
   title: z.string().min(1, 'Título obrigatório').max(200),

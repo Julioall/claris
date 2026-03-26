@@ -3,9 +3,10 @@ import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { CalendarEvent } from '@/features/agenda/types';
+import { getAgendaItemsOnDate, buildAgendaItems, type AgendaItem } from '@/features/agenda/lib/agenda';
+import type { Task } from '@/features/tasks/types';
 import { cn } from '@/lib/utils';
-import type { CalendarEvent, Task } from '@/types';
-import { buildAgendaItems, getAgendaItemsOnDate, type AgendaItem } from '@/lib/agenda';
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS } from '@/lib/tasks';
 import { AGENDA_TASK_APPEARANCE, CALENDAR_EVENT_APPEARANCE } from './agenda-item-appearance';
 import {

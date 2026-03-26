@@ -1,17 +1,13 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { User, Course, Student } from '@/types';
+import type { User } from '@/features/auth/types';
+import type { Course } from '@/features/courses/types';
+import type { Student } from '@/features/students/types';
+import type { MoodleSession } from '@/features/auth/domain/session';
 import {
-  normalizeMoodleUrl,
-  resolveFunctionsInvokeErrorMessage,
-  resolveMoodleErrorMessage,
-} from '@/lib/moodle-errors';
-
-interface MoodleSession {
-  moodleToken: string;
-  moodleUserId: number;
-  moodleUrl: string;
-}
+  authenticateMoodleUser,
+  fetchMoodleCoursesFromSession,
+} from '@/features/auth/infrastructure/moodle-api';
 
 interface LoginResult {
   success: boolean;
@@ -43,34 +39,15 @@ export function useMoodleApi() {
   ): Promise<LoginResult> => {
     setIsLoading(true);
     try {
-      const cleanUrl = normalizeMoodleUrl(moodleUrl);
-      const { data, error } = await supabase.functions.invoke('moodle-auth', {
-        body: {
-          moodleUrl: cleanUrl,
-          username,
-          password,
-        },
-      });
-
-      if (error) {
-        console.error('Login error:', error);
-        return { success: false, error: resolveFunctionsInvokeErrorMessage(error) };
+      const result = await authenticateMoodleUser({ username, password, moodleUrl });
+      if (!result.success) {
+        return { success: false, error: result.error };
       }
-
-      if (data.error) {
-        return { success: false, error: resolveMoodleErrorMessage(data.error, data.errorcode) };
-      }
-
-      const session: MoodleSession = {
-        moodleToken: data.moodleToken,
-        moodleUserId: data.moodleUserId,
-        moodleUrl: cleanUrl,
-      };
 
       return {
         success: true,
-        user: data.user,
-        session,
+        user: result.user,
+        session: result.moodleSession || undefined,
       };
     } catch (err) {
       console.error('Login error:', err);
@@ -88,26 +65,14 @@ export function useMoodleApi() {
     setSyncProgress('Sincronizando cursos...');
     
     try {
-      const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
-        body: {
-          moodleUrl: session.moodleUrl,
-          token: session.moodleToken,
-          userId: session.moodleUserId,
-        },
-      });
-
-      if (error) {
-        console.error('Sync courses error:', error);
-        return { success: false, error: error.message };
-      }
-
-      if (data.error) {
-        return { success: false, error: data.error };
+      const result = await fetchMoodleCoursesFromSession(session, session.moodleUserId);
+      if (result.handledError) {
+        return { success: false, error: result.errorMessage || 'Erro ao sincronizar cursos' };
       }
 
       return {
         success: true,
-        courses: data.courses,
+        courses: result.courses,
       };
     } catch (err) {
       console.error('Sync courses error:', err);

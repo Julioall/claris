@@ -8,7 +8,7 @@ import {
   Users,
   Video,
 } from 'lucide-react';
-import type { CalendarEventType } from '@/types';
+import type { CalendarEventType } from '@/features/agenda/types';
 
 export interface AgendaItemAppearance {
   label: string;

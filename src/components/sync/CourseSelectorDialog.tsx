@@ -8,17 +8,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { RefreshCw, Building2, GraduationCap, Users, ChevronRight, AlertCircle, BookOpen } from 'lucide-react';
-import { Course } from '@/types';
-import { supabase } from '@/integrations/supabase/client';
+import {
+  fetchStudentCountsByCourseIds,
+  fetchUserSyncPreferences,
+  saveUserSyncPreferences,
+  type SyncPreferences,
+} from '@/features/courses/api';
+import type { Course } from '@/features/courses/types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { isCourseEffectivelyActive, withEffectiveCourseDates } from '@/lib/course-dates';
-
-interface SyncPreferences {
-  selectedKeys: string[];
-  includeEmptyCourses: boolean;
-  includeFinished: boolean;
-}
 
 interface CourseSelectorDialogProps {
   open: boolean;
@@ -56,19 +55,7 @@ function isCourseFinishedForSyncFilter(course: Course): boolean {
 
 async function loadPreferencesFromDB(userId: string): Promise<SyncPreferences | null> {
   try {
-    const { data } = await supabase
-      .from('user_sync_preferences')
-      .select('*')
-      .eq('user_id', userId)
-      .maybeSingle();
-    
-    if (data) {
-      return {
-        selectedKeys: data.selected_keys || [],
-        includeEmptyCourses: data.include_empty_courses,
-        includeFinished: data.include_finished,
-      };
-    }
+    return await fetchUserSyncPreferences(userId);
   } catch (e) {
     console.error('Error loading sync preferences:', e);
   }
@@ -77,14 +64,7 @@ async function loadPreferencesFromDB(userId: string): Promise<SyncPreferences | 
 
 async function savePreferencesToDB(userId: string, prefs: SyncPreferences) {
   try {
-    await supabase
-      .from('user_sync_preferences')
-      .upsert({
-        user_id: userId,
-        selected_keys: prefs.selectedKeys,
-        include_empty_courses: prefs.includeEmptyCourses,
-        include_finished: prefs.includeFinished,
-      }, { onConflict: 'user_id' });
+    await saveUserSyncPreferences(userId, prefs);
   } catch (e) {
     console.error('Error saving sync preferences:', e);
   }
@@ -117,22 +97,8 @@ export function CourseSelectorDialog({
     const fetchCounts = async () => {
       setCountsLoaded(false);
       const courseIds = courses.map(c => c.id);
-      // Fetch in batches if needed (supabase .in() has limits)
-      const BATCH = 200;
-      const allCounts = new Map<string, number>();
-      
-      for (let i = 0; i < courseIds.length; i += BATCH) {
-        const batch = courseIds.slice(i, i + BATCH);
-        const { data } = await supabase
-          .from('student_courses')
-          .select('course_id')
-          .in('course_id', batch);
+      const allCounts = await fetchStudentCountsByCourseIds(courseIds);
 
-        data?.forEach(sc => {
-          allCounts.set(sc.course_id, (allCounts.get(sc.course_id) || 0) + 1);
-        });
-      }
-      
       setStudentCounts(allCounts);
       setCountsLoaded(true);
       console.log(`✓ Loaded student counts for ${allCounts.size} courses out of ${courseIds.length} total courses`);

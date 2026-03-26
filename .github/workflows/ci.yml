@@ -16,6 +16,18 @@ env:
   PUBLIC_DEPLOY_REPO: Julioall/claris-ia
 
 jobs:
+  supabase-boundary:
+    name: Supabase Boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run guard:supabase-boundary
+
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -40,6 +52,18 @@ jobs:
       - run: npm ci
       - run: npm run test
 
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
   build:
     name: Build
     runs-on: ubuntu-latest
@@ -62,8 +86,10 @@ jobs:
     name: Publish Public Build
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs:
+      - supabase-boundary
       - lint
       - test
+      - typecheck
       - build
     runs-on: ubuntu-latest
     environment: supabase

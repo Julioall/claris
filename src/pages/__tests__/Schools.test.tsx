@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Schools from "@/pages/Schools";
+import Schools from "@/features/courses/pages/SchoolsPage";
 
 const useAllCoursesDataMock = vi.fn();
 const useAuthMock = vi.fn();
 
-vi.mock("@/hooks/useAllCoursesData", () => ({
+vi.mock("@/features/courses/hooks/useAllCoursesData", () => ({
   useAllCoursesData: (...args: unknown[]) => useAllCoursesDataMock(...args),
 }));
 

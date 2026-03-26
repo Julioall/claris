@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar, Edit2, Trash2, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/types';
+import type { Task } from '@/features/tasks/types';
 import { endOfDay, format, isPast, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 

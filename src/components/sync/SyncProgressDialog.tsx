@@ -4,16 +4,7 @@ import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, BookOpen, Users, ClipboardList, GraduationCap } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { cn } from '@/lib/utils';
-
-export interface SyncStep {
-  id: string;
-  label: string;
-  icon: 'courses' | 'students' | 'activities' | 'grades';
-  status: 'pending' | 'in_progress' | 'completed' | 'error';
-  count?: number;
-  total?: number;
-  errorMessage?: string;
-}
+import type { SyncStep } from '@/features/auth/domain/sync';
 
 interface SyncProgressDialogProps {
   open: boolean;

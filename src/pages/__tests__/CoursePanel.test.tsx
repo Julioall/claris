@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import CoursePanel from "@/pages/CoursePanel";
+import CoursePanel from "@/features/courses/pages/CoursePanelPage";
 
 const useCoursePanelMock = vi.fn();
 const useAuthMock = vi.fn();
 const toggleActivityVisibilityMock = vi.fn();
 
-vi.mock("@/hooks/useCoursePanel", () => ({
+vi.mock("@/features/courses/hooks/useCoursePanel", () => ({
   useCoursePanel: (...args: unknown[]) => useCoursePanelMock(...args),
 }));
 
@@ -38,6 +38,9 @@ describe("CoursePanel page", () => {
     useAuthMock.mockReturnValue({
       user: { id: "u-1" },
       isEditMode: false,
+      syncCourseIncremental: vi.fn(),
+      isSyncing: false,
+      isOfflineMode: false,
     });
 
     useCoursePanelMock.mockReturnValue({
@@ -135,7 +138,11 @@ describe("CoursePanel page", () => {
       },
       isLoading: false,
       error: null,
+      refetch: vi.fn(),
       toggleActivityVisibility: toggleActivityVisibilityMock,
+      isAttendanceEnabled: false,
+      isLoadingAttendanceFlag: false,
+      toggleAttendance: vi.fn(),
     });
   });
 
@@ -153,7 +160,11 @@ describe("CoursePanel page", () => {
       },
       isLoading: true,
       error: null,
+      refetch: vi.fn(),
       toggleActivityVisibility: toggleActivityVisibilityMock,
+      isAttendanceEnabled: false,
+      isLoadingAttendanceFlag: false,
+      toggleAttendance: vi.fn(),
     });
 
     const { container } = renderPage();
@@ -174,7 +185,11 @@ describe("CoursePanel page", () => {
       },
       isLoading: false,
       error: "Curso nao encontrado",
+      refetch: vi.fn(),
       toggleActivityVisibility: toggleActivityVisibilityMock,
+      isAttendanceEnabled: false,
+      isLoadingAttendanceFlag: false,
+      toggleAttendance: vi.fn(),
     });
 
     renderPage();
@@ -306,7 +321,11 @@ describe("CoursePanel page", () => {
       },
       isLoading: false,
       error: null,
+      refetch: vi.fn(),
       toggleActivityVisibility: toggleActivityVisibilityMock,
+      isAttendanceEnabled: false,
+      isLoadingAttendanceFlag: false,
+      toggleAttendance: vi.fn(),
     });
 
     renderPage();

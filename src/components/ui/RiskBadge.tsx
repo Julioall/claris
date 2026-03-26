@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { RiskLevel } from '@/types';
+import type { RiskLevel } from '@/features/students/types';
 import { getRiskLevelLabel } from '@/lib/mock-data';
 
 interface RiskBadgeProps {

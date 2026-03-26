@@ -6,8 +6,6 @@ import { StudentGradesTab } from "@/components/student/StudentGradesTab";
 const fromMock = vi.fn();
 const gradesEqMock = vi.fn();
 const activitiesEqMock = vi.fn();
-const activitiesNeqMock = vi.fn();
-const activitiesOrderMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -20,9 +18,7 @@ describe("StudentGradesTab", () => {
     vi.clearAllMocks();
 
     gradesEqMock.mockResolvedValue({ data: [], error: null });
-    activitiesOrderMock.mockResolvedValue({ data: [], error: null });
-    activitiesNeqMock.mockReturnValue({ order: activitiesOrderMock });
-    activitiesEqMock.mockReturnValue({ neq: activitiesNeqMock });
+    activitiesEqMock.mockResolvedValue({ data: [], error: null });
 
     fromMock.mockImplementation((table: string) => {
       if (table === "student_course_grades") {
@@ -72,7 +68,7 @@ describe("StudentGradesTab", () => {
       error: null,
     });
 
-    activitiesOrderMock.mockResolvedValueOnce({
+    activitiesEqMock.mockResolvedValueOnce({
       data: [
         {
           id: "a-1",

@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import type { Course } from "@/types";
+import type { Course } from "@/features/courses/types";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
