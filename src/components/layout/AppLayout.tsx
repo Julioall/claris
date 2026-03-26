@@ -5,8 +5,8 @@ import { SidebarProvider } from '@/components/ui/sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { SyncProgressDialog } from '@/components/sync/SyncProgressDialog';
 import { CourseSelectorDialog } from '@/components/sync/CourseSelectorDialog';
-import { FloatingClarisChat } from '@/components/layout/FloatingClarisChat';
 import { AppFooter } from '@/components/layout/AppFooter';
+import { FloatingClarisChat } from '@/features/claris/components/FloatingClarisChat';
 
 export function AppLayout() {
   const location = useLocation();

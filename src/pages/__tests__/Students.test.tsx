@@ -1,18 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import Students from "@/pages/Students";
+import Students from "@/features/students/pages/StudentsPage";
 
 const useStudentsDataMock = vi.fn();
+const useSyncStudentsMutationMock = vi.fn();
 const useCoursesDataMock = vi.fn();
 const useAuthMock = vi.fn();
 const navigateMock = vi.fn();
 
-vi.mock("@/hooks/useStudentsData", () => ({
+vi.mock("@/features/students/hooks/useStudentsData", () => ({
   useStudentsData: (...args: unknown[]) => useStudentsDataMock(...args),
 }));
 
-vi.mock("@/hooks/useCoursesData", () => ({
+vi.mock("@/features/students/hooks/useSyncStudentsMutation", () => ({
+  useSyncStudentsMutation: () => useSyncStudentsMutationMock(),
+}));
+
+vi.mock("@/features/courses/hooks/useCoursesData", () => ({
   useCoursesData: () => useCoursesDataMock(),
 }));
 
@@ -55,9 +60,13 @@ describe("Students page", () => {
     });
 
     useAuthMock.mockReturnValue({
-      syncStudentsIncremental: vi.fn(),
       isSyncing: false,
       isOfflineMode: false,
+    });
+
+    useSyncStudentsMutationMock.mockReturnValue({
+      mutateAsync: vi.fn(),
+      isPending: false,
     });
   });
 

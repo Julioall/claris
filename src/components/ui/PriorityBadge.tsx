@@ -1,6 +1,6 @@
 import { TASK_PRIORITY_LABELS } from '@/lib/tasks';
 import { cn } from '@/lib/utils';
-import type { TaskPriority } from '@/types';
+import type { TaskPriority } from '@/features/tasks/types';
 
 interface PriorityBadgeProps {
   priority: TaskPriority;

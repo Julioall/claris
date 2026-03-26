@@ -4,7 +4,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchStudentGrades, fetchStudentActivities } from '@/features/students/api';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -47,39 +47,9 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
     setIsLoading(true);
     try {
       const [gradesResponse, activitiesResponse] = await Promise.all([
-        supabase
-          .from('student_course_grades')
-          .select(`
-            id,
-            course_id,
-            grade_raw,
-            grade_max,
-            grade_percentage,
-            grade_formatted,
-            letter_grade,
-            last_sync,
-            courses!inner(name)
-          `)
-          .eq('student_id', studentId),
-        supabase
-          .from('student_activities')
-          .select(`
-            id,
-            course_id,
-            activity_name,
-            activity_type,
-            grade,
-            grade_max,
-            percentage,
-            status,
-            due_date,
-            hidden
-          `)
-          .eq('student_id', studentId)
-          .neq('activity_type', 'scorm')
-          .order('activity_name'),
+        fetchStudentGrades(studentId),
+        fetchStudentActivities(studentId),
       ]);
-
       if (gradesResponse.error) throw gradesResponse.error;
       if (activitiesResponse.error) throw activitiesResponse.error;
 

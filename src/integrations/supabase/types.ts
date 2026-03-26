@@ -743,6 +743,7 @@ export type Database = {
           failed_count: number
           id: string
           message_content: string
+          origin: string
           sent_count: number
           started_at: string | null
           status: Database["public"]["Enums"]["bulk_message_status"]
@@ -758,6 +759,7 @@ export type Database = {
           failed_count?: number
           id?: string
           message_content: string
+          origin?: string
           sent_count?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["bulk_message_status"]
@@ -773,6 +775,7 @@ export type Database = {
           failed_count?: number
           id?: string
           message_content?: string
+          origin?: string
           sent_count?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["bulk_message_status"]

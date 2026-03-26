@@ -327,6 +327,23 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'bulk-message-send',
     },
     {
+      body: {
+        message_content: 'Mensagem smoke',
+        moodleUrl: 'https://example.com',
+        origin: 'manual',
+        recipients: [{
+          moodle_user_id: 'smoke-student-001',
+          personalized_message: 'Mensagem smoke',
+          student_id: 'student-smoke',
+          student_name: 'Aluno Smoke',
+        }],
+        token: 'token-demo',
+      },
+      expectedStatus: 401,
+      name: 'bulk-message-send create-no-auth',
+      path: 'bulk-message-send',
+    },
+    {
       body: { automation_types: 'auto_at_risk' },
       expectedStatus: 400,
       name: 'generate-automated-tasks invalid-types',

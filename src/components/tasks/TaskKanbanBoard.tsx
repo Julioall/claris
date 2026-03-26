@@ -2,8 +2,8 @@ import { useState, type DragEvent, type MouseEvent } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import type { Task, TaskStatus } from '@/features/tasks/types';
 import { cn } from '@/lib/utils';
-import type { Task, TaskStatus } from '@/types';
 import { TaskCard } from './TaskCard';
 
 interface Column {

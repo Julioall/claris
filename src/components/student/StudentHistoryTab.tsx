@@ -5,8 +5,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { RiskBadge } from '@/components/ui/RiskBadge';
-import { useStudentHistory, StudentSyncSnapshot } from '@/hooks/useStudentHistory';
-import { RiskLevel } from '@/types';
+import { useStudentHistory, StudentSyncSnapshot } from '@/features/students/hooks/useStudentHistory';
+import type { RiskLevel } from '@/features/students/types';
 import { cn } from '@/lib/utils';
 
 const DROPOUT_THRESHOLD_DAYS = 90;

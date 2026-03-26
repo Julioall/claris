@@ -8,11 +8,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { fetchLoginDefaults } from '@/features/auth/api/login';
 import {
   DEFAULT_MOODLE_SERVICE,
   DEFAULT_MOODLE_URL,
-  fetchGlobalAppSettings,
 } from '@/lib/global-app-settings';
 
 export default function Login() {
@@ -37,9 +36,9 @@ export default function Login() {
     let storedService = DEFAULT_MOODLE_SERVICE;
 
     try {
-      const appSettings = await fetchGlobalAppSettings(supabase);
-      storedUrl = appSettings.moodleConnectionUrl || DEFAULT_MOODLE_URL;
-      storedService = appSettings.moodleConnectionService || DEFAULT_MOODLE_SERVICE;
+      const loginDefaults = await fetchLoginDefaults();
+      storedUrl = loginDefaults.moodleUrl || DEFAULT_MOODLE_URL;
+      storedService = loginDefaults.moodleService || DEFAULT_MOODLE_SERVICE;
     } catch (error) {
       console.error('Error loading global Moodle connection settings:', error);
     }

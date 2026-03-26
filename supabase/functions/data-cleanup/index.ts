@@ -37,9 +37,17 @@ Deno.serve(createHandler(async ({ body, user }) => {
     { table: 'courses', label: 'Cursos' },
   ] as const
 
+  const tablesToDelete = body.mode === 'selected_cleanup'
+    ? deleteOrder.filter(({ table }) => body.tables?.includes(table))
+    : deleteOrder
+
+  if (body.mode === 'selected_cleanup' && tablesToDelete.length === 0) {
+    return errorResponse('No tables selected for cleanup.', 400)
+  }
+
   const results: { table: string; success: boolean; error?: string }[] = []
 
-  for (const { table } of deleteOrder) {
+  for (const { table } of tablesToDelete) {
     const { error } = await supabase
       .from(table)
       .delete()
@@ -57,7 +65,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
   }
 
   const failures = results.filter((result) => !result.success)
-  console.log(`Full cleanup completed. ${results.length - failures.length}/${results.length} tables cleaned.`)
+  console.log(`${body.mode} completed. ${results.length - failures.length}/${results.length} tables cleaned.`)
 
   return jsonResponse({
     success: failures.length === 0,

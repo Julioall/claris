@@ -1,6 +1,6 @@
 import { TASK_STATUS_LABELS } from '@/lib/tasks';
 import { cn } from '@/lib/utils';
-import type { TaskStatus } from '@/types';
+import type { TaskStatus } from '@/features/tasks/types';
 
 interface StatusBadgeProps {
   status: TaskStatus;

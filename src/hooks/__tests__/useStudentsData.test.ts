@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
-import { useStudentsData } from "@/hooks/useStudentsData";
+import { useStudentsData } from "@/features/students/hooks/useStudentsData";
+import { createQueryClientWrapper } from "@/test/query-client";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
@@ -132,7 +133,8 @@ describe("useStudentsData", () => {
   });
 
   it("deduplicates students, computes stats and sorts by risk level", async () => {
-    const { result } = renderHook(() => useStudentsData());
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentsData(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -161,7 +163,8 @@ describe("useStudentsData", () => {
   it("returns empty data when user is not authenticated", async () => {
     useAuthMock.mockReturnValue({ user: null });
 
-    const { result } = renderHook(() => useStudentsData());
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentsData(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -177,7 +180,8 @@ describe("useStudentsData", () => {
       error: new Error("students query failed"),
     });
 
-    const { result } = renderHook(() => useStudentsData());
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentsData(), { wrapper });
 
     await waitFor(() => {
       expect(result.current.error).toContain("students query failed");
@@ -185,7 +189,8 @@ describe("useStudentsData", () => {
   });
 
   it("applies explicit course filter when provided", async () => {
-    const { result } = renderHook(() => useStudentsData("course-fixed"));
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useStudentsData("course-fixed"), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
