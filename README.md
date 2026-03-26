@@ -16,7 +16,7 @@ cp .env.example .env
 
 ## Documentacao
 
-- [docs/ACTIM.md](docs/ACTIM.md): visao funcional e fluxo do produto.
+- [docs/CLARIS.md](docs/CLARIS.md): visao funcional e fluxo do produto.
 - [docs/MOODLE_API.md](docs/MOODLE_API.md): referencias de integracao com Moodle.
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): arquitetura atual do app, fronteiras de dominio e seguranca.
 - [docs/EDGE_FUNCTIONS.md](docs/EDGE_FUNCTIONS.md): padroes, runtime compartilhado e operacao das Edge Functions.

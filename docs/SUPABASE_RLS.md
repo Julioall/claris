@@ -20,6 +20,7 @@ Posturas especiais válidas:
 
 - `student_activities`: leitura por escopo de curso, escrita automática por `service_role`.
 - `student_course_grades`: leitura por escopo de curso, escrita automática por `service_role`.
+- `dashboard_course_activity_aggregates`: leitura por escopo de curso; escrita automática por `service_role`.
 - `task_action_history`: insert permitido para `service_role` e, no fluxo autenticado, somente com validação de ownership e integridade cruzada.
 - `courses`: insert continua aceitando `auth.uid() IS NOT NULL`; isso depende do fluxo controlado pelas Edge Functions.
 - `user_sync_preferences`: usa `auth.uid()::text` por compatibilidade com o tipo atual da coluna.
@@ -60,6 +61,7 @@ Tabelas:
 - `student_courses`
 - `student_activities`
 - `student_course_grades`
+- `dashboard_course_activity_aggregates`
 
 Regra canônica:
 
@@ -68,6 +70,7 @@ Regra canônica:
 - `student_courses`: leitura e escrita validadas pelo `course_id` acessível em `user_courses`.
 - `student_activities`: leitura por escopo de curso; escrita automática por `service_role`.
 - `student_course_grades`: leitura por escopo de curso; escrita automática por `service_role`.
+- `dashboard_course_activity_aggregates`: leitura por escopo de curso; insert/update exclusivos de `service_role`.
 
 Migrations de referência:
 
@@ -76,11 +79,13 @@ Migrations de referência:
 - `20260204194036_0737e748-5485-4860-a650-48737a3eee5d.sql`
 - `20260205183218_fix_rls_remove_null_auth.sql`
 - `20260211041244_0ef98547-ca60-4110-a1de-2cc1df4d6c1b.sql`
+- `20260326183000_add_dashboard_course_activity_aggregates.sql`
 
 Observações:
 
 - O padrão correto aqui é sempre curso como unidade de autorização, nunca acesso amplo por aluno ou atividade isolada.
 - As Edge Functions de sync dependem explicitamente das policies `service_role` em atividades e notas.
+- `dashboard_course_activity_aggregates` materializa a fila do dashboard por curso para evitar recálculo completo de `student_activities` em toda abertura da tela.
 
 ## Tarefas E Automação
 
