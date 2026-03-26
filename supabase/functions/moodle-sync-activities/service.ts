@@ -7,6 +7,7 @@ import {
   listStudentsWithMoodleUserId,
   upsertStudentActivities,
 } from '../_shared/domain/moodle-sync/repository.ts'
+import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 
 const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
@@ -31,12 +32,18 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   }
 
   const studentIds = await listStudentIdsByCourseId(supabase, dbCourse.id)
-  if (studentIds.length === 0) return jsonResponse({ success: true, activitiesCount: 0 })
+  if (studentIds.length === 0) {
+    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
+    return jsonResponse({ success: true, activitiesCount: 0 })
+  }
 
   // Extract activities
   const activities = activitiesFromFallback ?? extractActivities(courseContents)
   console.log(`Found ${activities.length} activities (quiz/assign/forum) in course ${courseId}`)
-  if (activities.length === 0) return jsonResponse({ success: true, activitiesCount: 0 })
+  if (activities.length === 0) {
+    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
+    return jsonResponse({ success: true, activitiesCount: 0 })
+  }
 
   // Fetch due dates
   const assignDueDates = await fetchAssignDueDates(moodleUrl, token, courseId, activities)
@@ -59,8 +66,21 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
     console.error('Error upserting activities:', error)
   }
 
+  await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
+
   console.log(`Upserted ${activitiesCount} activity records`)
   return jsonResponse({ success: true, activitiesCount })
+}
+
+async function refreshDashboardAggregatesForCourse(
+  supabase: AppSupabaseClient,
+  courseId: string,
+) {
+  try {
+    await refreshDashboardCourseActivityAggregates(supabase, [courseId])
+  } catch (error) {
+    console.error('[moodle-sync-activities] Error refreshing dashboard aggregates:', error)
+  }
 }
 
 // --- Helper functions ---

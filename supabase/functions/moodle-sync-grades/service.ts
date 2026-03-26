@@ -6,6 +6,7 @@ import {
   upsertStudentActivities,
   upsertStudentCourseGrades,
 } from '../_shared/domain/moodle-sync/repository.ts'
+import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 import { parseNullableNumber, parseNullablePercentage } from '../_shared/validation/mod.ts'
 
@@ -69,7 +70,10 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
 
   const enrolledStudents = await listCourseEnrollmentsWithMoodleUserId(supabase, gradesCourse.id)
 
-  if (!enrolledStudents?.length) return jsonResponse({ success: true, gradesCount: 0 })
+  if (!enrolledStudents?.length) {
+    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+    return jsonResponse({ success: true, gradesCount: 0 })
+  }
 
   console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`)
 
@@ -199,7 +203,20 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
     }
   }
 
+  await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+
   return jsonResponse({ success: true, gradesCount, activityGradesCount })
+}
+
+async function refreshDashboardAggregatesForCourse(
+  supabase: ReturnType<typeof createServiceClient>,
+  courseId: string,
+) {
+  try {
+    await refreshDashboardCourseActivityAggregates(supabase, [courseId])
+  } catch (error) {
+    console.error('[moodle-sync-grades] Error refreshing dashboard aggregates:', error)
+  }
 }
 
 export async function debugGrades(

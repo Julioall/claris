@@ -1,4 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
+import {
+  isStudentActivityPendingSubmission,
+  isStudentActivityWeightedInGradebook,
+} from '@/lib/student-activity-status';
 
 import type {
   BulkMessageJobPreview,
@@ -42,10 +46,15 @@ interface StudentCourseGradeRow {
 }
 
 interface StudentActivityRow {
+  activity_type: string | null;
+  grade: number | null;
+  grade_max: number | null;
+  percentage: number | null;
   student_id: string;
   course_id: string;
   submitted_at: string | null;
   completed_at: string | null;
+  graded_at: string | null;
   status: string | null;
 }
 
@@ -212,7 +221,7 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
         .in('student_id', studentIds),
       supabase
         .from('student_activities')
-        .select('student_id, course_id, submitted_at, completed_at, status, hidden')
+        .select('student_id, course_id, activity_type, grade, grade_max, percentage, submitted_at, completed_at, graded_at, status, hidden')
         .in('course_id', courseIds)
         .in('student_id', studentIds)
         .eq('hidden', false),
@@ -231,12 +240,8 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
 
   const pendingLookup: PendingLookup = {};
   (pendingActivities as StudentActivityRow[] | null)?.forEach((activity) => {
-    const isSubmitted = Boolean(activity.submitted_at);
-    const isCompleted =
-      Boolean(activity.completed_at) ||
-      ['completed', 'concluida', 'finalizada'].includes(String(activity.status || '').toLowerCase());
-
-    if (isSubmitted || isCompleted) return;
+    if (!isStudentActivityWeightedInGradebook(activity)) return;
+    if (!isStudentActivityPendingSubmission(activity)) return;
 
     const key = buildStudentCourseKey(activity.student_id, activity.course_id);
     pendingLookup[key] = (pendingLookup[key] || 0) + 1;

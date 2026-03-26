@@ -1145,6 +1145,35 @@ export type Database = {
         }
         Relationships: []
       }
+      dashboard_course_activity_aggregates: {
+        Row: {
+          course_id: string
+          pending_correction_assignments: number
+          pending_submission_assignments: number
+          updated_at: string
+        }
+        Insert: {
+          course_id: string
+          pending_correction_assignments?: number
+          pending_submission_assignments?: number
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string
+          pending_correction_assignments?: number
+          pending_submission_assignments?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_course_activity_aggregates_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: true
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_templates: {
         Row: {
           category: string | null

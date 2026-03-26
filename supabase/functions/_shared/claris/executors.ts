@@ -17,6 +17,11 @@ import {
   markRecipientFailed,
   markRecipientSent,
 } from '../domain/bulk-messaging/repository.ts'
+import {
+  isStudentActivityPendingCorrection,
+  isStudentActivityPendingSubmission,
+  isStudentActivityWeightedInGradebook,
+} from '../domain/student-activity-status.ts'
 import { callMoodleApi } from '../moodle/mod.ts'
 
 // ---------------------------------------------------------------------------
@@ -355,13 +360,15 @@ async function getDashboardSummary(userId: string, supabase: Supabase) {
   const studentIds = Array.from(uniqueStudents.keys())
   let activitiesToReview = 0
   if (studentIds.length > 0) {
-    const { count } = await supabase
+    const { data: activityRows } = await supabase
       .from('student_activities')
-      .select('*', { count: 'exact', head: true })
+      .select('activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
       .in('student_id', studentIds)
-      .not('submitted_at', 'is', null)
-      .is('graded_at', null)
-    activitiesToReview = count ?? 0
+      .eq('hidden', false)
+    activitiesToReview = (activityRows ?? [])
+      .filter((row) => isStudentActivityWeightedInGradebook(row))
+      .filter((row) => isStudentActivityPendingCorrection(row))
+      .length
   }
 
   return {
@@ -484,17 +491,22 @@ async function getActivitiesToReview(userId: string, args: ToolCallArgs, supabas
   const { data } = await supabase
     .from('student_activities')
     .select(`
-      activity_name, activity_type, submitted_at, due_date,
+      activity_name, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at, due_date,
       students(full_name, current_risk_level),
       courses(short_name)
     `)
     .in('course_id', courseIds)
-    .not('submitted_at', 'is', null)
-    .is('graded_at', null)
-    .order('submitted_at', { ascending: true })
-    .limit(limit)
+    .eq('hidden', false)
 
-  return data ?? []
+  return (data ?? [])
+    .filter((row) => isStudentActivityWeightedInGradebook(row))
+    .filter((row) => isStudentActivityPendingCorrection(row))
+    .sort((left, right) => {
+      const leftSubmitted = left.submitted_at ? new Date(left.submitted_at).getTime() : Number.POSITIVE_INFINITY
+      const rightSubmitted = right.submitted_at ? new Date(right.submitted_at).getTime() : Number.POSITIVE_INFINITY
+      return leftSubmitted - rightSubmitted
+    })
+    .slice(0, limit)
 }
 
 // ---------------------------------------------------------------------------
@@ -1086,11 +1098,16 @@ async function getRecipientsForAudience(
   if (audience === 'students_with_pending_activities') {
     const { data: pendingRows } = await supabase
       .from('student_activities')
-      .select('student_id')
+      .select('student_id, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
       .in('course_id', courseIds)
-      .is('submitted_at', null)
+      .eq('hidden', false)
 
-    const pendingStudentIds = [...new Set((pendingRows ?? []).map((row: StudentCourseRow) => row.student_id))]
+    const pendingStudentIds = [...new Set(
+      (pendingRows ?? [])
+        .filter((row) => isStudentActivityWeightedInGradebook(row))
+        .filter((row) => isStudentActivityPendingSubmission(row))
+        .map((row: StudentCourseRow) => row.student_id),
+    )]
       .filter((id: unknown): id is string => typeof id === 'string')
       .slice(0, limit)
     if (pendingStudentIds.length === 0) return []
@@ -1315,7 +1332,7 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
         .in('course_id', selectedCourseIds),
       supabase
         .from('student_activities')
-        .select('student_id, course_id, submitted_at, completed_at, status')
+        .select('student_id, course_id, activity_type, grade, grade_max, percentage, submitted_at, completed_at, graded_at, status')
         .in('student_id', recipientIds)
         .in('course_id', selectedCourseIds)
         .eq('hidden', false),
@@ -1329,9 +1346,8 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
     }
 
     for (const activity of activities ?? []) {
-      const isSubmitted = Boolean(activity.submitted_at)
-      const isCompleted = Boolean(activity.completed_at) || ['completed', 'concluida', 'finalizada'].includes(String(activity.status || '').toLowerCase())
-      if (isSubmitted || isCompleted) continue
+      if (!isStudentActivityWeightedInGradebook(activity)) continue
+      if (!isStudentActivityPendingSubmission(activity)) continue
 
       const key = buildKey(activity.student_id, activity.course_id)
       pendingLookup[key] = (pendingLookup[key] || 0) + 1
@@ -2088,7 +2104,7 @@ async function getStudentSummary(userId: string, args: ToolCallArgs, supabase: S
   const [activitiesResult, gradesResult, pendingTasksResult, attendanceResult] = await Promise.all([
     supabase
       .from('student_activities')
-      .select('activity_name, due_date, submitted_at, completed_at, percentage, is_recovery')
+      .select('activity_name, due_date, submitted_at, completed_at, grade, grade_max, percentage, is_recovery')
       .eq('student_id', student.id)
       .in('course_id', courseIds)
       .order('due_date', { ascending: false })
@@ -2116,7 +2132,7 @@ async function getStudentSummary(userId: string, args: ToolCallArgs, supabase: S
       .limit(10),
   ])
 
-  const activities = activitiesResult.data ?? []
+  const activities = (activitiesResult.data ?? []).filter((activity) => isStudentActivityWeightedInGradebook(activity))
   const overdueCount = activities.filter(
     (a: { due_date?: string | null; completed_at?: string | null }) =>
       a.due_date && new Date(a.due_date) < new Date() && !a.completed_at,
@@ -2472,12 +2488,15 @@ async function getTutorRoutineSuggestions(userId: string, args: ToolCallArgs, su
 
     // Activities pending correction
     if (studentIds.length > 0) {
-      const { count: correctionCount } = await supabase
+    const { data: correctionRows } = await supabase
         .from('student_activities')
-        .select('*', { count: 'exact', head: true })
+        .select('activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
         .in('course_id', courseIds)
-        .not('submitted_at', 'is', null)
-        .is('graded_at', null)
+        .eq('hidden', false)
+      const correctionCount = (correctionRows ?? [])
+        .filter((row) => isStudentActivityWeightedInGradebook(row))
+        .filter((row) => isStudentActivityPendingCorrection(row))
+        .length
 
       if (correctionCount && correctionCount > 0) {
         suggestions.push({
@@ -2537,13 +2556,15 @@ async function generateWeeklyChecklist(userId: string, args: ToolCallArgs, supab
   // 2. Activities to review
   let activitiesToReviewCount = 0
   if (studentIds.length > 0) {
-    const { count } = await supabase
+    const { data: activityRows } = await supabase
       .from('student_activities')
-      .select('*', { count: 'exact', head: true })
+      .select('activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
       .in('course_id', courseIds)
-      .not('submitted_at', 'is', null)
-      .is('graded_at', null)
-    activitiesToReviewCount = count ?? 0
+      .eq('hidden', false)
+    activitiesToReviewCount = (activityRows ?? [])
+      .filter((row) => isStudentActivityWeightedInGradebook(row))
+      .filter((row) => isStudentActivityPendingCorrection(row))
+      .length
   }
 
   checklistSections.push({

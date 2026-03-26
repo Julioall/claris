@@ -32,6 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/AuthContext';
 import { getCourseEffectiveEndDate } from '@/lib/course-dates';
+import { getStudentActivityWorkflowStatus } from '@/lib/student-activity-status';
 import { cn } from '@/lib/utils';
 
 import { useCoursePanel } from '../hooks/useCoursePanel';
@@ -78,21 +79,18 @@ export default function CoursePanelPage() {
   };
 
   const getSubmissionStatus = (submission: {
+    activity_type?: string | null;
     grade: number | null;
     status: string | null;
     completed_at: string | null;
     submitted_at?: string | null;
+    graded_at?: string | null;
   }) => {
-    if (submission.grade !== null) return 'corrigido';
+    const workflowStatus = getStudentActivityWorkflowStatus(submission);
 
-    const hasSubmission = Boolean(
-      submission.submitted_at
-      || submission.completed_at
-      || submission.status === 'completed'
-      || submission.status === 'complete_pass',
-    );
-
-    return hasSubmission ? 'pendente-correcao' : 'pendente-envio';
+    if (workflowStatus === 'corrected') return 'corrigido';
+    if (workflowStatus === 'pending_correction') return 'pendente-correcao';
+    return 'pendente-envio';
   };
 
   const handleSyncStudentsTab = async () => {

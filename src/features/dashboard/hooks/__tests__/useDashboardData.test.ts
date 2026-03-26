@@ -12,6 +12,7 @@ const userCoursesEqRoleMock = vi.fn();
 
 const studentCoursesSelectMock = vi.fn();
 const studentCoursesInMock = vi.fn();
+const studentCoursesRangeMock = vi.fn();
 
 // calendar_events today
 const calEventsSelectMock = vi.fn();
@@ -41,6 +42,9 @@ const feedOrMock = vi.fn();
 const feedOrderMock = vi.fn();
 const feedLimitMock = vi.fn();
 
+const dashboardAggregatesSelectMock = vi.fn();
+const dashboardAggregatesInMock = vi.fn();
+
 const studentActivitiesSelectMock = vi.fn();
 
 const missedActivitiesInCourseMock = vi.fn();
@@ -48,15 +52,12 @@ const missedActivitiesInStudentMock = vi.fn();
 const missedActivitiesEqTypeMock = vi.fn();
 const missedActivitiesNotDueMock = vi.fn();
 const missedActivitiesLtDueMock = vi.fn();
-const missedActivitiesIsSubmittedMock = vi.fn();
 const missedActivitiesEqHiddenMock = vi.fn();
 
 const uncorrectedActivitiesInCourseMock = vi.fn();
 const uncorrectedActivitiesInStudentMock = vi.fn();
 const uncorrectedActivitiesEqTypeMock = vi.fn();
-const uncorrectedActivitiesIsGradedMock = vi.fn();
 const uncorrectedActivitiesEqHiddenMock = vi.fn();
-const uncorrectedActivitiesNotSubmittedMock = vi.fn();
 
 const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -106,6 +107,10 @@ function setupFromMock() {
       return { select: feedSelectMock };
     }
 
+    if (table === "dashboard_course_activity_aggregates") {
+      return { select: dashboardAggregatesSelectMock };
+    }
+
     if (table === "student_activities") {
       return { select: studentActivitiesSelectMock };
     }
@@ -130,7 +135,8 @@ describe("useDashboardData", () => {
     });
 
     studentCoursesSelectMock.mockReturnValue({ in: studentCoursesInMock });
-    studentCoursesInMock.mockResolvedValue({
+    studentCoursesInMock.mockReturnValue({ range: studentCoursesRangeMock });
+    studentCoursesRangeMock.mockResolvedValue({
       data: [
         { student_id: "s-1", enrollment_status: "ativo" },
         { student_id: "s-2", enrollment_status: "ativo" },
@@ -208,6 +214,18 @@ describe("useDashboardData", () => {
       error: null,
     });
 
+    dashboardAggregatesSelectMock.mockReturnValue({ in: dashboardAggregatesInMock });
+    dashboardAggregatesInMock.mockResolvedValue({
+      data: [
+        {
+          course_id: "c-1",
+          pending_submission_assignments: 4,
+          pending_correction_assignments: 12,
+        },
+      ],
+      error: null,
+    });
+
     studentActivitiesSelectMock
       .mockReturnValueOnce({ in: missedActivitiesInCourseMock })
       .mockReturnValueOnce({ in: uncorrectedActivitiesInCourseMock });
@@ -216,23 +234,53 @@ describe("useDashboardData", () => {
     missedActivitiesInStudentMock.mockReturnValue({ eq: missedActivitiesEqTypeMock });
     missedActivitiesEqTypeMock.mockReturnValue({ not: missedActivitiesNotDueMock });
     missedActivitiesNotDueMock.mockReturnValue({ lt: missedActivitiesLtDueMock });
-    missedActivitiesLtDueMock.mockReturnValue({ is: missedActivitiesIsSubmittedMock });
-    missedActivitiesIsSubmittedMock.mockReturnValue({ eq: missedActivitiesEqHiddenMock });
-    missedActivitiesEqHiddenMock.mockResolvedValue({ count: 1, error: null });
+    missedActivitiesLtDueMock.mockReturnValue({ eq: missedActivitiesEqHiddenMock });
+    missedActivitiesEqHiddenMock.mockResolvedValue({
+      data: [
+        {
+          id: "missed-1",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 10,
+          percentage: null,
+          status: "pending",
+          completed_at: null,
+          submitted_at: null,
+          graded_at: null,
+        },
+        {
+          id: "missed-2",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 0,
+          percentage: null,
+          status: "pending",
+          completed_at: null,
+          submitted_at: null,
+          graded_at: null,
+        },
+      ],
+      error: null,
+    });
 
     uncorrectedActivitiesInCourseMock.mockReturnValue({ in: uncorrectedActivitiesInStudentMock });
     uncorrectedActivitiesInStudentMock.mockReturnValue({ eq: uncorrectedActivitiesEqTypeMock });
-    uncorrectedActivitiesEqTypeMock.mockReturnValue({ is: uncorrectedActivitiesIsGradedMock });
-    uncorrectedActivitiesIsGradedMock.mockReturnValue({ eq: uncorrectedActivitiesEqHiddenMock });
-    uncorrectedActivitiesEqHiddenMock.mockReturnValue({ not: uncorrectedActivitiesNotSubmittedMock });
-    uncorrectedActivitiesNotSubmittedMock.mockResolvedValue({
+    uncorrectedActivitiesEqTypeMock.mockReturnValue({ eq: uncorrectedActivitiesEqHiddenMock });
+    uncorrectedActivitiesEqHiddenMock.mockResolvedValue({
       data: [
         {
           id: "act-1",
           student_id: "s-2",
           course_id: "c-1",
           activity_name: "Trabalho final",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 20,
+          percentage: null,
           due_date: isoDaysFromNow(-4),
+          completed_at: isoDaysFromNow(-3),
+          graded_at: null,
+          status: "submitted",
           submitted_at: isoDaysFromNow(-3),
           students: {
             id: "s-2",
@@ -250,7 +298,39 @@ describe("useDashboardData", () => {
           student_id: "s-1",
           course_id: "c-1",
           activity_name: "Estudo dirigido",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 10,
+          percentage: null,
           due_date: isoDaysFromNow(2),
+          completed_at: isoDaysFromNow(-1),
+          graded_at: null,
+          status: "completed",
+          submitted_at: isoDaysFromNow(-1),
+          students: {
+            id: "s-1",
+            full_name: "Ana",
+            current_risk_level: "risco",
+          },
+          courses: {
+            id: "c-1",
+            name: "Curso 1",
+            short_name: "CUR-1",
+          },
+        },
+        {
+          id: "act-3",
+          student_id: "s-1",
+          course_id: "c-1",
+          activity_name: "Forum sem nota",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 0,
+          percentage: null,
+          due_date: isoDaysFromNow(3),
+          completed_at: isoDaysFromNow(-1),
+          graded_at: null,
+          status: "submitted",
           submitted_at: isoDaysFromNow(-1),
           students: {
             id: "s-1",
@@ -323,10 +403,10 @@ describe("useDashboardData", () => {
     expect(result.current.summary).toEqual({
       today_events: 2,
       today_tasks: 3,
-      activities_to_review: 2,
+      activities_to_review: 12,
       active_normal_students: 0,
       pending_submission_assignments: 1,
-      pending_correction_assignments: 2,
+      pending_correction_assignments: 12,
       students_at_risk: 2,
       new_at_risk_this_week: 2,
     });

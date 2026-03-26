@@ -104,7 +104,10 @@ export default function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <PriorityList criticalStudents={criticalStudents} />
 
-        <ActivitiesToReview activities={activitiesToReview} />
+        <ActivitiesToReview
+          activities={activitiesToReview}
+          totalCount={summary?.pending_correction_assignments ?? 0}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

@@ -202,6 +202,21 @@ const activitiesResponse = [
     graded_at: null,
     submitted_at: '2026-03-11T09:00:00.000Z',
   },
+  {
+    student_id: 'student-2',
+    course_id: 'course-1',
+    moodle_activity_id: 'activity-4',
+    activity_name: 'Projeto Aplicado',
+    activity_type: 'assign',
+    grade: null,
+    grade_max: 100,
+    hidden: false,
+    status: 'completed',
+    due_date: null,
+    completed_at: '2026-03-12T10:00:00.000Z',
+    graded_at: null,
+    submitted_at: '2026-03-12T10:00:00.000Z',
+  },
 ];
 
 const courseTotalsResponse = [
@@ -422,6 +437,13 @@ describe('Reports page', () => {
         'Pendente de Envio': 1,
         'Pendente de Correção': 0,
       },
+      {
+        Aluno: 'Carla Dias',
+        'Último Acesso (dias)': 5,
+        'Atividades Pendentes': 1,
+        'Pendente de Envio': 0,
+        'Pendente de Correção': 1,
+      },
     ]);
 
     expect(jsonToSheetMock).toHaveBeenNthCalledWith(2, [
@@ -432,6 +454,14 @@ describe('Reports page', () => {
         Atividade: 'Trabalho Final',
         Tipo: 'assign',
         Status: 'Pendente de Envio',
+      },
+      {
+        Aluno: 'Carla Dias',
+        'Último Acesso (dias)': 5,
+        'Unidade Curricular': 'Matematica',
+        Atividade: 'Projeto Aplicado',
+        Tipo: 'assign',
+        Status: 'Pendente de Correção',
       },
     ]);
 

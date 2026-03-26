@@ -22,10 +22,12 @@ export interface EnrollmentRow {
 export interface ActivityGradeRow {
   student_id: string;
   course_id: string;
+  activity_type: string | null;
   grade: number | null;
   grade_max: number | null;
   hidden: boolean;
   status: string | null;
+  completed_at: string | null;
   graded_at: string | null;
   submitted_at: string | null;
 }
@@ -136,10 +138,12 @@ export async function fetchAllReportActivityGrades(courseIds: string[]) {
       .select(`
         student_id,
         course_id,
+        activity_type,
         grade,
         grade_max,
         hidden,
         status,
+        completed_at,
         graded_at,
         submitted_at
       `)

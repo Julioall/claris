@@ -45,7 +45,7 @@ describe("StudentGradesTab", () => {
     await waitFor(() => {
       expect(screen.getByText(/nenhuma nota encontrada/i)).toBeInTheDocument();
     });
-    expect(screen.getByText(/após a sincronização dos cursos/i)).toBeInTheDocument();
+    expect(screen.getByText(/apos a sincronizacao dos cursos/i)).toBeInTheDocument();
   });
 
   it("renders the course total from the gradebook instead of summing visible activities", async () => {
@@ -139,5 +139,85 @@ describe("StudentGradesTab", () => {
     expect(consoleErrorSpy).toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
+  });
+
+  it("renders pending activities even when the course total grade is still unavailable", async () => {
+    const user = userEvent.setup();
+
+    gradesEqMock.mockResolvedValueOnce({
+      data: [],
+      error: null,
+    });
+
+    activitiesEqMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: "a-1",
+          course_id: "c-1",
+          activity_name: "Trabalho Final",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 20,
+          percentage: null,
+          status: "completed",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          completed_at: "2026-03-09T12:00:00.000Z",
+          submitted_at: null,
+          graded_at: null,
+          courses: { name: "Matematica" },
+        },
+        {
+          id: "a-2",
+          course_id: "c-1",
+          activity_name: "Projeto 2",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 10,
+          percentage: null,
+          status: "pending",
+          due_date: "2026-03-18T00:00:00.000Z",
+          hidden: false,
+          completed_at: null,
+          submitted_at: null,
+          graded_at: null,
+          courses: { name: "Matematica" },
+        },
+        {
+          id: "a-3",
+          course_id: "c-1",
+          activity_name: "Forum de Boas-vindas",
+          activity_type: "forum",
+          grade: null,
+          grade_max: 0,
+          percentage: null,
+          status: "pending",
+          due_date: "2026-03-18T00:00:00.000Z",
+          hidden: false,
+          completed_at: null,
+          submitted_at: null,
+          graded_at: null,
+          courses: { name: "Matematica" },
+        },
+      ],
+      error: null,
+    });
+
+    render(<StudentGradesTab studentId="s-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Matematica")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Sem nota total sincronizada")).toBeInTheDocument();
+    expect(screen.getByText("Sem nota total")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
+
+    expect(screen.getByText("Trabalho Final")).toBeInTheDocument();
+    expect(screen.getByText("Projeto 2")).toBeInTheDocument();
+    expect(screen.queryByText("Forum de Boas-vindas")).not.toBeInTheDocument();
+    expect(screen.getByText("Pendente de Correcao")).toBeInTheDocument();
+    expect(screen.getByText("Pendente de Envio")).toBeInTheDocument();
   });
 });

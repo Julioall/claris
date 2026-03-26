@@ -1,6 +1,11 @@
 import { endOfDay, startOfDay, startOfWeek, subWeeks } from 'date-fns';
 
 import { supabase } from '@/integrations/supabase/client';
+import {
+  isStudentActivityPendingCorrection,
+  isStudentActivityPendingSubmission,
+  isStudentActivityWeightedInGradebook,
+} from '@/lib/student-activity-status';
 import type { RiskLevel, Student } from '@/features/students/types';
 
 import type {
@@ -47,10 +52,40 @@ type ReviewActivityRow = {
   student_id: string;
   course_id: string;
   activity_name: string;
+  activity_type: string | null;
+  grade: number | null;
+  grade_max: number | null;
   due_date: string | null;
+  completed_at: string | null;
+  graded_at: string | null;
+  percentage: number | null;
+  status: string | null;
   submitted_at: string | null;
   students: ReviewActivityStudentSummary | null;
   courses: ReviewActivityCourseSummary | null;
+};
+
+type PendingAssignmentRow = {
+  id: string;
+  activity_type: string | null;
+  grade: number | null;
+  grade_max: number | null;
+  status: string | null;
+  completed_at: string | null;
+  percentage: number | null;
+  submitted_at: string | null;
+  graded_at: string | null;
+};
+
+type DashboardCourseActivityAggregateRow = {
+  course_id: string;
+  pending_submission_assignments: number;
+  pending_correction_assignments: number;
+};
+
+type StudentCourseRow = {
+  student_id: string;
+  enrollment_status: string | null;
 };
 
 interface DashboardDataQueryInput {
@@ -58,6 +93,8 @@ interface DashboardDataQueryInput {
   selectedWeek?: DashboardWeekFilter;
   courseFilter?: string;
 }
+
+const PAGE_SIZE = 1000;
 
 const EMPTY_SUMMARY: WeeklySummary = {
   today_events: 0,
@@ -79,6 +116,43 @@ const EMPTY_DASHBOARD_DATA: DashboardData = {
 
 function normalizeEnrollmentStatus(status: string | null | undefined) {
   return (status || '').trim().toLowerCase();
+}
+
+async function paginateRows<T>(
+  fetchPage: (page: number) => Promise<{ data: T[] | null; error: Error | null }>,
+) {
+  const rows: T[] = [];
+  let page = 0;
+
+  while (true) {
+    const { data, error } = await fetchPage(page);
+
+    if (error) {
+      throw error;
+    }
+
+    rows.push(...(data ?? []));
+
+    if (!data || data.length < PAGE_SIZE) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return rows;
+}
+
+async function fetchAllDashboardStudentCourses(courseIds: string[]) {
+  return paginateRows<StudentCourseRow>(async (page) => {
+    const { data, error } = await supabase
+      .from('student_courses')
+      .select('student_id, enrollment_status')
+      .in('course_id', courseIds)
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    return { data: (data ?? []) as StudentCourseRow[], error };
+  });
 }
 
 function mapActivityFeedItems(items: Array<Record<string, unknown>>): ActivityFeedItem[] {
@@ -219,12 +293,7 @@ export const dashboardRepository = {
       };
     }
 
-    const { data: studentCourses, error: studentCoursesError } = await supabase
-      .from('student_courses')
-      .select('student_id, enrollment_status')
-      .in('course_id', courseIds);
-
-    if (studentCoursesError) throw studentCoursesError;
+    const studentCourses = await fetchAllDashboardStudentCourses(courseIds);
 
     const suspendedStudentIds = new Set(
       (studentCourses || [])
@@ -302,6 +371,7 @@ export const dashboardRepository = {
       newAtRiskResponse,
       feedResponse,
       missedAssignmentsResponse,
+      dashboardAggregatesResponse,
       uncorrectedActivitiesResponse,
     ] = await Promise.all([
       (supabase.from('calendar_events' as never) as ReturnType<typeof supabase.from>)
@@ -336,14 +406,17 @@ export const dashboardRepository = {
         .limit(20),
       supabase
         .from('student_activities')
-        .select('id', { count: 'exact', head: true })
+        .select('id, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
         .in('course_id', courseIds)
         .in('student_id', studentIds)
         .eq('activity_type', 'assign')
         .not('due_date', 'is', null)
         .lt('due_date', nowIso)
-        .is('submitted_at', null)
         .eq('hidden', false),
+      supabase
+        .from('dashboard_course_activity_aggregates')
+        .select('course_id, pending_submission_assignments, pending_correction_assignments')
+        .in('course_id', courseIds),
       supabase
         .from('student_activities')
         .select(`
@@ -351,7 +424,14 @@ export const dashboardRepository = {
           student_id,
           course_id,
           activity_name,
+          activity_type,
+          grade,
+          grade_max,
           due_date,
+          completed_at,
+          graded_at,
+          percentage,
+          status,
           submitted_at,
           students!inner (id, full_name, current_risk_level),
           courses!inner (id, name, short_name)
@@ -359,9 +439,7 @@ export const dashboardRepository = {
         .in('course_id', courseIds)
         .in('student_id', studentIds)
         .eq('activity_type', 'assign')
-        .is('graded_at', null)
-        .eq('hidden', false)
-        .not('submitted_at', 'is', null),
+        .eq('hidden', false),
     ]);
 
     const { count: todayEventsCount, error: todayEventsError } = todayEventsResponse as {
@@ -376,7 +454,8 @@ export const dashboardRepository = {
     const { count: activeNormalStudentsCount, error: activeNormalStudentsError } = activeNormalStudentsResponse;
     const { count: newAtRisk, error: newAtRiskError } = newAtRiskResponse;
     const { data: feedData, error: feedError } = feedResponse;
-    const { count: missedAssignmentsCount, error: missedAssignmentsError } = missedAssignmentsResponse;
+    const { data: missedAssignments, error: missedAssignmentsError } = missedAssignmentsResponse;
+    const { data: dashboardAggregates, error: dashboardAggregatesError } = dashboardAggregatesResponse;
     const { data: uncorrectedActivities, error: uncorrectedActivitiesError } = uncorrectedActivitiesResponse;
 
     if (todayEventsError) throw todayEventsError;
@@ -386,21 +465,35 @@ export const dashboardRepository = {
     if (newAtRiskError) throw newAtRiskError;
     if (feedError) throw feedError;
     if (missedAssignmentsError) throw missedAssignmentsError;
+    if (dashboardAggregatesError) throw dashboardAggregatesError;
     if (uncorrectedActivitiesError) throw uncorrectedActivitiesError;
+
+    const pendingSubmissionAssignments = ((missedAssignments || []) as PendingAssignmentRow[])
+      .filter((activity) => isStudentActivityWeightedInGradebook(activity))
+      .filter((activity) => isStudentActivityPendingSubmission(activity));
+    const pendingCorrectionActivities = ((uncorrectedActivities || []) as ReviewActivityRow[])
+      .filter((activity) => isStudentActivityWeightedInGradebook(activity))
+      .filter((activity) => isStudentActivityPendingCorrection(activity));
+    const aggregateRows = (dashboardAggregates || []) as DashboardCourseActivityAggregateRow[];
+    const aggregateCourseIds = new Set(aggregateRows.map((aggregate) => aggregate.course_id));
+    const hasAggregateForEveryCourse = courseIds.every((courseId) => aggregateCourseIds.has(courseId));
+    const pendingCorrectionAssignmentsCount = hasAggregateForEveryCourse
+      ? aggregateRows.reduce((total, aggregate) => total + (aggregate.pending_correction_assignments || 0), 0)
+      : pendingCorrectionActivities.length;
 
     return {
       summary: {
         today_events: todayEventsCount || 0,
         today_tasks: todayTasksCount || 0,
-        activities_to_review: uncorrectedActivities?.length || 0,
+        activities_to_review: pendingCorrectionAssignmentsCount,
         active_normal_students: activeNormalStudentsCount || 0,
-        pending_submission_assignments: missedAssignmentsCount || 0,
-        pending_correction_assignments: uncorrectedActivities?.length || 0,
+        pending_submission_assignments: pendingSubmissionAssignments.length,
+        pending_correction_assignments: pendingCorrectionAssignmentsCount,
         students_at_risk: atRiskStudents?.length || 0,
         new_at_risk_this_week: newAtRisk || 0,
       },
       criticalStudents: mapCriticalStudents((atRiskStudents || []) as AtRiskStudentRow[]),
-      activitiesToReview: mapActivitiesToReview((uncorrectedActivities || []) as ReviewActivityRow[]),
+      activitiesToReview: mapActivitiesToReview(pendingCorrectionActivities),
       activityFeed: mapActivityFeedItems((feedData || []) as Array<Record<string, unknown>>),
     };
   },

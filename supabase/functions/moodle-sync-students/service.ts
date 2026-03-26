@@ -8,6 +8,7 @@ import {
   upsertStudentCourseLinks,
   upsertStudents,
 } from '../_shared/domain/moodle-sync/repository.ts'
+import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import { getCourseEnrolledUsers, getCourseSuspendedUserIds } from '../_shared/moodle/mod.ts'
 
 const STAFF_ROLE_SHORTNAMES = new Set(['manager', 'editingteacher', 'teacher', 'coursecreator'])
@@ -162,6 +163,7 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
   }
 
   if (students.length === 0) {
+    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
     return jsonResponse({ success: true, students: [] })
   }
 
@@ -396,7 +398,19 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
     }
   }
 
+  await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
   await touchCourseLastSync(supabase, dbCourse.id, now)
 
   return jsonResponse({ success: true, students: syncedStudents || [] })
+}
+
+async function refreshDashboardAggregatesForCourse(
+  supabase: ReturnType<typeof createServiceClient>,
+  courseId: string,
+) {
+  try {
+    await refreshDashboardCourseActivityAggregates(supabase, [courseId])
+  } catch (error) {
+    console.error('[moodle-sync-students] Error refreshing dashboard aggregates:', error)
+  }
 }

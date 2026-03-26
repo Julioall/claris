@@ -19,6 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
+import { getStudentActivityWorkflowStatus } from '@/lib/student-activity-status';
 import {
   fetchAllReportActivityDetails,
   fetchAllReportActivityGrades,
@@ -173,21 +174,13 @@ const UNIT_STATUS_BADGE_STYLES: Record<UnitLifecycleStatus, string> = {
 };
 
 const getNormalizedActivityStatus = (activity: ActivityGradeRow): Exclude<ReportActivityStatus, 'nao_iniciada' | 'sem_atividades'> => {
-  const rawStatus = activity.status?.toLowerCase();
+  const workflowStatus = getStudentActivityWorkflowStatus(activity);
 
-  if (rawStatus === 'submitted') {
+  if (workflowStatus === 'pending_correction') {
     return 'submitted';
   }
 
-  if (rawStatus === 'graded' || rawStatus === 'completed') {
-    return 'graded';
-  }
-
-  if (activity.submitted_at && !activity.graded_at) {
-    return 'submitted';
-  }
-
-  if (activity.grade !== null || activity.graded_at) {
+  if (workflowStatus === 'corrected') {
     return 'graded';
   }
 
@@ -599,8 +592,8 @@ export default function ReportsPage() {
         if (a.activity_type === 'quiz') return false;
 
         // Exclude fully completed/graded; submitted-but-ungraded activities are included as 'Pendente de Correção'
-        const isCompleted = a.status === 'completed' || a.status === 'complete_pass' || a.completed_at || a.graded_at;
-        if (isCompleted) return false;
+        const workflowStatus = getStudentActivityWorkflowStatus(a);
+        if (workflowStatus !== 'pending_submission' && workflowStatus !== 'pending_correction') return false;
 
         // Check if the activity's unit period has started
         const unitStart = unitStartMap.get(a.course_id);
@@ -665,7 +658,9 @@ export default function ReportsPage() {
             'Unidade Curricular': unitName,
             'Atividade': act.activity_name,
             'Tipo': act.activity_type || '-',
-            'Status': act.submitted_at ? 'Pendente de Correção' : 'Pendente de Envio',
+            'Status': getStudentActivityWorkflowStatus(act) === 'pending_correction'
+              ? 'Pendente de Correção'
+              : 'Pendente de Envio',
           });
         }
       }
@@ -675,8 +670,12 @@ export default function ReportsPage() {
         'Aluno': studentsById.get(studentId) || 'Desconhecido',
         'Último Acesso (dias)': lastAccessByStudentId.get(studentId) ?? '-',
         'Atividades Pendentes': activities.length,
-        'Pendente de Envio': activities.filter(a => !a.submitted_at).length,
-        'Pendente de Correção': activities.filter(a => !!a.submitted_at).length,
+        'Pendente de Envio': activities.filter(
+          (activity) => getStudentActivityWorkflowStatus(activity) === 'pending_submission',
+        ).length,
+        'Pendente de Correção': activities.filter(
+          (activity) => getStudentActivityWorkflowStatus(activity) === 'pending_correction',
+        ).length,
       }));
 
       const workbook = XLSX.utils.book_new();

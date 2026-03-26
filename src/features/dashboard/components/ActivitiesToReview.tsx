@@ -16,6 +16,7 @@ import type { DashboardReviewActivity } from '../types';
 
 interface ActivitiesToReviewProps {
   activities: DashboardReviewActivity[];
+  totalCount?: number;
 }
 
 function formatShortDate(date?: string) {
@@ -31,8 +32,9 @@ function formatWaitingTime(date?: string) {
   })}`;
 }
 
-export function ActivitiesToReview({ activities }: ActivitiesToReviewProps) {
+export function ActivitiesToReview({ activities, totalCount }: ActivitiesToReviewProps) {
   const visibleActivities = activities.slice(0, 6);
+  const queueCount = totalCount ?? activities.length;
 
   return (
     <Card>
@@ -43,7 +45,7 @@ export function ActivitiesToReview({ activities }: ActivitiesToReviewProps) {
             Atividades para corrigir
           </CardTitle>
           <span className="text-xs text-muted-foreground">
-            {activities.length} na fila
+            {queueCount} na fila
           </span>
         </div>
       </CardHeader>

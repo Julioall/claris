@@ -4,6 +4,11 @@ import type {
   Tables,
   TablesInsert,
 } from '../../db/mod.ts'
+import {
+  isStudentActivityPendingCorrection,
+  isStudentActivityPendingSubmission,
+  isStudentActivityWeightedInGradebook,
+} from '../student-activity-status.ts'
 
 export interface AtRiskStudent {
   currentRiskLevel: Extract<Enums<'risk_level'>, 'critico' | 'risco'>
@@ -66,23 +71,25 @@ export async function listMissedAssignments(
 ): Promise<ActivityCandidate[]> {
   const { data, error } = await supabase
     .from('student_activities')
-    .select('id, student_id, course_id, activity_name, due_date')
+    .select('id, student_id, course_id, activity_name, due_date, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
     .in('course_id', courseIds)
     .eq('activity_type', 'assign')
     .not('due_date', 'is', null)
     .lt('due_date', referenceIso)
-    .is('submitted_at', null)
     .eq('hidden', false)
 
   if (error) throw error
 
-  return (data ?? []).map((row) => ({
-    activityId: row.id,
-    activityName: row.activity_name,
-    courseId: row.course_id,
-    dueDate: row.due_date!,
-    studentId: row.student_id,
-  }))
+  return (data ?? [])
+    .filter((row) => isStudentActivityWeightedInGradebook(row))
+    .filter((row) => isStudentActivityPendingSubmission(row))
+    .map((row) => ({
+      activityId: row.id,
+      activityName: row.activity_name,
+      courseId: row.course_id,
+      dueDate: row.due_date!,
+      studentId: row.student_id,
+    }))
 }
 
 export async function listUncorrectedAssignments(
@@ -92,24 +99,25 @@ export async function listUncorrectedAssignments(
 ): Promise<ActivityCandidate[]> {
   const { data, error } = await supabase
     .from('student_activities')
-    .select('id, student_id, course_id, activity_name, due_date')
+    .select('id, student_id, course_id, activity_name, due_date, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
     .in('course_id', courseIds)
     .eq('activity_type', 'assign')
     .not('due_date', 'is', null)
     .lt('due_date', referenceIso)
-    .is('graded_at', null)
     .eq('hidden', false)
-    .not('submitted_at', 'is', null)
 
   if (error) throw error
 
-  return (data ?? []).map((row) => ({
-    activityId: row.id,
-    activityName: row.activity_name,
-    courseId: row.course_id,
-    dueDate: row.due_date!,
-    studentId: row.student_id,
-  }))
+  return (data ?? [])
+    .filter((row) => isStudentActivityWeightedInGradebook(row))
+    .filter((row) => isStudentActivityPendingCorrection(row))
+    .map((row) => ({
+      activityId: row.id,
+      activityName: row.activity_name,
+      courseId: row.course_id,
+      dueDate: row.due_date!,
+      studentId: row.student_id,
+    }))
 }
 
 export async function hasOpenAutomatedTask(
