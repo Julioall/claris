@@ -40,6 +40,9 @@ jobs:
     name: Smoke test local Edge Functions
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    environment: supabase
+    env:
+      SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
 
     steps:
       - name: Checkout repository
@@ -59,6 +62,7 @@ jobs:
       - name: Run Edge smoke test
         env:
           SUPABASE_RUNNER_CONTAINER: claris-supabase
+          SCHEDULED_MESSAGES_CRON_SECRET: ${{ env.SCHEDULED_MESSAGES_CRON_SECRET }}
         run: npm run smoke:edge
 
       - name: Print Docker diagnostics
