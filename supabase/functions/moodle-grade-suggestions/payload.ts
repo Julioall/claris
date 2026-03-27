@@ -5,7 +5,13 @@ import {
 } from '../_shared/http/mod.ts'
 import { RequestBodyValidationError } from '../_shared/http/body.ts'
 
-const ACTIONS = ['generate_suggestion', 'generate_activity_suggestions', 'approve_suggestion'] as const
+const ACTIONS = [
+  'generate_suggestion',
+  'generate_activity_suggestions',
+  'get_activity_suggestion_job',
+  'resume_activity_suggestion_job',
+  'approve_suggestion',
+] as const
 
 export interface GenerateGradeSuggestionPayload {
   action: 'generate_suggestion'
@@ -33,9 +39,23 @@ export interface GenerateActivityGradeSuggestionsPayload {
   token: string
 }
 
+export interface GetActivityGradeSuggestionJobPayload {
+  action: 'get_activity_suggestion_job'
+  jobId: string
+}
+
+export interface ResumeActivityGradeSuggestionJobPayload {
+  action: 'resume_activity_suggestion_job'
+  jobId: string
+  moodleUrl: string
+  token: string
+}
+
 export type MoodleGradeSuggestionPayload =
   | GenerateGradeSuggestionPayload
   | GenerateActivityGradeSuggestionsPayload
+  | GetActivityGradeSuggestionJobPayload
+  | ResumeActivityGradeSuggestionJobPayload
   | ApproveGradeSuggestionPayload
 
 function readRequiredAction(body: Record<string, unknown>) {
@@ -70,6 +90,22 @@ export function parseMoodleGradeSuggestionPayload(rawBody: unknown): MoodleGrade
       token: readRequiredString(body, 'token', 4096),
       approvedGrade: readRequiredFiniteNumber(body, 'approvedGrade'),
       approvedFeedback: readRequiredString(body, 'approvedFeedback', 12000),
+    }
+  }
+
+  if (action === 'get_activity_suggestion_job') {
+    return {
+      action,
+      jobId: readRequiredString(body, 'jobId', 200),
+    }
+  }
+
+  if (action === 'resume_activity_suggestion_job') {
+    return {
+      action,
+      jobId: readRequiredString(body, 'jobId', 200),
+      moodleUrl: readRequiredMoodleUrl(body),
+      token: readRequiredString(body, 'token', 4096),
     }
   }
 

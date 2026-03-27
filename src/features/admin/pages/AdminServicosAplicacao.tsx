@@ -10,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
@@ -468,6 +469,18 @@ export default function AdminServicosAplicacao() {
       window.clearInterval(intervalId);
     };
   }, [instances, queryClient]);
+
+  const pendingPairingCount = instances.filter((inst) => inst.connection_status === 'pending_connection').length;
+
+  useBackgroundActivityFlag({
+    id: 'whatsapp:pairing:shared',
+    active: connectMutation.isPending || pendingPairingCount > 0,
+    label: 'Pareando instancias compartilhadas',
+    description: pendingPairingCount > 1
+      ? `${pendingPairingCount} instancias aguardando conexao.`
+      : 'Aguardando confirmacao da conexao da instancia compartilhada.',
+    source: 'whatsapp',
+  });
 
   const openCreate = () => {
     setEditingInstance(null);

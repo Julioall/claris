@@ -231,6 +231,168 @@ export type Database = {
           },
         ]
       }
+      ai_grade_suggestion_job_items: {
+        Row: {
+          audit_id: string | null
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          job_id: string
+          moodle_activity_id: string
+          result_payload: Json
+          started_at: string | null
+          status: Database["public"]["Enums"]["ai_grade_suggestion_job_item_status"]
+          student_activity_id: string
+          student_id: string
+          student_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          audit_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_id: string
+          moodle_activity_id: string
+          result_payload?: Json
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["ai_grade_suggestion_job_item_status"]
+          student_activity_id: string
+          student_id: string
+          student_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          audit_id?: string | null
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          job_id?: string
+          moodle_activity_id?: string
+          result_payload?: Json
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["ai_grade_suggestion_job_item_status"]
+          student_activity_id?: string
+          student_id?: string
+          student_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_grade_suggestion_job_items_audit_id_fkey"
+            columns: ["audit_id"]
+            isOneToOne: false
+            referencedRelation: "ai_grade_suggestion_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_job_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "ai_grade_suggestion_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_job_items_student_activity_id_fkey"
+            columns: ["student_activity_id"]
+            isOneToOne: false
+            referencedRelation: "student_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_job_items_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_job_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ai_grade_suggestion_jobs: {
+        Row: {
+          activity_name: string
+          completed_at: string | null
+          course_id: string
+          created_at: string
+          error_count: number
+          error_message: string | null
+          id: string
+          max_grade: number | null
+          moodle_activity_id: string
+          processed_items: number
+          started_at: string | null
+          status: Database["public"]["Enums"]["ai_grade_suggestion_job_status"]
+          success_count: number
+          total_items: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_name: string
+          completed_at?: string | null
+          course_id: string
+          created_at?: string
+          error_count?: number
+          error_message?: string | null
+          id?: string
+          max_grade?: number | null
+          moodle_activity_id: string
+          processed_items?: number
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["ai_grade_suggestion_job_status"]
+          success_count?: number
+          total_items?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_name?: string
+          completed_at?: string | null
+          course_id?: string
+          created_at?: string
+          error_count?: number
+          error_message?: string | null
+          id?: string
+          max_grade?: number | null
+          moodle_activity_id?: string
+          processed_items?: number
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["ai_grade_suggestion_job_status"]
+          success_count?: number
+          total_items?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_grade_suggestion_jobs_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_error_logs: {
         Row: {
           category: string
@@ -2580,6 +2742,16 @@ export type Database = {
       }
     }
     Enums: {
+      ai_grade_suggestion_job_item_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed"
+      ai_grade_suggestion_job_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed"
       bulk_message_status:
         | "pending"
         | "processing"
@@ -2731,6 +2903,18 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      ai_grade_suggestion_job_item_status: [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+      ],
+      ai_grade_suggestion_job_status: [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+      ],
       bulk_message_status: [
         "pending",
         "processing",

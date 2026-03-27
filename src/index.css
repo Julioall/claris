@@ -149,6 +149,16 @@
 }
 
 @layer components {
+  @keyframes background-activity-line {
+    0% {
+      transform: translateX(-140%);
+    }
+
+    100% {
+      transform: translateX(calc(100vw + 10rem));
+    }
+  }
+
   /* Risk badges */
   .risk-normal {
     @apply bg-[hsl(var(--risk-normal-bg))] text-[hsl(var(--risk-normal))] border-[hsl(var(--risk-normal)/0.3)];
@@ -198,5 +208,9 @@
   /* Mono text for data */
   .mono {
     font-family: 'JetBrains Mono', monospace;
+  }
+
+  .background-activity-line {
+    animation: background-activity-line 1.5s ease-in-out infinite;
   }
 }

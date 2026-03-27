@@ -6,6 +6,7 @@ import {
   fetchPersonalWhatsAppInstance,
 } from '../api/myServices';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -539,6 +540,14 @@ export default function MyServicesPage() {
   const pendingInstanceId = myInstance?.connection_status === 'pending_connection'
     ? myInstance.id
     : null;
+
+  useBackgroundActivityFlag({
+    id: user?.id ? `whatsapp:pairing:personal:${user.id}` : 'whatsapp:pairing:personal',
+    active: connectMutation.isPending || Boolean(pendingInstanceId),
+    label: 'Pareando WhatsApp',
+    description: 'Aguardando confirmacao da conexao da instancia pessoal.',
+    source: 'whatsapp',
+  });
 
   useEffect(() => {
     if (!pendingInstanceId) return;

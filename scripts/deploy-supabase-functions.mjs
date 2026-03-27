@@ -8,6 +8,7 @@ const DEFAULT_FUNCTIONS = [
   'moodle-sync-students',
   'moodle-sync-activities',
   'moodle-sync-grades',
+  'moodle-grade-suggestions',
   'moodle-messaging',
   'bulk-message-send',
   'data-cleanup',

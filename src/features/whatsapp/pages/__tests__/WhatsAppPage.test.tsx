@@ -5,6 +5,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import WhatsAppPage from "@/features/whatsapp/pages/WhatsAppPage";
+import { BackgroundActivityProvider } from "@/contexts/BackgroundActivityContext";
 
 const fromMock = vi.fn();
 const invokeMock = vi.fn();
@@ -102,9 +103,11 @@ function renderPage() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter>
-        <WhatsAppPage />
-      </MemoryRouter>
+      <BackgroundActivityProvider>
+        <MemoryRouter>
+          <WhatsAppPage />
+        </MemoryRouter>
+      </BackgroundActivityProvider>
     </QueryClientProvider>,
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Course } from '@/features/courses/types';
+import { useBackgroundActivity } from '@/contexts/BackgroundActivityContext';
 import { toast } from '@/hooks/use-toast';
 import { logError, trackEvent } from '@/lib/tracking';
 
@@ -42,6 +43,7 @@ export function useCourseSync(params: {
   clearInvalidSession: () => Promise<void>;
   setLastSync: (value: string | null) => void;
 }): UseCourseSyncResult {
+  const { finishActivity, startActivity, trackActivity } = useBackgroundActivity();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCourseSelector, setShowCourseSelector] = useState(false);
@@ -156,240 +158,253 @@ export function useCourseSync(params: {
   }, [courses.length, fetchMoodleCourses, params]);
 
   const syncSelectedCourses = useCallback(async (courseIds: string[]) => {
-    const context = await params.resolveSessionContext();
-    if (!context) {
-      toast({
-        title: 'Erro',
-        description: 'Sessao expirada. Faca login novamente.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    const initialPhaseEntities: SyncEntity[] = ['courses', 'students'];
-    const deepPhaseEntities: CourseScopedSyncEntity[] = ['activities', 'grades'];
-
-    setIsSyncing(true);
-    setSyncProgress({
-      isOpen: true,
-      steps: INITIAL_SYNC_STEPS
-        .filter((step) => initialPhaseEntities.includes(step.id as SyncEntity))
-        .map((step) => ({ ...step, status: 'pending' as const })),
-      currentStep: null,
-      isComplete: false,
-    });
-
-    void trackEvent(context.user.id, 'sync_start', {
-      metadata: { courseIds, courseCount: courseIds.length },
-    });
-
-    let syncedCourses = courses.filter((course) => courseIds.includes(course.id));
-    let totalStudents = 0;
-    let riskUpdateResult: Awaited<ReturnType<typeof recalculateRiskForCourses>> | null = null;
-    let edgeAccessToken: string | null = null;
-
-    try {
-      edgeAccessToken = await resolveEdgeAccessToken();
-
-      await invokeMoodleFunctionWithTimeout({
-        functionName: 'moodle-sync-courses',
-        body: {
-          action: 'link_selected_courses',
-          userId: context.session.moodleUserId,
-          selectedCourseIds: courseIds,
-        },
-        timeoutMs: 30000,
-        accessTokenOverride: edgeAccessToken,
-      });
-
-      updateStep('courses', { status: 'in_progress', count: 0, total: 1 });
-      const { data: coursesData, error: coursesError } = await invokeMoodleFunctionWithTimeout({
-        functionName: 'moodle-sync-courses',
-        body: {
-          moodleUrl: context.session.moodleUrl,
-          token: context.session.moodleToken,
-          userId: context.session.moodleUserId,
-        },
-        timeoutMs: 30000,
-        accessTokenOverride: edgeAccessToken,
-      });
-
-      if (coursesError || coursesData?.error) {
-        updateStep('courses', {
-          status: 'error',
-          errorMessage:
-            (typeof coursesError?.message === 'string' ? coursesError.message : undefined) ||
-            (coursesData as { error?: string } | null)?.error ||
-            'Falha ao sincronizar cursos',
-        });
-      } else {
-        const allSyncedCourses = ((coursesData as { courses?: Course[] } | null)?.courses || []);
-        setCourses(allSyncedCourses);
-        syncedCourses = allSyncedCourses.filter((course) => courseIds.includes(course.id));
-        updateStep('courses', {
-          status: 'completed',
-          count: syncedCourses.length,
-          total: syncedCourses.length,
-        });
-      }
-
-      updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
-      const studentsResult = await runBatchedEntitySync({
-        entity: 'students',
-        selectedCourses: syncedCourses,
-        session: context.session,
-        accessToken: edgeAccessToken,
-        onProgress: (processedCourses) => {
-          updateStep('students', { count: processedCourses, total: syncedCourses.length });
-        },
-      });
-
-      totalStudents = studentsResult.totalCount;
-      updateStep('students', {
-        status: studentsResult.succeeded ? 'completed' : 'error',
-        count: totalStudents,
-        errorMessage: studentsResult.errorCount > 0 ? `${studentsResult.errorCount} cursos com erro` : undefined,
-      });
-
-      if (courseIds.length > 0) {
-        riskUpdateResult = await recalculateRiskForCourses(courseIds);
-      }
-
-      const now = new Date().toISOString();
-      params.setLastSync(now);
-      setSyncProgress((previous) => ({
-        ...previous,
-        isComplete: true,
-      }));
-
-      toast({
-        title: 'Sincronizacao inicial concluida',
-        description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados. Atividades e notas continuarao em segundo plano.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
-      });
-
-      void trackEvent(context.user.id, 'sync_finish', {
-        metadata: {
-          courses: syncedCourses.length,
-          students: totalStudents,
-          activities: 0,
-          grades: 0,
-        },
-      });
-
-      if (riskUpdateResult?.missingRpc) {
+    await trackActivity({
+      label: 'Sincronizando dados do Moodle',
+      description: `${courseIds.length} curso(s) em processamento`,
+      source: 'sync',
+    }, async () => {
+      const context = await params.resolveSessionContext();
+      if (!context) {
         toast({
-          title: 'Funcao de risco indisponivel',
-          description: 'As funcoes de atualizacao de risco nao existem no banco local. Crie/aplique as migracoes.',
+          title: 'Erro',
+          description: 'Sessao expirada. Faca login novamente.',
           variant: 'destructive',
         });
-      } else if (riskUpdateResult && riskUpdateResult.failedCount > 0) {
-        toast({
-          title: 'Atualizacao parcial de risco',
-          description: riskUpdateResult.usedFallback
-            ? `${riskUpdateResult.updatedCount} alunos recalculados via fallback e ${riskUpdateResult.failedCount} com erro.`
-            : `${riskUpdateResult.updatedCount} alunos recalculados e ${riskUpdateResult.failedCount} com erro.`,
-          variant: 'destructive',
-        });
+        return;
       }
 
-      if (deepPhaseEntities.length > 0 && !deepSyncInProgressRef.current) {
-        deepSyncInProgressRef.current = true;
-        const syncOwnerId = context.user.id;
+      const initialPhaseEntities: SyncEntity[] = ['courses', 'students'];
+      const deepPhaseEntities: CourseScopedSyncEntity[] = ['activities', 'grades'];
 
-        await createSystemNotification(syncOwnerId, {
-          title: 'Sincronizacao em segundo plano iniciada',
-          description: 'As atividades e notas restantes serao sincronizadas em segundo plano.',
-          eventType: 'sync_start',
-          severity: 'info',
-          metadata: {
-            sync_phase: 'deep',
-            courses: syncedCourses.length,
+      setIsSyncing(true);
+      setSyncProgress({
+        isOpen: true,
+        steps: INITIAL_SYNC_STEPS
+          .filter((step) => initialPhaseEntities.includes(step.id as SyncEntity))
+          .map((step) => ({ ...step, status: 'pending' as const })),
+        currentStep: null,
+        isComplete: false,
+      });
+
+      void trackEvent(context.user.id, 'sync_start', {
+        metadata: { courseIds, courseCount: courseIds.length },
+      });
+
+      let syncedCourses = courses.filter((course) => courseIds.includes(course.id));
+      let totalStudents = 0;
+      let riskUpdateResult: Awaited<ReturnType<typeof recalculateRiskForCourses>> | null = null;
+      let edgeAccessToken: string | null = null;
+
+      try {
+        edgeAccessToken = await resolveEdgeAccessToken();
+
+        await invokeMoodleFunctionWithTimeout({
+          functionName: 'moodle-sync-courses',
+          body: {
+            action: 'link_selected_courses',
+            userId: context.session.moodleUserId,
+            selectedCourseIds: courseIds,
+          },
+          timeoutMs: 30000,
+          accessTokenOverride: edgeAccessToken,
+        });
+
+        updateStep('courses', { status: 'in_progress', count: 0, total: 1 });
+        const { data: coursesData, error: coursesError } = await invokeMoodleFunctionWithTimeout({
+          functionName: 'moodle-sync-courses',
+          body: {
+            moodleUrl: context.session.moodleUrl,
+            token: context.session.moodleToken,
+            userId: context.session.moodleUserId,
+          },
+          timeoutMs: 30000,
+          accessTokenOverride: edgeAccessToken,
+        });
+
+        if (coursesError || coursesData?.error) {
+          updateStep('courses', {
+            status: 'error',
+            errorMessage:
+              (typeof coursesError?.message === 'string' ? coursesError.message : undefined) ||
+              (coursesData as { error?: string } | null)?.error ||
+              'Falha ao sincronizar cursos',
+          });
+        } else {
+          const allSyncedCourses = ((coursesData as { courses?: Course[] } | null)?.courses || []);
+          setCourses(allSyncedCourses);
+          syncedCourses = allSyncedCourses.filter((course) => courseIds.includes(course.id));
+          updateStep('courses', {
+            status: 'completed',
+            count: syncedCourses.length,
+            total: syncedCourses.length,
+          });
+        }
+
+        updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
+        const studentsResult = await runBatchedEntitySync({
+          entity: 'students',
+          selectedCourses: syncedCourses,
+          session: context.session,
+          accessToken: edgeAccessToken,
+          onProgress: (processedCourses) => {
+            updateStep('students', { count: processedCourses, total: syncedCourses.length });
           },
         });
 
-        void (async () => {
-          let deepActivities = 0;
-          let deepGrades = 0;
+        totalStudents = studentsResult.totalCount;
+        updateStep('students', {
+          status: studentsResult.succeeded ? 'completed' : 'error',
+          count: totalStudents,
+          errorMessage: studentsResult.errorCount > 0 ? `${studentsResult.errorCount} cursos com erro` : undefined,
+        });
 
-          try {
-            if (deepPhaseEntities.includes('activities')) {
-              const activitiesResult = await runBatchedEntitySync({
-                entity: 'activities',
-                selectedCourses: syncedCourses,
-                session: context.session,
-                accessToken: edgeAccessToken || undefined,
+        if (courseIds.length > 0) {
+          riskUpdateResult = await recalculateRiskForCourses(courseIds);
+        }
+
+        const now = new Date().toISOString();
+        params.setLastSync(now);
+        setSyncProgress((previous) => ({
+          ...previous,
+          isComplete: true,
+        }));
+
+        toast({
+          title: 'Sincronizacao inicial concluida',
+          description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados. Atividades e notas continuarao em segundo plano.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
+        });
+
+        void trackEvent(context.user.id, 'sync_finish', {
+          metadata: {
+            courses: syncedCourses.length,
+            students: totalStudents,
+            activities: 0,
+            grades: 0,
+          },
+        });
+
+        if (riskUpdateResult?.missingRpc) {
+          toast({
+            title: 'Funcao de risco indisponivel',
+            description: 'As funcoes de atualizacao de risco nao existem no banco local. Crie/aplique as migracoes.',
+            variant: 'destructive',
+          });
+        } else if (riskUpdateResult && riskUpdateResult.failedCount > 0) {
+          toast({
+            title: 'Atualizacao parcial de risco',
+            description: riskUpdateResult.usedFallback
+              ? `${riskUpdateResult.updatedCount} alunos recalculados via fallback e ${riskUpdateResult.failedCount} com erro.`
+              : `${riskUpdateResult.updatedCount} alunos recalculados e ${riskUpdateResult.failedCount} com erro.`,
+            variant: 'destructive',
+          });
+        }
+
+        if (deepPhaseEntities.length > 0 && !deepSyncInProgressRef.current) {
+          deepSyncInProgressRef.current = true;
+          const syncOwnerId = context.user.id;
+          const deepSyncActivityId = startActivity({
+            id: `sync:deep:${syncOwnerId}`,
+            label: 'Sincronizacao em segundo plano',
+            description: 'Atividades e notas continuam sendo atualizadas.',
+            source: 'sync',
+          });
+
+          await createSystemNotification(syncOwnerId, {
+            title: 'Sincronizacao em segundo plano iniciada',
+            description: 'As atividades e notas restantes serao sincronizadas em segundo plano.',
+            eventType: 'sync_start',
+            severity: 'info',
+            metadata: {
+              sync_phase: 'deep',
+              courses: syncedCourses.length,
+            },
+          });
+
+          void (async () => {
+            let deepActivities = 0;
+            let deepGrades = 0;
+
+            try {
+              if (deepPhaseEntities.includes('activities')) {
+                const activitiesResult = await runBatchedEntitySync({
+                  entity: 'activities',
+                  selectedCourses: syncedCourses,
+                  session: context.session,
+                  accessToken: edgeAccessToken || undefined,
+                });
+                deepActivities = activitiesResult.totalCount;
+              }
+
+              if (deepPhaseEntities.includes('grades')) {
+                const gradesResult = await runBatchedEntitySync({
+                  entity: 'grades',
+                  selectedCourses: syncedCourses,
+                  session: context.session,
+                  accessToken: edgeAccessToken || undefined,
+                });
+                deepGrades = gradesResult.totalCount;
+              }
+
+              params.setLastSync(new Date().toISOString());
+              toast({
+                title: 'Sincronizacao concluida',
+                description: `${deepActivities} atividades e ${deepGrades} notas sincronizadas em segundo plano.`,
               });
-              deepActivities = activitiesResult.totalCount;
-            }
 
-            if (deepPhaseEntities.includes('grades')) {
-              const gradesResult = await runBatchedEntitySync({
-                entity: 'grades',
-                selectedCourses: syncedCourses,
-                session: context.session,
-                accessToken: edgeAccessToken || undefined,
+              await createSystemNotification(syncOwnerId, {
+                title: 'Sincronizacao concluida',
+                description: `${deepActivities} atividades e ${deepGrades} notas foram sincronizadas em segundo plano.`,
+                eventType: 'sync_finish',
+                severity: 'info',
+                metadata: {
+                  sync_phase: 'deep',
+                  activities: deepActivities,
+                  grades: deepGrades,
+                  courses: syncedCourses.length,
+                },
               });
-              deepGrades = gradesResult.totalCount;
+            } catch (error) {
+              console.error('Background deep sync error:', error);
+              toast({
+                title: 'Erro na sincronizacao profunda',
+                description: 'Nao foi possivel concluir a sincronizacao em segundo plano de atividades e notas.',
+                variant: 'destructive',
+              });
+
+              await createSystemNotification(syncOwnerId, {
+                title: 'Falha na sincronizacao em segundo plano',
+                description: 'Nao foi possivel concluir a sincronizacao em segundo plano de atividades e notas.',
+                eventType: 'sync_error',
+                severity: 'warning',
+                metadata: {
+                  sync_phase: 'deep',
+                  courses: syncedCourses.length,
+                },
+              });
+            } finally {
+              deepSyncInProgressRef.current = false;
+              finishActivity(deepSyncActivityId);
             }
-
-            params.setLastSync(new Date().toISOString());
-            toast({
-              title: 'Sincronizacao concluida',
-              description: `${deepActivities} atividades e ${deepGrades} notas sincronizadas em segundo plano.`,
-            });
-
-            await createSystemNotification(syncOwnerId, {
-              title: 'Sincronizacao concluida',
-              description: `${deepActivities} atividades e ${deepGrades} notas foram sincronizadas em segundo plano.`,
-              eventType: 'sync_finish',
-              severity: 'info',
-              metadata: {
-                sync_phase: 'deep',
-                activities: deepActivities,
-                grades: deepGrades,
-                courses: syncedCourses.length,
-              },
-            });
-          } catch (error) {
-            console.error('Background deep sync error:', error);
-            toast({
-              title: 'Erro na sincronizacao profunda',
-              description: 'Nao foi possivel concluir a sincronizacao em segundo plano de atividades e notas.',
-              variant: 'destructive',
-            });
-
-            await createSystemNotification(syncOwnerId, {
-              title: 'Falha na sincronizacao em segundo plano',
-              description: 'Nao foi possivel concluir a sincronizacao em segundo plano de atividades e notas.',
-              eventType: 'sync_error',
-              severity: 'warning',
-              metadata: {
-                sync_phase: 'deep',
-                courses: syncedCourses.length,
-              },
-            });
-          } finally {
-            deepSyncInProgressRef.current = false;
-          }
-        })();
+          })();
+        }
+      } catch (error) {
+        console.error('Sync error:', error);
+        toast({
+          title: 'Erro na sincronizacao',
+          description: 'Ocorreu um erro durante a sincronizacao. Tente novamente.',
+          variant: 'destructive',
+        });
+        void trackEvent(context.user.id, 'sync_error');
+        void logError(context.user.id, 'Erro na sincronizacao com Moodle', {
+          category: 'integration',
+          payload: { message: error instanceof Error ? error.message : String(error) },
+        });
+        setSyncProgress((previous) => ({ ...previous, isComplete: true }));
+      } finally {
+        setIsSyncing(false);
       }
-    } catch (error) {
-      console.error('Sync error:', error);
-      toast({
-        title: 'Erro na sincronizacao',
-        description: 'Ocorreu um erro durante a sincronizacao. Tente novamente.',
-        variant: 'destructive',
-      });
-      void trackEvent(context.user.id, 'sync_error');
-      void logError(context.user.id, 'Erro na sincronizacao com Moodle', {
-        category: 'integration',
-        payload: { message: error instanceof Error ? error.message : String(error) },
-      });
-      setSyncProgress((previous) => ({ ...previous, isComplete: true }));
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [courses, params, updateStep]);
+    });
+  }, [courses, finishActivity, params, startActivity, trackActivity, updateStep]);
 
   const syncEntitiesIncremental = useCallback(async (
     courseIds: string[],
@@ -399,75 +414,81 @@ export function useCourseSync(params: {
       emptyMessage?: string;
     },
   ): Promise<ScopedSyncSummary | null> => {
-    const context = await params.resolveSessionContext();
-    if (!context) {
-      toast({
-        title: 'Erro',
-        description: 'Sessao expirada. Faca login novamente.',
-        variant: 'destructive',
-      });
-      return null;
-    }
-
-    const selectedCourses = await resolveCoursesByIds(courseIds, courses);
-    if (selectedCourses.length === 0) {
-      toast({
-        title: 'Nenhum curso selecionado',
-        description: labels?.emptyMessage || 'Selecione ao menos um curso para sincronizar.',
-        variant: 'destructive',
-      });
-      return null;
-    }
-
-    const summary: ScopedSyncSummary = {
-      students: 0,
-      activities: 0,
-      grades: 0,
-    };
-
-    setIsSyncing(true);
-    try {
-      const accessToken = await resolveEdgeAccessToken();
-
-      for (const entity of entities) {
-        const result = await runBatchedEntitySync({
-          entity,
-          selectedCourses,
-          session: context.session,
-          accessToken,
+    return await trackActivity({
+      label: labels?.successTitle || 'Sincronizacao incremental',
+      description: `${courseIds.length} curso(s) em atualizacao`,
+      source: 'sync',
+    }, async () => {
+      const context = await params.resolveSessionContext();
+      if (!context) {
+        toast({
+          title: 'Erro',
+          description: 'Sessao expirada. Faca login novamente.',
+          variant: 'destructive',
         });
-        summary[entity] = result.totalCount;
+        return null;
       }
 
-      if (entities.includes('students')) {
-        await recalculateRiskForCourses(selectedCourses.map((course) => course.id));
+      const selectedCourses = await resolveCoursesByIds(courseIds, courses);
+      if (selectedCourses.length === 0) {
+        toast({
+          title: 'Nenhum curso selecionado',
+          description: labels?.emptyMessage || 'Selecione ao menos um curso para sincronizar.',
+          variant: 'destructive',
+        });
+        return null;
       }
 
-      params.setLastSync(new Date().toISOString());
+      const summary: ScopedSyncSummary = {
+        students: 0,
+        activities: 0,
+        grades: 0,
+      };
 
-      const parts: string[] = [];
-      if (entities.includes('students')) parts.push(`${summary.students} alunos`);
-      if (entities.includes('activities')) parts.push(`${summary.activities} atividades`);
-      if (entities.includes('grades')) parts.push(`${summary.grades} notas`);
+      setIsSyncing(true);
+      try {
+        const accessToken = await resolveEdgeAccessToken();
 
-      toast({
-        title: labels?.successTitle || 'Sincronizacao incremental concluida',
-        description: `${selectedCourses.length} curso(s): ${parts.join(', ')} atualizados.`,
-      });
+        for (const entity of entities) {
+          const result = await runBatchedEntitySync({
+            entity,
+            selectedCourses,
+            session: context.session,
+            accessToken,
+          });
+          summary[entity] = result.totalCount;
+        }
 
-      return summary;
-    } catch (error) {
-      console.error('Incremental sync error:', error);
-      toast({
-        title: 'Erro na sincronizacao incremental',
-        description: 'Nao foi possivel atualizar os dados solicitados.',
-        variant: 'destructive',
-      });
-      return null;
-    } finally {
-      setIsSyncing(false);
-    }
-  }, [courses, params]);
+        if (entities.includes('students')) {
+          await recalculateRiskForCourses(selectedCourses.map((course) => course.id));
+        }
+
+        params.setLastSync(new Date().toISOString());
+
+        const parts: string[] = [];
+        if (entities.includes('students')) parts.push(`${summary.students} alunos`);
+        if (entities.includes('activities')) parts.push(`${summary.activities} atividades`);
+        if (entities.includes('grades')) parts.push(`${summary.grades} notas`);
+
+        toast({
+          title: labels?.successTitle || 'Sincronizacao incremental concluida',
+          description: `${selectedCourses.length} curso(s): ${parts.join(', ')} atualizados.`,
+        });
+
+        return summary;
+      } catch (error) {
+        console.error('Incremental sync error:', error);
+        toast({
+          title: 'Erro na sincronizacao incremental',
+          description: 'Nao foi possivel atualizar os dados solicitados.',
+          variant: 'destructive',
+        });
+        return null;
+      } finally {
+        setIsSyncing(false);
+      }
+    });
+  }, [courses, params, trackActivity]);
 
   const syncStudentsIncremental = useCallback(async (courseIds: string[]) => {
     await syncEntitiesIncremental(courseIds, ['students'], {

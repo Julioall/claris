@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -8,14 +8,23 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
+import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import {
   approveStudentGradeSuggestion,
+  findLatestRelevantActivityGradeSuggestionJob,
   generateActivityGradeSuggestions,
+  getActivityGradeSuggestionJob,
+  resumeActivityGradeSuggestionJob,
 } from '@/features/students/api/gradeSuggestions';
 import type {
+  ActivityGradeSuggestionJobItem,
+  ActivityGradeSuggestionJobStatus,
+  ActivityGradeSuggestionResponse,
   Student,
   StudentGradeSuggestionResult,
 } from '@/features/students/types';
@@ -30,6 +39,15 @@ interface SuggestionRowState {
   editedFeedback: string;
   requestError: string | null;
   isApproving: boolean;
+}
+
+interface AssignmentSuggestionJobState {
+  errorCount: number;
+  message?: string;
+  processedItems: number;
+  status: ActivityGradeSuggestionJobStatus;
+  successCount: number;
+  totalItems: number;
 }
 
 interface AssignmentSuggestionPanelProps {
@@ -80,11 +98,17 @@ export function AssignmentSuggestionPanel({
   onToggleExpand,
   onApproved,
 }: AssignmentSuggestionPanelProps) {
+  const { user } = useAuth();
   const moodleSession = useMoodleSession();
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isResumingJob, setIsResumingJob] = useState(false);
   const [batchError, setBatchError] = useState<string | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [jobState, setJobState] = useState<AssignmentSuggestionJobState | null>(null);
+  const [jobItems, setJobItems] = useState<Record<string, ActivityGradeSuggestionJobItem>>({});
   const [rows, setRows] = useState<Record<string, SuggestionRowState>>({});
+  const [closedSuggestionIds, setClosedSuggestionIds] = useState<Record<string, true>>({});
   const pendingCorrectionSubmissions = useMemo(
     () => submissions.filter((submission) => getStudentActivityWorkflowStatus(submission) === 'pending_correction'),
     [submissions],
@@ -94,6 +118,147 @@ export function AssignmentSuggestionPanel({
     () => Object.keys(rows).length > 0,
     [rows],
   );
+  const approvingCount = useMemo(
+    () => Object.values(rows).filter((row) => row.isApproving).length,
+    [rows],
+  );
+  const hasActiveBatchJob = Boolean(
+    jobState &&
+    jobState.processedItems < jobState.totalItems &&
+    (jobState.status === 'processing' || jobState.status === 'pending'),
+  );
+  const persistentActivityId = activeJobId ? `background-job:ai-grading:${activeJobId}` : null;
+
+  useBackgroundActivityFlag({
+    id: persistentActivityId ?? `ai-grading:activity:${activity.id}`,
+    active: isGenerating || isResumingJob || hasActiveBatchJob || approvingCount > 0,
+    label: approvingCount > 0
+      ? 'Publicando correcoes no Moodle'
+      : hasActiveBatchJob
+        ? 'Correcoes por IA em lote'
+        : 'Gerando correcoes por IA',
+    description: hasActiveBatchJob && jobState
+      ? `${activity.activity_name} (${jobState.processedItems}/${jobState.totalItems})`
+      : `${activity.activity_name}`,
+    source: 'ai-grading',
+    cleanupOnUnmount: !hasActiveBatchJob || !persistentActivityId,
+  });
+
+  const applyJobResponse = useCallback((data: ActivityGradeSuggestionResponse) => {
+    const isSameJob = data.jobId === activeJobId;
+    const nextClosedSuggestionIds = isSameJob ? closedSuggestionIds : {};
+
+    if (!isSameJob) {
+      setClosedSuggestionIds({});
+    }
+
+    setActiveJobId(data.jobId);
+    setJobState({
+      errorCount: data.errorCount,
+      message: data.message,
+      processedItems: data.processedItems,
+      status: data.status,
+      successCount: data.successCount,
+      totalItems: data.totalItems,
+    });
+
+    setJobItems((current) => {
+      const nextItems = isSameJob ? { ...current } : {};
+
+      data.items.forEach((item) => {
+        nextItems[item.studentActivityId] = item;
+      });
+
+      return nextItems;
+    });
+
+    setRows((current) => {
+      const nextRows: Record<string, SuggestionRowState> = isSameJob ? { ...current } : {};
+
+      Object.keys(nextRows).forEach((studentActivityId) => {
+        if (nextClosedSuggestionIds[studentActivityId]) {
+          delete nextRows[studentActivityId];
+        }
+      });
+
+      for (const item of data.items) {
+        if (!item.result || nextClosedSuggestionIds[item.studentActivityId]) {
+          continue;
+        }
+
+        const previous = isSameJob ? current[item.studentActivityId] : undefined;
+
+        nextRows[item.studentActivityId] = {
+          auditId: item.auditId ?? null,
+          result: item.result,
+          editedGrade: previous?.editedGrade ?? buildGradeInputValue(item.result),
+          editedFeedback: previous?.editedFeedback ?? item.result.suggestedFeedback ?? '',
+          requestError: item.result.status === 'error' ? (previous?.requestError ?? item.result.warnings[0] ?? null) : null,
+          isApproving: previous?.isApproving ?? false,
+        };
+      }
+
+      return nextRows;
+    });
+
+    if (data.status === 'failed' && data.successCount === 0) {
+      setBatchError(data.message || 'O job de correcao em lote falhou antes de gerar sugestoes utilizaveis.');
+      return;
+    }
+
+    setBatchError(null);
+  }, [activeJobId, closedSuggestionIds]);
+
+  const loadJob = useCallback(async (jobId: string) => {
+    if (!moodleSession) {
+      return;
+    }
+
+    const { data, error } = await getActivityGradeSuggestionJob({
+      session: moodleSession,
+      jobId,
+    });
+
+    if (error) {
+      throw new Error(error.message || 'Nao foi possivel atualizar o job de correcao em lote.');
+    }
+
+    if (!data?.jobId) {
+      throw new Error(data?.message || 'O job de correcao em lote nao retornou dados validos.');
+    }
+
+    applyJobResponse(data);
+  }, [applyJobResponse, moodleSession]);
+
+  const resumeJob = useCallback(async (jobId: string) => {
+    if (!moodleSession) {
+      return;
+    }
+
+    setIsResumingJob(true);
+
+    try {
+      const { data, error } = await resumeActivityGradeSuggestionJob({
+        session: moodleSession,
+        jobId,
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Nao foi possivel retomar o job de correcao em lote.');
+      }
+
+      if (!data?.jobId) {
+        throw new Error(data?.message || 'O job de correcao em lote nao retornou dados validos.');
+      }
+
+      applyJobResponse(data);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nao foi possivel retomar o job de correcao em lote.';
+      setBatchError(message);
+    } finally {
+      setIsResumingJob(false);
+    }
+  }, [applyJobResponse, moodleSession]);
 
   const handleGenerateSuggestions = async () => {
     if (!moodleSession || !activity.moodle_activity_id) {
@@ -124,35 +289,18 @@ export function AssignmentSuggestionPanel({
         throw new Error(error.message || 'Nao foi possivel gerar as sugestoes com IA.');
       }
 
-      if (!data?.success) {
-        throw new Error(data?.message || 'Nenhuma entrega pendente de correcao foi encontrada para esta atividade.');
+      if (!data?.jobId) {
+        throw new Error(data?.message || 'Nao foi possivel iniciar o job de correcao em lote.');
       }
 
-      if (!data.results?.length) {
-        throw new Error(data.message || 'A atividade nao retornou sugestoes utilizaveis.');
-      }
-
-      const nextRows = data.results.reduce<Record<string, SuggestionRowState>>((accumulator, entry) => {
-        accumulator[entry.studentActivityId] = {
-          auditId: entry.auditId ?? null,
-          result: entry.result,
-          editedGrade: buildGradeInputValue(entry.result),
-          editedFeedback: entry.result.suggestedFeedback ?? '',
-          requestError: entry.result.status === 'error' ? entry.result.warnings[0] ?? null : null,
-          isApproving: false,
-        };
-        return accumulator;
-      }, {});
-
-      setRows(nextRows);
+      applyJobResponse(data);
 
       toast({
-        title: 'Sugestoes atualizadas',
-        description: data.message || `${data.generatedCount} sugestoes geradas para a atividade.`,
+        title: 'Correcao em lote iniciada',
+        description: data.message || `Job iniciado para ${data.totalItems} entregas.`,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Nao foi possivel gerar as sugestoes com IA.';
-      setRows({});
       setBatchError(message);
       toast({
         variant: 'destructive',
@@ -163,6 +311,105 @@ export function AssignmentSuggestionPanel({
       setIsGenerating(false);
     }
   };
+
+  useEffect(() => {
+    if (!isExpanded || activeJobId || !user?.id || !activity.moodle_activity_id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const restoreExistingJob = async () => {
+      try {
+        const existingJob = await findLatestRelevantActivityGradeSuggestionJob({
+          userId: user.id,
+          courseId: activity.course_id,
+          moodleActivityId: activity.moodle_activity_id,
+        });
+
+        if (!existingJob || cancelled) {
+          return;
+        }
+
+        setActiveJobId(existingJob.jobId);
+        setJobState({
+          errorCount: existingJob.errorCount,
+          message: existingJob.errorMessage ?? undefined,
+          processedItems: existingJob.processedItems,
+          status: existingJob.status,
+          successCount: existingJob.successCount,
+          totalItems: existingJob.totalItems,
+        });
+        setBatchError(null);
+      } catch (error) {
+        console.error('Falha ao reidratar job de correcao em lote', error);
+      }
+    };
+
+    void restoreExistingJob();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activity.course_id, activity.moodle_activity_id, activeJobId, isExpanded, user?.id]);
+
+  useEffect(() => {
+    if (!activeJobId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const refreshJob = async () => {
+      try {
+        await loadJob(activeJobId);
+      } catch (error) {
+        if (!cancelled) {
+          setBatchError(error instanceof Error ? error.message : 'Nao foi possivel atualizar o job de correcao em lote.');
+        }
+      }
+    };
+
+    void refreshJob();
+
+    if (jobState?.status === 'completed' || (jobState?.status === 'failed' && jobState.processedItems >= jobState.totalItems)) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshJob();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeJobId, jobState?.processedItems, jobState?.status, jobState?.totalItems, loadJob]);
+
+  useEffect(() => {
+    if (!activeJobId || !jobState || isResumingJob) {
+      return;
+    }
+
+    const shouldResume =
+      jobState.processedItems > 0 &&
+      jobState.processedItems < jobState.totalItems &&
+      (jobState.status === 'pending' || jobState.status === 'failed');
+
+    if (!shouldResume) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void resumeJob(activeJobId);
+    }, 800);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [activeJobId, isResumingJob, jobState, resumeJob]);
 
   const updateRow = (studentActivityId: string, updater: (current: SuggestionRowState | undefined) => SuggestionRowState) => {
     setRows((current) => ({
@@ -217,6 +464,19 @@ export function AssignmentSuggestionPanel({
         isApproving: false,
         requestError: null,
       }));
+      setClosedSuggestionIds((current) => ({
+        ...current,
+        [submission.id]: true,
+      }));
+      setRows((current) => {
+        if (!(submission.id in current)) {
+          return current;
+        }
+
+        const nextRows = { ...current };
+        delete nextRows[submission.id];
+        return nextRows;
+      });
 
       toast({
         title: 'Nota lancada',
@@ -241,6 +501,10 @@ export function AssignmentSuggestionPanel({
     }
   };
 
+  const jobProgressPercent = jobState && jobState.totalItems > 0
+    ? Math.round((jobState.processedItems / jobState.totalItems) * 100)
+    : 0;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-2">
@@ -250,7 +514,7 @@ export function AssignmentSuggestionPanel({
             variant="outline"
             size="sm"
             onClick={() => void handleGenerateSuggestions()}
-            disabled={!moodleSession || !activity.moodle_activity_id || isGenerating}
+            disabled={!moodleSession || !activity.moodle_activity_id || isGenerating || isResumingJob}
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Corrigir
@@ -270,16 +534,44 @@ export function AssignmentSuggestionPanel({
 
       {isExpanded && (
         <div className="overflow-hidden rounded-md border border-border/70 bg-background/80">
+          {jobState ? (
+            <div className="border-b bg-muted/20 px-4 py-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Correcao em lote da atividade</p>
+                  <p className="text-xs text-muted-foreground">
+                    {jobState.message || `Processadas ${jobState.processedItems} de ${jobState.totalItems} entregas.`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant="outline">
+                    {jobState.status === 'processing'
+                      ? 'Processando'
+                      : jobState.status === 'pending'
+                        ? 'Na fila'
+                        : jobState.status === 'completed'
+                          ? 'Concluido'
+                          : 'Falhou'}
+                  </Badge>
+                  <span>{jobState.processedItems} / {jobState.totalItems}</span>
+                </div>
+              </div>
+              <Progress value={jobProgressPercent} className="mt-3 h-2" />
+            </div>
+          ) : null}
+
           {batchError ? (
             <div className="border-b px-4 py-2 text-sm text-destructive">
               {batchError}
             </div>
           ) : null}
 
-          {isGenerating && !hasSuggestions ? (
+          {(isGenerating || isResumingJob || (jobState && !hasSuggestions && jobState.processedItems < jobState.totalItems)) ? (
             <div className="flex items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Gerando sugestoes para as entregas desta atividade...
+              {jobState
+                ? `Processando entregas em background (${jobState.processedItems}/${jobState.totalItems})...`
+                : 'Preparando job de correcao em lote...'}
             </div>
           ) : submissions.length === 0 ? (
             <div className="px-4 py-3 text-sm text-muted-foreground">
@@ -291,7 +583,9 @@ export function AssignmentSuggestionPanel({
                 const submissionStatus = getSubmissionStatus(submission);
                 const student = studentsById.get(submission.student_id);
                 const studentName = student?.full_name || 'Aluno nao identificado';
-                const row = rows[submission.id];
+                const suggestionClosed = submissionStatus === 'corrigido' || Boolean(closedSuggestionIds[submission.id]);
+                const row = suggestionClosed ? undefined : rows[submission.id];
+                const jobItem = jobItems[submission.id];
                 const parsedGrade = row ? parseEditedGrade(row.editedGrade) : null;
                 const approvalBlocked = row?.result.status === 'error';
                 const canApprove = Boolean(
@@ -397,6 +691,12 @@ export function AssignmentSuggestionPanel({
                             ))}
                           </div>
                         )}
+                      </div>
+                    ) : jobItem && (jobItem.status === 'pending' || jobItem.status === 'processing') ? (
+                      <div className="mt-3 border-l border-border/60 pl-3 text-xs text-muted-foreground">
+                        {jobItem.status === 'processing'
+                          ? 'Gerando sugestao para esta entrega...'
+                          : 'Entrega na fila de correcao em lote.'}
                       </div>
                     ) : null}
                   </div>

@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/select';
 import { DynamicVariableInput, resolveVariables, DYNAMIC_VARIABLES } from './DynamicVariableInput';
 import { useAuth } from '@/contexts/AuthContext';
+import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -304,6 +305,14 @@ export function BulkSendTab() {
     () => recentJobs.some(job => job.status === 'pending' || job.status === 'processing'),
     [recentJobs],
   );
+
+  useBackgroundActivityFlag({
+    id: user?.id ? `messages:bulk-send:request:${user.id}` : 'messages:bulk-send:request',
+    active: Boolean(user?.id) && isSending,
+    label: 'Preparando envio em massa',
+    description: 'Enfileirando destinatarios e validando o disparo.',
+    source: 'messages',
+  });
 
   useEffect(() => {
     if (!user || !hasActiveJobs) return;

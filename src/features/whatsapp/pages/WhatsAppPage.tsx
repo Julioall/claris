@@ -46,6 +46,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { Textarea } from '@/components/ui/textarea';
+import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 
@@ -602,6 +603,16 @@ export default function WhatsAppPage() {
     onError: (error) => {
       setSendError(error instanceof Error ? error.message : 'Erro ao enviar mensagem');
     },
+  });
+
+  useBackgroundActivityFlag({
+    id: selectedInstanceId ? `whatsapp:send:${selectedInstanceId}` : 'whatsapp:send',
+    active: sendMutation.isPending,
+    label: 'Enviando mensagem no WhatsApp',
+    description: selectedConversation
+      ? `Conversa com ${selectedConversation.name}`
+      : 'Processando envio da mensagem.',
+    source: 'whatsapp',
   });
 
   const handleSelectConversation = useCallback((conversationId: string) => {

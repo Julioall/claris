@@ -2,6 +2,7 @@ import { act } from "react";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, waitFor } from "@testing-library/react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { BackgroundActivityProvider } from "@/contexts/BackgroundActivityContext";
 
 const onAuthStateChangeMock = vi.fn();
 const getSessionMock = vi.fn();
@@ -48,6 +49,14 @@ let authRef: ReturnType<typeof useAuth> | null = null;
 function Probe() {
   authRef = useAuth();
   return null;
+}
+
+function renderWithProviders(ui: React.ReactElement) {
+  return render(
+    <BackgroundActivityProvider>
+      {ui}
+    </BackgroundActivityProvider>,
+  );
 }
 
 describe("AuthContext", () => {
@@ -113,7 +122,7 @@ describe("AuthContext", () => {
       error: null,
     });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -152,7 +161,7 @@ describe("AuthContext", () => {
       error: null,
     });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -184,7 +193,7 @@ describe("AuthContext", () => {
       error: { message: "{\"message\":\"name resolution failed\"}" },
     });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -218,7 +227,7 @@ describe("AuthContext", () => {
       error: null,
     });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -261,7 +270,7 @@ describe("AuthContext", () => {
         error: null,
       });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -312,7 +321,7 @@ describe("AuthContext", () => {
       error: null,
     });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -433,7 +442,7 @@ describe("AuthContext", () => {
       throw new Error(`Unexpected fetch call: ${url}`);
     });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,
@@ -502,7 +511,7 @@ describe("AuthContext", () => {
       error: null,
     });
 
-    render(
+    renderWithProviders(
       <AuthProvider>
         <Probe />
       </AuthProvider>,

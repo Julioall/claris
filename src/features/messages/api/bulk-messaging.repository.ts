@@ -270,6 +270,19 @@ export async function listRecentBulkMessageJobsForUser(
   return (data || []) as BulkMessageJobPreview[];
 }
 
+export async function listActiveBulkMessageJobsForUser(userId: string): Promise<BulkMessageJobPreview[]> {
+  const { data, error } = await supabase
+    .from('bulk_message_jobs')
+    .select('id, message_content, total_recipients, sent_count, failed_count, status, created_at, origin')
+    .eq('user_id', userId)
+    .in('status', ['pending', 'processing'])
+    .order('created_at', { ascending: false });
+
+  if (error) throw error;
+
+  return (data || []) as BulkMessageJobPreview[];
+}
+
 export async function startBulkMessageSend(
   input: StartBulkMessageSendInput,
 ): Promise<StartBulkMessageSendResult> {

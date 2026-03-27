@@ -77,12 +77,44 @@ export interface ActivityStudentGradeSuggestionItem {
   result: StudentGradeSuggestionResult;
 }
 
+export type ActivityGradeSuggestionJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ActivityGradeSuggestionJobItemStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface ActivityGradeSuggestionJobItem {
+  id: string;
+  studentId: string;
+  studentActivityId: string;
+  studentName: string;
+  status: ActivityGradeSuggestionJobItemStatus;
+  auditId?: string;
+  errorMessage?: string;
+  result?: StudentGradeSuggestionResult;
+}
+
 export interface ActivityGradeSuggestionResponse {
   success: boolean;
+  jobId: string | null;
+  status: ActivityGradeSuggestionJobStatus;
   message?: string;
-  generatedCount: number;
+  totalItems: number;
+  processedItems: number;
+  successCount: number;
   errorCount: number;
-  results: ActivityStudentGradeSuggestionItem[];
+  items: ActivityGradeSuggestionJobItem[];
+}
+
+export interface ActivityGradeSuggestionJobSummary {
+  jobId: string;
+  activityName: string;
+  courseId: string;
+  moodleActivityId: string;
+  status: ActivityGradeSuggestionJobStatus;
+  totalItems: number;
+  processedItems: number;
+  successCount: number;
+  errorCount: number;
+  errorMessage?: string | null;
+  createdAt: string;
 }
 
 export interface StudentGradeApprovalResponse {

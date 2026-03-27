@@ -6,8 +6,10 @@ import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { BackgroundActivityProvider } from '@/contexts/BackgroundActivityContext';
 
 import { ColorThemeApplier } from './ColorThemeApplier';
+import { BackgroundActivitySyncBridge } from './BackgroundActivitySyncBridge';
 
 export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
@@ -16,13 +18,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <ColorThemeApplier>
         <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              {children}
-            </TooltipProvider>
-          </AuthProvider>
+          <BackgroundActivityProvider>
+            <AuthProvider>
+              <TooltipProvider>
+                <BackgroundActivitySyncBridge />
+                <Toaster />
+                <Sonner />
+                {children}
+              </TooltipProvider>
+            </AuthProvider>
+          </BackgroundActivityProvider>
         </QueryClientProvider>
       </ColorThemeApplier>
     </ThemeProvider>

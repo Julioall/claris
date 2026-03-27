@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TopBar } from "@/components/layout/TopBar";
+import { BackgroundActivityProvider } from "@/contexts/BackgroundActivityContext";
 
 const ROUTER_FUTURE = {
   v7_startTransition: true,
@@ -70,7 +71,9 @@ function createWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter future={ROUTER_FUTURE}>{children}</MemoryRouter>
+      <BackgroundActivityProvider>
+        <MemoryRouter future={ROUTER_FUTURE}>{children}</MemoryRouter>
+      </BackgroundActivityProvider>
     </QueryClientProvider>
   );
 }

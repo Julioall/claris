@@ -18,6 +18,7 @@ import type {
   StudentGradeSuggestionResult,
 } from "@/features/students/types";
 import { Button } from "@/components/ui/button";
+import { useBackgroundActivityFlag } from "@/contexts/BackgroundActivityContext";
 import {
   Dialog,
   DialogContent,
@@ -102,6 +103,16 @@ export function GradeSuggestionDialog({
     parsedGrade !== null &&
     Number.isFinite(parsedGrade) &&
     editedFeedback.trim().length > 0;
+
+  useBackgroundActivityFlag({
+    id: activity?.id ? `ai-grading:student:${activity.id}:${studentId}` : `ai-grading:student:${studentId}`,
+    active: open && (isGenerating || isApproving),
+    label: isApproving ? 'Publicando correcao no Moodle' : 'Gerando correcao por IA',
+    description: activity
+      ? `Atividade ${activity.activity_name}`
+      : 'Analisando envio do aluno.',
+    source: 'ai-grading',
+  });
 
   const resetState = () => {
     setAuditId(null);

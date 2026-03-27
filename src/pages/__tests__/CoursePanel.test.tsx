@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { BackgroundActivityProvider } from "@/contexts/BackgroundActivityContext";
 import CoursePanel from "@/features/courses/pages/CoursePanelPage";
 
 const useCoursePanelMock = vi.fn();
 const useAuthMock = vi.fn();
 const toggleActivityVisibilityMock = vi.fn();
 const generateActivityGradeSuggestionsMock = vi.fn();
+const findLatestRelevantActivityGradeSuggestionJobMock = vi.fn();
+const getActivityGradeSuggestionJobMock = vi.fn();
+const resumeActivityGradeSuggestionJobMock = vi.fn();
 const approveStudentGradeSuggestionMock = vi.fn();
 const useMoodleSessionMock = vi.fn();
 
@@ -25,6 +29,9 @@ vi.mock("@/features/auth/context/MoodleSessionContext", () => ({
 
 vi.mock("@/features/students/api/gradeSuggestions", () => ({
   generateActivityGradeSuggestions: (...args: unknown[]) => generateActivityGradeSuggestionsMock(...args),
+  findLatestRelevantActivityGradeSuggestionJob: (...args: unknown[]) => findLatestRelevantActivityGradeSuggestionJobMock(...args),
+  getActivityGradeSuggestionJob: (...args: unknown[]) => getActivityGradeSuggestionJobMock(...args),
+  resumeActivityGradeSuggestionJob: (...args: unknown[]) => resumeActivityGradeSuggestionJobMock(...args),
   approveStudentGradeSuggestion: (...args: unknown[]) => approveStudentGradeSuggestionMock(...args),
 }));
 
@@ -36,11 +43,13 @@ vi.mock("@/components/attendance/CourseAttendanceTab", () => ({
 
 function renderPage() {
   return render(
-    <MemoryRouter initialEntries={["/cursos/c-1"]}>
-      <Routes>
-        <Route path="/cursos/:id" element={<CoursePanel />} />
-      </Routes>
-    </MemoryRouter>,
+    <BackgroundActivityProvider>
+      <MemoryRouter initialEntries={["/cursos/c-1"]}>
+        <Routes>
+          <Route path="/cursos/:id" element={<CoursePanel />} />
+        </Routes>
+      </MemoryRouter>
+    </BackgroundActivityProvider>,
   );
 }
 
@@ -55,13 +64,35 @@ describe("CoursePanel page", () => {
     generateActivityGradeSuggestionsMock.mockResolvedValue({
       data: {
         success: true,
-        generatedCount: 1,
+        jobId: "job-1",
+        status: "processing",
+        totalItems: 1,
+        processedItems: 0,
+        successCount: 0,
+        errorCount: 0,
+        message: "Job iniciado para 1 entrega.",
+        items: [],
+      },
+      error: null,
+    });
+    findLatestRelevantActivityGradeSuggestionJobMock.mockResolvedValue(null);
+    getActivityGradeSuggestionJobMock.mockResolvedValue({
+      data: {
+        success: true,
+        jobId: "job-1",
+        status: "completed",
+        totalItems: 1,
+        processedItems: 1,
+        successCount: 1,
         errorCount: 0,
         message: "1 sugestao gerada com sucesso.",
-        results: [
+        items: [
           {
+            id: "item-2",
             studentId: "s-2",
             studentActivityId: "sub-2",
+            studentName: "Bruno Souza",
+            status: "completed",
             auditId: "audit-2",
             result: {
               status: "success",
@@ -74,6 +105,19 @@ describe("CoursePanel page", () => {
             },
           },
         ],
+      },
+      error: null,
+    });
+    resumeActivityGradeSuggestionJobMock.mockResolvedValue({
+      data: {
+        success: true,
+        jobId: "job-1",
+        status: "processing",
+        totalItems: 1,
+        processedItems: 0,
+        successCount: 0,
+        errorCount: 0,
+        items: [],
       },
       error: null,
     });
@@ -541,10 +585,334 @@ describe("CoursePanel page", () => {
       });
     });
 
+    await waitFor(() => {
+      expect(getActivityGradeSuggestionJobMock).toHaveBeenCalledWith({
+        session: {
+          moodleToken: "token-1",
+          moodleUrl: "https://moodle.example.com",
+          moodleUserId: 12,
+        },
+        jobId: "job-1",
+      });
+    });
+
     expect(screen.getByLabelText("Nota sugerida para Bruno Souza")).toHaveValue("8.5");
     expect(screen.getByLabelText("Feedback sugerido para Bruno Souza")).toHaveValue("A resposta apresenta boa cobertura dos pontos solicitados.");
     expect(screen.queryByLabelText("Feedback sugerido para Ana Silva")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Feedback sugerido para Carla Dias")).not.toBeInTheDocument();
+  });
+
+  it("rehydrates an active batch correction job when the assignment is reopened", async () => {
+    const user = userEvent.setup();
+
+    useCoursePanelMock.mockReturnValue({
+      course: {
+        id: "c-1",
+        name: "Curso de Matematica",
+        category: "Exatas",
+        last_sync: "2026-02-20T00:00:00.000Z",
+        start_date: "2026-01-01T00:00:00.000Z",
+        end_date: "2026-12-31T00:00:00.000Z",
+        effective_end_date: "2026-03-15T12:00:00.000Z",
+        moodle_course_id: "123",
+      },
+      students: [
+        {
+          id: "s-1",
+          full_name: "Ana Silva",
+          email: "ana@example.com",
+          current_risk_level: "atencao",
+          last_access: "2026-02-19T00:00:00.000Z",
+          avatar_url: null,
+        },
+        {
+          id: "s-2",
+          full_name: "Bruno Souza",
+          email: "bruno@example.com",
+          current_risk_level: "normal",
+          last_access: "2026-02-18T00:00:00.000Z",
+          avatar_url: null,
+        },
+        {
+          id: "s-3",
+          full_name: "Carla Dias",
+          email: "carla@example.com",
+          current_risk_level: "risco",
+          last_access: "2026-02-17T00:00:00.000Z",
+          avatar_url: null,
+        },
+      ],
+      activities: [
+        {
+          id: "act-1",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: null,
+          status: "pending",
+        },
+      ],
+      activitySubmissions: [
+        {
+          id: "sub-1",
+          student_id: "s-1",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: 9.5,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-09T00:00:00.000Z",
+          submitted_at: "2026-03-09T00:00:00.000Z",
+        },
+        {
+          id: "sub-2",
+          student_id: "s-2",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-10T00:00:00.000Z",
+          submitted_at: "2026-03-10T00:00:00.000Z",
+        },
+        {
+          id: "sub-3",
+          student_id: "s-3",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: 10,
+          status: "pending",
+          completed_at: null,
+          submitted_at: null,
+        },
+      ],
+      stats: {
+        totalStudents: 3,
+        atRiskStudents: 2,
+        totalActivities: 1,
+        completionRate: 67,
+        riskDistribution: {
+          normal: 1,
+          atencao: 1,
+          risco: 1,
+          critico: 0,
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      toggleActivityVisibility: toggleActivityVisibilityMock,
+      isAttendanceEnabled: false,
+      isLoadingAttendanceFlag: false,
+      toggleAttendance: vi.fn(),
+    });
+
+    findLatestRelevantActivityGradeSuggestionJobMock.mockResolvedValue({
+      jobId: "job-77",
+      activityName: "Atividade 1",
+      courseId: "c-1",
+      moodleActivityId: "321",
+      status: "completed",
+      totalItems: 1,
+      processedItems: 1,
+      successCount: 1,
+      errorCount: 0,
+      errorMessage: null,
+      createdAt: "2026-03-27T10:30:00.000Z",
+    });
+
+    renderPage();
+
+    await user.click(screen.getByRole("tab", { name: /atividades \(1\)/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /expandir entregas/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /expandir entregas/i }));
+
+    await waitFor(() => {
+      expect(findLatestRelevantActivityGradeSuggestionJobMock).toHaveBeenCalledWith({
+        userId: "u-1",
+        courseId: "c-1",
+        moodleActivityId: "321",
+      });
+    });
+
+    await waitFor(() => {
+      expect(getActivityGradeSuggestionJobMock).toHaveBeenCalledWith({
+        session: {
+          moodleToken: "token-1",
+          moodleUrl: "https://moodle.example.com",
+          moodleUserId: 12,
+        },
+        jobId: "job-77",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("8.5")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("A resposta apresenta boa cobertura dos pontos solicitados.")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("tab", { name: /vis/i }));
+    await user.click(screen.getByRole("tab", { name: /atividades \(1\)/i }));
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("8.5")).toBeInTheDocument();
+      expect(screen.getByDisplayValue("A resposta apresenta boa cobertura dos pontos solicitados.")).toBeInTheDocument();
+    });
+  });
+
+  it("closes the approved suggestion row after launching the grade", async () => {
+    const user = userEvent.setup();
+
+    useCoursePanelMock.mockReturnValue({
+      course: {
+        id: "c-1",
+        name: "Curso de Matematica",
+        category: "Exatas",
+        last_sync: "2026-02-20T00:00:00.000Z",
+        start_date: "2026-01-01T00:00:00.000Z",
+        end_date: "2026-12-31T00:00:00.000Z",
+        effective_end_date: "2026-03-15T12:00:00.000Z",
+        moodle_course_id: "123",
+      },
+      students: [
+        {
+          id: "s-1",
+          full_name: "Ana Silva",
+          email: "ana@example.com",
+          current_risk_level: "atencao",
+          last_access: "2026-02-19T00:00:00.000Z",
+          avatar_url: null,
+        },
+        {
+          id: "s-2",
+          full_name: "Bruno Souza",
+          email: "bruno@example.com",
+          current_risk_level: "normal",
+          last_access: "2026-02-18T00:00:00.000Z",
+          avatar_url: null,
+        },
+      ],
+      activities: [
+        {
+          id: "act-1",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: null,
+          status: "pending",
+        },
+      ],
+      activitySubmissions: [
+        {
+          id: "sub-1",
+          student_id: "s-1",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: 9.5,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-09T00:00:00.000Z",
+          submitted_at: "2026-03-09T00:00:00.000Z",
+        },
+        {
+          id: "sub-2",
+          student_id: "s-2",
+          course_id: "c-1",
+          moodle_activity_id: "321",
+          activity_name: "Atividade 1",
+          activity_type: "assign",
+          due_date: "2026-03-10T00:00:00.000Z",
+          hidden: false,
+          grade: null,
+          grade_max: 10,
+          status: "completed",
+          completed_at: "2026-03-10T00:00:00.000Z",
+          submitted_at: "2026-03-10T00:00:00.000Z",
+        },
+      ],
+      stats: {
+        totalStudents: 2,
+        atRiskStudents: 1,
+        totalActivities: 1,
+        completionRate: 100,
+        riskDistribution: {
+          normal: 1,
+          atencao: 1,
+          risco: 0,
+          critico: 0,
+        },
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+      toggleActivityVisibility: toggleActivityVisibilityMock,
+      isAttendanceEnabled: false,
+      isLoadingAttendanceFlag: false,
+      toggleAttendance: vi.fn(),
+    });
+
+    renderPage();
+
+    await user.click(screen.getByRole("tab", { name: /atividades \(1\)/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /corrigir/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /corrigir/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /lancar nota/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /lancar nota/i }));
+
+    await waitFor(() => {
+      expect(approveStudentGradeSuggestionMock).toHaveBeenCalledWith({
+        session: {
+          moodleToken: "token-1",
+          moodleUrl: "https://moodle.example.com",
+          moodleUserId: 12,
+        },
+        auditId: "audit-2",
+        approvedGrade: 8.5,
+        approvedFeedback: "A resposta apresenta boa cobertura dos pontos solicitados.",
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Nota sugerida para Bruno Souza")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("Feedback sugerido para Bruno Souza")).not.toBeInTheDocument();
+    });
   });
 
   it("hides the Corrigir action when there is no pending correction", async () => {

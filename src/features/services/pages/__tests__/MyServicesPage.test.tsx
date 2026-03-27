@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import MyServicesPage from "@/features/services/pages/MyServicesPage";
+import { BackgroundActivityProvider } from "@/contexts/BackgroundActivityContext";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
@@ -33,7 +34,11 @@ function setAuthUser() {
 
 function renderWithClient(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={qc}>
+      <BackgroundActivityProvider>{ui}</BackgroundActivityProvider>
+    </QueryClientProvider>,
+  );
 }
 
 function setupNoInstance() {
