@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,7 +14,15 @@ export function BackgroundActivitySyncBridge() {
   const { activities, finishActivity, upsertActivity } = useBackgroundActivity();
   const activitiesRef = useRef(activities);
 
-  const { data: activeBulkJobs = [] } = useQuery({
+  const clearManagedActivities = useCallback((prefixes: string[]) => {
+    activitiesRef.current.forEach((activity) => {
+      if (prefixes.some((prefix) => activity.id.startsWith(prefix))) {
+        finishActivity(activity.id);
+      }
+    });
+  }, [finishActivity]);
+
+  const bulkJobsQuery = useQuery({
     queryKey: ['background-activity', 'bulk-message-jobs', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -23,8 +31,10 @@ export function BackgroundActivitySyncBridge() {
     enabled: !!user?.id,
     refetchInterval: 8000,
   });
+  const activeBulkJobs = useMemo(() => bulkJobsQuery.data ?? [], [bulkJobsQuery.data]);
+  const bulkJobsDataIsStale = bulkJobsQuery.dataUpdatedAt > 0 && bulkJobsQuery.errorUpdatedAt > bulkJobsQuery.dataUpdatedAt;
 
-  const { data: activeAiGradeSuggestionJobs = [] } = useQuery({
+  const aiGradeSuggestionJobsQuery = useQuery({
     queryKey: ['background-activity', 'ai-grade-suggestion-jobs', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
@@ -33,12 +43,25 @@ export function BackgroundActivitySyncBridge() {
     enabled: !!user?.id,
     refetchInterval: 8000,
   });
+  const activeAiGradeSuggestionJobs = useMemo(
+    () => aiGradeSuggestionJobsQuery.data ?? [],
+    [aiGradeSuggestionJobsQuery.data],
+  );
+  const aiGradeSuggestionJobsDataIsStale = (
+    aiGradeSuggestionJobsQuery.dataUpdatedAt > 0 &&
+    aiGradeSuggestionJobsQuery.errorUpdatedAt > aiGradeSuggestionJobsQuery.dataUpdatedAt
+  );
 
   useEffect(() => {
     activitiesRef.current = activities;
   }, [activities]);
 
   useEffect(() => {
+    if (bulkJobsDataIsStale) {
+      clearManagedActivities([BULK_MESSAGE_ACTIVITY_PREFIX]);
+      return;
+    }
+
     const activeIds = new Set<string>();
 
     activeBulkJobs.forEach((job) => {
@@ -58,9 +81,14 @@ export function BackgroundActivitySyncBridge() {
         finishActivity(activity.id);
       }
     });
-  }, [activeBulkJobs, finishActivity, upsertActivity]);
+  }, [activeBulkJobs, bulkJobsDataIsStale, clearManagedActivities, finishActivity, upsertActivity]);
 
   useEffect(() => {
+    if (aiGradeSuggestionJobsDataIsStale) {
+      clearManagedActivities([AI_GRADING_ACTIVITY_PREFIX]);
+      return;
+    }
+
     const activeIds = new Set<string>();
 
     activeAiGradeSuggestionJobs.forEach((job) => {
@@ -82,31 +110,23 @@ export function BackgroundActivitySyncBridge() {
         finishActivity(activity.id);
       }
     });
-  }, [activeAiGradeSuggestionJobs, finishActivity, upsertActivity]);
+  }, [
+    activeAiGradeSuggestionJobs,
+    aiGradeSuggestionJobsDataIsStale,
+    clearManagedActivities,
+    finishActivity,
+    upsertActivity,
+  ]);
 
   useEffect(() => {
     if (user?.id) return;
 
-    activitiesRef.current.forEach((activity) => {
-      if (
-        activity.id.startsWith(BULK_MESSAGE_ACTIVITY_PREFIX) ||
-        activity.id.startsWith(AI_GRADING_ACTIVITY_PREFIX)
-      ) {
-        finishActivity(activity.id);
-      }
-    });
-  }, [finishActivity, user?.id]);
+    clearManagedActivities([BULK_MESSAGE_ACTIVITY_PREFIX, AI_GRADING_ACTIVITY_PREFIX]);
+  }, [clearManagedActivities, user?.id]);
 
   useEffect(() => () => {
-    activitiesRef.current.forEach((activity) => {
-      if (
-        activity.id.startsWith(BULK_MESSAGE_ACTIVITY_PREFIX) ||
-        activity.id.startsWith(AI_GRADING_ACTIVITY_PREFIX)
-      ) {
-        finishActivity(activity.id);
-      }
-    });
-  }, [finishActivity]);
+    clearManagedActivities([BULK_MESSAGE_ACTIVITY_PREFIX, AI_GRADING_ACTIVITY_PREFIX]);
+  }, [clearManagedActivities]);
 
   return null;
 }
