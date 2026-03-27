@@ -254,7 +254,7 @@ export function GradeSuggestionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            Gerar sugestao com IA
+            Corrigir
           </DialogTitle>
           <DialogDescription>
             {activity
@@ -389,7 +389,7 @@ export function GradeSuggestionDialog({
             disabled={isGenerating || isApproving || !activity || !session}
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCcw className="h-4 w-4" />}
-            Regerar sugestao
+            Corrigir novamente
           </Button>
           <Button type="button" onClick={() => void handleApprove()} disabled={!canApprove}>
             {isApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

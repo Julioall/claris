@@ -70,6 +70,21 @@ export interface StudentGradeSuggestionResponse {
   result?: StudentGradeSuggestionResult;
 }
 
+export interface ActivityStudentGradeSuggestionItem {
+  studentId: string;
+  studentActivityId: string;
+  auditId?: string;
+  result: StudentGradeSuggestionResult;
+}
+
+export interface ActivityGradeSuggestionResponse {
+  success: boolean;
+  message?: string;
+  generatedCount: number;
+  errorCount: number;
+  results: ActivityStudentGradeSuggestionItem[];
+}
+
 export interface StudentGradeApprovalResponse {
   success: boolean;
   message?: string;

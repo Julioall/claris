@@ -447,7 +447,7 @@ export default function AdminConfiguracoes() {
             <div className="space-y-1">
               <Label htmlFor="ai-grading-enabled">Habilitar analise automatica</Label>
               <p className="text-xs text-muted-foreground">
-                Quando desabilitado, a tela de notas nao gera sugestoes com IA.
+                Quando desabilitado, a aba de atividades da UC nao gera sugestoes com IA.
               </p>
             </div>
             <Switch

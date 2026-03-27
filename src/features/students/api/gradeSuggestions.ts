@@ -2,6 +2,7 @@ import type { MoodleSession } from '@/features/auth/domain/session';
 import { invokeMoodleFunctionWithTimeout } from '@/features/auth/infrastructure/moodle-api';
 
 import type {
+  ActivityGradeSuggestionResponse,
   StudentGradeApprovalResponse,
   StudentGradeSuggestionResponse,
 } from '../types';
@@ -25,6 +26,27 @@ export async function generateStudentGradeSuggestion(params: {
     },
   }) as {
     data: StudentGradeSuggestionResponse | null;
+    error: { message: string } | null;
+  };
+}
+
+export async function generateActivityGradeSuggestions(params: {
+  session: MoodleSession;
+  courseId: string;
+  moodleActivityId: string;
+}) {
+  return await invokeMoodleFunctionWithTimeout({
+    functionName: 'moodle-grade-suggestions',
+    timeoutMs: 120000,
+    body: {
+      action: 'generate_activity_suggestions',
+      courseId: params.courseId,
+      moodleActivityId: params.moodleActivityId,
+      moodleUrl: params.session.moodleUrl,
+      token: params.session.moodleToken,
+    },
+  }) as {
+    data: ActivityGradeSuggestionResponse | null;
     error: { message: string } | null;
   };
 }

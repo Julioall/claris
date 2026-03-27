@@ -227,14 +227,8 @@ describe("StudentGradesTab", () => {
     expect(screen.getByText("Pendente de Envio")).toBeInTheDocument();
   });
 
-  it("shows the AI suggestion action for assign activities pending correction when a Moodle session exists", async () => {
+  it("does not show the AI suggestion action in the student grade screen anymore", async () => {
     const user = userEvent.setup();
-
-    useMoodleSessionMock.mockReturnValue({
-      moodleToken: "token-1",
-      moodleUrl: "https://moodle.example.com",
-      moodleUserId: 12,
-    });
 
     gradesEqMock.mockResolvedValueOnce({
       data: [],
@@ -272,6 +266,7 @@ describe("StudentGradesTab", () => {
 
     await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
 
-    expect(screen.getByRole("button", { name: /gerar sugestao com ia/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /gerar sugestao com ia/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sugerir ia/i })).not.toBeInTheDocument();
   });
 });

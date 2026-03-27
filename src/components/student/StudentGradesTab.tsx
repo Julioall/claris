@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, ChevronUp, GraduationCap, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp, GraduationCap } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Spinner } from '@/components/ui/spinner';
-import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
-import { GradeSuggestionDialog } from '@/features/students/components/GradeSuggestionDialog';
 import { fetchStudentActivities, fetchStudentGrades } from '@/features/students/api';
 import {
   getStudentActivityWorkflowStatus,
@@ -66,12 +64,10 @@ interface StudentGradesTabProps {
 }
 
 export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
-  const moodleSession = useMoodleSession();
   const [grades, setGrades] = useState<CourseGrade[]>([]);
   const [activities, setActivities] = useState<StudentActivityGrade[]>([]);
   const [openCourses, setOpenCourses] = useState<Record<string, boolean>>({});
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedActivity, setSelectedActivity] = useState<StudentActivityGrade | null>(null);
 
   const fetchGrades = useCallback(async () => {
     setIsLoading(true);
@@ -212,17 +208,6 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
     return '';
   };
 
-  const canGenerateAiSuggestion = (activity: StudentActivityGrade, workflowStatus: StudentActivityWorkflowStatus) => {
-    const normalizedType = (activity.activity_type || '').trim().toLowerCase();
-
-    return (
-      Boolean(moodleSession) &&
-      Boolean(activity.moodle_activity_id) &&
-      workflowStatus === 'pending_correction' &&
-      (normalizedType === 'assign' || normalizedType === 'assignment')
-    );
-  };
-
   const courseSectionsMap = new Map<string, Omit<CourseSection, 'visibleActivities'>>();
 
   grades.forEach((grade) => {
@@ -274,19 +259,6 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
 
   return (
     <div className="space-y-3">
-      <GradeSuggestionDialog
-        open={Boolean(selectedActivity)}
-        onOpenChange={(isOpen) => {
-          if (!isOpen) {
-            setSelectedActivity(null);
-          }
-        }}
-        session={moodleSession}
-        studentId={studentId}
-        activity={selectedActivity}
-        onApproved={fetchGrades}
-      />
-
       <div className="flex items-center justify-between">
         <h3 className="font-medium">Notas por Curso</h3>
       </div>
@@ -390,17 +362,6 @@ export function StudentGradesTab({ studentId }: StudentGradesTabProps) {
                                   </div>
                                 </div>
                                 <div className="flex flex-wrap items-center justify-end gap-2">
-                                  {canGenerateAiSuggestion(activity, workflowStatus) && (
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setSelectedActivity(activity)}
-                                    >
-                                      <Sparkles className="h-4 w-4" />
-                                      Gerar sugestao com IA
-                                    </Button>
-                                  )}
                                   {isStudentActivityCorrected(activity) && (
                                     <span className="shrink-0 text-sm font-medium text-foreground">
                                       {formatActivityGrade(activity)}

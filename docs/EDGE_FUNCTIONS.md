@@ -123,6 +123,14 @@ Responsavel pela sugestao de nota/feedback com IA e pela aprovacao manual com en
 6. grava auditoria em `ai_grade_suggestion_history`
 7. retorna sugestao estruturada para a UI
 
+### Fluxo em lote por atividade
+
+1. `generate_activity_suggestions`
+2. resolve a atividade e lista todas as entregas sincronizadas daquela UC
+3. monta o contexto avaliativo uma unica vez
+4. reaproveita esse contexto para gerar sugestoes por aluno, variando apenas a submissao
+5. retorna um conjunto estruturado de resultados para renderizacao inline na aba de atividades
+
 ### Aprovacao
 
 1. `approve_suggestion`

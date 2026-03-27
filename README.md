@@ -27,12 +27,14 @@ cp .env.example .env
 
 ## Correcao com IA
 
-A tela de notas do aluno agora suporta sugestao assistida por IA para atividades do tipo `assign`.
+A aba de atividades da unidade curricular agora suporta sugestoes assistidas por IA para atividades do tipo `assign`.
 
-- a UI exibe a acao `Gerar sugestao com IA` em atividades pendentes de correcao;
+- a UI exibe a acao `Corrigir` na linha da atividade, ao lado do expansor de entregas;
+- a geracao usa um contexto unico da atividade e produz sugestoes para todas as entregas dos alunos daquela atividade;
 - o backend monta contexto da atividade a partir do `assign` e de materiais da mesma secao do Moodle (`file`, `page`, `label` e `folder`);
-- a submissao do aluno e normalizada com extracao textual de arquivos suportados;
-- o professor pode editar a sugestao e aprovar manualmente antes do envio ao Moodle;
+- a submissao de cada aluno e normalizada com extracao textual de arquivos suportados;
+- o professor pode editar nota e feedback em cada linha antes de aprovar manualmente o envio ao Moodle;
+- clicar novamente em `Corrigir` regenera as sugestoes dos alunos ainda pendentes de correcao;
 - toda geracao/aprovacao fica auditada em `ai_grade_suggestion_history`.
 
 Configuracao:

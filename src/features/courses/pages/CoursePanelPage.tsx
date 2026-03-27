@@ -5,8 +5,6 @@ import {
   ArrowLeft,
   Calendar,
   CheckCircle2,
-  ChevronDown,
-  ChevronUp,
   ClipboardList,
   Clock,
   Eye,
@@ -35,6 +33,7 @@ import { getCourseEffectiveEndDate } from '@/lib/course-dates';
 import { getStudentActivityWorkflowStatus } from '@/lib/student-activity-status';
 import { cn } from '@/lib/utils';
 
+import { AssignmentSuggestionPanel } from '../components/AssignmentSuggestionPanel';
 import { useCoursePanel } from '../hooks/useCoursePanel';
 
 export default function CoursePanelPage() {
@@ -76,21 +75,6 @@ export default function CoursePanelPage() {
       ...current,
       [moodleActivityId]: !current[moodleActivityId],
     }));
-  };
-
-  const getSubmissionStatus = (submission: {
-    activity_type?: string | null;
-    grade: number | null;
-    status: string | null;
-    completed_at: string | null;
-    submitted_at?: string | null;
-    graded_at?: string | null;
-  }) => {
-    const workflowStatus = getStudentActivityWorkflowStatus(submission);
-
-    if (workflowStatus === 'corrected') return 'corrigido';
-    if (workflowStatus === 'pending_correction') return 'pendente-correcao';
-    return 'pendente-envio';
   };
 
   const handleSyncStudentsTab = async () => {
@@ -452,10 +436,10 @@ export default function CoursePanelPage() {
                           })
                         : [];
                       const pendingSubmissionCount = activitySubmissionsForAssign.filter(
-                        (submission) => getSubmissionStatus(submission) === 'pendente-envio',
+                        (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_submission',
                       ).length;
                       const pendingCorrectionCount = activitySubmissionsForAssign.filter(
-                        (submission) => getSubmissionStatus(submission) === 'pendente-correcao',
+                        (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_correction',
                       ).length;
                       const isExpanded = Boolean(expandedActivities[activity.moodle_activity_id]);
 
@@ -467,7 +451,8 @@ export default function CoursePanelPage() {
                             activity.hidden && 'bg-muted/30 opacity-50',
                           )}
                         >
-                          <div className="flex items-start justify-between gap-4">
+                          <div className="space-y-3">
+                            <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0 flex-1 space-y-1">
                               <div className="flex items-center gap-2">
                                 <p
@@ -497,6 +482,8 @@ export default function CoursePanelPage() {
                               </div>
                               {isAssignment && (
                                 <div className="text-xs text-muted-foreground">
+                                  <span>Entregas: {activitySubmissionsForAssign.length}</span>
+                                  <span className="mx-2">•</span>
                                   <span>Pendente de Envio: {pendingSubmissionCount}</span>
                                   <span className="mx-2">•</span>
                                   <span>Pendente de Correção: {pendingCorrectionCount}</span>
@@ -536,72 +523,20 @@ export default function CoursePanelPage() {
                                 </div>
                               )}
 
-                              {isAssignment && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 px-2"
-                                  onClick={() => toggleActivityExpansion(activity.moodle_activity_id)}
-                                >
-                                  {isExpanded ? (
-                                    <ChevronUp className="mr-1 h-4 w-4" />
-                                  ) : (
-                                    <ChevronDown className="mr-1 h-4 w-4" />
-                                  )}
-                                  Alunos ({activitySubmissionsForAssign.length})
-                                </Button>
-                              )}
                             </div>
                           </div>
 
-                          {isAssignment && isExpanded && (
-                            <div className="mt-3 rounded-md border bg-muted/20">
-                              {activitySubmissionsForAssign.length === 0 ? (
-                                <div className="p-3 text-sm text-muted-foreground">
-                                  Nenhum aluno encontrado para esta atividade.
-                                </div>
-                              ) : (
-                                <div className="divide-y">
-                                  {activitySubmissionsForAssign.map((submission) => {
-                                    const submissionStatus = getSubmissionStatus(submission);
-                                    const student = studentsById.get(submission.student_id);
-                                    const studentName = student?.full_name || 'Aluno não identificado';
-
-                                    return (
-                                      <div
-                                        key={submission.id}
-                                        className="flex items-center justify-between gap-3 px-3 py-2.5"
-                                      >
-                                        <div className="min-w-0">
-                                          <p className="truncate text-sm font-medium">{studentName}</p>
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          {submissionStatus === 'corrigido' && submission.grade !== null && (
-                                            <span className="text-xs text-muted-foreground">
-                                              Nota: {submission.grade.toFixed(1)}
-                                              {submission.grade_max !== null ? ` / ${submission.grade_max}` : ''}
-                                            </span>
-                                          )}
-
-                                          {submissionStatus === 'corrigido' ? (
-                                            <Badge className="border-blue-500/30 bg-blue-500/15 text-blue-700 dark:text-blue-400">
-                                              Corrigido
-                                            </Badge>
-                                          ) : submissionStatus === 'pendente-correcao' ? (
-                                            <Badge className="border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400">
-                                              Pendente de Correção
-                                            </Badge>
-                                          ) : (
-                                            <Badge variant="secondary">Pendente de Envio</Badge>
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          )}
+                            {isAssignment && (
+                              <AssignmentSuggestionPanel
+                                activity={activity}
+                                submissions={activitySubmissionsForAssign}
+                                studentsById={studentsById}
+                                isExpanded={isExpanded}
+                                onToggleExpand={() => toggleActivityExpansion(activity.moodle_activity_id)}
+                                onApproved={refetch}
+                              />
+                            )}
+                          </div>
                         </div>
                       );
                     })}

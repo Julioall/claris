@@ -230,15 +230,17 @@ Registro do que o tutor fez ou vai fazer.
 
 ### 4.1 Sugestao de nota e feedback com IA
 
-Na aba de notas do perfil do aluno, atividades `assign` pendentes de correcao podem exibir a acao `Gerar sugestao com IA`.
+Na aba de atividades do painel da unidade curricular, atividades `assign` podem exibir a acao `Corrigir`.
 
 Fluxo resumido:
-- o sistema monta o contexto da atividade usando a descricao do `assign` e materiais relacionados da mesma secao do curso (`file`, `page`, `label` e `folder`);
-- a submissao do aluno pode combinar texto digitado e arquivos anexados;
+- o sistema monta um contexto unico da atividade usando a descricao do `assign` e materiais relacionados da mesma secao do curso (`file`, `page`, `label` e `folder`);
+- a geracao percorre todas as entregas dos alunos daquela atividade, reaproveitando o mesmo contexto e mudando apenas a submissao de cada aluno;
+- cada submissao pode combinar texto digitado e arquivos anexados;
 - arquivos suportados sao convertidos para texto quando possivel;
 - quando a correcao depende de analise visual ou ha pouco texto extraido, o sistema marca `revisao manual necessaria`;
 - a sugestao nunca publica nota automaticamente na primeira versao;
-- o professor pode editar nota e feedback antes de aprovar o envio ao Moodle;
+- o professor pode editar nota e feedback em cada linha antes de aprovar o envio ao Moodle;
+- clicar novamente em `Corrigir` regenera as sugestoes dos alunos ainda pendentes de correcao;
 - cada execucao fica auditada no backend.
 
 ### 5. Histórico (Linha do Tempo)

@@ -1,11 +1,27 @@
+import { getStudentActivityWorkflowStatus } from '../domain/student-activity-status.ts'
 import type { AppSupabaseClient, Tables, TablesInsert, TablesUpdate } from '../db/mod.ts'
 
 type CourseAccessRow = Pick<Tables<'courses'>, 'id' | 'moodle_course_id' | 'name'>
 type StudentInCourseRow = Pick<Tables<'students'>, 'id' | 'moodle_user_id' | 'full_name'>
 type StudentActivityRow = Pick<
   Tables<'student_activities'>,
-  'id' | 'activity_name' | 'activity_type' | 'grade_max' | 'moodle_activity_id' | 'course_id' | 'student_id'
+  | 'id'
+  | 'activity_name'
+  | 'activity_type'
+  | 'grade'
+  | 'grade_max'
+  | 'percentage'
+  | 'status'
+  | 'completed_at'
+  | 'submitted_at'
+  | 'graded_at'
+  | 'moodle_activity_id'
+  | 'course_id'
+  | 'student_id'
 >
+type StudentActivitySuggestionTargetQueryRow = StudentActivityRow & {
+  students?: StudentInCourseRow | StudentInCourseRow[] | null
+}
 type AuditRow = Tables<'ai_grade_suggestion_history'>
 
 export async function findCourseForUser(
@@ -60,6 +76,55 @@ export async function findStudentActivityForSuggestion(
 
   if (error) throw error
   return data
+}
+
+export interface StudentActivitySuggestionTarget {
+  id: string
+  activityName: string
+  activityType: string | null
+  gradeMax: number | null
+  moodleActivityId: string
+  courseId: string
+  studentId: string
+  student: StudentInCourseRow | null
+}
+
+export async function listStudentActivitiesForSuggestion(
+  supabase: AppSupabaseClient,
+  courseId: string,
+  moodleActivityId: string,
+): Promise<StudentActivitySuggestionTarget[]> {
+  const { data, error } = await supabase
+    .from('student_activities')
+    .select('id, activity_name, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at, moodle_activity_id, course_id, student_id, students(id, moodle_user_id, full_name)')
+    .eq('course_id', courseId)
+    .eq('moodle_activity_id', moodleActivityId)
+
+  if (error) throw error
+
+  return ((data || []) as StudentActivitySuggestionTargetQueryRow[])
+    .filter((row) => getStudentActivityWorkflowStatus(row) === 'pending_correction')
+    .map((row) => {
+      const rawStudent = Array.isArray(row.students)
+        ? row.students[0] ?? null
+        : row.students ?? null
+
+      return {
+        id: row.id,
+        activityName: row.activity_name,
+        activityType: row.activity_type,
+        gradeMax: row.grade_max,
+        moodleActivityId: row.moodle_activity_id,
+        courseId: row.course_id,
+        studentId: row.student_id,
+        student: rawStudent,
+      }
+    })
+    .sort((left, right) => {
+      const leftName = left.student?.full_name ?? ''
+      const rightName = right.student?.full_name ?? ''
+      return leftName.localeCompare(rightName, 'pt-BR')
+    })
 }
 
 function truncateAuditText(value: string | null | undefined, maxLength: number): string | null {
@@ -160,4 +225,3 @@ export async function markStudentActivityApproved(
 
   if (error) throw error
 }
-
