@@ -41,13 +41,6 @@ interface AssignmentSuggestionPanelProps {
   onApproved?: () => Promise<void> | void;
 }
 
-const SUGGESTION_STATUS_LABELS: Record<StudentGradeSuggestionResult['status'], string> = {
-  success: 'Sugestao pronta',
-  invalid: 'Resposta invalida',
-  manual_review_required: 'Revisao manual',
-  error: 'Erro',
-};
-
 const SUGGESTION_STATUS_CLASS_NAMES: Record<StudentGradeSuggestionResult['status'], string> = {
   success: 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
   invalid: 'border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400',
@@ -319,15 +312,18 @@ export function AssignmentSuggestionPanel({
                       <div className="min-w-0 space-y-1">
                         <p className="truncate text-sm font-medium">{studentName}</p>
 
-                        {row ? (
+                        {row && row.result.status !== 'success' ? (
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <Badge
                               variant="outline"
                               className={SUGGESTION_STATUS_CLASS_NAMES[row.result.status]}
                             >
-                              {SUGGESTION_STATUS_LABELS[row.result.status]}
+                              {row.result.status === 'invalid'
+                                ? 'Resposta invalida'
+                                : row.result.status === 'manual_review_required'
+                                  ? 'Revisao manual'
+                                  : 'Erro'}
                             </Badge>
-                            <span>{row.result.evaluationStatus.replace(/_/g, ' ')}</span>
                           </div>
                         ) : null}
                       </div>

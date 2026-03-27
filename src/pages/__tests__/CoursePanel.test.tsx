@@ -397,7 +397,7 @@ describe("CoursePanel page", () => {
     expect(screen.getAllByText(/Pendente de Cor/i).length).toBeGreaterThan(0);
     expect(screen.getByText("Pendente de Envio")).toBeInTheDocument();
   });
-  it("generates inline suggestions for all submissions of an assignment activity", async () => {
+  it("generates inline suggestions for pending corrections of an assignment activity", async () => {
     const user = userEvent.setup();
 
     useCoursePanelMock.mockReturnValue({
@@ -543,7 +543,6 @@ describe("CoursePanel page", () => {
 
     expect(screen.getByLabelText("Nota sugerida para Bruno Souza")).toHaveValue("8.5");
     expect(screen.getByLabelText("Feedback sugerido para Bruno Souza")).toHaveValue("A resposta apresenta boa cobertura dos pontos solicitados.");
-    expect(screen.getByText("Sugestao pronta")).toBeInTheDocument();
     expect(screen.queryByLabelText("Feedback sugerido para Ana Silva")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Feedback sugerido para Carla Dias")).not.toBeInTheDocument();
   });

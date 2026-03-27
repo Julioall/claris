@@ -17,7 +17,6 @@ import type {
   GradeSuggestionSource,
   StudentGradeSuggestionResult,
 } from "@/features/students/types";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,7 +30,6 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
 
 interface ActivityReference {
   id: string;
@@ -48,35 +46,6 @@ interface GradeSuggestionDialogProps {
   studentId: string;
   activity: ActivityReference | null;
   onApproved?: () => Promise<void> | void;
-}
-
-const STATUS_LABELS: Record<StudentGradeSuggestionResult["status"], string> = {
-  success: "Sugestao pronta",
-  invalid: "Resposta invalida",
-  manual_review_required: "Revisao manual necessaria",
-  error: "Erro na analise",
-};
-
-const STATUS_CLASS_NAMES: Record<StudentGradeSuggestionResult["status"], string> = {
-  success: "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
-  invalid: "border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-400",
-  manual_review_required: "border-orange-500/30 bg-orange-500/15 text-orange-700 dark:text-orange-400",
-  error: "border-destructive/30 bg-destructive/10 text-destructive",
-};
-
-function formatSuggestionStatus(result: StudentGradeSuggestionResult | null) {
-  if (!result) return "Aguardando analise";
-  return STATUS_LABELS[result.status];
-}
-
-function formatEvaluationStatus(value: string | undefined) {
-  if (!value) return "Nao informado";
-
-  const normalized = value
-    .replace(/_/g, " ")
-    .trim();
-
-  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
 function formatExtractionQuality(value: GradeSuggestionSource["extractionQuality"]) {
@@ -264,25 +233,13 @@ export function GradeSuggestionDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid gap-3 rounded-lg border bg-muted/20 p-4 sm:grid-cols-3">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Status</p>
-              <Badge className={cn("w-fit", result ? STATUS_CLASS_NAMES[result.status] : "")} variant="outline">
-                {formatSuggestionStatus(result)}
-              </Badge>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Nota sugerida</p>
-              <p className="text-sm font-medium">
-                {result?.suggestedGrade !== null && result?.suggestedGrade !== undefined
-                  ? `${result.suggestedGrade}${maxGrade !== null ? ` / ${maxGrade}` : ""}`
-                  : "Nao disponivel"}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Status da avaliacao</p>
-              <p className="text-sm font-medium">{formatEvaluationStatus(result?.evaluationStatus)}</p>
-            </div>
+          <div className="rounded-lg border bg-muted/20 p-4">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Nota sugerida</p>
+            <p className="mt-1 text-sm font-medium">
+              {result?.suggestedGrade !== null && result?.suggestedGrade !== undefined
+                ? `${result.suggestedGrade}${maxGrade !== null ? ` / ${maxGrade}` : ""}`
+                : "Nao disponivel"}
+            </p>
           </div>
 
           {(requestError || result?.warnings.length) ? (
