@@ -1,0 +1,118 @@
+name: Process Scheduled Messages
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Executar sem processar mensagens pendentes
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+      limit:
+        description: Quantidade maxima de agendamentos por rodada
+        required: false
+        default: '25'
+        type: string
+      scheduled_message_id:
+        description: ID opcional para processar um agendamento especifico
+        required: false
+        type: string
+
+concurrency:
+  group: process-scheduled-messages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  invoke-scheduler:
+    name: Invoke scheduled message processor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: supabase
+    env:
+      INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
+      INPUT_LIMIT: ${{ github.event.inputs.limit }}
+      INPUT_SCHEDULED_MESSAGE_ID: ${{ github.event.inputs.scheduled_message_id }}
+      SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+
+    steps:
+      - name: Validate scheduler secrets
+        shell: bash
+        run: |
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "::error::Configure o secret SUPABASE_URL no ambiente 'supabase'."
+            exit 1
+          fi
+
+          if [ -z "$SUPABASE_PUBLISHABLE_KEY" ]; then
+            echo "::error::Configure o secret SUPABASE_PUBLISHABLE_KEY no ambiente 'supabase'."
+            exit 1
+          fi
+
+          if [ -z "$SCHEDULED_MESSAGES_CRON_SECRET" ]; then
+            echo "::error::Configure o secret SCHEDULED_MESSAGES_CRON_SECRET no ambiente 'supabase'."
+            exit 1
+          fi
+
+      - name: Build processor payload
+        id: payload
+        shell: bash
+        run: |
+          request_body="$(node - <<'NODE'
+          const body = {}
+          const dryRun = (process.env.INPUT_DRY_RUN ?? '').trim()
+          const limitRaw = (process.env.INPUT_LIMIT ?? '').trim()
+          const scheduledMessageId = (process.env.INPUT_SCHEDULED_MESSAGE_ID ?? '').trim()
+
+          if (dryRun) {
+            body.dry_run = dryRun === 'true'
+          }
+
+          if (limitRaw) {
+            const limit = Number(limitRaw)
+            if (Number.isFinite(limit) && limit > 0) {
+              body.limit = limit
+            }
+          }
+
+          if (scheduledMessageId) {
+            body.scheduled_message_id = scheduledMessageId
+          }
+
+          process.stdout.write(JSON.stringify(body))
+          NODE
+          )"
+
+          echo "request_body=${request_body}" >> "$GITHUB_OUTPUT"
+
+      - name: Invoke process-scheduled-messages
+        shell: bash
+        env:
+          REQUEST_BODY: ${{ steps.payload.outputs.request_body }}
+        run: |
+          response_file="$(mktemp)"
+          status_code="$(
+            curl -sS -o "$response_file" -w "%{http_code}" \
+              -X POST "${SUPABASE_URL%/}/functions/v1/process-scheduled-messages" \
+              -H "Content-Type: application/json" \
+              -H "apikey: ${SUPABASE_PUBLISHABLE_KEY}" \
+              -H "x-scheduled-messages-secret: ${SCHEDULED_MESSAGES_CRON_SECRET}" \
+              --data "${REQUEST_BODY}"
+          )"
+
+          cat "$response_file"
+          echo
+
+          if [ "$status_code" -ge 400 ]; then
+            echo "::error::process-scheduled-messages retornou HTTP ${status_code}."
+            exit 1
+          fi

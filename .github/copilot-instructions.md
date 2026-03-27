@@ -149,7 +149,7 @@ If a Moodle sync fails, use the cached data in Supabase and indicate that it is 
 - `VITE_SUPABASE_URL` - Supabase project URL
 - `VITE_SUPABASE_ANON_KEY` - Supabase anonymous key
 
-See `.env` for local development values. Never commit secrets.
+For local Docker-based development, see `docker-compose.yml` and `docker-compose.dev.yml` for the versioned defaults used by the stack.
 
 ## CI/CD
 

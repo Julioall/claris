@@ -175,6 +175,39 @@ Observações:
 - `bulk_message_recipients` não deve ganhar política independente por usuário direto; a fronteira correta é o job.
 - `message_templates` segue o mesmo padrão user-owned de `task_templates` e `action_types`.
 
+## Jobs E Observabilidade
+
+Tabelas:
+
+- `background_jobs`
+- `background_job_items`
+- `background_job_events`
+- `scheduled_messages`
+- `user_moodle_reauth_credentials`
+
+Regra canÃ´nica:
+
+- `background_jobs`: leitura por owner ou application admin; insert/update pelo owner ou pelo admin operacional.
+- `background_job_items`: leitura por owner ou application admin; insert/update pelo owner do job ou pelo admin.
+- `background_job_events`: leitura por owner ou application admin; insert pelo owner do job ou pelo admin.
+- `scheduled_messages`: continua user-owned, mas application admin pode fazer `SELECT` e `UPDATE` para operaÃ§Ãµes administrativas de cancelamento e reenfileiramento.
+- `user_moodle_reauth_credentials`: leitura apenas pelo owner ou application admin; escritas ficam concentradas nas Edge Functions com `service_role`.
+
+Migrations de referÃªncia:
+
+- `20260317230000_add_scheduled_messages.sql`
+- `20260327160000_add_background_jobs_hangfire_foundation.sql`
+- `20260327170000_sync_more_legacy_automation_flows_to_background_jobs.sql`
+- `20260327183000_prepare_scheduled_message_execution.sql`
+- `20260327193000_add_moodle_reauth_credentials.sql`
+- `20260327204500_allow_admin_manage_scheduled_messages.sql`
+
+ObservaÃ§Ãµes:
+
+- `scheduled_messages` e `background_jobs` compartilham o mesmo `id` quando o job nasce do agendador, preservando rastreabilidade operacional.
+- Cancelar ou reenfileirar jobs agendados deve atuar sobre `scheduled_messages`; alterar apenas `background_jobs` quebraria a fonte de verdade do scheduler.
+- `user_moodle_reauth_credentials` guarda apenas material cifrado; rotacionar `MOODLE_REAUTH_SECRET` invalida credenciais armazenadas e exige novo opt-in dos usuÃ¡rios.
+
 ## Attendance
 
 Tabelas:

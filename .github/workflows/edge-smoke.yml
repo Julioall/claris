@@ -4,8 +4,8 @@ on:
   pull_request:
     paths:
       - .github/workflows/edge-smoke.yml
-      - .env.example
       - docker-compose.yml
+      - docker-compose.dev.yml
       - Dockerfile.supabase-runner
       - package.json
       - package-lock.json
@@ -16,8 +16,8 @@ on:
   push:
     paths:
       - .github/workflows/edge-smoke.yml
-      - .env.example
       - docker-compose.yml
+      - docker-compose.dev.yml
       - Dockerfile.supabase-runner
       - package.json
       - package-lock.json

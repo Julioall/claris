@@ -5,11 +5,91 @@ import type {
   Tables,
   TablesInsert,
 } from '../../db/mod.ts'
+import {
+  appendBackgroundJobEvent,
+  createBackgroundJobItems,
+  updateBackgroundJob,
+  updateBackgroundJobItem,
+  upsertBackgroundJob,
+} from '../background-jobs/repository.ts'
 
 export type GradeSuggestionJob = Tables<'ai_grade_suggestion_jobs'>
 export type GradeSuggestionJobItem = Tables<'ai_grade_suggestion_job_items'>
 export type GradeSuggestionJobStatus = Enums<'ai_grade_suggestion_job_status'>
 export type GradeSuggestionJobItemStatus = Enums<'ai_grade_suggestion_job_item_status'>
+
+async function syncBackgroundJob(task: () => Promise<void>) {
+  try {
+    await task()
+  } catch (error) {
+    console.error('[grade-suggestion-jobs][background-jobs] sync failed:', error)
+  }
+}
+
+async function mirrorGradeSuggestionJobCreate(
+  supabase: AppSupabaseClient,
+  input: {
+    job: GradeSuggestionJob
+    items: GradeSuggestionJobItem[]
+  },
+) {
+  await upsertBackgroundJob(supabase, {
+    id: input.job.id,
+    userId: input.job.user_id,
+    courseId: input.job.course_id,
+    jobType: 'ai_grade_suggestion',
+    source: 'ai-grading',
+    sourceTable: 'ai_grade_suggestion_jobs',
+    sourceRecordId: input.job.id,
+    title: 'Correcao por IA em lote',
+    description: input.job.activity_name,
+    status: input.job.status,
+    totalItems: input.job.total_items,
+    processedItems: input.job.processed_items,
+    successCount: input.job.success_count,
+    errorCount: input.job.error_count,
+    startedAt: input.job.started_at,
+    completedAt: input.job.completed_at,
+    errorMessage: input.job.error_message,
+    metadata: {
+      activity_name: input.job.activity_name,
+      max_grade: input.job.max_grade,
+      moodle_activity_id: input.job.moodle_activity_id,
+    },
+  })
+
+  await createBackgroundJobItems(supabase, input.items.map((item) => ({
+    id: item.id,
+    jobId: input.job.id,
+    userId: item.user_id,
+    sourceTable: 'ai_grade_suggestion_job_items',
+    sourceRecordId: item.id,
+    itemKey: item.student_activity_id,
+    label: item.student_name,
+    status: item.status,
+    progressCurrent: item.status === 'completed' || item.status === 'failed' ? 1 : 0,
+    progressTotal: 1,
+    startedAt: item.started_at,
+    completedAt: item.completed_at,
+    errorMessage: item.error_message,
+    metadata: {
+      moodle_activity_id: item.moodle_activity_id,
+      student_id: item.student_id,
+      student_activity_id: item.student_activity_id,
+      audit_id: item.audit_id,
+    },
+  })))
+
+  await appendBackgroundJobEvent(supabase, {
+    userId: input.job.user_id,
+    jobId: input.job.id,
+    eventType: 'job_created',
+    message: `Job criado para ${input.items.length} entrega(s).`,
+    metadata: {
+      moodle_activity_id: input.job.moodle_activity_id,
+    },
+  })
+}
 
 export interface GradeSuggestionJobItemDraft {
   moodleActivityId: string
@@ -89,13 +169,21 @@ export async function createGradeSuggestionJobWithItems(
       user_id: input.userId,
     }))
 
-    const { error: itemsError } = await supabase
+    const { data: itemsData, error: itemsError } = await supabase
       .from('ai_grade_suggestion_job_items')
       .insert(itemsInsert)
+      .select('*')
 
     if (itemsError) {
       throw itemsError
     }
+
+    await syncBackgroundJob(async () => {
+      await mirrorGradeSuggestionJobCreate(supabase, {
+        job,
+        items: (itemsData ?? []) as GradeSuggestionJobItem[],
+      })
+    })
 
     return job
   } catch (error) {
@@ -190,6 +278,28 @@ export async function claimGradeSuggestionJobItem(
     .maybeSingle()
 
   if (error) throw error
+
+  if (data) {
+    await syncBackgroundJob(async () => {
+      const item = await loadGradeSuggestionJobItem(supabase, itemId)
+      if (!item) return
+
+      await updateBackgroundJobItem(supabase, itemId, {
+        started_at: startedAt,
+        progress_current: 0,
+        progress_total: 1,
+        status: 'processing',
+      })
+      await appendBackgroundJobEvent(supabase, {
+        userId: item.user_id,
+        jobId: item.job_id,
+        jobItemId: item.id,
+        eventType: 'job_item_processing',
+        message: `Entrega de ${item.student_name} entrou em processamento.`,
+      })
+    })
+  }
+
   return Boolean(data)
 }
 
@@ -208,6 +318,23 @@ export async function markGradeSuggestionJobProcessing(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findGradeSuggestionJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      error_message: null,
+      started_at: startedAt,
+      status: 'processing',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_processing',
+      message: 'Job entrou em processamento.',
+    })
+  })
 }
 
 export async function markGradeSuggestionJobPending(
@@ -222,6 +349,21 @@ export async function markGradeSuggestionJobPending(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findGradeSuggestionJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      status: 'pending',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_pending',
+      message: 'Job voltou para a fila.',
+    })
+  })
 }
 
 export async function updateGradeSuggestionJobProgress(
@@ -260,6 +402,31 @@ export async function updateGradeSuggestionJobProgress(
 
   if (updateError) throw updateError
 
+  await syncBackgroundJob(async () => {
+    const job = await findGradeSuggestionJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      error_count: errorCount,
+      processed_items: processedItems,
+      success_count: successCount,
+      total_items: totalItems,
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_progress',
+      message: `Progresso atualizado: ${processedItems}/${totalItems} entrega(s).`,
+      metadata: {
+        error_count: errorCount,
+        pending_count: pendingCount,
+        processed_items: processedItems,
+        success_count: successCount,
+        total_items: totalItems,
+      },
+    })
+  })
+
   return {
     errorCount,
     pendingCount,
@@ -294,6 +461,36 @@ export async function completeGradeSuggestionJob(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findGradeSuggestionJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      completed_at: input.completedAt,
+      error_count: input.errorCount,
+      processed_items: input.processedItems,
+      status: input.status as 'completed' | 'failed' | 'cancelled',
+      success_count: input.successCount,
+      total_items: input.totalItems,
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_completed',
+      level: input.status === 'failed' ? 'error' : 'info',
+      message: input.status === 'failed'
+        ? `Job finalizado com falha. ${input.errorCount} erro(s).`
+        : `Job concluido com ${input.successCount} sucesso(s) e ${input.errorCount} erro(s).`,
+      metadata: {
+        error_count: input.errorCount,
+        processed_items: input.processedItems,
+        status: input.status,
+        success_count: input.successCount,
+        total_items: input.totalItems,
+      },
+    })
+  })
 }
 
 export async function failGradeSuggestionJob(
@@ -312,6 +509,24 @@ export async function failGradeSuggestionJob(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findGradeSuggestionJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      completed_at: completedAt,
+      error_message: errorMessage,
+      status: 'failed',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_failed',
+      level: 'error',
+      message: errorMessage,
+    })
+  })
 }
 
 export async function completeGradeSuggestionJobItem(
@@ -335,6 +550,33 @@ export async function completeGradeSuggestionJobItem(
     .eq('id', input.itemId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const item = await loadGradeSuggestionJobItem(supabase, input.itemId)
+    if (!item) return
+
+    await updateBackgroundJobItem(supabase, input.itemId, {
+      completed_at: input.completedAt,
+      error_message: null,
+      metadata: {
+        audit_id: input.auditId,
+        result_payload: input.resultPayload,
+      },
+      progress_current: 1,
+      progress_total: 1,
+      status: 'completed',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: item.user_id,
+      jobId: item.job_id,
+      jobItemId: item.id,
+      eventType: 'job_item_completed',
+      message: `Sugestao concluida para ${item.student_name}.`,
+      metadata: {
+        audit_id: input.auditId,
+      },
+    })
+  })
 }
 
 export async function failGradeSuggestionJobItem(
@@ -359,4 +601,46 @@ export async function failGradeSuggestionJobItem(
     .eq('id', input.itemId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const item = await loadGradeSuggestionJobItem(supabase, input.itemId)
+    if (!item) return
+
+    await updateBackgroundJobItem(supabase, input.itemId, {
+      completed_at: input.completedAt,
+      error_message: input.errorMessage,
+      metadata: {
+        audit_id: input.auditId ?? null,
+        result_payload: input.resultPayload,
+      },
+      progress_current: 1,
+      progress_total: 1,
+      status: 'failed',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: item.user_id,
+      jobId: item.job_id,
+      jobItemId: item.id,
+      eventType: 'job_item_failed',
+      level: 'error',
+      message: `Falha ao processar ${item.student_name}: ${input.errorMessage}`,
+      metadata: {
+        audit_id: input.auditId ?? null,
+      },
+    })
+  })
+}
+
+async function findGradeSuggestionJobById(
+  supabase: AppSupabaseClient,
+  jobId: string,
+): Promise<GradeSuggestionJob | null> {
+  const { data, error } = await supabase
+    .from('ai_grade_suggestion_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
 }

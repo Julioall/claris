@@ -16,7 +16,15 @@ export interface UseAuthSessionResult {
   isLoading: boolean;
   lastSync: string | null;
   setLastSync: (value: string | null) => void;
-  login: (username: string, password: string, moodleUrl: string, service?: string) => Promise<boolean>;
+  login: (
+    username: string,
+    password: string,
+    moodleUrl: string,
+    service?: string,
+    options?: {
+      backgroundReauthEnabled?: boolean;
+    },
+  ) => Promise<boolean>;
   logout: () => Promise<void>;
   clearInvalidSession: () => Promise<void>;
   resolveSessionContext: () => Promise<SessionContext | null>;
@@ -117,11 +125,20 @@ export function useAuthSession(): UseAuthSessionResult {
     password: string,
     moodleUrl: string,
     service = 'moodle_mobile_app',
+    options?: {
+      backgroundReauthEnabled?: boolean;
+    },
   ): Promise<boolean> => {
     setIsLoading(true);
 
     try {
-      const result = await authenticateMoodleUser({ username, password, moodleUrl, service });
+      const result = await authenticateMoodleUser({
+        username,
+        password,
+        moodleUrl,
+        service,
+        backgroundReauthEnabled: options?.backgroundReauthEnabled === true,
+      });
       if (!result.success) {
         toast({
           title: 'Erro de autenticacao',
@@ -148,7 +165,9 @@ export function useAuthSession(): UseAuthSessionResult {
       const offlineNote = result.offlineMode ? ' (modo offline)' : '';
       toast({
         title: 'Login realizado com sucesso',
-        description: `Bem-vindo, ${result.user.full_name}!${offlineNote}`,
+        description: result.backgroundReauthError
+          ? `Bem-vindo, ${result.user.full_name}!${offlineNote} A reautorizacao para jobs nao foi salva.`
+          : `Bem-vindo, ${result.user.full_name}!${offlineNote}`,
       });
 
       void trackEvent(result.user.id, 'login');

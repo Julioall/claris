@@ -28,6 +28,8 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets['SUPABASE_ACCESS_TOKEN'] }}
       SUPABASE_DB_PASSWORD: ${{ secrets['SUPABASE_PASSWORD'] }}
       VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
+      MOODLE_REAUTH_SECRET: ${{ secrets.MOODLE_REAUTH_SECRET }}
+      SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
 
     steps:
       - name: Checkout repository
@@ -53,6 +55,16 @@ jobs:
             exit 1
           fi
 
+          if [ -z "$MOODLE_REAUTH_SECRET" ]; then
+            echo "::error::Configure o secret MOODLE_REAUTH_SECRET no ambiente 'supabase'."
+            exit 1
+          fi
+
+          if [ -z "$SCHEDULED_MESSAGES_CRON_SECRET" ]; then
+            echo "::error::Configure o secret SCHEDULED_MESSAGES_CRON_SECRET no ambiente 'supabase'."
+            exit 1
+          fi
+
       - name: Resolve Supabase project ref
         shell: bash
         run: |
@@ -70,6 +82,13 @@ jobs:
 
       - name: Push remote database migrations
         run: npm exec --yes --package supabase@latest -- supabase --yes db push --linked --include-all
+
+      - name: Sync remote Edge Function secrets
+        shell: bash
+        run: |
+          npm exec --yes --package supabase@latest -- supabase --yes secrets set \
+            MOODLE_REAUTH_SECRET="$MOODLE_REAUTH_SECRET" \
+            SCHEDULED_MESSAGES_CRON_SECRET="$SCHEDULED_MESSAGES_CRON_SECRET"
 
       - name: Deploy remote Edge Functions
         run: node scripts/deploy-supabase-functions.mjs --skip-link

@@ -64,6 +64,7 @@ const secondaryNavItems = [
 
 const adminNavItems = [
   { title: 'Painel', url: '/admin' },
+  { title: 'Jobs', url: '/admin/jobs' },
   { title: 'Usuários', url: '/admin/usuarios' },
   { title: 'Métricas de Uso', url: '/admin/metricas' },
   { title: 'Logs de Erro', url: '/admin/logs-erros' },

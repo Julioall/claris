@@ -4,10 +4,85 @@ import type {
   Tables,
   TablesInsert,
 } from '../../db/mod.ts'
+import {
+  appendBackgroundJobEvent,
+  createBackgroundJobItems,
+  updateBackgroundJob,
+  updateBackgroundJobItem,
+  upsertBackgroundJob,
+} from '../background-jobs/repository.ts'
 
 export type BulkMessageJob = Tables<'bulk_message_jobs'>
 export type BulkMessageRecipient = Tables<'bulk_message_recipients'>
 export type BulkMessageJobOrigin = 'manual' | 'ia'
+
+async function syncBackgroundJob(task: () => Promise<void>) {
+  try {
+    await task()
+  } catch (error) {
+    console.error('[bulk-messaging][background-jobs] sync failed:', error)
+  }
+}
+
+async function mirrorBulkMessageJobCreate(
+  supabase: AppSupabaseClient,
+  input: {
+    job: BulkMessageJob
+    recipients: BulkMessageRecipient[]
+    userId: string
+  },
+) {
+  await upsertBackgroundJob(supabase, {
+    id: input.job.id,
+    userId: input.userId,
+    jobType: 'bulk_message',
+    source: 'messages',
+    sourceTable: 'bulk_message_jobs',
+    sourceRecordId: input.job.id,
+    title: 'Envio em massa',
+    description: input.job.message_content,
+    status: input.job.status,
+    totalItems: input.job.total_recipients,
+    processedItems: input.job.sent_count + input.job.failed_count,
+    successCount: input.job.sent_count,
+    errorCount: input.job.failed_count,
+    startedAt: input.job.started_at,
+    completedAt: input.job.completed_at,
+    errorMessage: input.job.error_message,
+    metadata: {
+      origin: input.job.origin,
+      template_id: input.job.template_id,
+    },
+  })
+
+  await createBackgroundJobItems(supabase, input.recipients.map((recipient) => ({
+    id: recipient.id,
+    jobId: input.job.id,
+    userId: input.userId,
+    sourceTable: 'bulk_message_recipients',
+    sourceRecordId: recipient.id,
+    itemKey: recipient.student_id,
+    label: recipient.student_name,
+    status: recipient.status === 'sent' ? 'completed' : recipient.status,
+    progressCurrent: recipient.status === 'pending' ? 0 : 1,
+    progressTotal: 1,
+    completedAt: recipient.sent_at,
+    errorMessage: recipient.error_message,
+    metadata: {
+      moodle_user_id: recipient.moodle_user_id,
+    },
+  })))
+
+  await appendBackgroundJobEvent(supabase, {
+    userId: input.userId,
+    jobId: input.job.id,
+    eventType: 'job_created',
+    message: `Job criado com ${input.recipients.length} destinatário(s).`,
+    metadata: {
+      origin: input.job.origin,
+    },
+  })
+}
 
 export interface BulkMessageRecipientDraft {
   moodleUserId: string
@@ -98,13 +173,22 @@ export async function createJobWithRecipients(
       student_name: recipient.studentName,
     }))
 
-    const { error: recipientsError } = await supabase
+    const { data: recipientsData, error: recipientsError } = await supabase
       .from('bulk_message_recipients')
       .insert(recipientsInsert)
+      .select('*')
 
     if (recipientsError) {
       throw recipientsError
     }
+
+    await syncBackgroundJob(async () => {
+      await mirrorBulkMessageJobCreate(supabase, {
+        job,
+        recipients: (recipientsData ?? []) as BulkMessageRecipient[],
+        userId: input.userId,
+      })
+    })
 
     return job
   } catch (error) {
@@ -136,6 +220,20 @@ export async function listPendingRecipients(
   return data ?? []
 }
 
+export async function listRecipientsForJob(
+  supabase: AppSupabaseClient,
+  jobId: string,
+): Promise<BulkMessageRecipient[]> {
+  const { data, error } = await supabase
+    .from('bulk_message_recipients')
+    .select('*')
+    .eq('job_id', jobId)
+    .order('created_at')
+
+  if (error) throw error
+  return data ?? []
+}
+
 export async function markJobProcessing(
   supabase: AppSupabaseClient,
   jobId: string,
@@ -147,6 +245,25 @@ export async function markJobProcessing(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      started_at: timestamp,
+      status: 'processing',
+      processed_items: job.sent_count + job.failed_count,
+      success_count: job.sent_count,
+      error_count: job.failed_count,
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_processing',
+      message: 'Job entrou em processamento.',
+    })
+  })
 }
 
 export async function markJobProgress(
@@ -161,6 +278,29 @@ export async function markJobProgress(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      processed_items: sentCount + failedCount,
+      success_count: sentCount,
+      error_count: failedCount,
+      status: 'processing',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_progress',
+      message: `Progresso atualizado: ${sentCount} enviado(s) e ${failedCount} falha(s).`,
+      metadata: {
+        processed_items: sentCount + failedCount,
+        success_count: sentCount,
+        error_count: failedCount,
+      },
+    })
+  })
 }
 
 export async function finalizeJob(
@@ -182,6 +322,33 @@ export async function finalizeJob(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      completed_at: timestamp,
+      error_count: failedCount,
+      processed_items: sentCount + failedCount,
+      status: status as 'completed' | 'failed' | 'cancelled',
+      success_count: sentCount,
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_completed',
+      level: status === 'failed' ? 'error' : 'info',
+      message: status === 'failed'
+        ? `Job finalizado com falha total. ${failedCount} erro(s).`
+        : `Job concluído com ${sentCount} sucesso(s) e ${failedCount} erro(s).`,
+      metadata: {
+        status,
+        success_count: sentCount,
+        error_count: failedCount,
+      },
+    })
+  })
 }
 
 export async function failJob(
@@ -200,6 +367,24 @@ export async function failJob(
     .eq('id', jobId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      completed_at: timestamp,
+      error_message: errorMessage,
+      status: 'failed',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_failed',
+      level: 'error',
+      message: errorMessage,
+    })
+  })
 }
 
 export async function markRecipientSent(
@@ -213,6 +398,16 @@ export async function markRecipientSent(
     .eq('id', recipientId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    await updateBackgroundJobItem(supabase, recipientId, {
+      completed_at: timestamp,
+      error_message: null,
+      progress_current: 1,
+      progress_total: 1,
+      status: 'completed',
+    })
+  })
 }
 
 export async function markRecipientFailed(
@@ -226,4 +421,28 @@ export async function markRecipientFailed(
     .eq('id', recipientId)
 
   if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    await updateBackgroundJobItem(supabase, recipientId, {
+      completed_at: new Date().toISOString(),
+      error_message: errorMessage,
+      progress_current: 1,
+      progress_total: 1,
+      status: 'failed',
+    })
+  })
+}
+
+async function findJobById(
+  supabase: AppSupabaseClient,
+  jobId: string,
+): Promise<BulkMessageJob | null> {
+  const { data, error } = await supabase
+    .from('bulk_message_jobs')
+    .select('*')
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
 }

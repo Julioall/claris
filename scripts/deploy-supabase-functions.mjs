@@ -15,6 +15,7 @@ const DEFAULT_FUNCTIONS = [
   'generate-automated-tasks',
   'generate-recurring-tasks',
   'generate-proactive-suggestions',
+  'process-scheduled-messages',
   'claris-llm-test',
   'claris-chat',
   'whatsapp-instance-manager',

@@ -1,4 +1,4 @@
-import type { Enums } from '@/integrations/supabase/types';
+import type { Enums, Json } from '@/integrations/supabase/types';
 
 import type { BulkMessageJobPreview } from '@/features/messages/types';
 
@@ -36,6 +36,11 @@ export interface ScheduledMessage {
   created_at: string;
   channel: 'moodle' | 'whatsapp';
   whatsapp_instance_id?: string;
+  execution_context: ScheduledMessageExecutionContext;
+  result_context: Json | null;
+  executed_bulk_job_id: string | null;
+  execution_attempts: number;
+  last_execution_at: string | null;
 }
 
 export interface ScheduledMessageFormValues {
@@ -46,6 +51,7 @@ export interface ScheduledMessageFormValues {
   notes?: string;
   channel: 'moodle' | 'whatsapp';
   whatsapp_instance_id?: string;
+  execution_context?: ScheduledMessageExecutionContext;
 }
 
 export interface AccessibleWhatsappInstance {
@@ -56,4 +62,24 @@ export interface AccessibleWhatsappInstance {
   is_active: boolean;
   is_blocked: boolean;
   owner_user_id: string | null;
+}
+
+export interface ScheduledMessageRecipientSnapshot {
+  moodle_user_id: string;
+  personalized_message?: string | null;
+  student_id: string;
+  student_name: string;
+}
+
+export interface ScheduledMessageExecutionContext {
+  schema_version?: number;
+  mode?: 'legacy_placeholder' | 'bulk_message_snapshot' | string;
+  channel?: 'moodle' | 'whatsapp';
+  created_via?: string;
+  automatic_execution_supported?: boolean;
+  blocking_reason?: string;
+  moodle_url?: string;
+  whatsapp_instance_id?: string | null;
+  recipient_snapshot?: ScheduledMessageRecipientSnapshot[];
+  [key: string]: Json | undefined;
 }

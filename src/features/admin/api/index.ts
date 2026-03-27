@@ -5,6 +5,7 @@ export * from './featureFlags';
 export * from './support';
 export * from './metrics';
 export * from './logs';
+export * from './backgroundJobs';
 export * from './users';
 export * from './services';
 export * from './conversations';

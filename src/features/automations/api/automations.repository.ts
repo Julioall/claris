@@ -6,6 +6,7 @@ import type {
   BulkJobDetail,
   BulkJobListItem,
   BulkJobRecipient,
+  ScheduledMessageExecutionContext,
   ScheduledMessage,
   ScheduledMessageFormValues,
 } from '../types';
@@ -18,8 +19,17 @@ function readFilterContext(filterContext: Json | null) {
   return filterContext as Record<string, Json | undefined>;
 }
 
+function readExecutionContext(executionContext: Json | null): ScheduledMessageExecutionContext {
+  if (!executionContext || typeof executionContext !== 'object' || Array.isArray(executionContext)) {
+    return {};
+  }
+
+  return executionContext as ScheduledMessageExecutionContext;
+}
+
 function mapScheduledMessage(row: Tables<'scheduled_messages'>): ScheduledMessage {
   const filterContext = readFilterContext(row.filter_context);
+  const executionContext = readExecutionContext(row.execution_context);
   const channel = filterContext.channel === 'whatsapp' ? 'whatsapp' : 'moodle';
   const whatsappInstanceId =
     typeof filterContext.whatsapp_instance_id === 'string'
@@ -40,12 +50,38 @@ function mapScheduledMessage(row: Tables<'scheduled_messages'>): ScheduledMessag
     created_at: row.created_at,
     channel,
     whatsapp_instance_id: whatsappInstanceId,
+    execution_context: executionContext,
+    result_context: row.result_context,
+    executed_bulk_job_id: row.executed_bulk_job_id,
+    execution_attempts: row.execution_attempts,
+    last_execution_at: row.last_execution_at,
   };
 }
 
 function buildScheduledMessageFilterContext(values: ScheduledMessageFormValues): Json {
   return {
     channel: values.channel,
+    whatsapp_instance_id: values.whatsapp_instance_id ?? null,
+  };
+}
+
+function buildScheduledMessageExecutionContext(values: ScheduledMessageFormValues): Json {
+  if (values.execution_context) {
+    return values.execution_context as Json;
+  }
+
+  const blockingReason =
+    values.channel === 'whatsapp'
+      ? 'destination_snapshot_missing'
+      : 'recipient_snapshot_missing';
+
+  return {
+    schema_version: 1,
+    mode: 'legacy_placeholder',
+    channel: values.channel,
+    created_via: 'scheduled_messages_tab',
+    automatic_execution_supported: false,
+    blocking_reason: blockingReason,
     whatsapp_instance_id: values.whatsapp_instance_id ?? null,
   };
 }
@@ -130,6 +166,7 @@ export async function createScheduledMessage(userId: string, values: ScheduledMe
     notes: values.notes?.trim() || null,
     origin: 'manual',
     filter_context: buildScheduledMessageFilterContext(values),
+    execution_context: buildScheduledMessageExecutionContext(values),
   };
 
   const { error } = await supabase.from('scheduled_messages').insert(payload);
@@ -145,6 +182,7 @@ export async function updateScheduledMessage(id: string, values: ScheduledMessag
     recipient_count: values.recipient_count ?? null,
     notes: values.notes?.trim() || null,
     filter_context: buildScheduledMessageFilterContext(values),
+    execution_context: buildScheduledMessageExecutionContext(values),
   };
 
   const { error } = await supabase

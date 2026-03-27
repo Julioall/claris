@@ -174,7 +174,7 @@ export function ScheduledMessagesTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Programe mensagens para envio automático em datas e horários específicos.
+          Programe mensagens em datas específicas. Para agendamentos já com snapshot de destinatários, use o botão "Agendar" na tela de envio em massa.
         </p>
         <Button size="sm" onClick={openCreate} className="gap-1.5">
           <Plus className="h-4 w-4" />
@@ -384,8 +384,8 @@ export function ScheduledMessagesTab() {
             <div className="rounded-md bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 p-3 flex gap-2">
               <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                Os agendamentos precisam de aprovação antes do envio automático.
-                Você poderá revisar e disparar manualmente quando necessário.
+                Os agendamentos criados nesta aba ainda não carregam um snapshot executável de destinatários.
+                Para um job pronto para o novo executor, crie o agendamento a partir da tela de envio em massa.
               </p>
             </div>
             <DialogFooter>

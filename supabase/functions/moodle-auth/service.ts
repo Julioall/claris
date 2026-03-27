@@ -8,14 +8,66 @@ import {
   touchUserLastLogin,
   updateUserProfile,
 } from '../_shared/domain/users/repository.ts'
+import {
+  disableMoodleReauthCredential,
+  upsertMoodleReauthCredential,
+} from '../_shared/domain/moodle-reauth/repository.ts'
+import { encryptMoodleReauthPayload } from '../_shared/security/moodle-reauth-crypto.ts'
 import type { MoodleTokenResponse } from '../_shared/moodle/mod.ts'
 
 interface LoginParams {
+  backgroundReauthEnabled: boolean
   moodleUrl: string
   username: string
   password: string
   service: string
   onMoodleUnavailable: (tokenResponse: MoodleTokenResponse) => Promise<Response>
+}
+
+interface BackgroundReauthSyncResult {
+  error?: string
+  stored: boolean
+}
+
+async function syncBackgroundReauthCredential(params: {
+  supabase: ReturnType<typeof createServiceClient>
+  userId: string
+  moodleUrl: string
+  username: string
+  password: string
+  service: string
+  enabled: boolean
+}): Promise<BackgroundReauthSyncResult> {
+  if (!params.enabled) {
+    try {
+      await disableMoodleReauthCredential(params.supabase, params.userId)
+    } catch {
+      // Ignore missing row when the user never opted in before.
+    }
+
+    return { stored: false }
+  }
+
+  try {
+    const credentialCiphertext = await encryptMoodleReauthPayload({ password: params.password })
+    await upsertMoodleReauthCredential(params.supabase, {
+      userId: params.userId,
+      moodleService: params.service,
+      moodleUrl: params.moodleUrl,
+      moodleUsername: params.username,
+      credentialCiphertext,
+      reauthEnabled: true,
+      lastError: null,
+    })
+
+    return { stored: true }
+  } catch (error) {
+    console.error('Failed to persist Moodle reauthorization credential:', error)
+    return {
+      error: error instanceof Error ? error.message : 'Erro ao salvar credencial de reautorizacao',
+      stored: false,
+    }
+  }
 }
 
 async function findAuthUserByEmail(supabase: ReturnType<typeof createServiceClient>, email: string) {
@@ -38,7 +90,7 @@ async function findAuthUserByEmail(supabase: ReturnType<typeof createServiceClie
 }
 
 export async function login(params: LoginParams): Promise<Response> {
-  const { moodleUrl, username, password, service, onMoodleUnavailable } = params
+  const { backgroundReauthEnabled, moodleUrl, username, password, service, onMoodleUnavailable } = params
   const supabase = createServiceClient()
 
   const tokenResponse = await getMoodleToken(moodleUrl, username, password, service)
@@ -223,8 +275,20 @@ export async function login(params: LoginParams): Promise<Response> {
       session = signInResult.data.session
     }
 
+    const backgroundReauth = await syncBackgroundReauthCredential({
+      supabase,
+      userId: user.id,
+      moodleUrl,
+      username,
+      password,
+      service,
+      enabled: backgroundReauthEnabled,
+    })
+
     return jsonResponse({
       success: true,
+      backgroundReauthError: backgroundReauth.error,
+      backgroundReauthStored: backgroundReauth.stored,
       user,
       moodleToken: tokenResponse.token,
       moodleUserId: siteInfo.userid,
@@ -245,7 +309,10 @@ export async function login(params: LoginParams): Promise<Response> {
 export async function fallbackLogin(
   username: string,
   password: string,
-  tokenResponse: MoodleTokenResponse
+  tokenResponse: MoodleTokenResponse,
+  moodleUrl: string,
+  service: string,
+  backgroundReauthEnabled = false,
 ): Promise<Response> {
   console.log('Moodle unavailable, attempting fallback login...')
 
@@ -266,8 +333,20 @@ export async function fallbackLogin(
 
       console.log('Fallback login successful for user:', fallbackUser.full_name)
 
+      const backgroundReauth = await syncBackgroundReauthCredential({
+        supabase,
+        userId: fallbackUser.id,
+        moodleUrl,
+        username,
+        password,
+        service,
+        enabled: backgroundReauthEnabled,
+      })
+
       return jsonResponse({
         success: true,
+        backgroundReauthError: backgroundReauth.error,
+        backgroundReauthStored: backgroundReauth.stored,
         user: fallbackUser,
         moodleToken: null,
         moodleUserId: parseInt(fallbackUser.moodle_user_id, 10),

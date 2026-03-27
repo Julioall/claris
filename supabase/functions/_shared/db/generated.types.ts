@@ -1019,6 +1019,220 @@ export type Database = {
           },
         ]
       }
+      background_job_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          job_id: string
+          job_item_id: string | null
+          level: string
+          message: string
+          metadata: Json
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          job_id: string
+          job_item_id?: string | null
+          level?: string
+          message: string
+          metadata?: Json
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          job_id?: string
+          job_item_id?: string | null
+          level?: string
+          message?: string
+          metadata?: Json
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_job_events_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "background_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_job_events_job_item_id_fkey"
+            columns: ["job_item_id"]
+            isOneToOne: false
+            referencedRelation: "background_job_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_job_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      background_job_items: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          item_key: string | null
+          job_id: string
+          label: string
+          metadata: Json
+          progress_current: number
+          progress_total: number
+          source_record_id: string | null
+          source_table: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["background_job_item_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          item_key?: string | null
+          job_id: string
+          label: string
+          metadata?: Json
+          progress_current?: number
+          progress_total?: number
+          source_record_id?: string | null
+          source_table?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["background_job_item_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          item_key?: string | null
+          job_id?: string
+          label?: string
+          metadata?: Json
+          progress_current?: number
+          progress_total?: number
+          source_record_id?: string | null
+          source_table?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["background_job_item_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_job_items_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "background_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_job_items_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      background_jobs: {
+        Row: {
+          completed_at: string | null
+          course_id: string | null
+          created_at: string
+          description: string | null
+          error_count: number
+          error_message: string | null
+          id: string
+          job_type: string
+          metadata: Json
+          processed_items: number
+          source: string
+          source_record_id: string | null
+          source_table: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["background_job_status"]
+          success_count: number
+          title: string
+          total_items: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          error_count?: number
+          error_message?: string | null
+          id?: string
+          job_type: string
+          metadata?: Json
+          processed_items?: number
+          source: string
+          source_record_id?: string | null
+          source_table?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["background_job_status"]
+          success_count?: number
+          title: string
+          total_items?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          error_count?: number
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          metadata?: Json
+          processed_items?: number
+          source?: string
+          source_record_id?: string | null
+          source_table?: string | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["background_job_status"]
+          success_count?: number
+          title?: string
+          total_items?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "background_jobs_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "background_jobs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bulk_message_jobs: {
         Row: {
           completed_at: string | null
@@ -1810,13 +2024,18 @@ export type Database = {
           completed_at: string | null
           created_at: string
           error_message: string | null
+          executed_bulk_job_id: string | null
+          execution_attempts: number
+          execution_context: Json
           failed_count: number
           filter_context: Json | null
           id: string
+          last_execution_at: string | null
           message_content: string
           notes: string | null
           origin: string
           recipient_count: number | null
+          result_context: Json
           scheduled_at: string
           sent_count: number
           started_at: string | null
@@ -1830,13 +2049,18 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
+          executed_bulk_job_id?: string | null
+          execution_attempts?: number
+          execution_context?: Json
           failed_count?: number
           filter_context?: Json | null
           id?: string
+          last_execution_at?: string | null
           message_content: string
           notes?: string | null
           origin?: string
           recipient_count?: number | null
+          result_context?: Json
           scheduled_at: string
           sent_count?: number
           started_at?: string | null
@@ -1850,13 +2074,18 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           error_message?: string | null
+          executed_bulk_job_id?: string | null
+          execution_attempts?: number
+          execution_context?: Json
           failed_count?: number
           filter_context?: Json | null
           id?: string
+          last_execution_at?: string | null
           message_content?: string
           notes?: string | null
           origin?: string
           recipient_count?: number | null
+          result_context?: Json
           scheduled_at?: string
           sent_count?: number
           started_at?: string | null
@@ -1867,6 +2096,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "scheduled_messages_executed_bulk_job_id_fkey"
+            columns: ["executed_bulk_job_id"]
+            isOneToOne: false
+            referencedRelation: "bulk_message_jobs"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "scheduled_messages_template_id_fkey"
             columns: ["template_id"]
@@ -2610,6 +2846,56 @@ export type Database = {
           },
         ]
       }
+      user_moodle_reauth_credentials: {
+        Row: {
+          created_at: string
+          credential_ciphertext: string | null
+          last_error: string | null
+          last_reauth_at: string | null
+          last_token_issued_at: string | null
+          moodle_service: string
+          moodle_url: string
+          moodle_username: string
+          reauth_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          credential_ciphertext?: string | null
+          last_error?: string | null
+          last_reauth_at?: string | null
+          last_token_issued_at?: string | null
+          moodle_service?: string
+          moodle_url: string
+          moodle_username: string
+          reauth_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          credential_ciphertext?: string | null
+          last_error?: string | null
+          last_reauth_at?: string | null
+          last_token_issued_at?: string | null
+          moodle_service?: string
+          moodle_url?: string
+          moodle_username?: string
+          reauth_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_moodle_reauth_credentials_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_sync_preferences: {
         Row: {
           claris_llm_settings: Json
@@ -2752,6 +3038,18 @@ export type Database = {
         | "processing"
         | "completed"
         | "failed"
+      background_job_item_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed"
+        | "cancelled"
+      background_job_status:
+        | "pending"
+        | "processing"
+        | "completed"
+        | "failed"
+        | "cancelled"
       bulk_message_status:
         | "pending"
         | "processing"
@@ -2914,6 +3212,20 @@ export const Constants = {
         "processing",
         "completed",
         "failed",
+      ],
+      background_job_item_status: [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "cancelled",
+      ],
+      background_job_status: [
+        "pending",
+        "processing",
+        "completed",
+        "failed",
+        "cancelled",
       ],
       bulk_message_status: [
         "pending",

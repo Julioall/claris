@@ -1,6 +1,8 @@
 import { execFileSync } from 'node:child_process'
 
 const RUNNER_CONTAINER = process.env.SUPABASE_RUNNER_CONTAINER || 'claris-supabase'
+const SCHEDULED_MESSAGES_SECRET =
+  process.env.SCHEDULED_MESSAGES_CRON_SECRET || 'claris-scheduled-messages-local-secret'
 
 const seed = {
   courseMoodleId: 'smoke-course-001',
@@ -243,6 +245,21 @@ async function deleteRows(status, table, filters) {
   })
 }
 
+async function selectRows(status, table, filters, headers = adminHeaders(status)) {
+  const query = new URLSearchParams({ select: '*' })
+
+  for (const [column, value] of Object.entries(filters)) {
+    query.set(column, `eq.${value}`)
+  }
+
+  const { data } = await requestJson(`${status.REST_URL}/${table}?${query.toString()}`, {
+    acceptStatuses: [200],
+    headers,
+  })
+
+  return Array.isArray(data) ? data : []
+}
+
 async function seedGenerateAutomatedTasksScenario(status, authUserId) {
   await upsertRows(status, 'users', 'id', {
     email: seed.email,
@@ -300,6 +317,22 @@ async function callEdgeFunction(status, functionName, body, accessToken) {
     acceptStatuses: [200, 400, 401],
     body,
     headers: publishableHeaders(status, accessToken),
+    method: 'POST',
+  })
+
+  return { data, status: response.status }
+}
+
+async function callScheduledMessageProcessor(status, body, secret) {
+  const headers = {
+    apikey: status.PUBLISHABLE_KEY,
+    ...(secret ? { 'x-scheduled-messages-secret': secret } : {}),
+  }
+
+  const { data, response } = await requestJson(`${status.FUNCTIONS_URL}/process-scheduled-messages`, {
+    acceptStatuses: [200, 401],
+    body,
+    headers,
     method: 'POST',
   })
 
@@ -415,6 +448,12 @@ async function runUnauthenticatedContractChecks(status) {
       name: 'generate-proactive-suggestions no-auth',
       path: 'generate-proactive-suggestions',
     },
+    {
+      body: {},
+      expectedStatus: 401,
+      name: 'process-scheduled-messages no-secret',
+      path: 'process-scheduled-messages',
+    },
   ]
 
   const failures = []
@@ -491,6 +530,83 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
   }
 
   log('generate-proactive-suggestions validado com autenticacao.')
+
+  const scheduledMessageId = '00000000-0000-0000-0000-000000000901'
+  await deleteRows(status, 'scheduled_messages', { id: scheduledMessageId })
+
+  await upsertRows(status, 'scheduled_messages', 'id', {
+    id: scheduledMessageId,
+    user_id: authUserId,
+    title: 'Smoke Scheduled Message',
+    message_content: 'Mensagem de smoke para agendamento',
+    scheduled_at: new Date(Date.now() - 60_000).toISOString(),
+    status: 'pending',
+    origin: 'manual',
+    recipient_count: 1,
+    filter_context: {
+      channel: 'moodle',
+    },
+    execution_context: {
+      schema_version: 1,
+      mode: 'bulk_send_schedule',
+      channel: 'moodle',
+      automatic_execution_supported: true,
+      moodle_url: 'https://example.com',
+      recipient_snapshot: [
+        {
+          student_id: studentId,
+          moodle_user_id: seed.studentMoodleUserId,
+          student_name: seed.studentFullName,
+          personalized_message: 'Mensagem personalizada do smoke',
+        },
+      ],
+    },
+  })
+
+  const unauthorizedProcessorRun = await callScheduledMessageProcessor(
+    status,
+    { scheduled_message_id: scheduledMessageId },
+    null,
+  )
+
+  if (unauthorizedProcessorRun.status !== 401) {
+    fail(
+      `process-scheduled-messages deveria bloquear chamada sem secret, mas retornou ${unauthorizedProcessorRun.status}`,
+    )
+  }
+
+  const scheduledProcessorRun = await callScheduledMessageProcessor(
+    status,
+    { scheduled_message_id: scheduledMessageId },
+    SCHEDULED_MESSAGES_SECRET,
+  )
+
+  if (scheduledProcessorRun.status !== 200) {
+    fail(
+      `process-scheduled-messages deveria retornar 200 com secret valida, mas retornou ${scheduledProcessorRun.status}: ${JSON.stringify(scheduledProcessorRun.data)}`,
+    )
+  }
+
+  const scheduledResult = Array.isArray(scheduledProcessorRun.data?.results)
+    ? scheduledProcessorRun.data.results[0]
+    : null
+
+  if (!scheduledResult || scheduledResult.status !== 'failed' || scheduledResult.reason !== 'reauthorization_not_enabled') {
+    fail(`Resultado inesperado do process-scheduled-messages: ${JSON.stringify(scheduledProcessorRun.data)}`)
+  }
+
+  const [scheduledMessageRow] = await selectRows(status, 'scheduled_messages', { id: scheduledMessageId })
+  if (!scheduledMessageRow || scheduledMessageRow.status !== 'failed') {
+    fail(`scheduled_messages nao foi atualizado para failed: ${JSON.stringify(scheduledMessageRow)}`)
+  }
+
+  const [backgroundJobRow] = await selectRows(status, 'background_jobs', { id: scheduledMessageId })
+  if (!backgroundJobRow || backgroundJobRow.status !== 'failed') {
+    fail(`background_jobs nao refletiu a falha do agendamento: ${JSON.stringify(backgroundJobRow)}`)
+  }
+
+  await deleteRows(status, 'scheduled_messages', { id: scheduledMessageId })
+  log('process-scheduled-messages validado com secret e falha controlada por falta de reautorizacao.')
 }
 
 async function main() {

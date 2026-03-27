@@ -2,6 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Course } from '@/features/courses/types';
 import { useBackgroundActivity } from '@/contexts/BackgroundActivityContext';
+import {
+  appendBackgroundJobEvent,
+  createBackgroundJob,
+  createBackgroundJobItems,
+  updateBackgroundJob,
+  updateBackgroundJobItem,
+} from '@/features/background-jobs/api/backgroundJobs.repository';
 import { toast } from '@/hooks/use-toast';
 import { logError, trackEvent } from '@/lib/tracking';
 
@@ -23,6 +30,98 @@ import {
   resolveEdgeAccessToken,
 } from '../infrastructure/moodle-api';
 
+type DeepSyncEntity = Extract<CourseScopedSyncEntity, 'activities' | 'grades'>;
+
+const DEEP_SYNC_ENTITY_LABELS: Record<DeepSyncEntity, string> = {
+  activities: 'Sincronizacao de atividades',
+  grades: 'Sincronizacao de notas',
+};
+
+interface DeepSyncMonitorState {
+  jobId: string;
+  itemIds: Partial<Record<DeepSyncEntity, string>>;
+  processedItems: number;
+  successCount: number;
+  errorCount: number;
+  totalItems: number;
+}
+
+function createClientGeneratedId(prefix: string) {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+async function initializeDeepSyncMonitor(params: {
+  userId: string;
+  courseIds: string[];
+  courseCount: number;
+  entities: DeepSyncEntity[];
+}) {
+  const job = await createBackgroundJob({
+    userId: params.userId,
+    courseId: params.courseIds.length === 1 ? params.courseIds[0] : null,
+    jobType: 'moodle_deep_sync',
+    source: 'sync',
+    title: 'Sincronizacao profunda do Moodle',
+    description: 'Atividades e notas continuam sendo atualizadas em segundo plano.',
+    status: 'processing',
+    totalItems: params.entities.length,
+    processedItems: 0,
+    successCount: 0,
+    errorCount: 0,
+    startedAt: new Date().toISOString(),
+    metadata: {
+      course_count: params.courseCount,
+      course_ids: params.courseIds,
+      entities: params.entities,
+    },
+  });
+
+  const itemIds: Partial<Record<DeepSyncEntity, string>> = {};
+  await createBackgroundJobItems(params.entities.map((entity) => {
+    const itemId = createClientGeneratedId(`deep-sync-${entity}`);
+    itemIds[entity] = itemId;
+
+    return {
+      id: itemId,
+      jobId: job.id,
+      userId: params.userId,
+      itemKey: entity,
+      label: DEEP_SYNC_ENTITY_LABELS[entity],
+      status: 'pending',
+      progressCurrent: 0,
+      progressTotal: params.courseCount,
+      metadata: {
+        course_count: params.courseCount,
+        entity,
+      },
+    };
+  }));
+
+  await appendBackgroundJobEvent({
+    userId: params.userId,
+    jobId: job.id,
+    eventType: 'job_processing',
+    message: 'Sincronizacao profunda iniciada.',
+    metadata: {
+      course_count: params.courseCount,
+      entities: params.entities,
+    },
+  });
+
+  return {
+    jobId: job.id,
+    itemIds,
+    processedItems: 0,
+    successCount: 0,
+    errorCount: 0,
+    totalItems: params.entities.length,
+  } satisfies DeepSyncMonitorState;
+}
+
 export interface UseCourseSyncResult {
   courses: Course[];
   setCourses: (courses: Course[]) => void;
@@ -43,7 +142,7 @@ export function useCourseSync(params: {
   clearInvalidSession: () => Promise<void>;
   setLastSync: (value: string | null) => void;
 }): UseCourseSyncResult {
-  const { finishActivity, startActivity, trackActivity } = useBackgroundActivity();
+  const { trackActivity } = useBackgroundActivity();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [showCourseSelector, setShowCourseSelector] = useState(false);
@@ -302,12 +401,6 @@ export function useCourseSync(params: {
         if (deepPhaseEntities.length > 0 && !deepSyncInProgressRef.current) {
           deepSyncInProgressRef.current = true;
           const syncOwnerId = context.user.id;
-          const deepSyncActivityId = startActivity({
-            id: `sync:deep:${syncOwnerId}`,
-            label: 'Sincronizacao em segundo plano',
-            description: 'Atividades e notas continuam sendo atualizadas.',
-            source: 'sync',
-          });
 
           await createSystemNotification(syncOwnerId, {
             title: 'Sincronizacao em segundo plano iniciada',
@@ -323,26 +416,161 @@ export function useCourseSync(params: {
           void (async () => {
             let deepActivities = 0;
             let deepGrades = 0;
+            let deepSyncMonitor: DeepSyncMonitorState | null = null;
+            let currentDeepEntity: DeepSyncEntity | null = null;
 
             try {
-              if (deepPhaseEntities.includes('activities')) {
-                const activitiesResult = await runBatchedEntitySync({
-                  entity: 'activities',
+              try {
+                deepSyncMonitor = await initializeDeepSyncMonitor({
+                  userId: syncOwnerId,
+                  courseIds: syncedCourses.map((course) => course.id),
+                  courseCount: syncedCourses.length,
+                  entities: deepPhaseEntities as DeepSyncEntity[],
+                });
+              } catch (monitorError) {
+                console.error('[sync][background-jobs] failed to initialize deep sync monitor:', monitorError);
+              }
+
+              const syncDeepEntity = async (entity: DeepSyncEntity) => {
+                currentDeepEntity = entity;
+
+                const itemId = deepSyncMonitor?.itemIds[entity] ?? null;
+                const totalCourses = syncedCourses.length;
+                const startedAt = new Date().toISOString();
+                const entityLabel = DEEP_SYNC_ENTITY_LABELS[entity];
+                const entityTargetLabel = entity === 'activities' ? 'atividades' : 'notas';
+
+                if (itemId) {
+                  await updateBackgroundJobItem(itemId, {
+                    started_at: startedAt,
+                    progress_current: 0,
+                    progress_total: totalCourses,
+                    status: 'processing',
+                  });
+                  await appendBackgroundJobEvent({
+                    userId: syncOwnerId,
+                    jobId: deepSyncMonitor!.jobId,
+                    jobItemId: itemId,
+                    eventType: 'job_item_processing',
+                    message: `${entityLabel} iniciada.`,
+                  });
+                }
+
+                const result = await runBatchedEntitySync({
+                  entity,
                   selectedCourses: syncedCourses,
                   session: context.session,
                   accessToken: edgeAccessToken || undefined,
+                  onProgress: (processedCourses) => {
+                    if (!itemId) return;
+
+                    void updateBackgroundJobItem(itemId, {
+                      progress_current: processedCourses,
+                      progress_total: totalCourses,
+                    }).catch((progressError) => {
+                      console.error('[sync][background-jobs] failed to update deep sync progress:', progressError);
+                    });
+                  },
                 });
+
+                const completedAt = new Date().toISOString();
+                const itemStatus = result.succeeded ? 'completed' : 'failed';
+                const itemErrorMessage = result.errorCount > 0
+                  ? `${result.errorCount} curso(s) com erro na etapa de ${entityTargetLabel}.`
+                  : null;
+
+                if (itemId) {
+                  await updateBackgroundJobItem(itemId, {
+                    completed_at: completedAt,
+                    error_message: itemStatus === 'failed' ? itemErrorMessage ?? `Falha ao sincronizar ${entityTargetLabel}.` : itemErrorMessage,
+                    metadata: {
+                      course_count: totalCourses,
+                      course_error_count: result.errorCount,
+                      entity,
+                      total_count: result.totalCount,
+                    },
+                    progress_current: totalCourses,
+                    progress_total: totalCourses,
+                    status: itemStatus,
+                  });
+                }
+
+                if (deepSyncMonitor) {
+                  deepSyncMonitor.processedItems += 1;
+                  if (result.succeeded) {
+                    deepSyncMonitor.successCount += 1;
+                  } else {
+                    deepSyncMonitor.errorCount += 1;
+                  }
+
+                  await updateBackgroundJob(deepSyncMonitor.jobId, {
+                    error_count: deepSyncMonitor.errorCount,
+                    processed_items: deepSyncMonitor.processedItems,
+                    status: deepSyncMonitor.processedItems >= deepSyncMonitor.totalItems ? itemStatus : 'processing',
+                    success_count: deepSyncMonitor.successCount,
+                    total_items: deepSyncMonitor.totalItems,
+                  });
+
+                  await appendBackgroundJobEvent({
+                    userId: syncOwnerId,
+                    jobId: deepSyncMonitor.jobId,
+                    jobItemId: itemId,
+                    eventType: itemStatus === 'failed' ? 'job_item_failed' : 'job_item_completed',
+                    level: itemStatus === 'failed' ? 'error' : 'info',
+                    message: itemStatus === 'failed'
+                      ? `${entityLabel} finalizada com falha.`
+                      : `${entityLabel} concluida com ${result.totalCount} registro(s) sincronizado(s).`,
+                    metadata: {
+                      course_count: totalCourses,
+                      course_error_count: result.errorCount,
+                      entity,
+                      total_count: result.totalCount,
+                    },
+                  });
+                }
+
+                currentDeepEntity = null;
+                return result;
+              };
+
+              if (deepPhaseEntities.includes('activities')) {
+                const activitiesResult = await syncDeepEntity('activities');
                 deepActivities = activitiesResult.totalCount;
               }
 
               if (deepPhaseEntities.includes('grades')) {
-                const gradesResult = await runBatchedEntitySync({
-                  entity: 'grades',
-                  selectedCourses: syncedCourses,
-                  session: context.session,
-                  accessToken: edgeAccessToken || undefined,
-                });
+                const gradesResult = await syncDeepEntity('grades');
                 deepGrades = gradesResult.totalCount;
+              }
+
+              if (deepSyncMonitor) {
+                const completedAt = new Date().toISOString();
+                const finalStatus = deepSyncMonitor.errorCount > 0 && deepSyncMonitor.successCount === 0
+                  ? 'failed'
+                  : 'completed';
+
+                await updateBackgroundJob(deepSyncMonitor.jobId, {
+                  completed_at: completedAt,
+                  error_count: deepSyncMonitor.errorCount,
+                  processed_items: deepSyncMonitor.processedItems,
+                  status: finalStatus,
+                  success_count: deepSyncMonitor.successCount,
+                  total_items: deepSyncMonitor.totalItems,
+                });
+                await appendBackgroundJobEvent({
+                  userId: syncOwnerId,
+                  jobId: deepSyncMonitor.jobId,
+                  eventType: finalStatus === 'failed' ? 'job_failed' : 'job_completed',
+                  level: finalStatus === 'failed' ? 'error' : 'info',
+                  message: finalStatus === 'failed'
+                    ? 'Sincronizacao profunda finalizada com falha.'
+                    : 'Sincronizacao profunda concluida.',
+                  metadata: {
+                    activities: deepActivities,
+                    courses: syncedCourses.length,
+                    grades: deepGrades,
+                  },
+                });
               }
 
               params.setLastSync(new Date().toISOString());
@@ -365,6 +593,53 @@ export function useCourseSync(params: {
               });
             } catch (error) {
               console.error('Background deep sync error:', error);
+
+              if (deepSyncMonitor) {
+                const completedAt = new Date().toISOString();
+                const errorMessage = error instanceof Error
+                  ? error.message
+                  : 'Falha inesperada na sincronizacao profunda.';
+                const failedItemId = currentDeepEntity ? deepSyncMonitor.itemIds[currentDeepEntity] ?? null : null;
+
+                if (failedItemId && currentDeepEntity) {
+                  deepSyncMonitor.processedItems += 1;
+                  deepSyncMonitor.errorCount += 1;
+
+                  await updateBackgroundJobItem(failedItemId, {
+                    completed_at: completedAt,
+                    error_message: errorMessage,
+                    progress_current: syncedCourses.length,
+                    progress_total: syncedCourses.length,
+                    status: 'failed',
+                  });
+                  await appendBackgroundJobEvent({
+                    userId: syncOwnerId,
+                    jobId: deepSyncMonitor.jobId,
+                    jobItemId: failedItemId,
+                    eventType: 'job_item_failed',
+                    level: 'error',
+                    message: `${DEEP_SYNC_ENTITY_LABELS[currentDeepEntity]} falhou: ${errorMessage}`,
+                  });
+                }
+
+                await updateBackgroundJob(deepSyncMonitor.jobId, {
+                  completed_at: completedAt,
+                  error_count: deepSyncMonitor.errorCount,
+                  error_message: errorMessage,
+                  processed_items: deepSyncMonitor.processedItems,
+                  status: 'failed',
+                  success_count: deepSyncMonitor.successCount,
+                  total_items: deepSyncMonitor.totalItems,
+                });
+                await appendBackgroundJobEvent({
+                  userId: syncOwnerId,
+                  jobId: deepSyncMonitor.jobId,
+                  eventType: 'job_failed',
+                  level: 'error',
+                  message: errorMessage,
+                });
+              }
+
               toast({
                 title: 'Erro na sincronizacao profunda',
                 description: 'Nao foi possivel concluir a sincronizacao em segundo plano de atividades e notas.',
@@ -383,7 +658,6 @@ export function useCourseSync(params: {
               });
             } finally {
               deepSyncInProgressRef.current = false;
-              finishActivity(deepSyncActivityId);
             }
           })();
         }
@@ -404,7 +678,7 @@ export function useCourseSync(params: {
         setIsSyncing(false);
       }
     });
-  }, [courses, finishActivity, params, startActivity, trackActivity, updateStep]);
+  }, [courses, params, trackActivity, updateStep]);
 
   const syncEntitiesIncremental = useCallback(async (
     courseIds: string[],

@@ -21,6 +21,7 @@ export const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 export const AdminDashboardPage = lazy(() => import('@/features/admin/pages/AdminDashboard'));
 export const AdminSettingsPage = lazy(() => import('@/features/admin/pages/AdminConfiguracoes'));
 export const AdminUsersPage = lazy(() => import('@/features/admin/pages/AdminUsuarios'));
+export const AdminJobsPage = lazy(() => import('@/features/admin/pages/AdminJobs'));
 export const AdminMetricsPage = lazy(() => import('@/features/admin/pages/AdminMetricas'));
 export const AdminErrorLogsPage = lazy(() => import('@/features/admin/pages/AdminLogsErros'));
 export const AdminSupportPage = lazy(() => import('@/features/admin/pages/AdminSuporte'));

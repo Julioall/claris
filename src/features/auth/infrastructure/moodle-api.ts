@@ -21,6 +21,8 @@ export interface ParsedFunctionError {
 
 export interface AuthenticateMoodleSuccess {
   success: true;
+  backgroundReauthError?: string;
+  backgroundReauthStored?: boolean;
   user: User;
   moodleSession: MoodleSession | null;
   supabaseSession?: {
@@ -83,6 +85,7 @@ export async function resolveEdgeAccessToken(forceRefresh = false): Promise<stri
 }
 
 export async function authenticateMoodleUser(params: {
+  backgroundReauthEnabled?: boolean;
   username: string;
   password: string;
   moodleUrl: string;
@@ -92,6 +95,7 @@ export async function authenticateMoodleUser(params: {
 
   const { data, error } = await supabase.functions.invoke('moodle-auth', {
     body: {
+      backgroundReauthEnabled: params.backgroundReauthEnabled === true,
       moodleUrl: cleanUrl,
       username: params.username,
       password: params.password,
@@ -110,6 +114,8 @@ export async function authenticateMoodleUser(params: {
   const payload = (data ?? {}) as {
     error?: string;
     errorcode?: string;
+    backgroundReauthError?: string;
+    backgroundReauthStored?: boolean;
     user: User;
     moodleToken?: string;
     moodleUserId?: number;
@@ -129,6 +135,8 @@ export async function authenticateMoodleUser(params: {
 
   return {
     success: true,
+    backgroundReauthError: payload.backgroundReauthError,
+    backgroundReauthStored: payload.backgroundReauthStored,
     user: payload.user,
     moodleSession: payload.moodleToken
       ? {

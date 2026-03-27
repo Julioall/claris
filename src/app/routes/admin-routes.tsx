@@ -6,6 +6,7 @@ import {
   AdminDashboardPage,
   AdminErrorLogsPage,
   AdminFeatureFlagsPage,
+  AdminJobsPage,
   AdminMetricsPage,
   AdminSettingsPage,
   AdminSupportPage,
@@ -25,6 +26,7 @@ export function renderAdminRoutes() {
     >
       <Route path="/admin" element={<AdminDashboardPage />} />
       <Route path="/admin/configuracoes" element={<AdminSettingsPage />} />
+      <Route path="/admin/jobs" element={<AdminJobsPage />} />
       <Route path="/admin/usuarios" element={<AdminUsersPage />} />
       <Route path="/admin/metricas" element={<AdminMetricsPage />} />
       <Route path="/admin/logs-erros" element={<AdminErrorLogsPage />} />

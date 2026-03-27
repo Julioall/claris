@@ -4,6 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { ClarisLogo } from '@/components/ui/claris-logo';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +16,7 @@ import {
 } from '@/lib/global-app-settings';
 
 export default function Login() {
+  const BACKGROUND_REAUTH_PREFERENCE_KEY = 'background-reauth-opt-in';
   const navigate = useNavigate();
   const { login, isLoading } = useAuth();
 
@@ -22,6 +24,10 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [backgroundReauthEnabled, setBackgroundReauthEnabled] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem(BACKGROUND_REAUTH_PREFERENCE_KEY) === 'true';
+  });
 
   const handleCredentialLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +49,16 @@ export default function Login() {
       console.error('Error loading global Moodle connection settings:', error);
     }
 
-    const success = await login(username, password, storedUrl, storedService);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(
+        BACKGROUND_REAUTH_PREFERENCE_KEY,
+        backgroundReauthEnabled ? 'true' : 'false',
+      );
+    }
+
+    const success = await login(username, password, storedUrl, storedService, {
+      backgroundReauthEnabled,
+    });
     if (success) {
       navigate('/');
     }
@@ -103,6 +118,22 @@ export default function Login() {
                       <Eye className="h-4 w-4 text-muted-foreground" />
                     )}
                   </Button>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-3">
+                <Checkbox
+                  id="background-reauth"
+                  checked={backgroundReauthEnabled}
+                  onCheckedChange={(checked) => setBackgroundReauthEnabled(checked === true)}
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="background-reauth" className="cursor-pointer text-sm">
+                    Permitir reautorização automática para jobs em segundo plano
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Quando habilitado, sua credencial do Moodle é cifrada no servidor para que envios e execuções agendadas possam renovar o token sem depender desta aba aberta.
+                  </p>
                 </div>
               </div>
 

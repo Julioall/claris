@@ -2,17 +2,15 @@
 
 Fluxo local padrao com Docker Compose base para Supabase local e override de desenvolvimento para frontend + integracoes.
 
-## Variaveis de ambiente
+## Variaveis locais
 
-1. Copie o arquivo de exemplo:
+O fluxo local nao depende de `.env`. Os valores de desenvolvimento ficam versionados no `docker-compose.yml` e no `docker-compose.dev.yml`.
 
-```bash
-cp .env.example .env
-```
+Para o frontend local, os valores usados sao:
 
-2. Preencha os valores no `.env` com as credenciais do seu projeto Supabase.
-
-> **Importante:** nunca commite o arquivo `.env`. Ele esta listado no `.gitignore` para evitar vazamentos de credenciais.
+- `VITE_SUPABASE_PROJECT_ID=local`
+- `VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`
+- `VITE_SUPABASE_URL=http://127.0.0.1:54321`
 
 ## Documentacao
 
@@ -87,6 +85,7 @@ O container `supabase` executa automaticamente:
 - `supabase migration up --local --include-all` (migrations pendentes)
 - `supabase gen types typescript --local --schema public` para regenerar [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts)
 - sincronizacao de [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts) para [supabase/functions/_shared/db/generated.types.ts](supabase/functions/_shared/db/generated.types.ts)
+- sincronizacao dos secrets locais de Edge Functions a partir do `docker-compose.yml` para [supabase/functions/.env](supabase/functions/.env)
 - carregamento das Edge Functions locais em `supabase/functions/` (ex.: `moodle-api`)
 
 ## Validacao rapida
@@ -132,7 +131,13 @@ Alternativamente:
 node scripts/smoke-edge-functions.mjs
 ```
 
-Em push para `main` com mudancas relevantes de `supabase/**`, `.env` ou scripts de deploy, o workflow [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) roda o smoke local. Se ele concluir com sucesso, o workflow dedicado [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml) dispara o deploy remoto do Supabase aplicando `db push --include-all` e publicando o conjunto remoto padrao de Edge Functions.
+Em push para `main` com mudancas relevantes de `supabase/**`, `docker-compose*.yml` ou scripts de deploy, o workflow [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) roda o smoke local. Se ele concluir com sucesso, o workflow dedicado [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml) dispara o deploy remoto do Supabase aplicando `db push --include-all` e publicando o conjunto remoto padrao de Edge Functions.
+
+O processamento automatico dos agendamentos roda em [.github/workflows/process-scheduled-messages.yml](.github/workflows/process-scheduled-messages.yml):
+
+- execucao recorrente a cada 5 minutos;
+- `workflow_dispatch` para dry-run ou para um `scheduled_message_id` especifico;
+- chamada autenticada por `SCHEDULED_MESSAGES_CRON_SECRET` para `process-scheduled-messages`.
 
 Secrets necessarios no GitHub Actions para esse deploy remoto, configurados no **ambiente `supabase`** (Settings → Environments → supabase):
 
@@ -197,8 +202,18 @@ Todos os secrets abaixo devem ser adicionados em **Settings → Environments →
 | `SUPABASE_PUBLIC_URL` | URL publica usada pelas Edge Functions para registrar webhooks externos (ex.: `https://<project-id>.supabase.co`) |
 | `SUPABASE_ACCESS_TOKEN` | Token de acesso para deploy via CLI |
 | `SUPABASE_PASSWORD` | Senha do banco de dados Supabase |
+| `MOODLE_REAUTH_SECRET` | Segredo usado para cifrar a credencial de reautorizacao do Moodle nas Edge Functions |
+| `SCHEDULED_MESSAGES_CRON_SECRET` | Segredo compartilhado usado para autorizar a chamada do executor de agendamentos |
 
 > O ambiente `supabase` e usado pelo job de **build** e pelo job de **deploy remoto** (`supabase-deploy.yml`). Os secrets sao injetados como variaveis de ambiente com o prefixo `VITE_` necessario para o Vite durante o build.
+
+No deploy remoto do Supabase, `MOODLE_REAUTH_SECRET` e `SCHEDULED_MESSAGES_CRON_SECRET` tambem sao sincronizados automaticamente do GitHub Environment para os secrets de runtime das Edge Functions via `supabase secrets set`.
+
+O workflow de scheduler remoto tambem usa:
+
+- `SUPABASE_URL`
+- `SUPABASE_PUBLISHABLE_KEY`
+- `SCHEDULED_MESSAGES_CRON_SECRET`
 
 ### Publicacao do build em repositorio publico
 
@@ -222,13 +237,16 @@ Observacoes:
 
 ### Desenvolvimento local
 
-Para rodar o projeto localmente, copie `.env.example` para `.env` e preencha com seus valores:
+Para as Edge Functions locais, o `docker compose` ja injeta defaults de teste para:
 
-```bash
-cp .env.example .env
-```
+- `MOODLE_REAUTH_SECRET`
+- `SCHEDULED_MESSAGES_CRON_SECRET`
+- `EVOLUTION_API_URL`
+- `EVOLUTION_API_KEY`
+- `SUPABASE_PUBLIC_URL`
+- `WEBHOOK_SECRET`
 
-O arquivo `.env` esta no `.gitignore` e **nunca deve ser commitado**.
+O runner local copia esses segredos automaticamente para `supabase/functions/.env`, que e o arquivo lido pelo runtime local das Edge Functions.
 
 ---
 

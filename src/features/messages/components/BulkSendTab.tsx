@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Send, Search, X, Users, FileText, Eye, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Send, Search, X, Users, FileText, Eye, CheckCircle2, AlertCircle, CalendarClock } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,6 +43,7 @@ import {
   listRecentBulkMessageJobsForUser,
   startBulkMessageSend,
 } from '@/features/messages/api/bulk-messaging.repository';
+import { createScheduledMessage } from '@/features/automations/api/automations.repository';
 import { listMessageTemplateOptionsForUser } from '@/features/messages/api/message-templates.repository';
 import type {
   BulkMessageJobPreview,
@@ -111,6 +112,10 @@ function buildUnavailableVariablesText(unavailableVariables: Array<{ key: Dynami
   return reasons.length > 0 ? `${labels}. ${reasons.join(' ')}` : labels;
 }
 
+function buildDefaultScheduledTitle(selectedCount: number) {
+  return `Envio agendado para ${selectedCount} aluno${selectedCount !== 1 ? 's' : ''}`;
+}
+
 export function BulkSendTab() {
   const { user } = useAuth();
   const moodleSession = useMoodleSession();
@@ -124,8 +129,13 @@ export function BulkSendTab() {
   const [templates, setTemplates] = useState<MessageTemplateOption[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
   const [recentJobs, setRecentJobs] = useState<BulkMessageJobPreview[]>([]);
+  const [scheduledTitle, setScheduledTitle] = useState('');
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [scheduledNotes, setScheduledNotes] = useState('');
 
   const [filterSchool, setFilterSchool] = useState<string>('todos');
   const [filterCourse, setFilterCourse] = useState<string>('todos');
@@ -416,6 +426,71 @@ export function BulkSendTab() {
     setPreviewDialogOpen(true);
   };
 
+  const openScheduleDialog = useCallback(() => {
+    if (!validateMessageContext(messageContent, 'A mensagem')) return;
+
+    setScheduledTitle(buildDefaultScheduledTitle(selectedStudents.length));
+    setScheduledAt('');
+    setScheduledNotes('');
+    setScheduleDialogOpen(true);
+  }, [messageContent, selectedStudents.length, validateMessageContext]);
+
+  const handleSchedule = useCallback(async () => {
+    if (!user || selectedStudents.length === 0 || !messageContent.trim() || !scheduledAt.trim()) return;
+    if (!validateMessageContext(messageContent, 'A mensagem')) return;
+
+    setIsScheduling(true);
+
+    try {
+      const recipientSnapshot = selectedStudents.map((student) => ({
+        student_id: student.id,
+        moodle_user_id: student.moodle_user_id,
+        student_name: student.full_name,
+        personalized_message: resolveVariables(messageContent, buildStudentVariableData(student)),
+      }));
+
+      await createScheduledMessage(user.id, {
+        title: scheduledTitle.trim() || buildDefaultScheduledTitle(selectedStudents.length),
+        message_content: messageContent,
+        scheduled_at: scheduledAt,
+        recipient_count: selectedStudents.length,
+        notes: scheduledNotes.trim() || undefined,
+        channel: 'moodle',
+        execution_context: {
+          schema_version: 1,
+          mode: 'bulk_message_snapshot',
+          channel: 'moodle',
+          created_via: 'bulk_send_tab',
+          automatic_execution_supported: false,
+          blocking_reason: moodleSession ? 'credential_snapshot_missing' : 'moodle_session_missing',
+          moodle_url: moodleSession?.moodleUrl,
+          recipient_snapshot: recipientSnapshot,
+        },
+      });
+
+      toast.success('Agendamento criado com snapshot de destinatários');
+      setScheduleDialogOpen(false);
+      setScheduledTitle('');
+      setScheduledAt('');
+      setScheduledNotes('');
+    } catch (error) {
+      console.error(error);
+      toast.error('Erro ao criar agendamento');
+    } finally {
+      setIsScheduling(false);
+    }
+  }, [
+    buildStudentVariableData,
+    messageContent,
+    moodleSession,
+    scheduledAt,
+    scheduledNotes,
+    scheduledTitle,
+    selectedStudents,
+    user,
+    validateMessageContext,
+  ]);
+
   const handleSend = useCallback(async () => {
     if (!user || !moodleSession || selectedStudents.length === 0 || !messageContent.trim()) return;
     if (!validateMessageContext(messageContent, 'A mensagem')) return;
@@ -667,6 +742,15 @@ export function BulkSendTab() {
               Pre-visualizar
             </Button>
             <Button
+              variant="outline"
+              size="sm"
+              onClick={openScheduleDialog}
+              disabled={!canPreviewOrSend || isScheduling}
+            >
+              <CalendarClock className="h-4 w-4 mr-1" />
+              Agendar
+            </Button>
+            <Button
               onClick={handleSend}
               disabled={isSending || !canPreviewOrSend}
             >
@@ -803,6 +887,69 @@ export function BulkSendTab() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Agendar Envio</DialogTitle>
+            <DialogDescription>
+              Este agendamento já guarda o snapshot dos destinatários e das mensagens personalizadas. Se a reautorização automática do Moodle estiver habilitada no login, o executor poderá disparar o job sem depender da aba aberta.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="bulk-schedule-title" className="text-sm font-medium">
+                Título
+              </label>
+              <Input
+                id="bulk-schedule-title"
+                value={scheduledTitle}
+                onChange={(event) => setScheduledTitle(event.target.value)}
+                placeholder={buildDefaultScheduledTitle(selectedStudents.length)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="bulk-schedule-at" className="text-sm font-medium">
+                Data e horário
+              </label>
+              <Input
+                id="bulk-schedule-at"
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(event) => setScheduledAt(event.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label htmlFor="bulk-schedule-notes" className="text-sm font-medium">
+                Observações
+              </label>
+              <Input
+                id="bulk-schedule-notes"
+                value={scheduledNotes}
+                onChange={(event) => setScheduledNotes(event.target.value)}
+                placeholder="Opcional"
+              />
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {moodleSession
+                ? 'Os destinatários ficam congelados neste agendamento. Para execução automática, habilite a reautorização do Moodle na tela de login.'
+                : 'Os destinatários ficam congelados neste agendamento, mas a sessão atual do Moodle não está disponível. O executor registrará falha se o job vencer sem reautorização habilitada.'}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSchedule}
+              disabled={isScheduling || !scheduledAt.trim() || !canPreviewOrSend}
+            >
+              {isScheduling ? <Spinner className="h-4 w-4 mr-1" onAccent /> : <CalendarClock className="h-4 w-4 mr-1" />}
+              Confirmar agendamento
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
