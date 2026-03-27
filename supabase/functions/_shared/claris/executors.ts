@@ -22,6 +22,7 @@ import {
   isStudentActivityPendingSubmission,
   isStudentActivityWeightedInGradebook,
 } from '../domain/student-activity-status.ts'
+import { listTutorSuggestionCourseIds } from './suggestion-course-scope.ts'
 import { callMoodleApi } from '../moodle/mod.ts'
 
 // ---------------------------------------------------------------------------
@@ -2438,7 +2439,7 @@ async function getTutorRoutineSuggestions(userId: string, args: ToolCallArgs, su
 
   // Enrich with real academic data
   try {
-    const courseIds = await getUserCourseIds(userId, supabase)
+    const courseIds = await listTutorSuggestionCourseIds(supabase, userId)
     const studentIds = await getStudentIdsInCourses(courseIds, supabase)
 
     // Students at risk needing weekly contact
@@ -2519,7 +2520,7 @@ async function getTutorRoutineSuggestions(userId: string, args: ToolCallArgs, su
 
 async function generateWeeklyChecklist(userId: string, args: ToolCallArgs, supabase: Supabase) {
   const weekContext = args.week_context ?? 'current'
-  const courseIds = await getUserCourseIds(userId, supabase)
+  const courseIds = await listTutorSuggestionCourseIds(supabase, userId)
 
   const checklistSections: Array<{
     section: string

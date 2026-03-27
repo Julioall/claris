@@ -5,6 +5,7 @@
  */
 
 import type { AppSupabaseClient } from '../_shared/db/mod.ts'
+import { listTutorSuggestionCourseIds, listTutorSuggestionCourses } from '../_shared/claris/suggestion-course-scope.ts'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -497,16 +498,10 @@ async function runAcademicEngine(
   // Trigger: Classes (turmas) with no follow-up action in the last N days
   const cutoff14 = new Date(Date.now() - CUTOFF_DAYS_ACADEMIC * MS_PER_DAY).toISOString()
 
-  const { data: userCourses } = await supabase
-    .from('user_courses')
-    .select('course_id, courses(id, name)')
-    .eq('user_id', userId)
-    .eq('role', 'tutor')
-    .limit(10)
+  const userCourses = await listTutorSuggestionCourses(supabase, userId)
 
-  for (const uc of userCourses ?? []) {
-    const course = normalizeRelation(uc.courses)
-    if (!course?.id || !course.name) continue
+  for (const course of userCourses) {
+    if (!course.id || !course.name) continue
 
     const triggerKey = 'class_no_followup'
     const entityId = course.id
@@ -676,14 +671,8 @@ export async function runEngines(
   userId: string,
   supabase: AppSupabaseClient,
 ): Promise<EngineRunResult> {
-  // Get user's course IDs for engines that need them
-  const { data: userCourseRows } = await supabase
-    .from('user_courses')
-    .select('course_id')
-    .eq('user_id', userId)
-    .eq('role', 'tutor')
-
-  const courseIds = (userCourseRows ?? []).map((r: { course_id: string }) => r.course_id)
+  // Suggestion engines operate only on classes currently in progress.
+  const courseIds = await listTutorSuggestionCourseIds(supabase, userId)
 
   const [comm, agenda, tasks, academic, operational, platformUsage] = await Promise.all([
     runCommunicationEngine(supabase, userId, courseIds),
