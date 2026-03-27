@@ -205,6 +205,7 @@ async function runSuggestionGeneration(params: {
         baseUrl: params.config.baseUrl,
         apiKey: params.config.apiKey,
         timeoutMs: params.config.timeoutMs,
+        customInstructions: params.config.customInstructions,
       }, {
         maxGrade: context.maxGrade,
         activityContext: context,

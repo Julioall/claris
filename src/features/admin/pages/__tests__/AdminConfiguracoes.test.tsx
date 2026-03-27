@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AdminConfiguracoes from "@/features/admin/pages/AdminConfiguracoes";
+import type { ReactNode } from "react";
 
 const fromMock = vi.fn();
 const toastMock = vi.fn();
@@ -29,6 +30,12 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/hooks/use-toast", () => ({
   toast: (...args: unknown[]) => toastMock(...args),
+}));
+
+vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
 describe("AdminConfiguracoes page", () => {
@@ -62,8 +69,10 @@ describe("AdminConfiguracoes page", () => {
     expect(screen.getByRole("heading", { name: /claris ia/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /testar conexao/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar claris ia/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^prompt de instrucoes personalizadas$/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /correcao com ia/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar correcao com ia/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/^prompt de instrucoes personalizadas do feedback$/i)).toBeInTheDocument();
   });
 
   it("validates risk thresholds before saving", async () => {
@@ -155,6 +164,33 @@ describe("AdminConfiguracoes page", () => {
     );
   });
 
+  it("saves claris custom instructions together with connection settings", async () => {
+    const user = userEvent.setup();
+    render(<AdminConfiguracoes />);
+
+    await user.type(screen.getByLabelText(/^modelo$/i), "gpt-4o-mini");
+    await user.type(screen.getByLabelText(/chave api/i), "sk-test");
+    await user.type(
+      screen.getByLabelText(/^prompt de instrucoes personalizadas$/i),
+      "Priorize proximos passos e responda de forma mais consultiva.",
+    );
+
+    await user.click(screen.getByRole("button", { name: /salvar claris ia/i }));
+
+    await waitFor(() => {
+      expect(upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          singleton_id: "global",
+          claris_llm_settings: expect.objectContaining({
+            model: "gpt-4o-mini",
+            customInstructions: "Priorize proximos passos e responda de forma mais consultiva.",
+          }),
+        }),
+        expect.objectContaining({ onConflict: "singleton_id" }),
+      );
+    });
+  });
+
   it("saves AI grading operational settings", async () => {
     const user = userEvent.setup();
     render(<AdminConfiguracoes />);
@@ -162,6 +198,12 @@ describe("AdminConfiguracoes page", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /salvar correcao com ia/i })).toBeEnabled();
     });
+
+    await user.clear(screen.getByLabelText(/^prompt de instrucoes personalizadas do feedback$/i));
+    await user.type(
+      screen.getByLabelText(/^prompt de instrucoes personalizadas do feedback$/i),
+      "Comece pelos pontos fortes e use linguagem mais acolhedora.",
+    );
 
     await user.click(screen.getByRole("button", { name: /salvar correcao com ia/i }));
 
@@ -172,6 +214,7 @@ describe("AdminConfiguracoes page", () => {
           ai_grading_settings: expect.objectContaining({
             enabled: true,
             timeoutMs: 45000,
+            customInstructions: "Comece pelos pontos fortes e use linguagem mais acolhedora.",
           }),
         }),
         expect.objectContaining({ onConflict: "singleton_id" }),

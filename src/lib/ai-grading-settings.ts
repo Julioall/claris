@@ -17,10 +17,16 @@ export interface AiGradingSettings {
   minVisualTextChars: number;
   minSubmissionTextChars: number;
   maxStoredTextLength: number;
+  customInstructions: string;
 }
 
 const LEGACY_DEFAULT_SUPPORTED_TYPES = ["docx", "pdf", "txt", "html", "csv", "xlsx", "pptx", "png", "jpg", "jpeg"];
 const CURRENT_DEFAULT_SUPPORTED_TYPES = [...LEGACY_DEFAULT_SUPPORTED_TYPES, "md", "htm", "gif", "bmp", "webp", "svg"];
+export const DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS = [
+  "Adote um tom impessoal, tecnico e construtivo.",
+  "Nao se dirija diretamente ao aluno nem use segunda pessoa.",
+  'Prefira formulacoes como "A resposta apresenta", "observa-se", "recomenda-se" e "e importante".',
+].join("\n");
 
 export const DEFAULT_AI_GRADING_SETTINGS: AiGradingSettings = {
   enabled: true,
@@ -50,6 +56,7 @@ export const DEFAULT_AI_GRADING_SETTINGS: AiGradingSettings = {
   minVisualTextChars: 80,
   minSubmissionTextChars: 40,
   maxStoredTextLength: 12000,
+  customInstructions: DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS,
 };
 
 const asObject = (value: unknown): Record<string, unknown> =>
@@ -107,6 +114,7 @@ function normalizeSupportedTypes(value: unknown): string[] {
 export function parseAiGradingSettings(value: unknown): AiGradingSettings {
   const raw = asObject(value);
   const rawWeights = asObject(raw.associationWeights);
+  const hasStoredCustomInstructions = Object.prototype.hasOwnProperty.call(raw, "customInstructions");
 
   return {
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_AI_GRADING_SETTINGS.enabled,
@@ -125,5 +133,8 @@ export function parseAiGradingSettings(value: unknown): AiGradingSettings {
     minVisualTextChars: normalizePositiveInteger(raw.minVisualTextChars, DEFAULT_AI_GRADING_SETTINGS.minVisualTextChars),
     minSubmissionTextChars: normalizePositiveInteger(raw.minSubmissionTextChars, DEFAULT_AI_GRADING_SETTINGS.minSubmissionTextChars),
     maxStoredTextLength: normalizePositiveInteger(raw.maxStoredTextLength, DEFAULT_AI_GRADING_SETTINGS.maxStoredTextLength),
+    customInstructions: hasStoredCustomInstructions
+      ? (typeof raw.customInstructions === "string" ? raw.customInstructions.trim() : "")
+      : DEFAULT_AI_GRADING_SETTINGS.customInstructions,
   };
 }

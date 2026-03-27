@@ -5,6 +5,7 @@ export interface ClarisLlmSettings {
   model: string;
   baseUrl: string;
   apiKey: string;
+  customInstructions: string;
   configured: boolean;
   updatedAt?: string;
 }
@@ -14,6 +15,7 @@ export const DEFAULT_CLARIS_LLM_SETTINGS: ClarisLlmSettings = {
   model: '',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
+  customInstructions: '',
   configured: false,
 };
 
@@ -39,6 +41,7 @@ export function parseClarisLlmSettings(value: unknown): ClarisLlmSettings {
     model: String(raw.model ?? ''),
     baseUrl: String(raw.baseUrl ?? DEFAULT_CLARIS_LLM_SETTINGS.baseUrl),
     apiKey: String(raw.apiKey ?? ''),
+    customInstructions: typeof raw.customInstructions === 'string' ? raw.customInstructions.trim() : '',
     configured: Boolean(raw.configured ?? false),
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
   };

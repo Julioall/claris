@@ -180,7 +180,21 @@ describe("grade suggestion helpers", () => {
     expect(prompt.userPrompt).toContain('"materiais_complementares"');
     expect(prompt.userPrompt).toContain('"arquivos"');
     expect(prompt.systemPrompt).toContain('Nao inclua nota');
-    expect(prompt.systemPrompt).toContain('impessoal e tecnico');
+    expect(prompt.systemPrompt).toContain('Adote um tom impessoal, tecnico e construtivo.');
+  });
+
+  it("inclui instrucoes personalizadas sem expor o contrato fixo de resposta", () => {
+    const prompt = buildGradeSuggestionPrompt({
+      maxGrade: 10,
+      activityContext: buildContext(),
+      studentSubmission: buildSubmission(),
+    }, {
+      customInstructions: "Use linguagem mais acolhedora e destaque melhorias ao final.",
+    });
+
+    expect(prompt.systemPrompt).toContain('Instrucoes personalizadas do administrador');
+    expect(prompt.systemPrompt).toContain('Use linguagem mais acolhedora');
+    expect(prompt.systemPrompt).toContain('JSON esperado');
   });
 
   it("faz parsing robusto da resposta JSON retornada pela IA", () => {
@@ -197,13 +211,13 @@ describe("grade suggestion helpers", () => {
     });
   });
 
-  it("normaliza o feedback para tom impessoal e remove nota do texto", () => {
+  it("remove nota do feedback sem sobrescrever o estilo retornado pela IA", () => {
     const parsed = parseAiEvaluationResponse(
       '{"valida":true,"feedback":"Feedback: O aluno apresenta conteudo relevante e coerente. Nota recomendada: 4,5/5.","nota_recomendada":4.5}',
       5,
     );
 
-    expect(parsed.feedback).toBe("A resposta apresenta conteudo relevante e coerente.");
+    expect(parsed.feedback).toBe("O aluno apresenta conteudo relevante e coerente.");
     expect(parsed.feedback.toLowerCase()).not.toContain("nota");
     expect(parsed.feedback).not.toContain("4,5/5");
   });

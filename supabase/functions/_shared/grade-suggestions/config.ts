@@ -1,4 +1,5 @@
 import { DEFAULT_ASSOCIATION_CONFIG } from './heuristics.ts'
+import { DEFAULT_GRADE_SUGGESTION_CUSTOM_INSTRUCTIONS } from './prompt.ts'
 
 export interface GradeSuggestionRuntimeConfig {
   enabled: boolean
@@ -16,6 +17,7 @@ export interface GradeSuggestionRuntimeConfig {
   minVisualTextChars: number
   minSubmissionTextChars: number
   maxStoredTextLength: number
+  customInstructions: string
 }
 
 interface StoredLlmSettings {
@@ -37,6 +39,7 @@ interface StoredAiGradingSettings {
   minVisualTextChars?: unknown
   minSubmissionTextChars?: unknown
   maxStoredTextLength?: unknown
+  customInstructions?: unknown
 }
 
 const DEFAULT_PROVIDER = 'openai'
@@ -104,6 +107,14 @@ function readSupportedTypes(value: unknown): string[] {
     : normalized
 }
 
+function readCustomInstructions(value: unknown, hasStoredValue: boolean): string {
+  if (!hasStoredValue) {
+    return DEFAULT_GRADE_SUGGESTION_CUSTOM_INSTRUCTIONS
+  }
+
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 export function resolveGradeSuggestionRuntimeConfig(
   storedLlmSettings: StoredLlmSettings = {},
   storedAiGradingSettings: StoredAiGradingSettings = {},
@@ -119,6 +130,10 @@ export function resolveGradeSuggestionRuntimeConfig(
     Boolean(baseUrl) &&
     Boolean(apiKey)
   const weights = asObject(storedAiGradingSettings.associationWeights)
+  const hasStoredCustomInstructions = Object.prototype.hasOwnProperty.call(
+    storedAiGradingSettings,
+    'customInstructions',
+  )
 
   return {
     enabled: readBoolean(storedAiGradingSettings.enabled, true),
@@ -163,5 +178,9 @@ export function resolveGradeSuggestionRuntimeConfig(
     minVisualTextChars: readPositiveInteger(storedAiGradingSettings.minVisualTextChars, 80),
     minSubmissionTextChars: readPositiveInteger(storedAiGradingSettings.minSubmissionTextChars, 40),
     maxStoredTextLength: readPositiveInteger(storedAiGradingSettings.maxStoredTextLength, 12000),
+    customInstructions: readCustomInstructions(
+      storedAiGradingSettings.customInstructions,
+      hasStoredCustomInstructions,
+    ),
   }
 }

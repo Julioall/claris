@@ -8,6 +8,7 @@ export interface AiClientConfig {
   baseUrl: string
   apiKey: string
   timeoutMs: number
+  customInstructions?: string
 }
 
 export interface AiEvaluationExecutionResult {
@@ -44,17 +45,6 @@ function normalizeConfidence(value: unknown): SuggestionConfidence | undefined {
     : undefined
 }
 
-function normalizeFeedbackTone(value: string): string {
-  return value
-    .replace(/\b(?:o aluno|a aluna|o estudante|a estudante)\s+apresenta\b/gi, 'A resposta apresenta')
-    .replace(/\b(?:o aluno|a aluna|o estudante|a estudante)\s+apresentou\b/gi, 'A resposta apresenta')
-    .replace(/\b(?:o aluno|a aluna|o estudante|a estudante)\s+demonstra\b/gi, 'A resposta demonstra')
-    .replace(/\b(?:o aluno|a aluna|o estudante|a estudante)\s+demonstrou\b/gi, 'A resposta demonstra')
-    .replace(/\b(?:o aluno|a aluna|o estudante|a estudante|voce)\s+deve\b/gi, 'Recomenda-se')
-    .replace(/\b(?:o aluno|a aluna|o estudante|a estudante|voce)\s+precisa\b/gi, 'E importante')
-    .replace(/\b(?:seu|sua)\s+trabalho\b/gi, 'o trabalho')
-}
-
 function stripGradeMentions(value: string): string {
   return value
     .replace(/\b(?:nota|pontuacao|grade|score|percentual)\s*(?:final|recomendada|sugerida)?\s*[:=-]?\s*\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)?%?/gi, '')
@@ -68,7 +58,6 @@ function normalizeFeedbackText(value: string): string {
     .trim()
 
   normalized = stripGradeMentions(normalized)
-  normalized = normalizeFeedbackTone(normalized)
 
   normalized = normalized
     .split('\n')
@@ -131,7 +120,9 @@ export async function executeAiEvaluation(
   config: AiClientConfig,
   request: AiEvaluationRequest,
 ): Promise<AiEvaluationExecutionResult> {
-  const prompt = buildGradeSuggestionPrompt(request)
+  const prompt = buildGradeSuggestionPrompt(request, {
+    customInstructions: config.customInstructions,
+  })
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs)
 

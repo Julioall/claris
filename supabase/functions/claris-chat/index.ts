@@ -9,6 +9,7 @@ type SettingsJson = {
   model?: string
   baseUrl?: string
   apiKey?: string
+  customInstructions?: string
   configured?: boolean
 }
 
@@ -42,6 +43,7 @@ async function readStoredSettings(userId: string): Promise<SettingsJson> {
     model: asTrimmedString(rawSettings.model),
     baseUrl: asTrimmedString(rawSettings.baseUrl),
     apiKey: asTrimmedString(rawSettings.apiKey),
+    customInstructions: typeof rawSettings.customInstructions === 'string' ? rawSettings.customInstructions.trim() : '',
     configured: Boolean(rawSettings.configured),
   }
 }
@@ -69,7 +71,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
   })
 
   const messages = [
-    { role: 'system' as const, content: buildClarisSystemPrompt(activeTools) },
+    { role: 'system' as const, content: buildClarisSystemPrompt(activeTools, storedSettings.customInstructions) },
     ...body.history.map(({ role, content }) => ({ role, content })),
     { role: 'user' as const, content: userMessage },
   ]

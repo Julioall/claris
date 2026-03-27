@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, Sparkles } from 'lucide-react';
+import { Bot, HelpCircle, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,7 @@ import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   fetchAdminSettings,
   saveAiGradingSettings,
@@ -37,7 +38,7 @@ import {
 } from '@/lib/global-app-settings';
 
 type RiskLevelThreshold = 'atencao' | 'risco' | 'critico';
-type ClarisField = 'provider' | 'model' | 'baseUrl' | 'apiKey';
+type ClarisField = 'provider' | 'model' | 'baseUrl' | 'apiKey' | 'customInstructions';
 type AiGradingField =
   | 'timeoutMs'
   | 'maxFileBytes'
@@ -52,6 +53,38 @@ interface RiskThresholdDays {
   risco: number;
   critico: number;
 }
+
+const AI_GRADING_WEIGHT_FIELDS: Array<{
+  field: AiGradingWeightField;
+  label: string;
+  description: string;
+}> = [
+  {
+    field: 'sameSection',
+    label: 'Mesma secao',
+    description: 'Aumenta a relevancia de materiais que estao no mesmo topico ou secao do Moodle que a atividade.',
+  },
+  {
+    field: 'similarName',
+    label: 'Nome semelhante',
+    description: 'Da mais peso quando o nome do arquivo, pagina ou recurso se parece com o nome da atividade.',
+  },
+  {
+    field: 'keywordMatch',
+    label: 'Palavra-chave',
+    description: 'Considera a presenca de termos em comum entre a atividade e os materiais associados.',
+  },
+  {
+    field: 'temporalProximity',
+    label: 'Proximidade temporal',
+    description: 'Favorece materiais publicados ou atualizados perto da data em que a atividade foi disponibilizada.',
+  },
+  {
+    field: 'explicitLink',
+    label: 'Vinculo explicito',
+    description: 'Valoriza sinais diretos de que o material pertence a atividade, como mencoes claras no texto ou na descricao.',
+  },
+];
 
 function parseCsvInput(value: string): string[] {
   return value
@@ -202,6 +235,7 @@ export default function AdminConfiguracoes() {
       model: clarisSettings.model.trim(),
       baseUrl: normalizeBaseUrl(clarisSettings.baseUrl),
       apiKey: effectiveApiKey,
+      customInstructions: clarisSettings.customInstructions.trim(),
       configured: isClarisSettingsConfigured({
         provider: clarisSettings.provider,
         model: clarisSettings.model,
@@ -217,7 +251,12 @@ export default function AdminConfiguracoes() {
       if (error) throw error;
       storedClarisApiKeyRef.current = effectiveApiKey;
       setHasStoredClarisApiKey(effectiveApiKey.length > 0);
-      setClarisSettings(prev => ({ ...prev, apiKey: '', configured: payload.configured }));
+      setClarisSettings(prev => ({
+        ...prev,
+        apiKey: '',
+        customInstructions: payload.customInstructions,
+        configured: payload.configured,
+      }));
       localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(payload.configured));
       toast({
         title: 'Configuracao da Claris IA salva',
@@ -420,6 +459,20 @@ export default function AdminConfiguracoes() {
               disabled={isSavingClaris}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="claris-custom-instructions">Prompt de instrucoes personalizadas</Label>
+            <Textarea
+              id="claris-custom-instructions"
+              rows={6}
+              value={clarisSettings.customInstructions}
+              onChange={(e) => updateClarisField('customInstructions', e.target.value)}
+              placeholder="Ex.: responda com tom mais consultivo, destaque proximos passos primeiro e mantenha respostas curtas."
+              disabled={isSavingClaris}
+            />
+            <p className="text-xs text-muted-foreground">
+              Apenas estas instrucoes ficam editaveis no admin. A base operacional e o formato interno da Claris continuam fixos.
+            </p>
+          </div>
           <Separator />
           <div className="flex gap-3">
             <Button onClick={testClarisConnection} variant="outline" disabled={isSavingClaris || isTestingClaris} className="flex-1">
@@ -563,6 +616,24 @@ export default function AdminConfiguracoes() {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="ai-grading-custom-instructions">Prompt de instrucoes personalizadas do feedback</Label>
+            <Textarea
+              id="ai-grading-custom-instructions"
+              rows={6}
+              value={aiGradingSettings.customInstructions}
+              onChange={(e) => setAiGradingSettings((prev) => ({
+                ...prev,
+                customInstructions: e.target.value,
+              }))}
+              placeholder="Ex.: destaque pontos fortes primeiro, traga orientacoes mais objetivas e use linguagem mais acolhedora."
+              disabled={isLoadingSettings || isSavingAiGrading}
+            />
+            <p className="text-xs text-muted-foreground">
+              O JSON de resposta da correcao permanece fixo internamente. Use este campo apenas para orientar estilo, tom e nivel de detalhamento do feedback.
+            </p>
+          </div>
+
           <div className="space-y-3">
             <div>
               <Label>Pesos da heuristica</Label>
@@ -571,15 +642,25 @@ export default function AdminConfiguracoes() {
               </p>
             </div>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {([
-                ['sameSection', 'Mesma secao'],
-                ['similarName', 'Nome semelhante'],
-                ['keywordMatch', 'Palavra-chave'],
-                ['temporalProximity', 'Proximidade temporal'],
-                ['explicitLink', 'Vinculo explicito'],
-              ] as Array<[AiGradingWeightField, string]>).map(([field, label]) => (
+              {AI_GRADING_WEIGHT_FIELDS.map(({ field, label, description }) => (
                 <div key={field} className="space-y-2">
-                  <Label htmlFor={`ai-grading-weight-${field}`}>{label}</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label htmlFor={`ai-grading-weight-${field}`}>{label}</Label>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          aria-label={`Explicar ${label}`}
+                          className="inline-flex h-4 w-4 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <HelpCircle className="h-3.5 w-3.5" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-64">
+                        {description}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                   <Input
                     id={`ai-grading-weight-${field}`}
                     type="number"

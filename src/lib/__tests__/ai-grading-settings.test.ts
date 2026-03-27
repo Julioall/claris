@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS,
   DEFAULT_AI_GRADING_SETTINGS,
   parseAiGradingSettings,
 } from "@/lib/ai-grading-settings";
@@ -8,6 +9,10 @@ import {
 describe("ai grading settings", () => {
   it("falls back to defaults when the payload is empty", () => {
     expect(parseAiGradingSettings(null)).toEqual(DEFAULT_AI_GRADING_SETTINGS);
+  });
+
+  it("keeps the default custom instructions when none were persisted", () => {
+    expect(parseAiGradingSettings({}).customInstructions).toBe(DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS);
   });
 
   it("includes the newly enabled supported file types in defaults", () => {
@@ -52,6 +57,7 @@ describe("ai grading settings", () => {
       minVisualTextChars: 120,
       minSubmissionTextChars: 75,
       maxStoredTextLength: 16000,
+      customInstructions: DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS,
     });
   });
 
@@ -61,5 +67,13 @@ describe("ai grading settings", () => {
     });
 
     expect(parsed.supportedTypes).toEqual(DEFAULT_AI_GRADING_SETTINGS.supportedTypes);
+  });
+
+  it("preserves an explicitly cleared custom instructions field", () => {
+    const parsed = parseAiGradingSettings({
+      customInstructions: "   ",
+    });
+
+    expect(parsed.customInstructions).toBe("");
   });
 });

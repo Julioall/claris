@@ -57,4 +57,15 @@ describe('claris chat configuration', () => {
     expect(prompt).toContain('list_tasks');
     expect(prompt).not.toContain('Camada 4');
   });
+
+  it('includes admin custom instructions in the Claris system prompt', () => {
+    const tools = selectClarisToolsForMessage({
+      latestUserMessage: 'Monte um resumo da semana.',
+    });
+    const prompt = buildClarisSystemPrompt(tools, 'Responda em tom mais consultivo e sempre destaque proximos passos.');
+
+    expect(prompt).toContain('Instrucoes personalizadas do administrador');
+    expect(prompt).toContain('Responda em tom mais consultivo');
+    expect(prompt).toContain('Ferramentas ativas nesta conversa:');
+  });
 });

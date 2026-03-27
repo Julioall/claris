@@ -119,9 +119,22 @@ function looksLikeBulkSchedule(text: string): boolean {
   )
 }
 
-export function buildClarisSystemPrompt(activeTools: ToolDefinition[]): string {
+export function buildClarisSystemPrompt(activeTools: ToolDefinition[], customInstructions?: string): string {
   const toolNames = activeTools.map((tool) => tool.function.name).join(', ')
-  return [...SYSTEM_PROMPT_LINES, `Ferramentas ativas nesta conversa: ${toolNames}.`].join('\n')
+  const normalizedCustomInstructions = typeof customInstructions === 'string'
+    ? customInstructions.trim()
+    : ''
+
+  return [
+    ...SYSTEM_PROMPT_LINES,
+    ...(normalizedCustomInstructions
+      ? [
+          'Instrucoes personalizadas do administrador: aplique-as sem quebrar o papel operacional da Claris nem inventar dados.',
+          normalizedCustomInstructions,
+        ]
+      : []),
+    `Ferramentas ativas nesta conversa: ${toolNames}.`,
+  ].join('\n')
 }
 
 export function selectClarisToolsForMessage(input: ToolSelectionInput): ToolDefinition[] {
