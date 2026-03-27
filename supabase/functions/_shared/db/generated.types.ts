@@ -112,6 +112,125 @@ export type Database = {
           },
         ]
       }
+      ai_grade_suggestion_history: {
+        Row: {
+          ai_response: Json
+          approval_response: Json
+          approved_at: string | null
+          approved_feedback: string | null
+          approved_grade: number | null
+          confidence: string | null
+          context_summary: Json
+          course_id: string
+          created_at: string
+          error_message: string | null
+          id: string
+          max_grade: number | null
+          model: string | null
+          moodle_activity_id: string
+          moodle_assign_id: number | null
+          prompt_payload: Json
+          provider: string | null
+          sources_used: Json
+          status: string
+          student_activity_id: string | null
+          student_id: string
+          submission_summary: Json
+          suggested_feedback: string | null
+          suggested_grade: number | null
+          updated_at: string
+          user_id: string
+          warnings: Json
+        }
+        Insert: {
+          ai_response?: Json
+          approval_response?: Json
+          approved_at?: string | null
+          approved_feedback?: string | null
+          approved_grade?: number | null
+          confidence?: string | null
+          context_summary?: Json
+          course_id: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          max_grade?: number | null
+          model?: string | null
+          moodle_activity_id: string
+          moodle_assign_id?: number | null
+          prompt_payload?: Json
+          provider?: string | null
+          sources_used?: Json
+          status?: string
+          student_activity_id?: string | null
+          student_id: string
+          submission_summary?: Json
+          suggested_feedback?: string | null
+          suggested_grade?: number | null
+          updated_at?: string
+          user_id: string
+          warnings?: Json
+        }
+        Update: {
+          ai_response?: Json
+          approval_response?: Json
+          approved_at?: string | null
+          approved_feedback?: string | null
+          approved_grade?: number | null
+          confidence?: string | null
+          context_summary?: Json
+          course_id?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          max_grade?: number | null
+          model?: string | null
+          moodle_activity_id?: string
+          moodle_assign_id?: number | null
+          prompt_payload?: Json
+          provider?: string | null
+          sources_used?: Json
+          status?: string
+          student_activity_id?: string | null
+          student_id?: string
+          submission_summary?: Json
+          suggested_feedback?: string | null
+          suggested_grade?: number | null
+          updated_at?: string
+          user_id?: string
+          warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_grade_suggestion_history_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_history_student_activity_id_fkey"
+            columns: ["student_activity_id"]
+            isOneToOne: false
+            referencedRelation: "student_activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_history_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_history_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_error_logs: {
         Row: {
           category: string
@@ -575,6 +694,7 @@ export type Database = {
       }
       app_settings: {
         Row: {
+          ai_grading_settings: Json
           claris_llm_settings: Json
           created_at: string
           moodle_connection_service: string
@@ -584,6 +704,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_grading_settings?: Json
           claris_llm_settings?: Json
           created_at?: string
           moodle_connection_service?: string
@@ -593,6 +714,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_grading_settings?: Json
           claris_llm_settings?: Json
           created_at?: string
           moodle_connection_service?: string

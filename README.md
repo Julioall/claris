@@ -25,6 +25,27 @@ cp .env.example .env
 - [docs/FRONTEND_MODULES.md](docs/FRONTEND_MODULES.md): direcao de modularizacao do frontend por `app/` e `features/`.
 - [docs/DECISIONS/](docs/DECISIONS): ADRs com decisoes estruturais do projeto.
 
+## Correcao com IA
+
+A tela de notas do aluno agora suporta sugestao assistida por IA para atividades do tipo `assign`.
+
+- a UI exibe a acao `Gerar sugestao com IA` em atividades pendentes de correcao;
+- o backend monta contexto da atividade a partir do `assign` e de materiais da mesma secao do Moodle (`file`, `page`, `label` e `folder`);
+- a submissao do aluno e normalizada com extracao textual de arquivos suportados;
+- o professor pode editar a sugestao e aprovar manualmente antes do envio ao Moodle;
+- toda geracao/aprovacao fica auditada em `ai_grade_suggestion_history`.
+
+Configuracao:
+
+- conexao com o modelo: `Administracao -> Configuracoes -> Claris IA`
+- comportamento da correcao: `Administracao -> Configuracoes -> Correcao com IA`
+
+Observacoes locais:
+
+- a edge function `moodle-grade-suggestions` usa o runtime compartilhado em `supabase/functions/_shared/grade-suggestions/`;
+- as imports npm das functions passam por [supabase/functions/deno.json](supabase/functions/deno.json);
+- apos mudar codigo de function, reinicie o runtime local do Supabase para recarregar imports e configuracoes.
+
 ## Requisito
 
 - Docker Desktop (com Docker Compose)

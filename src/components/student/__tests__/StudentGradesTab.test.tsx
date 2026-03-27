@@ -6,6 +6,7 @@ import { StudentGradesTab } from "@/components/student/StudentGradesTab";
 const fromMock = vi.fn();
 const gradesEqMock = vi.fn();
 const activitiesEqMock = vi.fn();
+const useMoodleSessionMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -13,9 +14,14 @@ vi.mock("@/integrations/supabase/client", () => ({
   },
 }));
 
+vi.mock("@/features/auth/context/MoodleSessionContext", () => ({
+  useMoodleSession: () => useMoodleSessionMock(),
+}));
+
 describe("StudentGradesTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useMoodleSessionMock.mockReturnValue(null);
 
     gradesEqMock.mockResolvedValue({ data: [], error: null });
     activitiesEqMock.mockResolvedValue({ data: [], error: null });
@@ -219,5 +225,53 @@ describe("StudentGradesTab", () => {
     expect(screen.queryByText("Forum de Boas-vindas")).not.toBeInTheDocument();
     expect(screen.getByText("Pendente de Correcao")).toBeInTheDocument();
     expect(screen.getByText("Pendente de Envio")).toBeInTheDocument();
+  });
+
+  it("shows the AI suggestion action for assign activities pending correction when a Moodle session exists", async () => {
+    const user = userEvent.setup();
+
+    useMoodleSessionMock.mockReturnValue({
+      moodleToken: "token-1",
+      moodleUrl: "https://moodle.example.com",
+      moodleUserId: 12,
+    });
+
+    gradesEqMock.mockResolvedValueOnce({
+      data: [],
+      error: null,
+    });
+
+    activitiesEqMock.mockResolvedValueOnce({
+      data: [
+        {
+          id: "a-1",
+          course_id: "c-1",
+          moodle_activity_id: "77",
+          activity_name: "SAP 4",
+          activity_type: "assign",
+          grade: null,
+          grade_max: 10,
+          percentage: null,
+          status: "submitted",
+          due_date: "2026-03-18T00:00:00.000Z",
+          hidden: false,
+          completed_at: "2026-03-18T10:00:00.000Z",
+          submitted_at: "2026-03-18T10:00:00.000Z",
+          graded_at: null,
+          courses: { name: "Matematica" },
+        },
+      ],
+      error: null,
+    });
+
+    render(<StudentGradesTab studentId="s-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Matematica")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
+
+    expect(screen.getByRole("button", { name: /gerar sugestao com ia/i })).toBeInTheDocument();
   });
 });

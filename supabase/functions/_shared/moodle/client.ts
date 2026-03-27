@@ -1,18 +1,48 @@
 import type { MoodleTokenResponse, MoodleCourse, MoodleCategory, MoodleEnrolledUser, MoodleSiteInfo } from './types.ts'
 
-const INVALID_PARAMETER_MESSAGE = 'valor inválido de parâmetro'
+const INVALID_PARAMETER_MESSAGE = 'valor invalido de parametro'
 const NUMERIC_CATEGORY_PATTERN = /^\d+$/
 
+function normalizeForComparison(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+}
+
 function isInvalidParameterError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  const message = error instanceof Error ? normalizeForComparison(error.message) : ''
   return message.includes(INVALID_PARAMETER_MESSAGE)
+}
+
+function isExceptionPayload(value: unknown): value is { exception: unknown; message?: unknown } {
+  return Boolean(value) && typeof value === 'object' && 'exception' in value
+}
+
+async function parseMoodleResponseBody(response: Response): Promise<unknown> {
+  const rawText = await response.text()
+  const trimmed = rawText.trim()
+
+  if (!trimmed) {
+    return null
+  }
+
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    if (!response.ok) {
+      throw new Error(`Moodle API returned status ${response.status}`)
+    }
+
+    throw new Error('Moodle retornou uma resposta invalida.')
+  }
 }
 
 async function callGetEnrolledUsers(
   moodleUrl: string,
   token: string,
   courseId: number,
-  extraParams: Record<string, string | number> = {}
+  extraParams: Record<string, string | number> = {},
 ): Promise<unknown[]> {
   const result = await callMoodleApi(moodleUrl, token, 'core_enrol_get_enrolled_users', {
     courseid: courseId,
@@ -22,14 +52,11 @@ async function callGetEnrolledUsers(
   return Array.isArray(result) ? result : []
 }
 
-/**
- * Get Moodle token using username/password.
- */
 export async function getMoodleToken(
   moodleUrl: string,
   username: string,
   password: string,
-  service = 'moodle_mobile_app'
+  service = 'moodle_mobile_app',
 ): Promise<MoodleTokenResponse> {
   const tokenUrl = `${moodleUrl}/login/token.php`
   const params = new URLSearchParams({ username, password, service })
@@ -51,7 +78,7 @@ export async function getMoodleToken(
     ) {
       console.error('Moodle returned HTML instead of JSON')
       return {
-        error: `O serviço "${service}" não está disponível neste Moodle. Verifique com o administrador se os Web Services estão habilitados.`,
+        error: `O servico "${service}" nao esta disponivel neste Moodle. Verifique com o administrador se os Web Services estao habilitados.`,
         errorcode: 'service_unavailable',
       }
     }
@@ -62,20 +89,17 @@ export async function getMoodleToken(
       return data
     } catch {
       console.error('Failed to parse JSON response:', text.substring(0, 200))
-      return { error: 'Resposta inválida do Moodle. Verifique a URL.', errorcode: 'parse_error' }
+      return { error: 'Resposta invalida do Moodle. Verifique a URL.', errorcode: 'parse_error' }
     }
   } catch (fetchError) {
     console.error('Fetch error:', fetchError)
     return {
-      error: `Erro de conexão: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
+      error: `Erro de conexao: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
       errorcode: 'network_error',
     }
   }
 }
 
-/**
- * Call a Moodle Web Service API function (GET-style via query params).
- */
 export async function callMoodleApi(
   moodleUrl: string,
   token: string,
@@ -96,19 +120,20 @@ export async function callMoodleApi(
   const response = await fetch(`${apiUrl}?${queryParams.toString()}`, {
     signal: AbortSignal.timeout(timeoutMs),
   })
-  const data = await response.json()
+  const data = await parseMoodleResponseBody(response)
 
-  if (data.exception) {
-    console.error(`Moodle API error: ${data.message}`)
-    throw new Error(data.message || 'Moodle API error')
+  if (isExceptionPayload(data)) {
+    console.error(`Moodle API error: ${String(data.message ?? '')}`)
+    throw new Error(typeof data.message === 'string' ? data.message : 'Moodle API error')
+  }
+
+  if (!response.ok) {
+    throw new Error(`Moodle API returned status ${response.status}`)
   }
 
   return data
 }
 
-/**
- * Call a Moodle Web Service API function via POST (required for some endpoints).
- */
 export async function callMoodleApiPost(
   moodleUrl: string,
   token: string,
@@ -132,50 +157,42 @@ export async function callMoodleApiPost(
     body: formData.toString(),
     signal: AbortSignal.timeout(timeoutMs),
   })
-  const data = await response.json()
+  const data = await parseMoodleResponseBody(response)
 
-  if (data.exception) {
-    console.error(`Moodle API error: ${data.message}`)
-    throw new Error(data.message || 'Moodle API error')
+  if (isExceptionPayload(data)) {
+    console.error(`Moodle API error: ${String(data.message ?? '')}`)
+    throw new Error(typeof data.message === 'string' ? data.message : 'Moodle API error')
+  }
+
+  if (!response.ok) {
+    throw new Error(`Moodle API returned status ${response.status}`)
   }
 
   return data
 }
 
-/**
- * Get current user info from Moodle.
- */
 export async function getSiteInfo(moodleUrl: string, token: string): Promise<MoodleSiteInfo> {
-  return await callMoodleApi(moodleUrl, token, 'core_webservice_get_site_info')
+  return await callMoodleApi(moodleUrl, token, 'core_webservice_get_site_info') as MoodleSiteInfo
 }
 
-/**
- * Get user's enrolled courses.
- */
 export async function getUserCourses(
   moodleUrl: string,
   token: string,
-  userId: number
+  userId: number,
 ): Promise<MoodleCourse[]> {
-  return await callMoodleApi(moodleUrl, token, 'core_enrol_get_users_courses', { userid: userId })
+  return await callMoodleApi(moodleUrl, token, 'core_enrol_get_users_courses', { userid: userId }) as MoodleCourse[]
 }
 
-/**
- * Get all categories from Moodle.
- */
 export async function getCategories(moodleUrl: string, token: string): Promise<MoodleCategory[]> {
   try {
     const data = await callMoodleApi(moodleUrl, token, 'core_course_get_categories')
-    return data || []
+    return Array.isArray(data) ? data as MoodleCategory[] : []
   } catch (error) {
     console.error('Error fetching categories:', error)
     return []
   }
 }
 
-/**
- * Build category name with full hierarchy path (e.g., "Parent > Child > SubChild").
- */
 export function buildCategoryPath(categoryId: number, categories: MoodleCategory[]): string {
   const categoryMap = new Map(categories.map((c) => [c.id, c]))
   const category = categoryMap.get(categoryId)
@@ -224,32 +241,29 @@ export function resolveCourseCategoryName(
   return null
 }
 
-/**
- * Get enrolled users in a course.
- */
 export async function getCourseEnrolledUsers(
   moodleUrl: string,
   token: string,
-  courseId: number
+  courseId: number,
 ): Promise<MoodleEnrolledUser[]> {
   try {
-    return await callGetEnrolledUsers(moodleUrl, token, courseId, { onlyactive: 0 })
+    return await callGetEnrolledUsers(moodleUrl, token, courseId, { onlyactive: 0 }) as MoodleEnrolledUser[]
   } catch (error) {
     if (isInvalidParameterError(error)) {
       console.warn(
-        `Moodle for course ${courseId} does not accept onlyactive=0. Retrying with options[onlyactive]=0.`
+        `Moodle for course ${courseId} does not accept onlyactive=0. Retrying with options[onlyactive]=0.`,
       )
       try {
         return await callGetEnrolledUsers(moodleUrl, token, courseId, {
           'options[0][name]': 'onlyactive',
           'options[0][value]': 0,
-        })
+        }) as MoodleEnrolledUser[]
       } catch {
         console.warn(
-          `Moodle for course ${courseId} also rejected options[onlyactive]. Retrying without filter options.`
+          `Moodle for course ${courseId} also rejected options[onlyactive]. Retrying without filter options.`,
         )
         try {
-          return await callGetEnrolledUsers(moodleUrl, token, courseId)
+          return await callGetEnrolledUsers(moodleUrl, token, courseId) as MoodleEnrolledUser[]
         } catch (fallbackError) {
           console.error(`Fallback failed fetching enrolled users for course ${courseId}:`, fallbackError)
           return []
@@ -262,13 +276,10 @@ export async function getCourseEnrolledUsers(
   }
 }
 
-/**
- * Get suspended user IDs in a course.
- */
 export async function getCourseSuspendedUserIds(
   moodleUrl: string,
   token: string,
-  courseId: number
+  courseId: number,
 ): Promise<Set<number>> {
   try {
     const users = await callGetEnrolledUsers(moodleUrl, token, courseId, { onlysuspended: 1 })
@@ -276,12 +287,12 @@ export async function getCourseSuspendedUserIds(
     return new Set<number>(
       users
         .map((user: { id?: number }) => user.id)
-        .filter((id): id is number => typeof id === 'number')
+        .filter((id): id is number => typeof id === 'number'),
     )
   } catch (error) {
     if (isInvalidParameterError(error)) {
       console.warn(
-        `Moodle for course ${courseId} does not accept onlysuspended=1. Retrying with options[onlysuspended]=1.`
+        `Moodle for course ${courseId} does not accept onlysuspended=1. Retrying with options[onlysuspended]=1.`,
       )
 
       try {
@@ -290,18 +301,13 @@ export async function getCourseSuspendedUserIds(
           'options[0][value]': 1,
         })
 
-        // Trust the result directly — an empty array means no suspended users,
-        // not that the filter was ignored. Falling through to inference here was
-        // the root cause of falsely marking students with recent access as
-        // suspended (inference: all enrolled − active enrolled = suspended is
-        // unreliable across Moodle versions).
         const suspendedIds = new Set<number>(
           suspendedViaOptions
             .map((user: { id?: number }) => user.id)
-            .filter((id): id is number => typeof id === 'number')
+            .filter((id): id is number => typeof id === 'number'),
         )
         console.log(
-          `Fetched suspended users via options for course ${courseId}: suspended=${suspendedIds.size}`
+          `Fetched suspended users via options for course ${courseId}: suspended=${suspendedIds.size}`,
         )
         return suspendedIds
       } catch (fallbackError) {

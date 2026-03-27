@@ -41,3 +41,38 @@ export interface StudentListItem extends StudentRecord {
 }
 
 export type StudentProfile = StudentRecord;
+
+export type GradeSuggestionStatus = 'success' | 'invalid' | 'manual_review_required' | 'error';
+export type GradeSuggestionConfidence = 'high' | 'medium' | 'low';
+
+export interface GradeSuggestionSource {
+  label: string;
+  type: string;
+  extractionQuality?: 'high' | 'medium' | 'low' | 'none';
+  requiresVisualAnalysis?: boolean;
+}
+
+export interface StudentGradeSuggestionResult {
+  status: GradeSuggestionStatus;
+  suggestedGrade: number | null;
+  suggestedFeedback: string | null;
+  confidence: GradeSuggestionConfidence;
+  sourcesUsed: GradeSuggestionSource[];
+  warnings: string[];
+  evaluationStatus: string;
+  reason?: string;
+}
+
+export interface StudentGradeSuggestionResponse {
+  success: boolean;
+  auditId?: string;
+  message?: string;
+  result?: StudentGradeSuggestionResult;
+}
+
+export interface StudentGradeApprovalResponse {
+  success: boolean;
+  message?: string;
+  approvedGrade?: number;
+  approvedFeedback?: string;
+}

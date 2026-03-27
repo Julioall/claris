@@ -57,6 +57,9 @@ verify_jwt = false
 [functions.moodle-sync-grades]
 verify_jwt = false
 
+[functions.moodle-grade-suggestions]
+verify_jwt = false
+
 [functions.moodle-messaging]
 verify_jwt = false
 

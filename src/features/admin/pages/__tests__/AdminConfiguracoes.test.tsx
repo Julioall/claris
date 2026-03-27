@@ -62,6 +62,8 @@ describe("AdminConfiguracoes page", () => {
     expect(screen.getByRole("heading", { name: /claris ia/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /testar conexao/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar claris ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /correcao com ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /salvar correcao com ia/i })).toBeInTheDocument();
   });
 
   it("validates risk thresholds before saving", async () => {
@@ -149,6 +151,36 @@ describe("AdminConfiguracoes page", () => {
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({
         title: expect.stringMatching(/conexao validada/i),
+      }),
+    );
+  });
+
+  it("saves AI grading operational settings", async () => {
+    const user = userEvent.setup();
+    render(<AdminConfiguracoes />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /salvar correcao com ia/i })).toBeEnabled();
+    });
+
+    await user.click(screen.getByRole("button", { name: /salvar correcao com ia/i }));
+
+    await waitFor(() => {
+      expect(upsertMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          singleton_id: "global",
+          ai_grading_settings: expect.objectContaining({
+            enabled: true,
+            timeoutMs: 45000,
+          }),
+        }),
+        expect.objectContaining({ onConflict: "singleton_id" }),
+      );
+    });
+
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/correcao com ia salva/i),
       }),
     );
   });

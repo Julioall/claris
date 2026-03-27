@@ -108,3 +108,37 @@ Antes de publicar mudancas em functions ou migrations:
 - `whatsapp-instance-manager`: operacao das instancias compartilhadas/pessoais
 - `moodle-*`: autenticacao e sincronizacao incremental com Moodle
 - `data-cleanup`: limpeza orientada pelo backend
+
+## Nova function: `moodle-grade-suggestions`
+
+Responsavel pela sugestao de nota/feedback com IA e pela aprovacao manual com envio ao Moodle.
+
+### Fluxo
+
+1. `generate_suggestion`
+2. resolve curso, aluno e atividade no banco local
+3. monta contexto avaliativo a partir do `assign` e de recursos da mesma secao (`file`, `page`, `label` e `folder`)
+4. normaliza a submissao do aluno e extrai texto de arquivos suportados
+5. chama o provedor configurado em `app_settings.claris_llm_settings`
+6. grava auditoria em `ai_grade_suggestion_history`
+7. retorna sugestao estruturada para a UI
+
+### Aprovacao
+
+1. `approve_suggestion`
+2. valida a auditoria e a relacao usuario/curso/aluno
+3. envia nota e feedback para `mod_assign_save_grade`
+4. atualiza `student_activities`
+5. registra status final da aprovacao na auditoria
+
+### Configuracao
+
+- conexao do modelo: `app_settings.claris_llm_settings`
+- knobs operacionais: `app_settings.ai_grading_settings`
+- imports npm do runtime Deno: `supabase/functions/deno.json`
+
+### Observacoes de operacao
+
+- a function continua autenticada via `createHandler(..., { requireAuth: true })`
+- o `config.toml` local usa `verify_jwt = false` apenas para permitir preflight/browser reachability; a validacao real segue dentro do handler
+- respostas `null` do Moodle em `mod_assign_save_grade` sao tratadas como validas pelo cliente compartilhado

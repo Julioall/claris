@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 
 const onAuthStateChangeMock = vi.fn();
 const getSessionMock = vi.fn();
+const refreshSessionMock = vi.fn();
 const setSessionMock = vi.fn();
 const signOutMock = vi.fn();
 const invokeMock = vi.fn();
@@ -21,6 +22,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     auth: {
       onAuthStateChange: (...args: unknown[]) => onAuthStateChangeMock(...args),
       getSession: (...args: unknown[]) => getSessionMock(...args),
+      refreshSession: (...args: unknown[]) => refreshSessionMock(...args),
       setSession: (...args: unknown[]) => setSessionMock(...args),
       signOut: (...args: unknown[]) => signOutMock(...args),
     },
@@ -49,18 +51,28 @@ function Probe() {
 }
 
 describe("AuthContext", () => {
+  let currentSession: { access_token: string; refresh_token: string } | null = null;
+
   beforeEach(() => {
     vi.clearAllMocks();
     authRef = null;
     sessionStorage.clear();
     vi.stubGlobal("fetch", fetchMock);
+    currentSession = null;
 
     onAuthStateChangeMock.mockImplementation(() => ({
       data: { subscription: { unsubscribe: vi.fn() } },
     }));
-    getSessionMock.mockResolvedValue({ data: { session: null } });
-    setSessionMock.mockResolvedValue({ error: null });
-    signOutMock.mockResolvedValue({ error: null });
+    getSessionMock.mockImplementation(async () => ({ data: { session: currentSession } }));
+    refreshSessionMock.mockImplementation(async () => ({ data: { session: currentSession }, error: null }));
+    setSessionMock.mockImplementation(async (session: { access_token: string; refresh_token: string }) => {
+      currentSession = session;
+      return { error: null };
+    });
+    signOutMock.mockImplementation(async () => {
+      currentSession = null;
+      return { error: null };
+    });
     rpcMock.mockResolvedValue({ data: 2, error: null });
     encryptSessionDataMock.mockResolvedValue("encrypted-session");
     decryptSessionDataMock.mockResolvedValue(null);

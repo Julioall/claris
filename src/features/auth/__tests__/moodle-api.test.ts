@@ -7,6 +7,7 @@ import {
 
 const invokeMock = vi.fn();
 const getSessionMock = vi.fn();
+const refreshSessionMock = vi.fn();
 const fetchMock = vi.fn();
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -16,6 +17,7 @@ vi.mock('@/integrations/supabase/client', () => ({
     },
     auth: {
       getSession: (...args: unknown[]) => getSessionMock(...args),
+      refreshSession: (...args: unknown[]) => refreshSessionMock(...args),
     },
   },
 }));
@@ -31,6 +33,14 @@ describe('moodle-api', () => {
           access_token: 'edge-token',
         },
       },
+    });
+    refreshSessionMock.mockResolvedValue({
+      data: {
+        session: {
+          access_token: 'refreshed-edge-token',
+        },
+      },
+      error: null,
     });
   });
 
@@ -103,5 +113,87 @@ describe('moodle-api', () => {
       data: { activitiesCount: 3 },
       error: null,
     });
+  });
+
+  it('returns a friendly error when there is no valid Supabase session', async () => {
+    getSessionMock.mockResolvedValueOnce({
+      data: { session: null },
+      error: null,
+    });
+    refreshSessionMock.mockResolvedValueOnce({
+      data: { session: null },
+      error: null,
+    });
+
+    const result = await invokeMoodleFunctionWithTimeout({
+      functionName: 'moodle-grade-suggestions',
+      body: { courseId: 42 },
+      timeoutMs: 1000,
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      data: null,
+      error: { message: 'Sessao expirada. Faca login novamente.' },
+    });
+  });
+
+  it('refreshes the session and retries when the first edge call returns invalid JWT', async () => {
+    getSessionMock.mockResolvedValueOnce({
+      data: {
+        session: {
+          access_token: 'stale-edge-token',
+        },
+      },
+      error: null,
+    });
+    refreshSessionMock.mockResolvedValueOnce({
+      data: {
+        session: {
+          access_token: 'fresh-edge-token',
+        },
+      },
+      error: null,
+    });
+
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Invalid JWT' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }));
+
+    const result = await invokeMoodleFunctionWithTimeout({
+      functionName: 'moodle-grade-suggestions',
+      body: { courseId: 42 },
+      timeoutMs: 1000,
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      expect.stringMatching(/moodle-grade-suggestions$/),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer stale-edge-token',
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      expect.stringMatching(/moodle-grade-suggestions$/),
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer fresh-edge-token',
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      data: { ok: true },
+      error: null,
+    });
+    expect(refreshSessionMock).toHaveBeenCalled();
   });
 });

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { AiGradingSettings } from '@/lib/ai-grading-settings';
 import {
   fetchGlobalAppSettings,
   GLOBAL_APP_SETTINGS_ID,
@@ -40,6 +41,16 @@ export async function saveClarisConnectionSettings(settings: Record<string, unkn
     {
       singleton_id: GLOBAL_APP_SETTINGS_ID,
       claris_llm_settings: settings,
+    },
+    { onConflict: 'singleton_id' },
+  );
+}
+
+export async function saveAiGradingSettings(settings: AiGradingSettings) {
+  return supabase.from('app_settings').upsert(
+    {
+      singleton_id: GLOBAL_APP_SETTINGS_ID,
+      ai_grading_settings: settings,
     },
     { onConflict: 'singleton_id' },
   );

@@ -7,6 +7,7 @@ import {
 import type { User } from '@/features/auth/types';
 import type { Course } from '@/features/courses/types';
 
+import { isInvalidRefreshTokenError } from '../domain/session';
 import type { MoodleSession } from '../domain/session';
 
 const DEFAULT_MOODLE_SERVICE = 'moodle_mobile_app';
@@ -57,9 +58,28 @@ export async function parseFunctionsError(err: unknown): Promise<ParsedFunctionE
   }
 }
 
-export async function resolveEdgeAccessToken(): Promise<string> {
-  const { data: { session } } = await supabase.auth.getSession();
-  return session?.access_token || SUPABASE_PUBLISHABLE_KEY;
+export async function resolveEdgeAccessToken(forceRefresh = false): Promise<string> {
+  const { data: { session }, error } = await supabase.auth.getSession();
+
+  if (error && isInvalidRefreshTokenError(error)) {
+    throw new Error('Sessao expirada. Faca login novamente.');
+  }
+
+  if (!forceRefresh && session?.access_token) {
+    return session.access_token;
+  }
+
+  const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+
+  if (refreshError && isInvalidRefreshTokenError(refreshError)) {
+    throw new Error('Sessao expirada. Faca login novamente.');
+  }
+
+  if (refreshData.session?.access_token) {
+    return refreshData.session.access_token;
+  }
+
+  throw new Error('Sessao expirada. Faca login novamente.');
 }
 
 export async function authenticateMoodleUser(params: {
@@ -169,24 +189,59 @@ export async function invokeMoodleFunctionWithTimeout(params: {
   const timeoutId = setTimeout(() => controller.abort(), params.timeoutMs ?? 25000);
 
   try {
-    const accessToken = params.accessTokenOverride || await resolveEdgeAccessToken();
-
-    const response = await fetch(`${SUPABASE_FUNCTIONS_BASE_URL}/${params.functionName}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify(params.body),
-      signal: controller.signal,
-    });
-
-    let payload: Record<string, unknown> | null = null;
+    let accessToken: string;
     try {
-      payload = await response.json() as Record<string, unknown>;
-    } catch {
-      payload = null;
+      accessToken = params.accessTokenOverride || await resolveEdgeAccessToken();
+    } catch (error) {
+      return {
+        data: null,
+        error: {
+          message: error instanceof Error ? error.message : 'Sessao expirada. Faca login novamente.',
+        },
+      };
+    }
+
+    const invokeRequest = async (token: string) => {
+      const response = await fetch(`${SUPABASE_FUNCTIONS_BASE_URL}/${params.functionName}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(params.body),
+        signal: controller.signal,
+      });
+
+      let payload: Record<string, unknown> | null = null;
+      try {
+        payload = await response.json() as Record<string, unknown>;
+      } catch {
+        payload = null;
+      }
+
+      return { response, payload };
+    };
+
+    let { response, payload } = await invokeRequest(accessToken);
+
+    if (
+      response.status === 401 &&
+      !params.accessTokenOverride &&
+      ((typeof payload?.error === 'string' && /invalid jwt|unauthorized/i.test(payload.error)) ||
+        (typeof payload?.msg === 'string' && /invalid jwt|unauthorized/i.test(payload.msg)))
+    ) {
+      try {
+        accessToken = await resolveEdgeAccessToken(true);
+        ({ response, payload } = await invokeRequest(accessToken));
+      } catch (error) {
+        return {
+          data: null,
+          error: {
+            message: error instanceof Error ? error.message : 'Sessao expirada. Faca login novamente.',
+          },
+        };
+      }
     }
 
     if (!response.ok) {

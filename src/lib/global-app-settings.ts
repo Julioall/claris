@@ -1,6 +1,11 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/integrations/supabase/types';
 import {
+  DEFAULT_AI_GRADING_SETTINGS,
+  parseAiGradingSettings,
+  type AiGradingSettings,
+} from '@/lib/ai-grading-settings';
+import {
   DEFAULT_CLARIS_LLM_SETTINGS,
   parseClarisLlmSettings,
   type ClarisLlmSettings,
@@ -18,6 +23,7 @@ export interface GlobalAppSettings {
   moodleConnectionService: string;
   riskThresholdDays: GlobalRiskThresholdDays;
   clarisSettings: ClarisLlmSettings;
+  aiGradingSettings: AiGradingSettings;
 }
 
 export const GLOBAL_APP_SETTINGS_ID = 'global';
@@ -34,6 +40,7 @@ export const DEFAULT_GLOBAL_APP_SETTINGS: GlobalAppSettings = {
     critico: 30,
   },
   clarisSettings: DEFAULT_CLARIS_LLM_SETTINGS,
+  aiGradingSettings: DEFAULT_AI_GRADING_SETTINGS,
 };
 
 const asObject = (value: unknown): Record<string, unknown> =>
@@ -59,13 +66,14 @@ export function parseGlobalAppSettings(value: unknown): GlobalAppSettings {
       critico: Number(rawRiskThreshold.critico ?? DEFAULT_GLOBAL_APP_SETTINGS.riskThresholdDays.critico),
     }),
     clarisSettings: parseClarisLlmSettings(raw.claris_llm_settings),
+    aiGradingSettings: parseAiGradingSettings(raw.ai_grading_settings),
   };
 }
 
 export async function fetchGlobalAppSettings(client: SupabaseClient<Database>): Promise<GlobalAppSettings> {
   const { data, error } = await client
     .from('app_settings')
-    .select('singleton_id, moodle_connection_url, moodle_connection_service, risk_threshold_days, claris_llm_settings')
+    .select('singleton_id, moodle_connection_url, moodle_connection_service, risk_threshold_days, claris_llm_settings, ai_grading_settings')
     .eq('singleton_id', GLOBAL_APP_SETTINGS_ID)
     .maybeSingle();
 
