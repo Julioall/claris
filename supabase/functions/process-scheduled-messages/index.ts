@@ -97,7 +97,7 @@ function readSecret(req: Request): string | null {
 
 function hasValidSecret(req: Request): boolean {
   const expectedSecret = (Deno.env.get('SCHEDULED_MESSAGES_CRON_SECRET') ?? '').trim()
-  if (!expectedSecret) return true
+  if (!expectedSecret) return false
   return readSecret(req) === expectedSecret
 }
 
