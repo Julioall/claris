@@ -1,6 +1,7 @@
 import type { Course } from '@/features/courses/types';
 
 export interface User {
+  background_reauth_enabled?: boolean;
   id: string;
   moodle_user_id: string;
   moodle_username: string;

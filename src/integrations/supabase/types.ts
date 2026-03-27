@@ -2950,6 +2950,7 @@ export type Database = {
       users: {
         Row: {
           avatar_url: string | null
+          background_reauth_enabled: boolean
           created_at: string | null
           email: string | null
           full_name: string
@@ -2963,6 +2964,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          background_reauth_enabled?: boolean
           created_at?: string | null
           email?: string | null
           full_name: string
@@ -2976,6 +2978,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          background_reauth_enabled?: boolean
           created_at?: string | null
           email?: string | null
           full_name?: string

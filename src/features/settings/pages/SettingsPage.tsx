@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { fetchGlobalSettings } from '@/features/settings/api';
+import { MoodleReauthCard } from '@/features/settings/components/MoodleReauthCard';
 import { ThemeCard } from '@/features/settings/components/ThemeCard';
 import {
   DEFAULT_MOODLE_URL,
@@ -58,6 +59,7 @@ export default function SettingsPage() {
         </Card>
 
         <ThemeCard />
+        {user ? <MoodleReauthCard userId={user.id} /> : null}
       </div>
 
       <Card>

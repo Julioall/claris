@@ -48,6 +48,9 @@ enable_signup = true
 [functions.moodle-auth]
 verify_jwt = false
 
+[functions.moodle-reauth-settings]
+verify_jwt = false
+
 [functions.moodle-sync-courses]
 verify_jwt = false
 

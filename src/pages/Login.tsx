@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
+
 import { ClarisLogo } from '@/components/ui/claris-logo';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,6 @@ import {
 } from '@/lib/global-app-settings';
 
 export default function Login() {
-  const BACKGROUND_REAUTH_PREFERENCE_KEY = 'background-reauth-opt-in';
   const navigate = useNavigate();
   const { login, isLoading } = useAuth();
 
@@ -24,10 +23,6 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [backgroundReauthEnabled, setBackgroundReauthEnabled] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem(BACKGROUND_REAUTH_PREFERENCE_KEY) === 'true';
-  });
 
   const handleCredentialLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,20 +40,11 @@ export default function Login() {
       const loginDefaults = await fetchLoginDefaults();
       storedUrl = loginDefaults.moodleUrl || DEFAULT_MOODLE_URL;
       storedService = loginDefaults.moodleService || DEFAULT_MOODLE_SERVICE;
-    } catch (error) {
-      console.error('Error loading global Moodle connection settings:', error);
+    } catch (nextError) {
+      console.error('Error loading global Moodle connection settings:', nextError);
     }
 
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(
-        BACKGROUND_REAUTH_PREFERENCE_KEY,
-        backgroundReauthEnabled ? 'true' : 'false',
-      );
-    }
-
-    const success = await login(username, password, storedUrl, storedService, {
-      backgroundReauthEnabled,
-    });
+    const success = await login(username, password, storedUrl, storedService);
     if (success) {
       navigate('/');
     }
@@ -121,22 +107,6 @@ export default function Login() {
                 </div>
               </div>
 
-              <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/20 px-3 py-3">
-                <Checkbox
-                  id="background-reauth"
-                  checked={backgroundReauthEnabled}
-                  onCheckedChange={(checked) => setBackgroundReauthEnabled(checked === true)}
-                />
-                <div className="space-y-1">
-                  <Label htmlFor="background-reauth" className="cursor-pointer text-sm">
-                    Permitir reautorização automática para jobs em segundo plano
-                  </Label>
-                  <p className="text-xs text-muted-foreground">
-                    Quando habilitado, sua credencial do Moodle é cifrada no servidor para que envios e execuções agendadas possam renovar o token sem depender desta aba aberta.
-                  </p>
-                </div>
-              </div>
-
               {error && (
                 <p className="text-sm text-destructive">{error}</p>
               )}
@@ -161,7 +131,7 @@ export default function Login() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground">
-          Ao entrar, seus dados são sincronizados do Moodle e salvos de forma segura.
+          Ao entrar, seus dados sao sincronizados do Moodle e salvos de forma segura.
         </p>
 
         <p className="text-center text-[10px] text-muted-foreground/70">

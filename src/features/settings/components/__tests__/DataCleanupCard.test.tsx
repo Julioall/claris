@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DataCleanupCard } from '@/features/settings/components/DataCleanupCard';
+import { CLEANUP_OPTIONS } from '@/features/settings/lib/cleanup-options';
 
 const useAuthMock = vi.fn();
 const toastMock = vi.fn();
 const cleanupDataMock = vi.fn();
-const cleanupSelectionMock = vi.fn();
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
@@ -14,7 +14,6 @@ vi.mock('@/contexts/AuthContext', () => ({
 
 vi.mock('@/features/settings/api/cleanup', () => ({
   cleanupData: (...args: unknown[]) => cleanupDataMock(...args),
-  cleanupSelection: (...args: unknown[]) => cleanupSelectionMock(...args),
 }));
 
 vi.mock('@/hooks/use-toast', () => ({
@@ -29,7 +28,6 @@ describe('DataCleanupCard', () => {
       setCourses: vi.fn(),
     });
 
-    cleanupSelectionMock.mockResolvedValue({ success: true });
     cleanupDataMock.mockResolvedValue({
       data: { cleaned: [], errors: [] },
       error: null,
@@ -47,7 +45,7 @@ describe('DataCleanupCard', () => {
     expect(cleanupButton).toBeDisabled();
 
     await user.click(screen.getByRole('button', { name: /Selecionar tudo/i }));
-    expect(cleanupButton).toHaveTextContent('(12)');
+    expect(cleanupButton).toHaveTextContent(`(${CLEANUP_OPTIONS.length})`);
     expect(cleanupButton).toBeEnabled();
 
     await user.click(screen.getByRole('button', { name: /Desmarcar tudo/i }));
@@ -55,40 +53,48 @@ describe('DataCleanupCard', () => {
     expect(cleanupButton).toBeDisabled();
   });
 
-  it('executes cleanup and clears courses cache when courses option is selected', async () => {
+  it('executes cleanup and clears courses cache when a course-linked option is selected', async () => {
     const user = userEvent.setup();
     const setCoursesMock = vi.fn();
     useAuthMock.mockReturnValue({ setCourses: setCoursesMock });
 
     render(<DataCleanupCard />);
 
-    await user.click(screen.getByLabelText(/^Cursos$/i));
+    await user.click(screen.getByLabelText(/^Cursos e vinculos$/i));
     await user.click(screen.getByRole('button', { name: /Limpar selecionados/i }));
     await user.click(screen.getByRole('button', { name: /Sim, limpar dados/i }));
 
     await waitFor(() => {
-      expect(toastMock).toHaveBeenCalledWith(
+      expect(cleanupDataMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: expect.stringMatching(/conclu/i),
+          mode: 'selected_cleanup',
+          tables: expect.arrayContaining(['courses', 'user_courses']),
         }),
       );
     });
 
     expect(setCoursesMock).toHaveBeenCalledWith([]);
-    expect(cleanupSelectionMock).toHaveBeenCalledTimes(1);
-    expect(cleanupSelectionMock).toHaveBeenCalledWith('courses');
+    expect(toastMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/concluida/i),
+      }),
+    );
   });
 
-  it('shows destructive toast when one selected cleanup option fails', async () => {
+  it('shows destructive toast when backend reports partial cleanup failure', async () => {
     const user = userEvent.setup();
-    cleanupSelectionMock.mockResolvedValue({
-      success: false,
-      error: 'fail user_courses',
+    cleanupDataMock.mockResolvedValue({
+      data: {
+        success: false,
+        cleaned: [],
+        errors: [{ table: 'background_jobs', error: 'fail background_jobs' }],
+      },
+      error: null,
     });
 
     render(<DataCleanupCard />);
 
-    await user.click(screen.getByLabelText(/^Meus cursos$/i));
+    await user.click(screen.getByLabelText(/^Background jobs$/i));
     await user.click(screen.getByRole('button', { name: /Limpar selecionados/i }));
     await user.click(screen.getByRole('button', { name: /Sim, limpar dados/i }));
 
@@ -102,6 +108,6 @@ describe('DataCleanupCard', () => {
 
     expect(lastToastCall?.title).toMatch(/parcial/i);
     expect(lastToastCall?.variant).toBe('destructive');
-    expect(lastToastCall?.description).toContain('Meus cursos: fail user_courses');
+    expect(lastToastCall?.description).toContain('background_jobs: fail background_jobs');
   });
 });

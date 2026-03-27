@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 const DEFAULT_FUNCTIONS = [
   'moodle-auth',
+  'moodle-reauth-settings',
   'moodle-sync-courses',
   'moodle-sync-students',
   'moodle-sync-activities',

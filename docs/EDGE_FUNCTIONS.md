@@ -107,7 +107,7 @@ Antes de publicar mudancas em functions ou migrations:
 - `bulk-message-send`: criacao e disparo inicial de jobs de envio em massa
 - `whatsapp-instance-manager`: operacao das instancias compartilhadas/pessoais
 - `moodle-*`: autenticacao e sincronizacao incremental com Moodle
-- `data-cleanup`: limpeza orientada pelo backend
+- `data-cleanup`: limpeza operacional admin-only, com ordenacao server-side e cobertura ampliada do banco
 
 ## Nova function: `moodle-grade-suggestions`
 

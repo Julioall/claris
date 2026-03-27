@@ -16,7 +16,7 @@ import { encryptMoodleReauthPayload } from '../_shared/security/moodle-reauth-cr
 import type { MoodleTokenResponse } from '../_shared/moodle/mod.ts'
 
 interface LoginParams {
-  backgroundReauthEnabled: boolean
+  backgroundReauthEnabled?: boolean
   moodleUrl: string
   username: string
   password: string
@@ -129,7 +129,10 @@ export async function login(params: LoginParams): Promise<Response> {
       )
     }
 
+    const resolvedBackgroundReauthEnabled = backgroundReauthEnabled ?? existingUser?.background_reauth_enabled ?? true
+
     const userData = {
+      background_reauth_enabled: resolvedBackgroundReauthEnabled,
       moodle_user_id: String(siteInfo.userid),
       moodle_username: siteInfo.username,
       full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
@@ -282,7 +285,7 @@ export async function login(params: LoginParams): Promise<Response> {
       username,
       password,
       service,
-      enabled: backgroundReauthEnabled,
+      enabled: resolvedBackgroundReauthEnabled,
     })
 
     return jsonResponse({
@@ -312,7 +315,7 @@ export async function fallbackLogin(
   tokenResponse: MoodleTokenResponse,
   moodleUrl: string,
   service: string,
-  backgroundReauthEnabled = false,
+  backgroundReauthEnabled?: boolean,
 ): Promise<Response> {
   console.log('Moodle unavailable, attempting fallback login...')
 
@@ -333,6 +336,8 @@ export async function fallbackLogin(
 
       console.log('Fallback login successful for user:', fallbackUser.full_name)
 
+      const resolvedBackgroundReauthEnabled = backgroundReauthEnabled ?? fallbackUser.background_reauth_enabled ?? true
+
       const backgroundReauth = await syncBackgroundReauthCredential({
         supabase,
         userId: fallbackUser.id,
@@ -340,7 +345,7 @@ export async function fallbackLogin(
         username,
         password,
         service,
-        enabled: backgroundReauthEnabled,
+        enabled: resolvedBackgroundReauthEnabled,
       })
 
       return jsonResponse({

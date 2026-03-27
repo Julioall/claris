@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Trash2 } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,99 +15,45 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { cleanupData, cleanupSelection } from '../api/cleanup';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
+import { cleanupData } from '../api/cleanup';
+import {
+  CLEANUP_CATEGORY_LABELS,
+  CLEANUP_OPTIONS,
+  getCleanupOption,
+  resolveCleanupTables,
+  shouldClearCoursesCache,
+  type CleanupOption,
+} from '../lib/cleanup-options';
 
-interface CleanupOption {
-  id: string;
-  label: string;
-  description: string;
-  category: 'preferences' | 'courses' | 'students' | 'tasks' | 'history';
-}
+const CLEANUP_OPTIONS_BY_CATEGORY = CLEANUP_OPTIONS.reduce((acc, option) => {
+  if (!acc[option.category]) {
+    acc[option.category] = [];
+  }
+  acc[option.category].push(option);
+  return acc;
+}, {} as Record<CleanupOption['category'], CleanupOption[]>);
 
-const cleanupOptions: CleanupOption[] = [
-  // Preferências do usuário
-  {
-    id: 'user_sync_preferences',
-    label: 'Preferências de sincronização',
-    description: 'Remove suas preferências de sincronização com o Moodle',
-    category: 'preferences',
-  },
-  {
-    id: 'user_ignored_courses',
-    label: 'Cursos ignorados',
-    description: 'Remove a lista de cursos que você ignorou',
-    category: 'preferences',
-  },
-  // Registros de cursos
-  {
-    id: 'student_course_grades',
-    label: 'Notas de cursos',
-    description: 'Remove todas as notas dos alunos por curso',
-    category: 'courses',
-  },
-  {
-    id: 'user_courses',
-    label: 'Meus cursos',
-    description: 'Remove seus vínculos com os cursos',
-    category: 'courses',
-  },
-  {
-    id: 'student_courses',
-    label: 'Matrículas de alunos',
-    description: 'Remove todas as matrículas dos alunos nos cursos',
-    category: 'courses',
-  },
-  {
-    id: 'courses',
-    label: 'Cursos',
-    description: 'Remove todos os cursos sincronizados',
-    category: 'courses',
-  },
-  // Dados de alunos
-  {
-    id: 'activities',
-    label: 'Atividades dos alunos',
-    description: 'Remove todas as atividades e notas sincronizadas',
-    category: 'students',
-  },
-  {
-    id: 'students',
-    label: 'Alunos',
-    description: 'Remove todos os alunos',
-    category: 'students',
-  },
-  // Tarefas e anotações
-  {
-    id: 'notes',
-    label: 'Anotações',
-    description: 'Remove todas as anotações sobre alunos',
-    category: 'tasks',
-  },
-  {
-    id: 'pending_tasks',
-    label: 'Pendências',
-    description: 'Remove todas as pendências criadas',
-    category: 'tasks',
-  },
-  // Histórico
-  {
-    id: 'activity_feed',
-    label: 'Feed de atividades',
-    description: 'Remove o histórico de atividades',
-    category: 'history',
-  },
-  {
-    id: 'risk_history',
-    label: 'Histórico de risco',
-    description: 'Remove o histórico de níveis de risco dos alunos',
-    category: 'history',
-  },
+const PRESERVED_RESOURCES = [
+  'Contas de usuario e papeis administrativos',
+  'Configuracoes globais, feature flags e credenciais da plataforma',
+  'Instancias e limites de servicos compartilhados',
 ];
 
+function formatCleanupErrors(errors: Array<{ table: string; error?: string }> | undefined) {
+  if (!errors || errors.length === 0) return null;
+  const summarized = errors
+    .slice(0, 4)
+    .map(({ table, error }) => `${table}: ${error ?? 'erro desconhecido'}`);
 
-// Nova função: chama a Edge Function de cleanup
+  if (errors.length > 4) {
+    summarized.push(`+${errors.length - 4} tabela(s) com falha`);
+  }
+
+  return summarized.join(', ');
+}
+
 export function DataCleanupCard() {
   const { setCourses } = useAuth();
   const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
@@ -117,43 +63,28 @@ export function DataCleanupCard() {
   const [isFullCleanupLoading, setIsFullCleanupLoading] = useState(false);
 
   const toggleOption = (optionId: string) => {
-    setSelectedOptions(prev =>
+    setSelectedOptions((prev) => (
       prev.includes(optionId)
-        ? prev.filter(id => id !== optionId)
+        ? prev.filter((id) => id !== optionId)
         : [...prev, optionId]
-    );
+    ));
   };
 
   const selectAll = () => {
-    if (selectedOptions.length === cleanupOptions.length) {
+    if (selectedOptions.length === CLEANUP_OPTIONS.length) {
       setSelectedOptions([]);
-    } else {
-      setSelectedOptions(cleanupOptions.map(o => o.id));
+      return;
     }
-  };
 
-  const categoryLabels: Record<string, string> = {
-    preferences: 'Preferências do Usuário',
-    courses: 'Registros de Cursos',
-    students: 'Dados de Alunos',
-    tasks: 'Tarefas e Anotações',
-    history: 'Histórico',
+    setSelectedOptions(CLEANUP_OPTIONS.map((option) => option.id));
   };
-
-  const optionsByCategory = cleanupOptions.reduce((acc, option) => {
-    if (!acc[option.category]) {
-      acc[option.category] = [];
-    }
-    acc[option.category].push(option);
-    return acc;
-  }, {} as Record<string, CleanupOption[]>);
 
   const handleCleanup = async () => {
     if (selectedOptions.length === 0) {
       toast({
-        title: "Nenhuma opção selecionada",
-        description: "Selecione pelo menos uma opção para limpar.",
-        variant: "destructive",
+        title: 'Nenhuma opcao selecionada',
+        description: 'Selecione pelo menos uma categoria para limpar.',
+        variant: 'destructive',
       });
       return;
     }
@@ -162,74 +93,59 @@ export function DataCleanupCard() {
   };
 
   const executeCleanup = async () => {
+    const tables = resolveCleanupTables(selectedOptions);
+    if (tables.length === 0) {
+      toast({
+        title: 'Nenhuma tabela resolvida',
+        description: 'Nao foi possivel identificar as tabelas para limpeza.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setIsLoading(true);
     setShowConfirmDialog(false);
 
     try {
-      // Order matters due to foreign key constraints
-      // Delete in dependency order: no references → with references
-      const deleteOrder = [
-        'notes',
-        'pending_tasks',
-        'risk_history',
-        'activity_feed',
-        'activities',
-        'student_course_grades',
-        'student_courses',
-        'user_courses',
-        'students',
-        'courses',
-        'user_ignored_courses',
-        'user_sync_preferences',
-      ];
-
-      const sortedOptions = [...selectedOptions].sort((a, b) => {
-        const indexA = deleteOrder.indexOf(a);
-        const indexB = deleteOrder.indexOf(b);
-        return indexA - indexB;
+      const { data, error } = await cleanupData({
+        mode: 'selected_cleanup',
+        tables,
       });
 
-      let deletedCount = 0;
-      const errors: string[] = [];
-
-      for (const optionId of sortedOptions) {
-        const option = cleanupOptions.find(o => o.id === optionId);
-        if (!option) continue;
-
-        const result = await cleanupSelection(optionId);
-        
-        if (result.success) {
-          deletedCount++;
-        } else {
-          errors.push(`${option.label}: ${result.error}`);
-        }
+      if (error) {
+        toast({
+          title: 'Erro na limpeza',
+          description: error.message,
+          variant: 'destructive',
+        });
+        return;
       }
 
-      // Clear local courses cache if courses were deleted
-      if (selectedOptions.includes('courses')) {
+      if (shouldClearCoursesCache(selectedOptions)) {
         setCourses([]);
       }
 
-      if (errors.length > 0) {
+      const errorSummary = formatCleanupErrors(data?.errors);
+      if (data?.errors?.length) {
         toast({
-          title: "Limpeza parcialmente concluída",
-          description: `${deletedCount} categoria(s) removidas. Erros: ${errors.join(', ')}`,
-          variant: "destructive",
+          title: 'Limpeza parcialmente concluida',
+          description: errorSummary ?? `${data.errors.length} tabela(s) falharam durante a limpeza.`,
+          variant: 'destructive',
         });
-      } else {
-        toast({
-          title: "Limpeza concluída",
-          description: `${deletedCount} categoria(s) de dados foram removidas com sucesso.`,
-        });
+        return;
       }
 
+      toast({
+        title: 'Limpeza concluida',
+        description: `${selectedOptions.length} categoria(s) processadas com sucesso.`,
+      });
       setSelectedOptions([]);
     } catch (err) {
       console.error('Cleanup error:', err);
       toast({
-        title: "Erro na limpeza",
-        description: "Ocorreu um erro ao limpar os dados. Tente novamente.",
-        variant: "destructive",
+        title: 'Erro na limpeza',
+        description: 'Ocorreu um erro ao limpar os dados. Tente novamente.',
+        variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
@@ -245,33 +161,36 @@ export function DataCleanupCard() {
 
       if (error) {
         toast({
-          title: "Erro na limpeza completa",
+          title: 'Erro na limpeza completa',
           description: error.message,
-          variant: "destructive",
+          variant: 'destructive',
         });
         return;
       }
 
       setCourses([]);
 
-      if (data?.errors?.length > 0) {
+      const errorSummary = formatCleanupErrors(data?.errors);
+      if (data?.errors?.length) {
         toast({
-          title: "Limpeza parcialmente concluída",
-          description: `${data.cleaned.length} tabelas limpas. ${data.errors.length} erro(s).`,
-          variant: "destructive",
+          title: 'Limpeza parcialmente concluida',
+          description: errorSummary ?? `${data.errors.length} tabela(s) falharam durante a limpeza.`,
+          variant: 'destructive',
         });
-      } else {
-        toast({
-          title: "Base completamente limpa",
-          description: "Todos os dados foram removidos. Faça uma nova sincronização.",
-        });
+        return;
       }
+
+      setSelectedOptions([]);
+      toast({
+        title: 'Base operacional limpa',
+        description: 'Os dados operacionais foram removidos. Contas e configuracoes globais foram preservadas.',
+      });
     } catch (err) {
       console.error('Full cleanup error:', err);
       toast({
-        title: "Erro na limpeza",
-        description: "Ocorreu um erro ao limpar a base completa.",
-        variant: "destructive",
+        title: 'Erro na limpeza',
+        description: 'Ocorreu um erro ao limpar a base completa.',
+        variant: 'destructive',
       });
     } finally {
       setIsFullCleanupLoading(false);
@@ -284,18 +203,28 @@ export function DataCleanupCard() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Trash2 className="h-5 w-5 text-destructive" />
-            Limpar Dados
+            Limpeza Operacional do Banco
           </CardTitle>
           <CardDescription>
-            Remova dados do banco para fazer uma sincronização limpa
+            Acao administrativa para remover dados operacionais e permitir uma retomada limpa da base.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex items-center gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0" />
-            <p className="text-sm text-destructive">
-              Atenção: Esta ação é irreversível. Os dados removidos não poderão ser recuperados. Sua conta de usuário será preservada.
-            </p>
+          <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+            <div className="space-y-1 text-sm text-destructive">
+              <p>Atencao: esta acao e irreversivel e remove dados para todos os usuarios da plataforma.</p>
+              <p>Esta tela deve ser usada apenas por administradores durante manutencoes e resets controlados.</p>
+            </div>
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3">
+            <p className="text-sm font-medium">Itens preservados neste fluxo:</p>
+            <ul className="mt-2 list-disc list-inside space-y-1 text-sm text-muted-foreground">
+              {PRESERVED_RESOURCES.map((resource) => (
+                <li key={resource}>{resource}</li>
+              ))}
+            </ul>
           </div>
 
           <div className="space-y-3">
@@ -307,31 +236,31 @@ export function DataCleanupCard() {
                 onClick={selectAll}
                 className="text-xs"
               >
-                {selectedOptions.length === cleanupOptions.length ? 'Desmarcar tudo' : 'Selecionar tudo'}
+                {selectedOptions.length === CLEANUP_OPTIONS.length ? 'Desmarcar tudo' : 'Selecionar tudo'}
               </Button>
             </div>
 
             <div className="space-y-4">
-              {Object.entries(optionsByCategory).map(([category, options]) => (
+              {Object.entries(CLEANUP_OPTIONS_BY_CATEGORY).map(([category, options]) => (
                 <div key={category} className="space-y-2">
                   <h3 className="text-sm font-semibold text-foreground/70">
-                    {categoryLabels[category]}
+                    {CLEANUP_CATEGORY_LABELS[category as CleanupOption['category']]}
                   </h3>
-                  <div className="grid gap-2 ml-2 border-l-2 border-muted pl-3">
+                  <div className="ml-2 grid gap-2 border-l-2 border-muted pl-3">
                     {options.map((option) => (
                       <div
                         key={option.id}
-                        className="flex items-start space-x-3 p-2 rounded-lg hover:bg-accent/30 transition-colors"
+                        className="flex items-start space-x-3 rounded-lg p-2 transition-colors hover:bg-accent/30"
                       >
                         <Checkbox
                           id={option.id}
                           checked={selectedOptions.includes(option.id)}
                           onCheckedChange={() => toggleOption(option.id)}
                         />
-                        <div className="grid gap-0.5 leading-none flex-1">
+                        <div className="grid flex-1 gap-0.5 leading-none">
                           <Label
                             htmlFor={option.id}
-                            className="text-sm font-medium cursor-pointer"
+                            className="cursor-pointer text-sm font-medium"
                           >
                             {option.label}
                           </Label>
@@ -372,11 +301,7 @@ export function DataCleanupCard() {
               className="border-destructive/50 text-destructive hover:bg-destructive/10"
               disabled={isLoading || isFullCleanupLoading}
             >
-              {isFullCleanupLoading ? (
-                <Spinner className="h-4 w-4" />
-              ) : (
-                'Limpar tudo'
-              )}
+              {isFullCleanupLoading ? <Spinner className="h-4 w-4" /> : 'Limpar tudo'}
             </Button>
           </div>
         </CardContent>
@@ -391,16 +316,16 @@ export function DataCleanupCard() {
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
-              <p>Você está prestes a remover permanentemente:</p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                {selectedOptions.map(id => {
-                  const option = cleanupOptions.find(o => o.id === id);
-                  return option ? <li key={id}>{option.label}</li> : null;
-                })}
-              </ul>
-              <p className="font-medium text-destructive">
-                Esta ação não pode ser desfeita!
-              </p>
+                <p>Voce esta prestes a remover permanentemente:</p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  {selectedOptions.map((id) => {
+                    const option = getCleanupOption(id);
+                    return option ? <li key={id}>{option.label}</li> : null;
+                  })}
+                </ul>
+                <p className="font-medium text-destructive">
+                  Esta acao nao pode ser desfeita.
+                </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -421,23 +346,22 @@ export function DataCleanupCard() {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Limpar TODA a base de dados
+              Limpar toda a base operacional
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2">
-              <p>
-                Esta ação vai remover <strong>todos os dados</strong> do sistema, incluindo dados que podem ter sido criados por outras sincronizações ou que não estão mais vinculados à sua conta:
-              </p>
-              <ul className="list-disc list-inside space-y-1 text-sm">
-                <li>Todos os cursos, alunos e matrículas</li>
-                <li>Todas as atividades, notas e pendências</li>
-                <li>Todas as anotações e mensagens</li>
-                <li>Todo o histórico de risco e feed de atividades</li>
-                <li>Todas as preferências e modelos</li>
-              </ul>
-              <p className="font-medium text-destructive">
-                Esta ação é irreversível! Sua conta de usuário será preservada.
-              </p>
+                <p>
+                  Esta acao remove todos os dados operacionais hoje cobertos pelo fluxo de limpeza administrativa.
+                </p>
+                <ul className="list-disc list-inside space-y-1 text-sm">
+                  <li>Base academica sincronizada, frequencia e snapshots</li>
+                  <li>Pendencias, tarefas modernas, agenda e historicos</li>
+                  <li>Mensageria, agendamentos e modelos operacionais</li>
+                  <li>Claris IA, jobs em segundo plano, suporte e observabilidade</li>
+                </ul>
+                <p className="font-medium text-destructive">
+                  Contas de usuario, papeis admin e configuracoes globais permanecem preservados.
+                </p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -896,7 +896,7 @@ export function BulkSendTab() {
           <DialogHeader>
             <DialogTitle>Agendar Envio</DialogTitle>
             <DialogDescription>
-              Este agendamento já guarda o snapshot dos destinatários e das mensagens personalizadas. Se a reautorização automática do Moodle estiver habilitada no login, o executor poderá disparar o job sem depender da aba aberta.
+              Este agendamento já guarda o snapshot dos destinatários e das mensagens personalizadas. Se a reautorização automática do Moodle estiver habilitada nas suas configurações, o executor poderá disparar o job sem depender da aba aberta.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -935,7 +935,7 @@ export function BulkSendTab() {
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
               {moodleSession
-                ? 'Os destinatários ficam congelados neste agendamento. Para execução automática, habilite a reautorização do Moodle na tela de login.'
+                ? 'Os destinatários ficam congelados neste agendamento. Para execução automática, habilite a reautorização do Moodle nas suas configurações.'
                 : 'Os destinatários ficam congelados neste agendamento, mas a sessão atual do Moodle não está disponível. O executor registrará falha se o job vencer sem reautorização habilitada.'}
             </div>
           </div>

@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { DataCleanupCard } from '@/features/settings/components/DataCleanupCard';
 import {
   fetchAdminSettings,
   saveAiGradingSettings,
@@ -686,6 +687,8 @@ export default function AdminConfiguracoes() {
           </Button>
         </CardContent>
       </Card>
+
+      <DataCleanupCard />
     </div>
   );
 }

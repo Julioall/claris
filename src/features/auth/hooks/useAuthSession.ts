@@ -132,13 +132,16 @@ export function useAuthSession(): UseAuthSessionResult {
     setIsLoading(true);
 
     try {
-      const result = await authenticateMoodleUser({
+      const authParams = {
         username,
         password,
         moodleUrl,
         service,
-        backgroundReauthEnabled: options?.backgroundReauthEnabled === true,
-      });
+        ...(typeof options?.backgroundReauthEnabled === 'boolean'
+          ? { backgroundReauthEnabled: options.backgroundReauthEnabled }
+          : {}),
+      };
+      const result = await authenticateMoodleUser(authParams);
       if (!result.success) {
         toast({
           title: 'Erro de autenticacao',

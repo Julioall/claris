@@ -6,6 +6,7 @@ import SettingsPage from "@/features/settings/pages/SettingsPage";
 
 const useAuthMock = vi.fn();
 const fromMock = vi.fn();
+const invokeMock = vi.fn();
 const logoutMock = vi.fn();
 const syncDataMock = vi.fn();
 
@@ -20,6 +21,9 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (...args: unknown[]) => fromMock(...args),
+    functions: {
+      invoke: (...args: unknown[]) => invokeMock(...args),
+    },
   },
 }));
 
@@ -60,6 +64,14 @@ describe("Settings page", () => {
     vi.clearAllMocks();
 
     logoutMock.mockResolvedValue(undefined);
+    invokeMock.mockResolvedValue({
+      data: {
+        preferenceEnabled: false,
+        credentialActive: false,
+        requiresLogin: false,
+      },
+      error: null,
+    });
     setAuthUser();
 
     maybeSingleMock.mockResolvedValue({ data: null, error: null });
@@ -79,6 +91,7 @@ describe("Settings page", () => {
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sincronizacao geral inicial/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sair da conta/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /limpeza operacional do banco/i })).not.toBeInTheDocument();
 
     await waitFor(() => {
       expect(fromMock).toHaveBeenCalledWith("app_settings");
@@ -91,6 +104,25 @@ describe("Settings page", () => {
 
     await user.click(screen.getByRole("button", { name: /sincronizacao geral inicial/i }));
     expect(syncDataMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the background job reauthorization preference and allows disabling it", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const reauthSwitch = await screen.findByRole("switch", {
+      name: /permitir reautorizacao automatica para jobs em segundo plano/i,
+    });
+
+    expect(reauthSwitch).toHaveAttribute("data-state", "checked");
+
+    await user.click(reauthSwitch);
+
+    expect(invokeMock).toHaveBeenCalledWith("moodle-reauth-settings", {
+      body: {
+        enabled: false,
+      },
+    });
   });
 
   it("allows logout", async () => {

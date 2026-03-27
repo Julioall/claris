@@ -17,7 +17,10 @@ export function parseMoodleAuthPayload(rawBody: unknown): MoodleAuthPayload {
   const body = expectBodyObject(rawBody)
 
   return {
-    backgroundReauthEnabled: body.backgroundReauthEnabled === true,
+    backgroundReauthEnabled:
+      typeof body.backgroundReauthEnabled === 'boolean'
+        ? body.backgroundReauthEnabled
+        : undefined,
     moodleUrl: readRequiredMoodleUrl(body),
     password: readRequiredString(body, 'password', 1024),
     service: readOptionalString(body, 'service', 128),

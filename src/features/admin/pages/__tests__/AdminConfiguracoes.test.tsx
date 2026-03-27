@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 
 const fromMock = vi.fn();
 const toastMock = vi.fn();
+const useAuthMock = vi.fn();
 
 const selectMock = vi.fn();
 const eqMock = vi.fn();
@@ -32,6 +33,10 @@ vi.mock("@/hooks/use-toast", () => ({
   toast: (...args: unknown[]) => toastMock(...args),
 }));
 
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => useAuthMock(),
+}));
+
 vi.mock("@/components/ui/tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
   TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
@@ -42,6 +47,9 @@ describe("AdminConfiguracoes page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
+    useAuthMock.mockReturnValue({
+      setCourses: vi.fn(),
+    });
     maybeSingleMock.mockResolvedValue({ data: null, error: null });
     upsertMock.mockResolvedValue({ error: null });
     invokeMock.mockResolvedValue({ data: { latencyMs: 123 }, error: null });
@@ -73,6 +81,7 @@ describe("AdminConfiguracoes page", () => {
     expect(screen.getByRole("heading", { name: /correcao com ia/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar correcao com ia/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/^prompt de instrucoes personalizadas do feedback$/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /limpeza operacional do banco/i })).toBeInTheDocument();
   });
 
   it("validates risk thresholds before saving", async () => {
@@ -140,7 +149,7 @@ describe("AdminConfiguracoes page", () => {
     const user = userEvent.setup();
     render(<AdminConfiguracoes />);
 
-    await user.type(screen.getByLabelText(/modelo/i), "gpt-4o-mini");
+    await user.type(screen.getByLabelText(/^modelo$/i), "gpt-4o-mini");
     await user.type(screen.getByLabelText(/chave api/i), "sk-test");
 
     await user.click(screen.getByRole("button", { name: /testar conexao/i }));

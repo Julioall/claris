@@ -37,6 +37,7 @@ jobs:
     timeout-minutes: 10
     environment: supabase
     env:
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
       INPUT_DRY_RUN: ${{ github.event.inputs.dry_run }}
       INPUT_LIMIT: ${{ github.event.inputs.limit }}
       INPUT_SCHEDULED_MESSAGE_ID: ${{ github.event.inputs.scheduled_message_id }}
@@ -111,6 +112,18 @@ jobs:
 
           cat "$response_file"
           echo
+
+          response_body="$(cat "$response_file")"
+
+          if [ "$status_code" -eq 404 ] && echo "$response_body" | grep -q '"code":"NOT_FOUND"'; then
+            if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+              echo "::warning::A function process-scheduled-messages ainda nao foi encontrada no projeto remoto. Aguarde a conclusao do workflow 'Deploy Supabase' antes do proximo ciclo."
+              exit 0
+            fi
+
+            echo "::error::A function process-scheduled-messages ainda nao foi encontrada no projeto remoto. Execute primeiro o workflow 'Deploy Supabase' e tente novamente."
+            exit 1
+          fi
 
           if [ "$status_code" -ge 400 ]; then
             echo "::error::process-scheduled-messages retornou HTTP ${status_code}."

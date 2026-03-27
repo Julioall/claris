@@ -18,14 +18,27 @@ describe('settings cleanup api', () => {
 
   it('expands course cleanup to include dependent tables', () => {
     expect(resolveCleanupTables('courses')).toEqual([
-      'user_courses',
-      'student_courses',
+      'background_job_events',
+      'background_job_items',
+      'background_jobs',
+      'ai_grade_suggestion_job_items',
+      'ai_grade_suggestion_history',
+      'ai_grade_suggestion_jobs',
+      'activity_feed',
+      'attendance_records',
+      'attendance_course_settings',
+      'dashboard_course_activity_aggregates',
+      'student_sync_snapshots',
+      'student_activities',
       'student_course_grades',
+      'student_courses',
+      'user_courses',
+      'user_ignored_courses',
       'courses',
     ]);
   });
 
-  it('maps activities cleanup to student_activities before invoking the edge function', async () => {
+  it('maps activities cleanup to the expanded activity-related tables before invoking the edge function', async () => {
     invokeMock.mockResolvedValue({
       data: { success: true, cleaned: ['student_activities'], errors: [] },
       error: null,
@@ -39,7 +52,14 @@ describe('settings cleanup api', () => {
       expect.objectContaining({
         body: {
           mode: 'selected_cleanup',
-          tables: ['student_activities'],
+          tables: [
+            'ai_grade_suggestion_job_items',
+            'ai_grade_suggestion_history',
+            'ai_grade_suggestion_jobs',
+            'dashboard_course_activity_aggregates',
+            'student_activities',
+            'student_course_grades',
+          ],
         },
       }),
     );

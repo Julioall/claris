@@ -92,15 +92,18 @@ export async function authenticateMoodleUser(params: {
   service?: string;
 }): Promise<AuthenticateMoodleResult> {
   const cleanUrl = normalizeMoodleUrl(params.moodleUrl);
+  const body = {
+    moodleUrl: cleanUrl,
+    username: params.username,
+    password: params.password,
+    service: params.service ?? DEFAULT_MOODLE_SERVICE,
+    ...(typeof params.backgroundReauthEnabled === 'boolean'
+      ? { backgroundReauthEnabled: params.backgroundReauthEnabled }
+      : {}),
+  };
 
   const { data, error } = await supabase.functions.invoke('moodle-auth', {
-    body: {
-      backgroundReauthEnabled: params.backgroundReauthEnabled === true,
-      moodleUrl: cleanUrl,
-      username: params.username,
-      password: params.password,
-      service: params.service ?? DEFAULT_MOODLE_SERVICE,
-    },
+    body,
   });
 
   if (error) {
