@@ -78,6 +78,7 @@ sync_edge_database_types() {
 
 set_function_secrets() {
   env_file="${WORKDIR}/supabase/functions/.env"
+  scheduled_messages_secret="${SCHEDULED_MESSAGES_CRON_SECRET:-claris-scheduled-messages-local-secret}"
   touch "${env_file}"
 
   write_secret() {
@@ -104,7 +105,7 @@ set_function_secrets() {
   write_secret "EVOLUTION_API_URL" "${evo_url}"
   write_secret "EVOLUTION_API_KEY" "${EVOLUTION_API_KEY:-}"
   write_secret "MOODLE_REAUTH_SECRET" "${MOODLE_REAUTH_SECRET:-}"
-  write_secret "SCHEDULED_MESSAGES_CRON_SECRET" "${SCHEDULED_MESSAGES_CRON_SECRET:-}"
+  write_secret "SCHEDULED_MESSAGES_CRON_SECRET" "${scheduled_messages_secret}"
   write_secret "SUPABASE_PUBLIC_URL" "${SUPABASE_PUBLIC_URL:-${SUPABASE_API_URL}}"
   write_secret "WEBHOOK_SECRET"    "${WEBHOOK_SECRET:-}"
 
