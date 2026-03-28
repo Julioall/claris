@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import App from "@/App";
+import { APP_PERMISSIONS } from "@/lib/access-control";
 
 const useAuthMock = vi.fn();
+const usePermissionsMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   useAuth: () => useAuthMock(),
+}));
+
+vi.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => usePermissionsMock(),
 }));
 
 vi.mock("@/components/ui/toaster", () => ({
@@ -116,6 +122,18 @@ describe("App routing", () => {
     useAuthMock.mockReturnValue({
       isAuthenticated: false,
       isLoading: false,
+    });
+    usePermissionsMock.mockReturnValue({
+      isAdmin: false,
+      isLoading: false,
+      isFetching: false,
+      role: "tutor",
+      group: { id: "group-1", name: "Tutor", slug: "tutor" },
+      permissions: Object.values(APP_PERMISSIONS),
+      refresh: vi.fn(),
+      can: () => true,
+      canAny: () => true,
+      canAccessAdminSection: () => false,
     });
   });
 

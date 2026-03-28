@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ReactNode } from "react";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { APP_PERMISSIONS } from "@/lib/access-control";
 
 const ROUTER_FUTURE = {
   v7_startTransition: true,
@@ -10,12 +11,17 @@ const ROUTER_FUTURE = {
 } as const;
 
 const useAuthMock = vi.fn();
+const usePermissionsMock = vi.fn();
 const closeSyncProgressMock = vi.fn();
 const setShowCourseSelectorMock = vi.fn();
 const syncSelectedCoursesMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
+}));
+
+vi.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => usePermissionsMock(),
 }));
 
 vi.mock("@/components/ui/sidebar", () => ({
@@ -30,6 +36,10 @@ vi.mock("@/components/layout/AppSidebar", () => ({
 
 vi.mock("@/components/layout/TopBar", () => ({
   TopBar: () => <div data-testid="top-bar" />,
+}));
+
+vi.mock("@/components/layout/AppFooter", () => ({
+  AppFooter: () => <div data-testid="app-footer" />,
 }));
 
 vi.mock("@/components/sync/CourseSelectorDialog", () => ({
@@ -64,6 +74,18 @@ function renderPage(initialEntry = "/") {
 describe("AppLayout", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    usePermissionsMock.mockReturnValue({
+      isAdmin: false,
+      isLoading: false,
+      isFetching: false,
+      role: "tutor",
+      group: { id: "group-1", name: "Tutor", slug: "tutor" },
+      permissions: Object.values(APP_PERMISSIONS),
+      refresh: vi.fn(),
+      can: () => true,
+      canAny: () => true,
+      canAccessAdminSection: () => false,
+    });
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
       syncProgress: {
@@ -88,6 +110,7 @@ describe("AppLayout", () => {
     expect(screen.getByTestId("sidebar-provider")).toBeInTheDocument();
     expect(screen.getByTestId("app-sidebar")).toBeInTheDocument();
     expect(screen.getByTestId("top-bar")).toBeInTheDocument();
+    expect(screen.getByTestId("app-footer")).toBeInTheDocument();
     expect(screen.getByText("Layout Child")).toBeInTheDocument();
     expect(screen.getByTestId("course-selector-dialog")).toHaveTextContent("open:true");
     expect(screen.getByTestId("sync-progress-dialog")).toHaveTextContent("open:true");
@@ -98,6 +121,25 @@ describe("AppLayout", () => {
     renderPage("/claris");
 
     expect(screen.getByText("Claris Page")).toBeInTheDocument();
+    expect(screen.queryByTestId("floating-claris-chat")).not.toBeInTheDocument();
+  });
+
+  it("hides floating chat when the user lacks Claris permission", () => {
+    usePermissionsMock.mockReturnValue({
+      isAdmin: false,
+      isLoading: false,
+      isFetching: false,
+      role: "tutor",
+      group: { id: "group-1", name: "Tutor", slug: "tutor" },
+      permissions: [],
+      refresh: vi.fn(),
+      can: (permission: string) => permission !== APP_PERMISSIONS.CLARIS_VIEW,
+      canAny: () => false,
+      canAccessAdminSection: () => false,
+    });
+
+    renderPage();
+
     expect(screen.queryByTestId("floating-claris-chat")).not.toBeInTheDocument();
   });
 

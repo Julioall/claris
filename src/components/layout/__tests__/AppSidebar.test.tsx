@@ -4,6 +4,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { AppSidebar } from "@/components/layout/AppSidebar";
+import { APP_PERMISSIONS } from "@/lib/access-control";
 
 const ROUTER_FUTURE = {
   v7_startTransition: true,
@@ -71,23 +72,40 @@ describe("AppSidebar", () => {
       logout: logoutMock,
     });
     useSidebarMock.mockReturnValue({ state: "expanded" });
-    usePermissionsMock.mockReturnValue({ isAdmin: false, role: null, permissions: [], canAccessAdminSection: () => false });
+    usePermissionsMock.mockReturnValue({
+      isAdmin: false,
+      isLoading: false,
+      isFetching: false,
+      role: "tutor",
+      group: { id: "group-1", name: "Tutor", slug: "tutor" },
+      permissions: Object.values(APP_PERMISSIONS),
+      refresh: vi.fn(),
+      can: () => true,
+      canAny: () => true,
+      canAccessAdminSection: () => false,
+    });
   });
 
   it("renders navigation and user info when expanded", () => {
     renderSidebar();
 
     expect(screen.getByText("Claris")).toBeInTheDocument();
+    expect(screen.getByText("Menu Principal")).toBeInTheDocument();
+    expect(screen.getByText("Resumo da Semana")).toBeInTheDocument();
     expect(screen.getByText("Meus Cursos")).toBeInTheDocument();
     expect(screen.getByText("Escolas")).toBeInTheDocument();
     expect(screen.getByText("Alunos")).toBeInTheDocument();
     expect(screen.getByText("WhatsApp")).toBeInTheDocument();
     expect(screen.getByText("Claris IA")).toBeInTheDocument();
-    expect(screen.getByText("Relatórios")).toBeInTheDocument();
-    expect(screen.getByText("Configurações")).toBeInTheDocument();
+    expect(screen.getByText("Relatorios")).toBeInTheDocument();
+    expect(screen.getByText("Configuracoes")).toBeInTheDocument();
     expect(screen.getByText("Suporte")).toBeInTheDocument();
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
     expect(screen.getByText("julio")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /resumo da semana/i })).toHaveAttribute(
+      "href",
+      "/",
+    );
     expect(screen.getByRole("link", { name: /meus cursos/i })).toHaveAttribute(
       "href",
       "/meus-cursos",

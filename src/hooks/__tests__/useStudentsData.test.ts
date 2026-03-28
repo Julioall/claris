@@ -1,138 +1,58 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useStudentsData } from "@/features/students/hooks/useStudentsData";
 import { createQueryClientWrapper } from "@/test/query-client";
+import type { StudentListItem } from "@/features/students/types";
 
 const useAuthMock = vi.fn();
-const fromMock = vi.fn();
-
-const userCoursesSelectMock = vi.fn();
-const userCoursesEqUserMock = vi.fn();
-const userCoursesEqRoleMock = vi.fn();
-
-const studentCoursesSelectMock = vi.fn();
-const studentCoursesInMock = vi.fn();
-
-const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+const listStudentsForUserMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
+vi.mock("@/features/students/api/students.repository", () => ({
+  listStudentsForUser: (...args: unknown[]) => listStudentsForUserMock(...args),
 }));
 
-function setupFromMock() {
-  fromMock.mockImplementation((table: string) => {
-    if (table === "user_courses") {
-      return {
-        select: userCoursesSelectMock,
-      };
-    }
-
-    if (table === "student_courses") {
-      return {
-        select: studentCoursesSelectMock,
-      };
-    }
-
-    throw new Error(`Unexpected table: ${table}`);
-  });
-}
+const studentsResponse: StudentListItem[] = [
+  {
+    id: "s-2",
+    moodle_user_id: "11",
+    full_name: "Bruno",
+    current_risk_level: "critico",
+    enrollment_status: "suspenso",
+    created_at: "2026-02-01T00:00:00.000Z",
+    updated_at: "2026-02-01T00:00:00.000Z",
+  },
+  {
+    id: "s-1",
+    moodle_user_id: "10",
+    full_name: "Ana",
+    current_risk_level: "atencao",
+    enrollment_status: "ativo",
+    created_at: "2026-02-01T00:00:00.000Z",
+    updated_at: "2026-02-01T00:00:00.000Z",
+  },
+  {
+    id: "s-3",
+    moodle_user_id: "12",
+    full_name: "Carla",
+    current_risk_level: "normal",
+    enrollment_status: "concluido",
+    created_at: "2026-02-01T00:00:00.000Z",
+    updated_at: "2026-02-01T00:00:00.000Z",
+  },
+];
 
 describe("useStudentsData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-
-    setupFromMock();
-
-    userCoursesSelectMock.mockReturnValue({ eq: userCoursesEqUserMock });
-    userCoursesEqUserMock.mockReturnValue({ eq: userCoursesEqRoleMock });
-    userCoursesEqRoleMock.mockResolvedValue({
-      data: [{ course_id: "c-1" }, { course_id: "c-2" }],
-      error: null,
-    });
-
-    studentCoursesSelectMock.mockReturnValue({ in: studentCoursesInMock });
-    studentCoursesInMock.mockResolvedValue({
-      data: [
-        {
-          student_id: "s-1",
-          enrollment_status: "ativo",
-          courses: {
-            start_date: "2026-01-01T00:00:00.000Z",
-          },
-          students: {
-            id: "s-1",
-            moodle_user_id: "10",
-            full_name: "Ana",
-            current_risk_level: "atencao",
-            created_at: "2026-02-01T00:00:00.000Z",
-            updated_at: "2026-02-01T00:00:00.000Z",
-          },
-        },
-        {
-          student_id: "s-1",
-          enrollment_status: "suspenso",
-          courses: {
-            start_date: "2026-01-01T00:00:00.000Z",
-          },
-          students: {
-            id: "s-1",
-            moodle_user_id: "10",
-            full_name: "Ana",
-            current_risk_level: "atencao",
-            created_at: "2026-02-01T00:00:00.000Z",
-            updated_at: "2026-02-01T00:00:00.000Z",
-          },
-        },
-        {
-          student_id: "s-2",
-          enrollment_status: "suspenso",
-          courses: {
-            start_date: "2026-01-01T00:00:00.000Z",
-          },
-          students: {
-            id: "s-2",
-            moodle_user_id: "11",
-            full_name: "Bruno",
-            current_risk_level: "critico",
-            created_at: "2026-02-01T00:00:00.000Z",
-            updated_at: "2026-02-01T00:00:00.000Z",
-          },
-        },
-        {
-          student_id: "s-3",
-          enrollment_status: "concluido",
-          courses: {
-            start_date: "2026-01-01T00:00:00.000Z",
-          },
-          students: {
-            id: "s-3",
-            moodle_user_id: "12",
-            full_name: "Carla",
-            current_risk_level: "normal",
-            created_at: "2026-02-01T00:00:00.000Z",
-            updated_at: "2026-02-01T00:00:00.000Z",
-          },
-        },
-      ],
-      error: null,
-    });
+    listStudentsForUserMock.mockResolvedValue(studentsResponse);
   });
 
-  afterAll(() => {
-    consoleErrorSpy.mockRestore();
-    consoleWarnSpy.mockRestore();
-  });
-
-  it("deduplicates students, computes stats and sorts by risk level", async () => {
+  it("loads students for the authenticated user", async () => {
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useStudentsData(), { wrapper });
 
@@ -141,23 +61,8 @@ describe("useStudentsData", () => {
     });
 
     expect(result.current.error).toBeNull();
-    expect(result.current.students).toHaveLength(3);
-
-    expect(result.current.students[0]).toMatchObject({
-      id: "s-2",
-      current_risk_level: "critico",
-      enrollment_status: "suspenso",
-    });
-    expect(result.current.students[1]).toMatchObject({
-      id: "s-1",
-      current_risk_level: "atencao",
-      enrollment_status: "ativo",
-    });
-    expect(result.current.students[2]).toMatchObject({
-      id: "s-3",
-      current_risk_level: "normal",
-      enrollment_status: "concluido",
-    });
+    expect(result.current.students).toEqual(studentsResponse);
+    expect(listStudentsForUserMock).toHaveBeenCalledWith({ userId: "user-1", courseId: undefined });
   });
 
   it("returns empty data when user is not authenticated", async () => {
@@ -171,14 +76,11 @@ describe("useStudentsData", () => {
     });
 
     expect(result.current.students).toEqual([]);
-    expect(fromMock).not.toHaveBeenCalled();
+    expect(listStudentsForUserMock).not.toHaveBeenCalled();
   });
 
-  it("stores an error when loading student courses fails", async () => {
-    studentCoursesInMock.mockResolvedValueOnce({
-      data: null,
-      error: new Error("students query failed"),
-    });
+  it("stores an error when loading students fails", async () => {
+    listStudentsForUserMock.mockRejectedValueOnce(new Error("students query failed"));
 
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useStudentsData(), { wrapper });
@@ -196,6 +98,6 @@ describe("useStudentsData", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(studentCoursesInMock).toHaveBeenCalledWith("course_id", ["course-fixed"]);
+    expect(listStudentsForUserMock).toHaveBeenCalledWith({ userId: "user-1", courseId: "course-fixed" });
   });
 });
