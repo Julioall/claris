@@ -17,7 +17,7 @@ services:
       SUPABASE_PUBLIC_URL: http://127.0.0.1:54321
       MOODLE_REAUTH_SECRET: ${MOODLE_REAUTH_SECRET:-claris-moodle-reauth-local-secret}
       SCHEDULED_MESSAGES_CRON_SECRET: ${SCHEDULED_MESSAGES_CRON_SECRET:-claris-scheduled-messages-local-secret}
-      EVOLUTION_API_URL: http://127.0.0.1:8081
+      EVOLUTION_API_URL: http://host.docker.internal:8081
       EVOLUTION_API_KEY: claris-evolution-local-key
       WEBHOOK_SECRET: claris-webhook-secret-local
     volumes:

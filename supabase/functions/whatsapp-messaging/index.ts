@@ -19,11 +19,11 @@ import {
   remoteJidToPhone,
   resolveConversationName,
 } from '../_shared/whatsapp/normalization.ts'
+import { evolutionRequest as requestEvolutionApi } from '../_shared/whatsapp/evolution.ts'
 
 const ACTIONS = ['get_chats', 'get_messages', 'send_message'] as const
 
 type Action = (typeof ACTIONS)[number]
-type EvolutionMethod = 'GET' | 'POST'
 type JsonRecord = Record<string, unknown>
 
 interface RequestBody {
@@ -340,41 +340,12 @@ function sortMessages(messages: NormalizedMessage[]): NormalizedMessage[] {
   })
 }
 
-function getEvolutionBaseUrl(): string {
-  return (Deno.env.get('EVOLUTION_API_URL') ?? '').trim().replace(/\/+$/, '')
-}
-
-function getEvolutionApiKey(): string {
-  return Deno.env.get('EVOLUTION_API_KEY') ?? ''
-}
-
 async function evolutionRequest(
   path: string,
-  method: EvolutionMethod,
+  method: 'GET' | 'POST',
   body?: unknown,
 ): Promise<unknown> {
-  const baseUrl = getEvolutionBaseUrl()
-  const apiKey = getEvolutionApiKey()
-
-  if (!baseUrl || !apiKey) {
-    throw new Error('Evolution API não configurada. Defina EVOLUTION_API_URL e EVOLUTION_API_KEY.')
-  }
-
-  const response = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: apiKey,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  if (!response.ok) {
-    const text = await response.text().catch(() => response.statusText)
-    throw new Error(`Evolution API error ${response.status}: ${text}`)
-  }
-
-  return response.json().catch(() => null)
+  return requestEvolutionApi(path, method, body)
 }
 
 async function resolveAccessibleInstance(

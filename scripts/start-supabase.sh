@@ -95,7 +95,7 @@ set_function_secrets() {
   # supabase_network_local bridge network. From there, 127.0.0.1 is the
   # container's own loopback – NOT the host. The bridge gateway IP is the
   # correct address to reach host-network services (like Evolution API).
-  evo_url="${EVOLUTION_API_URL:-http://127.0.0.1:8081}"
+  evo_url="${EVOLUTION_API_URL:-http://host.docker.internal:8081}"
   bridge_gw="$(docker network inspect supabase_network_local \
     --format '{{(index .IPAM.Config 0).Gateway}}' 2>/dev/null || true)"
   if [ -n "${bridge_gw}" ]; then

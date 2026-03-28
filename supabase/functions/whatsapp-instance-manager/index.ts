@@ -22,6 +22,7 @@ import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.
 import type { AuthenticatedHandlerContext } from '../_shared/http/mod.ts'
 import { isApplicationAdmin, userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
+import { evolutionRequest } from '../_shared/whatsapp/evolution.ts'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -46,14 +47,6 @@ interface RequestBody {
 // ---------------------------------------------------------------------------
 // Helpers – Evolution API v2
 // ---------------------------------------------------------------------------
-
-function getEvolutionBaseUrl(): string {
-  return Deno.env.get('EVOLUTION_API_URL') ?? ''
-}
-
-function getEvolutionApiKey(): string {
-  return Deno.env.get('EVOLUTION_API_KEY') ?? ''
-}
 
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '')
@@ -174,35 +167,6 @@ async function requestQrCodeWithRetry(
   }
 
   return { data: lastData, ready: false, attemptsUsed: attempts }
-}
-
-async function evolutionRequest(
-  path: string,
-  method: 'GET' | 'POST' | 'DELETE' | 'PUT',
-  body?: unknown
-): Promise<unknown> {
-  const baseUrl = getEvolutionBaseUrl()
-  const apiKey = getEvolutionApiKey()
-
-  if (!baseUrl || !apiKey) {
-    throw new Error('Evolution API not configured. Set EVOLUTION_API_URL and EVOLUTION_API_KEY.')
-  }
-
-  const res = await fetch(`${baseUrl}${path}`, {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: apiKey,
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  })
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => res.statusText)
-    throw new Error(`Evolution API error ${res.status}: ${text}`)
-  }
-
-  return res.json().catch(() => null)
 }
 
 // ---------------------------------------------------------------------------
