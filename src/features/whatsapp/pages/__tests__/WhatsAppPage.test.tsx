@@ -16,6 +16,9 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: {
       invoke: (...args: unknown[]) => invokeMock(...args),
     },
+    auth: {
+      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
+    },
   },
 }));
 
@@ -41,6 +44,39 @@ const connectedInstance = {
   metadata: { phone_number: "5562999990000" },
 };
 
+const contacts = [
+  {
+    id: "5511999991111@s.whatsapp.net",
+    remote_jid: "5511999991111@s.whatsapp.net",
+    name: "Ana Silva",
+    short_name: "Ana",
+    phone: "+5511999991111",
+    profile_picture_url: "https://example.com/ana.jpg",
+    is_business: false,
+    updated_at: "2026-03-19T12:00:00.000Z",
+  },
+  {
+    id: "5511999992222@s.whatsapp.net",
+    remote_jid: "5511999992222@s.whatsapp.net",
+    name: "Bruno Souza",
+    short_name: "Bruno",
+    phone: "+5511999992222",
+    profile_picture_url: "https://example.com/bruno.jpg",
+    is_business: false,
+    updated_at: "2026-03-19T11:00:00.000Z",
+  },
+  {
+    id: "5511999993333@s.whatsapp.net",
+    remote_jid: "5511999993333@s.whatsapp.net",
+    name: "Carla Sem Chat",
+    short_name: "Carla",
+    phone: "+5511999993333",
+    profile_picture_url: null,
+    is_business: false,
+    updated_at: "2026-03-19T10:00:00.000Z",
+  },
+];
+
 const conversations = [
   {
     id: "5511999991111@s.whatsapp.net",
@@ -51,6 +87,7 @@ const conversations = [
     last_message_text: "Bom dia, professora!",
     last_message_at: "2026-03-19T12:00:00.000Z",
     is_group: false,
+    profile_picture_url: null,
   },
   {
     id: "5511999992222@s.whatsapp.net",
@@ -58,9 +95,10 @@ const conversations = [
     name: "Bruno Souza",
     phone: "+5511999992222",
     unread_count: 0,
-    last_message_text: "Posso te responder depois do almoço?",
+    last_message_text: "Posso te responder depois do almoco?",
     last_message_at: "2026-03-19T11:40:00.000Z",
     is_group: false,
+    profile_picture_url: null,
   },
 ];
 
@@ -72,6 +110,11 @@ const messagesByConversation: Record<string, Array<Record<string, unknown>>> = {
       text: "Bom dia, professora!",
       sent_at: "2026-03-19T11:58:00.000Z",
       direction: "incoming",
+      type: "text",
+      media: null,
+      contact: null,
+      location: null,
+      sender_name: "Ana",
     },
     {
       id: "msg-2",
@@ -80,17 +123,28 @@ const messagesByConversation: Record<string, Array<Record<string, unknown>>> = {
       sent_at: "2026-03-19T11:59:00.000Z",
       direction: "outgoing",
       status: "read",
+      type: "text",
+      media: null,
+      contact: null,
+      location: null,
+      sender_name: null,
     },
   ],
   "5511999992222@s.whatsapp.net": [
     {
       id: "msg-3",
       remote_jid: "5511999992222@s.whatsapp.net",
-      text: "Posso te responder depois do almoço?",
+      text: "Posso te responder depois do almoco?",
       sent_at: "2026-03-19T11:40:00.000Z",
       direction: "incoming",
+      type: "text",
+      media: null,
+      contact: null,
+      location: null,
+      sender_name: "Bruno",
     },
   ],
+  "5511999993333@s.whatsapp.net": [],
 };
 
 function renderPage() {
@@ -135,11 +189,104 @@ function setViewportWidth(width: number) {
   });
 }
 
+function mockWhatsAppInvoke() {
+  invokeMock.mockImplementation((_fn: string, { body }: { body: Record<string, unknown> }) => {
+    if (body.action === "get_contacts") {
+      return Promise.resolve({ data: { contacts }, error: null });
+    }
+
+    if (body.action === "get_chats") {
+      return Promise.resolve({ data: { conversations }, error: null });
+    }
+
+    if (body.action === "get_messages") {
+      return Promise.resolve({
+        data: {
+          messages: messagesByConversation[String(body.remote_jid)] ?? [],
+        },
+        error: null,
+      });
+    }
+
+    if (body.action === "send_message") {
+      const sentMessage = {
+        id: "msg-4",
+        remote_jid: String(body.remote_jid),
+        text: String(body.message),
+        sent_at: "2026-03-19T12:01:00.000Z",
+        direction: "outgoing",
+        status: "sent",
+        type: "text",
+        media: null,
+        contact: null,
+        location: null,
+        sender_name: null,
+      };
+
+      messagesByConversation[String(body.remote_jid)] = [
+        ...(messagesByConversation[String(body.remote_jid)] ?? []),
+        sentMessage,
+      ];
+
+      return Promise.resolve({
+        data: {
+          message: sentMessage,
+        },
+        error: null,
+      });
+    }
+
+    return Promise.resolve({ data: {}, error: null });
+  });
+}
+
 describe("WhatsApp page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.history.pushState({}, "Test", "/whatsapp");
     setViewportWidth(1280);
+    messagesByConversation["5511999991111@s.whatsapp.net"] = [
+      {
+        id: "msg-1",
+        remote_jid: "5511999991111@s.whatsapp.net",
+        text: "Bom dia, professora!",
+        sent_at: "2026-03-19T11:58:00.000Z",
+        direction: "incoming",
+        type: "text",
+        media: null,
+        contact: null,
+        location: null,
+        sender_name: "Ana",
+      },
+      {
+        id: "msg-2",
+        remote_jid: "5511999991111@s.whatsapp.net",
+        text: "Oi, Ana. Como posso ajudar?",
+        sent_at: "2026-03-19T11:59:00.000Z",
+        direction: "outgoing",
+        status: "read",
+        type: "text",
+        media: null,
+        contact: null,
+        location: null,
+        sender_name: null,
+      },
+    ];
+    messagesByConversation["5511999992222@s.whatsapp.net"] = [
+      {
+        id: "msg-3",
+        remote_jid: "5511999992222@s.whatsapp.net",
+        text: "Posso te responder depois do almoco?",
+        sent_at: "2026-03-19T11:40:00.000Z",
+        direction: "incoming",
+        type: "text",
+        media: null,
+        contact: null,
+        location: null,
+        sender_name: "Bruno",
+      },
+    ];
+    messagesByConversation["5511999993333@s.whatsapp.net"] = [];
   });
 
   it("renders an empty state when no WhatsApp instance is available", async () => {
@@ -148,34 +295,19 @@ describe("WhatsApp page", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByText(/nenhuma instância disponível/i)).toBeInTheDocument();
+      expect(screen.getByText(/nenhuma instancia disponivel/i)).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("link", { name: /abrir meus serviços/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /abrir meus servicos/i })).toHaveAttribute(
       "href",
       "/meus-servicos",
     );
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
-  it("loads conversations and the first message history from the connected instance", async () => {
+  it("loads contacts, conversations and the first message history from the connected instance", async () => {
     mockInstances([connectedInstance]);
-    invokeMock.mockImplementation((_fn: string, { body }: { body: Record<string, unknown> }) => {
-      if (body.action === "get_chats") {
-        return Promise.resolve({ data: { conversations }, error: null });
-      }
-
-      if (body.action === "get_messages") {
-        return Promise.resolve({
-          data: {
-            messages: messagesByConversation[String(body.remote_jid)] ?? [],
-          },
-          error: null,
-        });
-      }
-
-      return Promise.resolve({ data: {}, error: null });
-    });
+    mockWhatsAppInvoke();
 
     renderPage();
 
@@ -185,6 +317,15 @@ describe("WhatsApp page", () => {
 
     expect(screen.getAllByText(/whatsapp pessoal/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/bom dia, professora!/i)).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith(
+      "whatsapp-messaging",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          action: "get_contacts",
+          instance_id: "inst-1",
+        }),
+      }),
+    );
     expect(invokeMock).toHaveBeenCalledWith(
       "whatsapp-messaging",
       expect.objectContaining({
@@ -199,22 +340,7 @@ describe("WhatsApp page", () => {
   it("filters conversations by the search field", async () => {
     const user = userEvent.setup();
     mockInstances([connectedInstance]);
-    invokeMock.mockImplementation((_fn: string, { body }: { body: Record<string, unknown> }) => {
-      if (body.action === "get_chats") {
-        return Promise.resolve({ data: { conversations }, error: null });
-      }
-
-      if (body.action === "get_messages") {
-        return Promise.resolve({
-          data: {
-            messages: messagesByConversation[String(body.remote_jid)] ?? [],
-          },
-          error: null,
-        });
-      }
-
-      return Promise.resolve({ data: {}, error: null });
-    });
+    mockWhatsAppInvoke();
 
     renderPage();
 
@@ -228,41 +354,33 @@ describe("WhatsApp page", () => {
     expect(screen.queryByRole("button", { name: /ana silva/i })).not.toBeInTheDocument();
   });
 
+  it("lets the user browse synced contacts separately from the chat list", async () => {
+    const user = userEvent.setup();
+    mockInstances([connectedInstance]);
+    mockWhatsAppInvoke();
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: /contatos/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("tab", { name: /contatos/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /carla sem chat/i })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: /carla sem chat/i }));
+
+    expect(screen.getByText(/novo chat/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/\+5511999993333/i).length).toBeGreaterThan(0);
+  });
+
   it("sends a message through the whatsapp-messaging function and appends it to the chat", async () => {
     const user = userEvent.setup();
     mockInstances([connectedInstance]);
-    invokeMock.mockImplementation((_fn: string, { body }: { body: Record<string, unknown> }) => {
-      if (body.action === "get_chats") {
-        return Promise.resolve({ data: { conversations }, error: null });
-      }
-
-      if (body.action === "get_messages") {
-        return Promise.resolve({
-          data: {
-            messages: messagesByConversation[String(body.remote_jid)] ?? [],
-          },
-          error: null,
-        });
-      }
-
-      if (body.action === "send_message") {
-        return Promise.resolve({
-          data: {
-            message: {
-              id: "msg-4",
-              remote_jid: body.remote_jid,
-              text: body.message,
-              sent_at: "2026-03-19T12:01:00.000Z",
-              direction: "outgoing",
-              status: "sent",
-            },
-          },
-          error: null,
-        });
-      }
-
-      return Promise.resolve({ data: {}, error: null });
-    });
+    mockWhatsAppInvoke();
 
     renderPage();
 
@@ -297,22 +415,7 @@ describe("WhatsApp page", () => {
     const user = userEvent.setup();
     setViewportWidth(390);
     mockInstances([connectedInstance]);
-    invokeMock.mockImplementation((_fn: string, { body }: { body: Record<string, unknown> }) => {
-      if (body.action === "get_chats") {
-        return Promise.resolve({ data: { conversations }, error: null });
-      }
-
-      if (body.action === "get_messages") {
-        return Promise.resolve({
-          data: {
-            messages: messagesByConversation[String(body.remote_jid)] ?? [],
-          },
-          error: null,
-        });
-      }
-
-      return Promise.resolve({ data: {}, error: null });
-    });
+    mockWhatsAppInvoke();
 
     renderPage();
 

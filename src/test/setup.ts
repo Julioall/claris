@@ -54,3 +54,11 @@ if (!Element.prototype.releasePointerCapture) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+if (!URL.createObjectURL) {
+  URL.createObjectURL = () => "blob:mock";
+}
+
+if (!URL.revokeObjectURL) {
+  URL.revokeObjectURL = () => {};
+}
