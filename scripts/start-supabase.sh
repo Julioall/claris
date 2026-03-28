@@ -6,6 +6,7 @@ EVOLUTION_CONTAINER_NAME="${EVOLUTION_CONTAINER_NAME:-claris-evolution}"
 SUPABASE_API_URL="${SUPABASE_API_URL:-http://127.0.0.1:54321}"
 SUPABASE_API_HEALTH_PATH="${SUPABASE_API_HEALTH_PATH:-/rest/v1/}"
 SUPABASE_API_WAIT_SECONDS="${SUPABASE_API_WAIT_SECONDS:-300}"
+READY_FILE="${SUPABASE_READY_FILE:-/tmp/supabase-runner-ready}"
 
 log() {
   printf '[supabase-runner] %s\n' "$*"
@@ -86,7 +87,7 @@ set_function_secrets() {
     _val="$2"
     [ -z "${_val}" ] && return
     # Remove any existing entry for this key, then append the new value
-    { grep -v "^${_key}=" "${env_file}" 2>/dev/null || true; echo "${_key}=${_val}"; } > "${env_file}.tmp"
+    { grep -v "^${_key}=" "${env_file}" 2>/dev/null || true; printf '%s=%s\n' "${_key}" "${_val}"; } > "${env_file}.tmp"
     mv "${env_file}.tmp" "${env_file}"
   }
 
@@ -178,6 +179,7 @@ cleanup() {
 trap cleanup INT TERM
 
 prepare_workdir_alias
+rm -f "${READY_FILE}"
 
 log "Using workdir: ${WORKDIR}"
 cd "${WORKDIR}"
@@ -205,6 +207,8 @@ set_function_secrets
 restart_edge_runtime_if_present
 
 restart_evolution_if_present
+
+touch "${READY_FILE}"
 
 log "Supabase stack is running at ${SUPABASE_API_URL}."
 while :; do
