@@ -1,11 +1,10 @@
-// API de Admin: centraliza acesso a dados sensíveis do painel administrativo
+// API de Admin: centraliza acesso a dados sensiveis do painel administrativo
 
-export * from './settings';
-export * from './featureFlags';
-export * from './support';
-export * from './metrics';
-export * from './logs';
+export * from './access';
 export * from './backgroundJobs';
-export * from './users';
-export * from './services';
 export * from './conversations';
+export * from './logs';
+export * from './metrics';
+export * from './services';
+export * from './settings';
+export * from './support';

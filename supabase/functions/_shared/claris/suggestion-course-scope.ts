@@ -1,22 +1,13 @@
+import { listAccessibleCourseIds } from '../auth/mod.ts'
 import type { AppSupabaseClient, Tables } from '../db/mod.ts'
 
 type CourseScopeRow = Pick<Tables<'courses'>, 'id' | 'name' | 'category' | 'start_date' | 'end_date'>
-
-type UserCourseWithCourse = {
-  course_id: string
-  courses: CourseScopeRow | CourseScopeRow[] | null
-}
 
 export interface SuggestionScopedCourse extends CourseScopeRow {
   effective_end_date: string | null
 }
 
 type CourseLifecycleStatus = 'nao_iniciada' | 'em_andamento' | 'finalizada'
-
-function normalizeRelation<T>(rel: T | T[] | null | undefined): T | null {
-  if (!rel) return null
-  return Array.isArray(rel) ? (rel[0] ?? null) : rel
-}
 
 function splitCategoryPath(category: string): string[] {
   if (category.includes(' > ')) {
@@ -151,19 +142,22 @@ export async function listTutorSuggestionCourses(
   supabase: AppSupabaseClient,
   userId: string,
 ): Promise<SuggestionScopedCourse[]> {
+  const accessibleCourseIds = await listAccessibleCourseIds(supabase, userId, 'tutor')
+  if (accessibleCourseIds.length === 0) {
+    return []
+  }
+
   const { data, error } = await supabase
-    .from('user_courses')
-    .select('course_id, courses!inner(id, name, category, start_date, end_date)')
-    .eq('user_id', userId)
-    .eq('role', 'tutor')
+    .from('courses')
+    .select('id, name, category, start_date, end_date')
+    .in('id', accessibleCourseIds)
 
   if (error) throw error
 
   const uniqueCourses = new Map<string, CourseScopeRow>()
 
-  for (const row of (data ?? []) as UserCourseWithCourse[]) {
-    const course = normalizeRelation(row.courses)
-    if (!course?.id) continue
+  for (const course of (data ?? []) as CourseScopeRow[]) {
+    if (!course.id) continue
 
     uniqueCourses.set(course.id, {
       id: course.id,

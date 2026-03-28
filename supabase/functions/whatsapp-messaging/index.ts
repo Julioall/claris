@@ -12,6 +12,7 @@ import {
   readRequiredString,
 } from '../_shared/http/mod.ts'
 import type { AuthenticatedHandlerContext } from '../_shared/http/mod.ts'
+import { userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   normalizePhone,
@@ -633,6 +634,11 @@ const handler = async ({
   user,
 }: AuthenticatedHandlerContext<RequestBody>): Promise<Response> => {
   const db = createServiceClient()
+  const canUseWhatsApp = await userHasPermission(db, user.id, 'whatsapp.view')
+
+  if (!canUseWhatsApp) {
+    return errorResponse('Permission denied for WhatsApp.', 403)
+  }
 
   switch (body.action) {
     case 'get_chats':

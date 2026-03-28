@@ -36,8 +36,8 @@ const CLEANUP_OPTIONS_BY_CATEGORY = CLEANUP_OPTIONS.reduce((acc, option) => {
 }, {} as Record<CleanupOption['category'], CleanupOption[]>);
 
 const PRESERVED_RESOURCES = [
-  'Contas de usuario e papeis administrativos',
-  'Configuracoes globais, feature flags e credenciais da plataforma',
+  'Contas de usuario e acessos administrativos',
+  'Grupos, permissoes e credenciais globais da plataforma',
   'Instancias e limites de servicos compartilhados',
 ];
 
@@ -360,7 +360,7 @@ export function DataCleanupCard() {
                   <li>Claris IA, jobs em segundo plano, suporte e observabilidade</li>
                 </ul>
                 <p className="font-medium text-destructive">
-                  Contas de usuario, papeis admin e configuracoes globais permanecem preservados.
+                  Contas de usuario, acessos admin e configuracoes globais permanecem preservados.
                 </p>
               </div>
             </AlertDialogDescription>

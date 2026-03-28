@@ -1,4 +1,5 @@
 import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
+import { isApplicationAdmin } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import { parseClarisLlmTestPayload } from './payload.ts'
 
@@ -45,6 +46,13 @@ async function readStoredSettings(userId: string): Promise<SettingsJson> {
 }
 
 Deno.serve(createHandler(async ({ body, user }) => {
+  const supabase = createServiceClient()
+  const isAdmin = await isApplicationAdmin(supabase, user.id)
+
+  if (!isAdmin) {
+    return errorResponse('Admin access required for Claris LLM tests.', 403)
+  }
+
   const storedSettings = await readStoredSettings(user.id)
 
   const provider = (body.provider?.trim() || storedSettings.provider || DEFAULT_PROVIDER).toLowerCase()

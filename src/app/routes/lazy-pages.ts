@@ -17,14 +17,16 @@ export const ClarisPage = lazy(() => import('@/features/claris/pages/ClarisPage'
 export const AutomationsPage = lazy(() => import('@/features/automations/pages/AutomacoesPage'));
 export const MyServicesPage = lazy(() => import('@/features/services/pages/MyServicesPage'));
 export const NotFoundPage = lazy(() => import('@/pages/NotFound'));
+export const NoAccessPage = lazy(() => import('@/pages/NoAccess'));
 
 export const AdminDashboardPage = lazy(() => import('@/features/admin/pages/AdminDashboard'));
 export const AdminSettingsPage = lazy(() => import('@/features/admin/pages/AdminConfiguracoes'));
 export const AdminUsersPage = lazy(() => import('@/features/admin/pages/AdminUsuarios'));
+export const AdminGroupsPage = lazy(() => import('@/features/admin/pages/AdminGrupos'));
+export const AdminGroupEditorPage = lazy(() => import('@/features/admin/pages/AdminGrupoEditor'));
 export const AdminJobsPage = lazy(() => import('@/features/admin/pages/AdminJobs'));
 export const AdminMetricsPage = lazy(() => import('@/features/admin/pages/AdminMetricas'));
 export const AdminErrorLogsPage = lazy(() => import('@/features/admin/pages/AdminLogsErros'));
 export const AdminSupportPage = lazy(() => import('@/features/admin/pages/AdminSuporte'));
 export const AdminClarisConversationsPage = lazy(() => import('@/features/admin/pages/AdminConversasClaris'));
-export const AdminFeatureFlagsPage = lazy(() => import('@/features/admin/pages/AdminFeatureFlags'));
 export const AdminApplicationServicesPage = lazy(() => import('@/features/admin/pages/AdminServicosAplicacao'));

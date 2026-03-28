@@ -16,6 +16,8 @@
  */
 
 import { createHandler, jsonResponse } from '../_shared/http/mod.ts'
+import { errorResponse } from '../_shared/http/mod.ts'
+import { userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   appendBackgroundJobEvent,
@@ -148,6 +150,11 @@ async function recordFailedProactiveSuggestionJob(
 Deno.serve(createHandler(async ({ user }) => {
   const supabase = createServiceClient()
   const startedAt = new Date().toISOString()
+  const canGenerateSuggestions = await userHasPermission(supabase, user.id, 'claris.proactive.generate')
+
+  if (!canGenerateSuggestions) {
+    return errorResponse('Permission denied for proactive Claris suggestions.', 403)
+  }
 
   try {
     const result = await runEngines(user.id, supabase)

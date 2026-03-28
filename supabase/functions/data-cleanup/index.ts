@@ -1,9 +1,7 @@
 import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
+import { isApplicationAdmin } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import { parseDataCleanupPayload } from './payload.ts'
-
-const ADMIN_EMAIL = 'julioalves@fieg.com.br'
-const ADMIN_MOODLE_USERNAME = '04112637225'
 
 const DELETE_ORDER = [
   { table: 'moodle_messages', label: 'Mensagens do Moodle' },
@@ -76,25 +74,7 @@ async function isAdminUser(
   supabase: ReturnType<typeof createServiceClient>,
   userId: string
 ): Promise<boolean> {
-  const [{ data: roleData }, { data: userData }] = await Promise.all([
-    supabase
-      .from('admin_user_roles')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
-      .maybeSingle(),
-    supabase
-      .from('users')
-      .select('email, moodle_username')
-      .eq('id', userId)
-      .maybeSingle(),
-  ])
-
-  if (roleData) return true
-  if (!userData) return false
-
-  return userData.moodle_username === ADMIN_MOODLE_USERNAME
-    || userData.email?.toLowerCase() === ADMIN_EMAIL
+  return isApplicationAdmin(supabase, userId)
 }
 
 Deno.serve(createHandler(async ({ body, user }) => {

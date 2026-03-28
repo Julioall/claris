@@ -1,4 +1,5 @@
 import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
+import { userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import { buildClarisSystemPrompt, selectClarisToolsForMessage } from '../_shared/claris/chat-config.ts'
 import { runClarisLoop } from '../_shared/claris/loop.ts'
@@ -49,6 +50,13 @@ async function readStoredSettings(userId: string): Promise<SettingsJson> {
 }
 
 Deno.serve(createHandler(async ({ body, user }) => {
+  const supabase = createServiceClient()
+  const canUseClaris = await userHasPermission(supabase, user.id, 'claris.view')
+
+  if (!canUseClaris) {
+    return errorResponse('Permission denied for Claris IA.', 403)
+  }
+
   const storedSettings = await readStoredSettings(user.id)
 
   const provider = (storedSettings.provider || DEFAULT_PROVIDER).toLowerCase()

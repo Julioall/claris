@@ -7,9 +7,12 @@ import { SyncProgressDialog } from '@/components/sync/SyncProgressDialog';
 import { CourseSelectorDialog } from '@/components/sync/CourseSelectorDialog';
 import { AppFooter } from '@/components/layout/AppFooter';
 import { FloatingClarisChat } from '@/features/claris/components/FloatingClarisChat';
+import { usePermissions } from '@/hooks/usePermissions';
+import { APP_PERMISSIONS } from '@/lib/access-control';
 
 export function AppLayout() {
   const location = useLocation();
+  const { can, isAdmin } = usePermissions();
   const { 
     isAuthenticated, 
     syncProgress, 
@@ -25,7 +28,7 @@ export function AppLayout() {
     return <Outlet />;
   }
 
-  const shouldHideFloatingClaris = location.pathname === '/claris';
+  const shouldHideFloatingClaris = location.pathname === '/claris' || (!isAdmin && !can(APP_PERMISSIONS.CLARIS_VIEW));
 
   return (
     <SidebarProvider>

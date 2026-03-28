@@ -1,3 +1,4 @@
+import { listAccessibleCourseIds } from '../auth/mod.ts'
 import { getStudentActivityWorkflowStatus } from '../domain/student-activity-status.ts'
 import type { AppSupabaseClient, Tables, TablesInsert, TablesUpdate } from '../db/mod.ts'
 
@@ -29,17 +30,19 @@ export async function findCourseForUser(
   userId: string,
   courseId: string,
 ): Promise<CourseAccessRow | null> {
+  const accessibleCourseIds = await listAccessibleCourseIds(supabase, userId, 'tutor')
+  if (!accessibleCourseIds.includes(courseId)) {
+    return null
+  }
+
   const { data, error } = await supabase
-    .from('user_courses')
-    .select('courses!inner(id, moodle_course_id, name)')
-    .eq('user_id', userId)
-    .eq('course_id', courseId)
+    .from('courses')
+    .select('id, moodle_course_id, name')
+    .eq('id', courseId)
     .maybeSingle()
 
   if (error) throw error
-
-  const row = data as { courses?: CourseAccessRow | null } | null
-  return row?.courses ?? null
+  return data
 }
 
 export async function findStudentForCourse(

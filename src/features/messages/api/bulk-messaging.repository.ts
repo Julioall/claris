@@ -3,6 +3,7 @@ import {
   isStudentActivityPendingSubmission,
   isStudentActivityWeightedInGradebook,
 } from '@/lib/student-activity-status';
+import { listAccessibleCourseIds } from '@/lib/course-access';
 
 import type {
   BulkMessageJobPreview,
@@ -13,14 +14,11 @@ import type {
   StudentOption,
 } from '../types';
 
-interface UserCourseRow {
-  course_id: string;
-  courses: {
-    id: string;
-    name: string;
-    category?: string | null;
-    start_date?: string | null;
-  } | null;
+interface AccessibleCourseRow {
+  id: string;
+  name: string;
+  category?: string | null;
+  start_date?: string | null;
 }
 
 interface StudentCourseRow {
@@ -106,24 +104,22 @@ export function buildStudentCourseKey(studentId: string, courseId: string) {
 }
 
 export async function listBulkSendAudienceForUser(userId: string): Promise<BulkSendAudienceData> {
-  const { data: userCourses, error: userCoursesError } = await supabase
-    .from('user_courses')
-    .select('course_id, courses(id, name, category, start_date)')
-    .eq('user_id', userId)
-    .eq('role', 'tutor');
+  const accessibleCourseIds = await listAccessibleCourseIds(userId, 'tutor');
 
-  if (userCoursesError) throw userCoursesError;
-
-  if (!userCourses?.length) {
+  if (accessibleCourseIds.length === 0) {
     return emptyAudienceData();
   }
 
+  const { data: courses, error: coursesError } = await supabase
+    .from('courses')
+    .select('id, name, category, start_date')
+    .in('id', accessibleCourseIds);
+
+  if (coursesError) throw coursesError;
+
   const courseMap = new Map<string, { id: string; name: string; category?: string; start_date?: string | null }>();
 
-  (userCourses as UserCourseRow[]).forEach((userCourse) => {
-    const course = userCourse.courses;
-    if (!course) return;
-
+  (courses as AccessibleCourseRow[]).forEach((course) => {
     courseMap.set(course.id, {
       id: course.id,
       name: course.name,

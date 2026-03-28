@@ -453,49 +453,116 @@ export type Database = {
           },
         ]
       }
-      app_feature_flags: {
+      app_group_permissions: {
         Row: {
           created_at: string
+          group_id: string
+          permission_key: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          permission_key: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          permission_key?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "app_group_permissions_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "app_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_group_permissions_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "app_permission_definitions"
+            referencedColumns: ["key"]
+          },
+        ]
+      }
+      app_groups: {
+        Row: {
+          created_at: string
+          created_by: string | null
           description: string | null
-          enabled: boolean
           id: string
-          key: string
           name: string
-          payload: Json | null
+          slug: string
           updated_at: string
           updated_by: string | null
         }
         Insert: {
           created_at?: string
+          created_by?: string | null
           description?: string | null
-          enabled?: boolean
           id?: string
-          key: string
           name: string
-          payload?: Json | null
+          slug: string
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
           created_at?: string
+          created_by?: string | null
           description?: string | null
-          enabled?: boolean
           id?: string
-          key?: string
           name?: string
-          payload?: Json | null
+          slug?: string
           updated_at?: string
           updated_by?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "app_feature_flags_updated_by_fkey"
+            foreignKeyName: "app_groups_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "app_groups_updated_by_fkey"
             columns: ["updated_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
+      }
+      app_permission_definitions: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          key: string
+          label: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          key: string
+          label: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          key?: string
+          label?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       app_service_instance_events: {
         Row: {
@@ -2810,6 +2877,52 @@ export type Database = {
           },
         ]
       }
+      user_group_memberships: {
+        Row: {
+          assigned_by: string | null
+          created_at: string
+          group_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_by?: string | null
+          created_at?: string
+          group_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_by?: string | null
+          created_at?: string
+          group_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_group_memberships_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_group_memberships_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "app_groups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_group_memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_ignored_courses: {
         Row: {
           course_id: string
@@ -2997,6 +3110,68 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_cleanup_table: {
+        Args: { target_table: string }
+        Returns: {
+          deleted_table: string
+        }[]
+      }
+      admin_delete_group: {
+        Args: { p_group_id: string; p_reassign_to_group_id?: string }
+        Returns: undefined
+      }
+      admin_list_groups: {
+        Args: never
+        Returns: {
+          description: string
+          id: string
+          name: string
+          permissions: string[]
+          slug: string
+          user_count: number
+        }[]
+      }
+      admin_list_permission_definitions: {
+        Args: never
+        Returns: {
+          category: string
+          description: string
+          key: string
+          label: string
+          sort_order: number
+        }[]
+      }
+      admin_search_users: {
+        Args: { p_limit?: number; p_offset?: number; p_query?: string }
+        Returns: {
+          email: string
+          full_name: string
+          group_id: string
+          group_name: string
+          group_slug: string
+          is_admin: boolean
+          moodle_username: string
+          total_count: number
+          user_id: string
+        }[]
+      }
+      admin_set_user_admin: {
+        Args: { p_is_admin: boolean; p_target_user_id: string }
+        Returns: undefined
+      }
+      admin_set_user_group: {
+        Args: { p_group_id?: string; p_target_user_id: string }
+        Returns: undefined
+      }
+      admin_upsert_group: {
+        Args: {
+          p_description?: string
+          p_group_id?: string
+          p_name?: string
+          p_permission_keys?: string[]
+        }
+        Returns: string
+      }
       calculate_next_recurrence_date: {
         Args: {
           current_ts: string
@@ -3011,8 +3186,26 @@ export type Database = {
           risk_reasons: string[]
         }[]
       }
+      get_current_user_authorization_context: { Args: never; Returns: Json }
+      get_user_permission_keys: {
+        Args: { p_user_id: string }
+        Returns: string[]
+      }
       is_application_admin: { Args: never; Returns: boolean }
+      is_user_application_admin: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
+      list_accessible_course_ids: {
+        Args: { p_role_filter?: string; p_user_id: string }
+        Returns: {
+          course_id: string
+        }[]
+      }
       resolve_current_app_user_id: { Args: never; Returns: string }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
+      slugify_app_group_name: { Args: { p_name: string }; Returns: string }
       update_course_students_risk: {
         Args: { p_course_id: string }
         Returns: number
@@ -3023,6 +3216,10 @@ export type Database = {
       }
       user_has_course_access: {
         Args: { p_course_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      user_has_permission: {
+        Args: { p_permission_key: string; p_user_id: string }
         Returns: boolean
       }
       user_has_student_access: {

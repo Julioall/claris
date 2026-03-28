@@ -6,6 +6,7 @@ import {
   isStudentActivityPendingSubmission,
   isStudentActivityWeightedInGradebook,
 } from '@/lib/student-activity-status';
+import { listAccessibleCourseIds } from '@/lib/course-access';
 import type { RiskLevel, Student } from '@/features/students/types';
 
 import type {
@@ -274,17 +275,11 @@ export const dashboardRepository = {
       ? startOfWeek(now, { weekStartsOn: 1 })
       : startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
 
-    const { data: userCourses, error: userCoursesError } = await supabase
-      .from('user_courses')
-      .select('course_id')
-      .eq('user_id', userId)
-      .eq('role', 'tutor');
-
-    if (userCoursesError) throw userCoursesError;
+    const userCourseIds = await listAccessibleCourseIds(userId, 'tutor');
 
     const courseIds = normalizedCourseFilter
       ? [normalizedCourseFilter]
-      : userCourses?.map((userCourse) => userCourse.course_id) || [];
+      : userCourseIds;
 
     if (courseIds.length === 0) {
       return {

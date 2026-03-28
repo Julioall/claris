@@ -163,11 +163,13 @@ export async function createPendingTask(
 
 export async function listDueRecurrenceConfigs(
   supabase: AppSupabaseClient,
+  createdByUserId: string,
   referenceIso: string,
 ): Promise<RecurrenceConfig[]> {
   const { data, error } = await supabase
     .from('task_recurrence_configs')
     .select('*')
+    .eq('created_by_user_id', createdByUserId)
     .eq('is_active', true)
     .lte('start_date', referenceIso)
     .or(`next_generation_at.is.null,next_generation_at.lte.${referenceIso}`)

@@ -3,6 +3,7 @@
 
 import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
 import type { AuthenticatedHandlerContext } from '../_shared/http/mod.ts'
+import { userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   createJobWithRecipients,
@@ -17,6 +18,11 @@ import type { BulkMessageSendPayload } from './payload.ts'
 const handleBulkMessageSend = async ({ body, user }: AuthenticatedHandlerContext<BulkMessageSendPayload>) => {
   const userId = user.id
   const db = createServiceClient()
+
+  const canSendBulkMessages = await userHasPermission(db, userId, 'messages.bulk_send')
+  if (!canSendBulkMessages) {
+    return errorResponse('Permission denied for bulk messaging.', 403)
+  }
 
   const userData = await findUserById(db, userId)
   if (!userData) return errorResponse('User not found')

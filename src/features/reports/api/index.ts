@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { listAccessibleCourseIds } from '@/lib/course-access';
 
 export interface TutorCourse {
   id: string;
@@ -73,37 +74,29 @@ async function paginateRows<T>(fetchPage: (page: number) => Promise<{ data: T[] 
 }
 
 export async function fetchTutorCourses(userId: string): Promise<TutorCourse[]> {
+  const accessibleCourseIds = await listAccessibleCourseIds(userId, 'tutor');
+
+  if (accessibleCourseIds.length === 0) {
+    return [];
+  }
+
   const { data, error } = await supabase
-    .from('user_courses')
-    .select(`
-      course_id,
-      courses!inner (
-        id,
-        name,
-        short_name,
-        category,
-        start_date,
-        end_date
-      )
-    `)
-    .eq('user_id', userId)
-    .eq('role', 'tutor');
+    .from('courses')
+    .select('id, name, short_name, category, start_date, end_date')
+    .in('id', accessibleCourseIds);
 
   if (error) {
     throw error;
   }
 
-  const normalizedCourses = (data ?? [])
-    .map((item) => item.courses)
-    .filter((course): course is NonNullable<typeof course> => Boolean(course))
-    .map((course) => ({
-      id: course.id,
-      name: course.name,
-      short_name: course.short_name,
-      category: course.category,
-      start_date: course.start_date,
-      end_date: course.end_date,
-    }));
+  const normalizedCourses = (data ?? []).map((course) => ({
+    id: course.id,
+    name: course.name,
+    short_name: course.short_name,
+    category: course.category,
+    start_date: course.start_date,
+    end_date: course.end_date,
+  }));
 
   const uniqueById = new Map<string, TutorCourse>();
 

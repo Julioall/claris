@@ -212,7 +212,7 @@ export async function generateRecurringTasks(
   const failures: RecurrenceGenerationFailure[] = []
   const startedAt = now.toISOString()
 
-  const configs = await listDueRecurrenceConfigs(supabase, now.toISOString())
+  const configs = await listDueRecurrenceConfigs(supabase, userId, now.toISOString())
 
   if (!configs || configs.length === 0) {
     return { message: 'No recurrence configurations due for generation', results: [] }

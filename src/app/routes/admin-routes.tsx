@@ -5,7 +5,8 @@ import {
   AdminClarisConversationsPage,
   AdminDashboardPage,
   AdminErrorLogsPage,
-  AdminFeatureFlagsPage,
+  AdminGroupEditorPage,
+  AdminGroupsPage,
   AdminJobsPage,
   AdminMetricsPage,
   AdminSettingsPage,
@@ -28,11 +29,13 @@ export function renderAdminRoutes() {
       <Route path="/admin/configuracoes" element={<AdminSettingsPage />} />
       <Route path="/admin/jobs" element={<AdminJobsPage />} />
       <Route path="/admin/usuarios" element={<AdminUsersPage />} />
+      <Route path="/admin/grupos" element={<AdminGroupsPage />} />
+      <Route path="/admin/grupos/novo" element={<AdminGroupEditorPage />} />
+      <Route path="/admin/grupos/:groupId" element={<AdminGroupEditorPage />} />
       <Route path="/admin/metricas" element={<AdminMetricsPage />} />
       <Route path="/admin/logs-erros" element={<AdminErrorLogsPage />} />
       <Route path="/admin/suporte" element={<AdminSupportPage />} />
       <Route path="/admin/conversas-claris" element={<AdminClarisConversationsPage />} />
-      <Route path="/admin/feature-flags" element={<AdminFeatureFlagsPage />} />
       <Route path="/admin/servicos-aplicacao" element={<AdminApplicationServicesPage />} />
     </Route>
   );

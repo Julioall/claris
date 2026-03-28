@@ -20,6 +20,7 @@
 
 import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
 import type { AuthenticatedHandlerContext } from '../_shared/http/mod.ts'
+import { isApplicationAdmin, userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 
 // ---------------------------------------------------------------------------
@@ -278,13 +279,7 @@ async function ensureEvolutionInstance(
 // ---------------------------------------------------------------------------
 
 async function isAdmin(db: ReturnType<typeof createServiceClient>, userId: string): Promise<boolean> {
-  const { data } = await db
-    .from('admin_user_roles')
-    .select('role')
-    .eq('user_id', userId)
-    .eq('role', 'admin')
-    .maybeSingle()
-  return !!data
+  return isApplicationAdmin(db, userId)
 }
 
 // ---------------------------------------------------------------------------
@@ -966,6 +961,11 @@ const handler = async ({ body, user }: AuthenticatedHandlerContext<RequestBody>)
   const db = createServiceClient()
   const userId = user.id
   const action = body.action
+  const canManageServices = await userHasPermission(db, userId, 'services.view')
+
+  if (!canManageServices) {
+    return errorResponse('Permission denied for service management.', 403)
+  }
 
   switch (action) {
     case 'create':        return handleCreate(db, userId, body)

@@ -5,6 +5,7 @@
  */
 import { createServiceClient } from '../db/mod.ts'
 import type { Tables } from '../db/mod.ts'
+import { listAccessibleCourseIds, userHasPermission } from '../auth/mod.ts'
 import {
   createJobWithRecipients,
   failJob,
@@ -177,6 +178,44 @@ export interface ToolExecutionContext {
   actionJobId?: string
 }
 
+const TOOL_REQUIRED_PERMISSIONS: Partial<Record<string, string>> = {
+  get_dashboard_summary: 'dashboard.view',
+  get_students_at_risk: 'students.view',
+  get_student_details: 'students.view',
+  get_activities_to_review: 'students.view',
+  get_student_summary: 'students.view',
+  get_student_history: 'students.view',
+  get_grade_risk: 'students.view',
+  get_engagement_signals: 'students.view',
+  get_recent_attendance_risk: 'students.view',
+  get_pending_tasks: 'tasks.view',
+  create_task: 'tasks.view',
+  batch_create_tasks: 'tasks.view',
+  update_task: 'tasks.view',
+  change_task_status: 'tasks.view',
+  add_tag_to_task: 'tasks.view',
+  list_tasks: 'tasks.view',
+  create_event: 'agenda.view',
+  batch_create_events: 'agenda.view',
+  update_event: 'agenda.view',
+  delete_event: 'agenda.view',
+  list_events: 'agenda.view',
+  get_upcoming_calendar_commitments: 'agenda.view',
+  find_students_for_messaging: 'messages.view',
+  prepare_single_student_message_send: 'messages.view',
+  confirm_single_student_message_send: 'messages.view',
+  list_message_templates: 'messages.view',
+  get_notifications: 'messages.view',
+  notify_user: 'messages.view',
+  prepare_bulk_message_send: 'messages.bulk_send',
+  confirm_bulk_message_send: 'messages.bulk_send',
+  cancel_bulk_message_send: 'messages.bulk_send',
+  get_tutor_routine_suggestions: 'claris.proactive.generate',
+  generate_weekly_checklist: 'claris.proactive.generate',
+  save_suggestion: 'claris.proactive.generate',
+  run_proactive_engines: 'claris.proactive.generate',
+}
+
 export async function executeToolCall(
   toolName: string,
   args: ToolCallArgs,
@@ -184,6 +223,14 @@ export async function executeToolCall(
   context: ToolExecutionContext,
 ): Promise<unknown> {
   const supabase = createServiceClient()
+  const requiredPermission = TOOL_REQUIRED_PERMISSIONS[toolName]
+
+  if (requiredPermission) {
+    const hasPermission = await userHasPermission(supabase, userId, requiredPermission)
+    if (!hasPermission) {
+      return { error: `Permission denied for tool: ${toolName}` }
+    }
+  }
 
   switch (toolName) {
     case 'get_dashboard_summary':
@@ -275,18 +322,12 @@ export async function executeToolCall(
 // ---------------------------------------------------------------------------
 
 type Supabase = ReturnType<typeof createServiceClient>
-type UserCourseRow = Pick<Tables<'user_courses'>, 'course_id'>
 type StudentCourseRow = Pick<Tables<'student_courses'>, 'student_id'>
 type StudentBasicRow = Pick<Tables<'students'>, 'id' | 'moodle_user_id' | 'full_name' | 'email' | 'current_risk_level'>
 type CourseBasicRow = Pick<Tables<'courses'>, 'id'>
 
 async function getUserCourseIds(userId: string, supabase: Supabase): Promise<string[]> {
-  const { data } = await supabase
-    .from('user_courses')
-    .select('course_id')
-    .eq('user_id', userId)
-    .eq('role', 'tutor')
-  return (data ?? []).map((r: UserCourseRow) => r.course_id)
+  return listAccessibleCourseIds(supabase, userId, 'tutor')
 }
 
 async function getStudentIdsInCourses(courseIds: string[], supabase: Supabase): Promise<string[]> {

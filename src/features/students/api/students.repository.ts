@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { listAccessibleCourseIds } from '@/lib/course-access';
 
 import type { EnrollmentStatus, RiskLevel, StudentListItem, StudentProfile, StudentRecord } from '../types';
 
@@ -9,10 +10,6 @@ const RISK_ORDER: Record<RiskLevel, number> = {
   normal: 3,
   inativo: 4,
 };
-
-interface UserCourseRow {
-  course_id: string;
-}
 
 interface StudentCourseRow {
   student_id: string;
@@ -55,15 +52,7 @@ function resolveEnrollmentStatus(statuses: Set<EnrollmentStatus>): EnrollmentSta
 }
 
 async function listTutorCourseIds(userId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('user_courses')
-    .select('course_id')
-    .eq('user_id', userId)
-    .eq('role', 'tutor');
-
-  if (error) throw error;
-
-  return ((data || []) as UserCourseRow[]).map((entry) => entry.course_id);
+  return listAccessibleCourseIds(userId, 'tutor');
 }
 
 function mapStudentEntries(studentCourses: StudentCourseRow[]): StudentListItem[] {
