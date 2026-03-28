@@ -1,27 +1,12 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
-import AutomacoesPage from "@/features/automations/pages/AutomacoesPage";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
-vi.mock("@/features/automations/components/BulkJobsTab", () => ({
-  BulkJobsTab: () => <div data-testid="bulk-jobs-tab">Bulk jobs</div>,
-}));
+import AutomacoesPage from '@/features/automations/pages/AutomacoesPage';
 
-vi.mock("@/features/automations/components/ScheduledMessagesTab", () => ({
-  ScheduledMessagesTab: () => <div data-testid="scheduled-messages-tab">Agendamentos</div>,
-}));
-
-vi.mock("@/features/automations/components/RotinasTab", () => ({
-  RotinasTab: () => <div data-testid="rotinas-tab">Rotinas</div>,
-}));
-
-vi.mock("@/features/messages/components/BulkSendTab", () => ({
-  BulkSendTab: () => <div data-testid="bulk-send-tab">Envio em massa</div>,
-}));
-
-vi.mock("@/features/messages/components/MessageTemplatesTab", () => ({
-  MessageTemplatesTab: () => <div data-testid="message-templates-tab">Modelos</div>,
+vi.mock('@/features/automations/components/RotinasTab', () => ({
+  RotinasTab: () => <div data-testid="rotinas-tab">Rotinas automaticas</div>,
 }));
 
 function renderPage(initialEntries?: string[]) {
@@ -32,42 +17,42 @@ function renderPage(initialEntries?: string[]) {
   );
 }
 
-describe("Automacoes page", () => {
+describe('Automacoes page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders the automation hub with bulk send, templates and operational tabs", () => {
+  it('renders the automation hub with trigger-centric tabs', () => {
     renderPage();
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: /automa/i }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /envio em massa/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /jobs de envio/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /modelos/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /agendamentos/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /rotinas/i })).toBeInTheDocument();
-    expect(screen.getByTestId("bulk-jobs-tab")).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /automacoes/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /gatilhos/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /regras/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /governanca/i })).toBeInTheDocument();
+    expect(screen.getByText(/atividade atrasada/i)).toBeInTheDocument();
   });
 
-  it("supports deep-linking to moved messaging workflows", () => {
-    renderPage(["/automacoes?tab=modelos"]);
+  it('redirects legacy campaign tabs to the campaigns module', () => {
+    render(
+      <MemoryRouter initialEntries={['/automacoes?tab=modelos']}>
+        <Routes>
+          <Route path="/automacoes" element={<AutomacoesPage />} />
+          <Route path="/campanhas" element={<div data-testid="campaigns-route">Campanhas</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
 
-    expect(screen.getByTestId("message-templates-tab")).toBeInTheDocument();
+    expect(screen.getByTestId('campaigns-route')).toBeInTheDocument();
   });
 
-  it("switches between automation tabs", async () => {
+  it('switches between automation tabs', async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("tab", { name: /envio em massa/i }));
-    expect(screen.getByTestId("bulk-send-tab")).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /regras/i }));
+    expect(screen.getByText(/estrutura minima de uma automacao/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("tab", { name: /agendamentos/i }));
-    expect(screen.getByTestId("scheduled-messages-tab")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: /rotinas/i }));
-    expect(screen.getByTestId("rotinas-tab")).toBeInTheDocument();
+    await user.click(screen.getByRole('tab', { name: /governanca/i }));
+    expect(screen.getByTestId('rotinas-tab')).toBeInTheDocument();
   });
 });

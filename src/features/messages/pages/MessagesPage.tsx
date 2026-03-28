@@ -134,7 +134,8 @@ export default function MessagesPage() {
       <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight">Mensagens</h1>
         <p className="text-muted-foreground">
-          Conversas individuais via Moodle com cache local simples para reabrir contatos mais rapido.
+          Canal individual do Moodle. Campanhas e automacoes ficam em modulos separados, e o
+          WhatsApp segue como chat proprio.
         </p>
       </div>
 

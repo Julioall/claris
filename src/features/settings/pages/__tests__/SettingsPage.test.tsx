@@ -90,7 +90,7 @@ describe('Settings page', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: /configuracoes/i })).toBeInTheDocument();
     expect(screen.getByText('Julio Tutor')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sincronizacao geral inicial/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Sincronizacao Geral/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sair da conta/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /mensagens/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /limpeza operacional do banco/i })).not.toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('Settings page', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole('button', { name: /sincronizacao geral inicial/i }));
+    await user.click(screen.getByRole('button', { name: /Sincronizacao Geral/i }));
     expect(syncDataMock).toHaveBeenCalledTimes(1);
   });
 

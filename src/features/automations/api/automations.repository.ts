@@ -4,12 +4,18 @@ import type { Json, Tables, TablesInsert, TablesUpdate } from '@/integrations/su
 import type {
   AccessibleWhatsappInstance,
   BulkJobDetail,
+  BulkJobListFilters,
   BulkJobListItem,
   BulkJobRecipient,
+  PaginatedBulkJobs,
+  PaginatedScheduledMessages,
   ScheduledMessageExecutionContext,
   ScheduledMessage,
   ScheduledMessageFormValues,
+  ScheduledMessageListFilters,
 } from '../types';
+
+const DEFAULT_PAGE_SIZE = 30;
 
 function readFilterContext(filterContext: Json | null) {
   if (!filterContext || typeof filterContext !== 'object' || Array.isArray(filterContext)) {
@@ -86,22 +92,40 @@ function buildScheduledMessageExecutionContext(values: ScheduledMessageFormValue
   };
 }
 
-export async function listBulkJobs(statusFilter?: string): Promise<BulkJobListItem[]> {
+export async function listBulkJobs(filters: BulkJobListFilters = {}): Promise<PaginatedBulkJobs> {
+  const {
+    page = 1,
+    pageSize = DEFAULT_PAGE_SIZE,
+    search,
+    status = 'all',
+  } = filters;
+  const normalizedPage = Math.max(page, 1);
+  const normalizedPageSize = Math.min(Math.max(pageSize, 1), 100);
+  const from = (normalizedPage - 1) * normalizedPageSize;
+  const to = from + normalizedPageSize - 1;
+
   let query = supabase
     .from('bulk_message_jobs')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(200);
+    .range(from, to);
 
-  if (statusFilter && statusFilter !== 'all') {
-    query = query.eq('status', statusFilter as never);
+  if (status && status !== 'all') {
+    query = query.eq('status', status as never);
   }
 
-  const { data, error } = await query;
+  if (search?.trim()) {
+    query = query.ilike('message_content', `%${search.trim()}%`);
+  }
+
+  const { data, error, count } = await query;
 
   if (error) throw error;
 
-  return (data || []) as BulkJobListItem[];
+  return {
+    items: (data || []) as BulkJobListItem[],
+    totalCount: count ?? 0,
+  };
 }
 
 export async function getBulkJobDetail(jobId: string): Promise<BulkJobDetail> {
@@ -145,15 +169,43 @@ export async function listAccessibleWhatsappInstances(
   return (data || []) as AccessibleWhatsappInstance[];
 }
 
-export async function listScheduledMessages(): Promise<ScheduledMessage[]> {
-  const { data, error } = await supabase
+export async function listScheduledMessages(
+  filters: ScheduledMessageListFilters = {},
+): Promise<PaginatedScheduledMessages> {
+  const {
+    page = 1,
+    pageSize = DEFAULT_PAGE_SIZE,
+    search,
+    status = 'all',
+  } = filters;
+  const normalizedPage = Math.max(page, 1);
+  const normalizedPageSize = Math.min(Math.max(pageSize, 1), 100);
+  const from = (normalizedPage - 1) * normalizedPageSize;
+  const to = from + normalizedPageSize - 1;
+
+  let query = supabase
     .from('scheduled_messages')
-    .select('*')
-    .order('scheduled_at', { ascending: true });
+    .select('*', { count: 'exact' })
+    .order('scheduled_at', { ascending: true })
+    .range(from, to);
+
+  if (status && status !== 'all') {
+    query = query.eq('status', status);
+  }
+
+  if (search?.trim()) {
+    const normalizedSearch = search.trim();
+    query = query.or(`title.ilike.%${normalizedSearch}%,message_content.ilike.%${normalizedSearch}%`);
+  }
+
+  const { data, error, count } = await query;
 
   if (error) throw error;
 
-  return ((data || []) as Tables<'scheduled_messages'>[]).map(mapScheduledMessage);
+  return {
+    items: ((data || []) as Tables<'scheduled_messages'>[]).map(mapScheduledMessage),
+    totalCount: count ?? 0,
+  };
 }
 
 export async function createScheduledMessage(userId: string, values: ScheduledMessageFormValues) {

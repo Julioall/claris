@@ -164,7 +164,6 @@ describe("SchoolHierarchy", () => {
         name: "Curso Sem Categoria",
         students_count: 2,
         at_risk_count: 0,
-        pending_tasks_count: 0,
         is_following: false,
         is_ignored: false,
         is_attendance_enabled: false,

@@ -5,6 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import {
   AgendaPage,
   AutomationsPage,
+  CampaignsPage,
   ClarisPage,
   CoursePanelPage,
   DashboardPage,
@@ -43,6 +44,7 @@ export function renderPrivateRoutes() {
       <Route path="/agenda" element={<PermissionRoute permission={APP_PERMISSIONS.AGENDA_VIEW}><AgendaPage /></PermissionRoute>} />
       <Route path="/mensagens" element={<PermissionRoute permission={APP_PERMISSIONS.MESSAGES_VIEW}><MessagesPage /></PermissionRoute>} />
       <Route path="/whatsapp" element={<PermissionRoute permission={APP_PERMISSIONS.WHATSAPP_VIEW}><WhatsAppPage /></PermissionRoute>} />
+      <Route path="/campanhas" element={<PermissionRoute permission={APP_PERMISSIONS.MESSAGES_BULK_SEND}><CampaignsPage /></PermissionRoute>} />
       <Route path="/claris" element={<PermissionRoute permission={APP_PERMISSIONS.CLARIS_VIEW}><ClarisPage /></PermissionRoute>} />
       <Route path="/automacoes" element={<PermissionRoute permission={APP_PERMISSIONS.AUTOMATIONS_VIEW}><AutomationsPage /></PermissionRoute>} />
       <Route path="/relatorios" element={<PermissionRoute permission={APP_PERMISSIONS.REPORTS_VIEW}><ReportsPage /></PermissionRoute>} />

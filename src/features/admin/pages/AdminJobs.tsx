@@ -1,9 +1,11 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Activity,
+  ChevronLeft,
+  ChevronRight,
   ChevronDown,
   ChevronUp,
   Clock3,
@@ -59,6 +61,8 @@ const JOB_TYPE_OPTIONS = [
   { value: 'ai_grade_suggestion', label: 'Sugestão de nota IA' },
   { value: 'moodle_deep_sync', label: 'Sync profunda Moodle' },
 ];
+
+const PAGE_SIZE = 30;
 
 function formatDateTime(value?: string | null) {
   if (!value) return '—';
@@ -185,16 +189,34 @@ export default function AdminJobs() {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [jobTypeFilter, setJobTypeFilter] = useState('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
   const queryClient = useQueryClient();
 
-  const { data: jobs = [], isLoading } = useQuery({
-    queryKey: ['admin-background-jobs', statusFilter, sourceFilter, jobTypeFilter],
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, sourceFilter, jobTypeFilter]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-background-jobs', statusFilter, sourceFilter, jobTypeFilter, search, page],
     queryFn: () => listAdminBackgroundJobs({
       status: statusFilter as 'all',
       source: sourceFilter,
       jobType: jobTypeFilter,
+      search,
+      page,
+      pageSize: PAGE_SIZE,
     }),
   });
+
+  const jobs = data?.items ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const { data: details } = useQuery({
     queryKey: ['admin-background-job-detail', expandedId],
@@ -202,30 +224,12 @@ export default function AdminJobs() {
     enabled: !!expandedId,
   });
 
-  const filteredJobs = useMemo(() => {
-    const normalizedSearch = search.trim().toLowerCase();
-    if (!normalizedSearch) return jobs;
-
-    return jobs.filter((job) => {
-      const haystack = [
-        job.title,
-        job.description ?? '',
-        job.job_type,
-        job.source,
-        job.user?.full_name ?? '',
-        job.user?.moodle_username ?? '',
-      ].join(' ').toLowerCase();
-
-      return haystack.includes(normalizedSearch);
-    });
-  }, [jobs, search]);
-
   const stats = useMemo(() => ({
-    total: filteredJobs.length,
-    processing: filteredJobs.filter((job) => job.status === 'pending' || job.status === 'processing').length,
-    failed: filteredJobs.filter((job) => job.status === 'failed').length,
-    completed: filteredJobs.filter((job) => job.status === 'completed').length,
-  }), [filteredJobs]);
+    total: totalCount,
+    processing: jobs.filter((job) => job.status === 'pending' || job.status === 'processing').length,
+    failed: jobs.filter((job) => job.status === 'failed').length,
+    completed: jobs.filter((job) => job.status === 'completed').length,
+  }), [jobs, totalCount]);
 
   const toggleExpanded = (jobId: string) => {
     setExpandedId((current) => current === jobId ? null : jobId);
@@ -338,7 +342,7 @@ export default function AdminJobs() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Carregando jobs...</div>
-          ) : filteredJobs.length === 0 ? (
+          ) : jobs.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Nenhum job encontrado.</div>
           ) : (
             <Table>
@@ -354,7 +358,7 @@ export default function AdminJobs() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredJobs.map((job: AdminBackgroundJobRow) => {
+                {jobs.map((job: AdminBackgroundJobRow) => {
                   const isExpanded = expandedId === job.id;
                   const progressLabel = job.total_items > 0
                     ? `${job.processed_items}/${job.total_items}`
@@ -504,6 +508,37 @@ export default function AdminJobs() {
           )}
         </CardContent>
       </Card>
+
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {(page - 1) * PAGE_SIZE + (jobs.length > 0 ? 1 : 0)}-{(page - 1) * PAGE_SIZE + jobs.length} de {totalCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

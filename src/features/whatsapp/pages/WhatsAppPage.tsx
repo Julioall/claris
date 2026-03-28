@@ -192,7 +192,8 @@ export default function WhatsAppPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">WhatsApp</h1>
           <p className="text-muted-foreground">
-            Conversas da Evolution com lista de chats, contatos sincronizados e envio de midia.
+            Chat individual do WhatsApp com lista de conversas, contatos sincronizados e envio de
+            midia. Campanhas e automacoes ficam em modulos dedicados.
           </p>
         </div>
       </div>

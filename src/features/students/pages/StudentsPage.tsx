@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   Clock,
   Filter,
+  ChevronLeft,
+  ChevronRight,
   RefreshCw,
   Search,
   UserCheck,
@@ -37,6 +39,8 @@ import { EnrollmentStatusBadge } from '../components/EnrollmentStatusBadge';
 import { useStudentsData } from '../hooks/useStudentsData';
 import { useSyncStudentsMutation } from '../hooks/useSyncStudentsMutation';
 
+const STUDENTS_PAGE_SIZE = 30;
+
 function formatLastAccess(date: string | null | undefined) {
   if (!date) return 'Nunca';
   return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
@@ -48,11 +52,17 @@ export default function StudentsPage() {
   const [riskFilter, setRiskFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [currentPage, setCurrentPage] = useState(1);
   const { isSyncing, isOfflineMode } = useAuth();
   const syncStudentsMutation = useSyncStudentsMutation();
-  const { students, isLoading, error } = useStudentsData(
-    courseFilter !== 'all' ? courseFilter : undefined,
-  );
+  const { students, totalCount, isLoading, error } = useStudentsData({
+    courseId: courseFilter !== 'all' ? courseFilter : undefined,
+    searchQuery,
+    riskFilter,
+    statusFilter,
+    page: currentPage,
+    pageSize: STUDENTS_PAGE_SIZE,
+  });
   const { courses } = useCoursesData();
 
   const targetCourseIds = courseFilter !== 'all'
@@ -64,15 +74,19 @@ export default function StudentsPage() {
     await syncStudentsMutation.mutateAsync(targetCourseIds);
   };
 
-  const filteredStudents = students.filter((student) => {
-    const matchesSearch = student.full_name.toLowerCase().includes(searchQuery.toLowerCase())
-      || student.email?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesRisk = riskFilter === 'all' || student.current_risk_level === riskFilter;
-    const matchesStatus = statusFilter === 'all'
-      || (student.enrollment_status?.toLowerCase() || 'ativo') === statusFilter;
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, riskFilter, statusFilter, courseFilter]);
 
-    return matchesSearch && matchesRisk && matchesStatus;
-  });
+  const totalPages = Math.max(1, Math.ceil(totalCount / STUDENTS_PAGE_SIZE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const pageStart = (currentPage - 1) * STUDENTS_PAGE_SIZE;
 
   if (isLoading) {
     return (
@@ -87,7 +101,7 @@ export default function StudentsPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Alunos</h1>
-          <p className="text-muted-foreground">{students.length} alunos em seus cursos</p>
+          <p className="text-muted-foreground">{totalCount} alunos em seus cursos</p>
         </div>
         <Button
           variant="outline"
@@ -176,7 +190,7 @@ export default function StudentsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredStudents.map((student) => (
+            {students.map((student) => (
               <TableRow
                 key={student.id}
                 className="cursor-pointer"
@@ -218,7 +232,7 @@ export default function StudentsPage() {
           </TableBody>
         </Table>
 
-        {filteredStudents.length === 0 && !isLoading && (
+        {totalCount === 0 && !isLoading && (
           <div className="py-12 text-center">
             <Users className="mx-auto mb-4 h-12 w-12 text-muted-foreground/50" />
             <h3 className="text-lg font-medium">Nenhum aluno encontrado</h3>
@@ -230,6 +244,44 @@ export default function StudentsPage() {
           </div>
         )}
       </div>
+
+      {totalCount > 0 && (
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Mostrando {pageStart + 1}-{Math.min(pageStart + STUDENTS_PAGE_SIZE, totalCount)} de {totalCount} alunos
+          </p>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={currentPage === 1}
+              className="gap-1"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+
+            <span className="min-w-24 text-center text-sm text-muted-foreground">
+              Página {currentPage} de {totalPages}
+            </span>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={currentPage === totalPages}
+              className="gap-1"
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

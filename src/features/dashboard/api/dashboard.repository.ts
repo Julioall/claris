@@ -96,6 +96,7 @@ interface DashboardDataQueryInput {
 }
 
 const PAGE_SIZE = 1000;
+const DASHBOARD_BATCH_SIZE = 120;
 
 const EMPTY_SUMMARY: WeeklySummary = {
   today_events: 0,
@@ -117,6 +118,17 @@ const EMPTY_DASHBOARD_DATA: DashboardData = {
 
 function normalizeEnrollmentStatus(status: string | null | undefined) {
   return (status || '').trim().toLowerCase();
+}
+
+function chunkValues<T>(values: T[], size = DASHBOARD_BATCH_SIZE) {
+  const uniqueValues = Array.from(new Set(values));
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < uniqueValues.length; index += size) {
+    chunks.push(uniqueValues.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 async function paginateRows<T>(
@@ -145,15 +157,197 @@ async function paginateRows<T>(
 }
 
 async function fetchAllDashboardStudentCourses(courseIds: string[]) {
-  return paginateRows<StudentCourseRow>(async (page) => {
-    const { data, error } = await supabase
-      .from('student_courses')
-      .select('student_id, enrollment_status')
-      .in('course_id', courseIds)
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+  const results = await Promise.all(
+    chunkValues(courseIds).map((courseIdBatch) => paginateRows<StudentCourseRow>(async (page) => {
+      const { data, error } = await supabase
+        .from('student_courses')
+        .select('student_id, enrollment_status')
+        .in('course_id', courseIdBatch)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    return { data: (data ?? []) as StudentCourseRow[], error };
+      return { data: (data ?? []) as StudentCourseRow[], error };
+    })),
+  );
+
+  return results.flat();
+}
+
+async function listStudentsAtRisk(studentIds: string[]) {
+  const results = await Promise.all(
+    chunkValues(studentIds).map(async (studentIdBatch) => {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .in('id', studentIdBatch)
+        .in('current_risk_level', ['risco', 'critico']);
+
+      if (error) throw error;
+      return (data ?? []) as AtRiskStudentRow[];
+    }),
+  );
+
+  return results.flat();
+}
+
+async function countActiveNormalStudents(studentIds: string[]) {
+  const counts = await Promise.all(
+    chunkValues(studentIds).map(async (studentIdBatch) => {
+      const { count, error } = await supabase
+        .from('students')
+        .select('id', { count: 'exact', head: true })
+        .in('id', studentIdBatch)
+        .eq('current_risk_level', 'normal');
+
+      if (error) throw error;
+      return count ?? 0;
+    }),
+  );
+
+  return counts.reduce((total, count) => total + count, 0);
+}
+
+async function countNewAtRiskStudents(studentIds: string[], weekStartIso: string) {
+  const counts = await Promise.all(
+    chunkValues(studentIds).map(async (studentIdBatch) => {
+      const { count, error } = await supabase
+        .from('risk_history')
+        .select('*', { count: 'exact', head: true })
+        .in('student_id', studentIdBatch)
+        .in('new_level', ['risco', 'critico'])
+        .gte('created_at', weekStartIso);
+
+      if (error) throw error;
+      return count ?? 0;
+    }),
+  );
+
+  return counts.reduce((total, count) => total + count, 0);
+}
+
+async function listActivityFeedItems(userId: string, studentIds: string[], courseFilter?: string) {
+  const ownFeedQuery = supabase
+    .from('activity_feed')
+    .select(`
+      *,
+      students (id, full_name)
+    `)
+    .eq('user_id', userId);
+
+  const { data: ownFeed, error: ownFeedError } = await (courseFilter
+    ? ownFeedQuery.eq('course_id', courseFilter)
+    : ownFeedQuery)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (ownFeedError) throw ownFeedError;
+
+  const studentFeedResults = await Promise.all(
+    chunkValues(studentIds).map(async (studentIdBatch) => {
+      const studentFeedQuery = supabase
+        .from('activity_feed')
+        .select(`
+          *,
+          students (id, full_name)
+        `)
+        .in('student_id', studentIdBatch);
+
+      const { data, error } = await (courseFilter
+        ? studentFeedQuery.eq('course_id', courseFilter)
+        : studentFeedQuery)
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      return (data ?? []) as Array<Record<string, unknown>>;
+    }),
+  );
+
+  const merged = [...((ownFeed ?? []) as Array<Record<string, unknown>>), ...studentFeedResults.flat()];
+  const uniqueById = new Map<string, Record<string, unknown>>();
+
+  merged.forEach((item) => {
+    const itemId = typeof item.id === 'string' ? item.id : null;
+    if (!itemId || uniqueById.has(itemId)) return;
+    uniqueById.set(itemId, item);
   });
+
+  return Array.from(uniqueById.values())
+    .sort((left, right) => {
+      const leftDate = new Date(String(left.created_at ?? '')).getTime();
+      const rightDate = new Date(String(right.created_at ?? '')).getTime();
+      return rightDate - leftDate;
+    })
+    .slice(0, 20);
+}
+
+async function listPendingAssignments(courseIds: string[]) {
+  const results = await Promise.all(
+    chunkValues(courseIds).map((courseIdBatch) => paginateRows<PendingAssignmentRow>(async (page) => {
+      const { data, error } = await supabase
+        .from('student_activities')
+        .select('id, student_id, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
+        .in('course_id', courseIdBatch)
+        .eq('activity_type', 'assign')
+        .not('due_date', 'is', null)
+        .lt('due_date', new Date().toISOString())
+        .eq('hidden', false)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      return { data: (data ?? []) as PendingAssignmentRow[], error };
+    })),
+  );
+
+  return results.flat();
+}
+
+async function listUncorrectedActivities(courseIds: string[]) {
+  const results = await Promise.all(
+    chunkValues(courseIds).map((courseIdBatch) => paginateRows<ReviewActivityRow>(async (page) => {
+      const { data, error } = await supabase
+        .from('student_activities')
+        .select(`
+          id,
+          student_id,
+          course_id,
+          activity_name,
+          activity_type,
+          grade,
+          grade_max,
+          due_date,
+          completed_at,
+          graded_at,
+          percentage,
+          status,
+          submitted_at,
+          students!inner (id, full_name, current_risk_level),
+          courses!inner (id, name, short_name)
+        `)
+        .in('course_id', courseIdBatch)
+        .eq('activity_type', 'assign')
+        .eq('hidden', false)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+      return { data: (data ?? []) as ReviewActivityRow[], error };
+    })),
+  );
+
+  return results.flat();
+}
+
+async function listDashboardAggregates(courseIds: string[]) {
+  const results = await Promise.all(
+    chunkValues(courseIds).map(async (courseIdBatch) => {
+      const { data, error } = await supabase
+        .from('dashboard_course_activity_aggregates')
+        .select('course_id, pending_submission_assignments, pending_correction_assignments')
+        .in('course_id', courseIdBatch);
+
+      if (error) throw error;
+      return (data ?? []) as DashboardCourseActivityAggregateRow[];
+    }),
+  );
+
+  return results.flat();
 }
 
 function mapActivityFeedItems(items: Array<Record<string, unknown>>): ActivityFeedItem[] {
@@ -312,28 +506,8 @@ export const dashboardRepository = {
       ),
     ];
 
-    const feedFilter = studentIds.length > 0
-      ? `user_id.eq.${userId},student_id.in.(${studentIds.join(',')})`
-      : `user_id.eq.${userId}`;
-
     if (studentIds.length === 0) {
-      let feedQuery = supabase
-        .from('activity_feed')
-        .select(`
-          *,
-          students (id, full_name)
-        `)
-        .or(feedFilter);
-
-      if (normalizedCourseFilter) {
-        feedQuery = feedQuery.eq('course_id', normalizedCourseFilter);
-      }
-
-      const { data: feedData, error: feedError } = await feedQuery
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (feedError) throw feedError;
+      const feedData = await listActivityFeedItems(userId, [], normalizedCourseFilter);
 
       return {
         ...EMPTY_DASHBOARD_DATA,
@@ -345,29 +519,19 @@ export const dashboardRepository = {
     const nowIso = now.toISOString();
     const todayStart = startOfDay(now).toISOString();
     const todayEnd = endOfDay(now).toISOString();
-
-    let feedQuery = supabase
-      .from('activity_feed')
-      .select(`
-        *,
-        students (id, full_name)
-      `)
-      .or(feedFilter);
-
-    if (normalizedCourseFilter) {
-      feedQuery = feedQuery.eq('course_id', normalizedCourseFilter);
-    }
+    const activeStudentIdSet = new Set(activeStudentIds);
+    const studentIdSet = new Set(studentIds);
 
     const [
       todayEventsResponse,
       todayTasksResponse,
-      atRiskStudentsResponse,
-      activeNormalStudentsResponse,
-      newAtRiskResponse,
-      feedResponse,
-      missedAssignmentsResponse,
-      dashboardAggregatesResponse,
-      uncorrectedActivitiesResponse,
+      atRiskStudents,
+      activeNormalStudentsCount,
+      newAtRisk,
+      feedData,
+      missedAssignments,
+      dashboardAggregates,
+      uncorrectedActivities,
     ] = await Promise.all([
       (supabase.from('calendar_events' as never) as ReturnType<typeof supabase.from>)
         .select('id', { count: 'exact', head: true })
@@ -380,61 +544,13 @@ export const dashboardRepository = {
         .gte('due_date', todayStart)
         .lte('due_date', todayEnd)
         .neq('status', 'done'),
-      supabase
-        .from('students')
-        .select('*')
-        .in('id', studentIds)
-        .in('current_risk_level', ['risco', 'critico']),
-      supabase
-        .from('students')
-        .select('id', { count: 'exact', head: true })
-        .in('id', activeStudentIds.length > 0 ? activeStudentIds : ['__none__'])
-        .eq('current_risk_level', 'normal'),
-      supabase
-        .from('risk_history')
-        .select('*', { count: 'exact', head: true })
-        .in('student_id', studentIds)
-        .in('new_level', ['risco', 'critico'])
-        .gte('created_at', weekStart.toISOString()),
-      feedQuery
-        .order('created_at', { ascending: false })
-        .limit(20),
-      supabase
-        .from('student_activities')
-        .select('id, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
-        .in('course_id', courseIds)
-        .in('student_id', studentIds)
-        .eq('activity_type', 'assign')
-        .not('due_date', 'is', null)
-        .lt('due_date', nowIso)
-        .eq('hidden', false),
-      supabase
-        .from('dashboard_course_activity_aggregates')
-        .select('course_id, pending_submission_assignments, pending_correction_assignments')
-        .in('course_id', courseIds),
-      supabase
-        .from('student_activities')
-        .select(`
-          id,
-          student_id,
-          course_id,
-          activity_name,
-          activity_type,
-          grade,
-          grade_max,
-          due_date,
-          completed_at,
-          graded_at,
-          percentage,
-          status,
-          submitted_at,
-          students!inner (id, full_name, current_risk_level),
-          courses!inner (id, name, short_name)
-        `)
-        .in('course_id', courseIds)
-        .in('student_id', studentIds)
-        .eq('activity_type', 'assign')
-        .eq('hidden', false),
+      listStudentsAtRisk(studentIds),
+      activeStudentIds.length > 0 ? countActiveNormalStudents(activeStudentIds) : Promise.resolve(0),
+      countNewAtRiskStudents(studentIds, weekStart.toISOString()),
+      listActivityFeedItems(userId, studentIds, normalizedCourseFilter),
+      listPendingAssignments(courseIds),
+      listDashboardAggregates(courseIds),
+      listUncorrectedActivities(courseIds),
     ]);
 
     const { count: todayEventsCount, error: todayEventsError } = todayEventsResponse as {
@@ -445,31 +561,18 @@ export const dashboardRepository = {
       count: number | null;
       error: Error | null;
     };
-    const { data: atRiskStudents, error: atRiskStudentsError } = atRiskStudentsResponse;
-    const { count: activeNormalStudentsCount, error: activeNormalStudentsError } = activeNormalStudentsResponse;
-    const { count: newAtRisk, error: newAtRiskError } = newAtRiskResponse;
-    const { data: feedData, error: feedError } = feedResponse;
-    const { data: missedAssignments, error: missedAssignmentsError } = missedAssignmentsResponse;
-    const { data: dashboardAggregates, error: dashboardAggregatesError } = dashboardAggregatesResponse;
-    const { data: uncorrectedActivities, error: uncorrectedActivitiesError } = uncorrectedActivitiesResponse;
-
     if (todayEventsError) throw todayEventsError;
     if (todayTasksError) throw todayTasksError;
-    if (atRiskStudentsError) throw atRiskStudentsError;
-    if (activeNormalStudentsError) throw activeNormalStudentsError;
-    if (newAtRiskError) throw newAtRiskError;
-    if (feedError) throw feedError;
-    if (missedAssignmentsError) throw missedAssignmentsError;
-    if (dashboardAggregatesError) throw dashboardAggregatesError;
-    if (uncorrectedActivitiesError) throw uncorrectedActivitiesError;
 
-    const pendingSubmissionAssignments = ((missedAssignments || []) as PendingAssignmentRow[])
+    const pendingSubmissionAssignments = (missedAssignments as (PendingAssignmentRow & { student_id?: string })[])
+      .filter((activity) => activity.student_id && activeStudentIdSet.has(activity.student_id))
       .filter((activity) => isStudentActivityWeightedInGradebook(activity))
       .filter((activity) => isStudentActivityPendingSubmission(activity));
-    const pendingCorrectionActivities = ((uncorrectedActivities || []) as ReviewActivityRow[])
+    const pendingCorrectionActivities = (uncorrectedActivities as ReviewActivityRow[])
+      .filter((activity) => studentIdSet.has(activity.student_id))
       .filter((activity) => isStudentActivityWeightedInGradebook(activity))
       .filter((activity) => isStudentActivityPendingCorrection(activity));
-    const aggregateRows = (dashboardAggregates || []) as DashboardCourseActivityAggregateRow[];
+    const aggregateRows = dashboardAggregates as DashboardCourseActivityAggregateRow[];
     const aggregateCourseIds = new Set(aggregateRows.map((aggregate) => aggregate.course_id));
     const hasAggregateForEveryCourse = courseIds.every((courseId) => aggregateCourseIds.has(courseId));
     const pendingCorrectionAssignmentsCount = hasAggregateForEveryCourse
@@ -484,12 +587,12 @@ export const dashboardRepository = {
         active_normal_students: activeNormalStudentsCount || 0,
         pending_submission_assignments: pendingSubmissionAssignments.length,
         pending_correction_assignments: pendingCorrectionAssignmentsCount,
-        students_at_risk: atRiskStudents?.length || 0,
+        students_at_risk: atRiskStudents.length || 0,
         new_at_risk_this_week: newAtRisk || 0,
       },
-      criticalStudents: mapCriticalStudents((atRiskStudents || []) as AtRiskStudentRow[]),
+      criticalStudents: mapCriticalStudents(atRiskStudents),
       activitiesToReview: mapActivitiesToReview(pendingCorrectionActivities),
-      activityFeed: mapActivityFeedItems((feedData || []) as Array<Record<string, unknown>>),
+      activityFeed: mapActivityFeedItems(feedData),
     };
   },
 };

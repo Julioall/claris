@@ -2,11 +2,13 @@ import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
-  AlertTriangle,
   ArrowLeft,
+  CalendarDays,
   Clock,
   GraduationCap,
   History,
+  Phone,
+  Mail,
   MessageSquare,
   User,
 } from 'lucide-react';
@@ -14,7 +16,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { StudentGradesTab } from '@/components/student/StudentGradesTab';
 import { StudentHistoryTab } from '@/components/student/StudentHistoryTab';
-import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { RiskBadge } from '@/components/ui/RiskBadge';
@@ -24,15 +26,25 @@ import { ChatWindow } from '@/features/claris/components/ChatWindow';
 
 import { useStudentProfile } from '../hooks/useStudentProfile';
 
-const RISK_REASON_LABELS: Record<string, string> = {
-  atividades_atrasadas: 'Atividades atrasadas',
-  baixa_nota: 'Baixa nota',
-  sem_acesso_recente: 'Sem acesso recente',
-  nao_responde: 'Não responde contato',
-};
-
 function formatTime(date: string) {
   return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
+}
+
+function formatDate(date?: string | null) {
+  if (!date) return 'Não informado';
+
+  const parsedDate = new Date(date);
+  if (Number.isNaN(parsedDate.getTime())) return 'Não informado';
+
+  return parsedDate.toLocaleString('pt-BR');
+}
+
+function resolveMobilePhone(student: {
+  mobile_phone?: string | null;
+  phone_number?: string | null;
+  phone?: string | null;
+}) {
+  return student.mobile_phone || student.phone_number || student.phone || null;
 }
 
 export default function StudentProfilePage() {
@@ -74,19 +86,17 @@ export default function StudentProfilePage() {
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4">
-          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary">
-            {student.full_name.charAt(0)}
-          </div>
+          <Avatar className="h-16 w-16 shrink-0">
+            <AvatarImage src={student.avatar_url ?? undefined} alt={student.full_name} />
+            <AvatarFallback className="bg-primary/10 text-2xl font-bold text-primary">
+              {student.full_name.charAt(0)}
+            </AvatarFallback>
+          </Avatar>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{student.full_name}</h1>
             <p className="text-muted-foreground">{student.email || 'Email não informado'}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <RiskBadge level={student.current_risk_level} size="lg" />
-              {student.tags?.map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs">
-                  {tag}
-                </Badge>
-              ))}
             </div>
           </div>
         </div>
@@ -108,25 +118,62 @@ export default function StudentProfilePage() {
         </Card>
       </div>
 
-      {student.risk_reasons && student.risk_reasons.length > 0 && (
-        <Card className="border-risk-risco/30 bg-risk-critico-bg/30">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base text-risk-risco">
-              <AlertTriangle className="h-5 w-5" />
-              Motivos do Risco
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {student.risk_reasons.map((reason) => (
-                <Badge key={reason} variant="outline" className="risk-risco">
-                  {RISK_REASON_LABELS[reason] || reason}
-                </Badge>
-              ))}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Dados completos do aluno</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <User className="h-4 w-4" />
+                Nome
+              </p>
+              <p className="break-all text-sm font-medium">{student.full_name || 'Não informado'}</p>
             </div>
-          </CardContent>
-        </Card>
-      )}
+
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Mail className="h-4 w-4" />
+                Email
+              </p>
+              <p className="break-all text-sm font-medium">{student.email || 'Não informado'}</p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Phone className="h-4 w-4" />
+                Telefone celular
+              </p>
+              <p className="break-all text-sm font-medium">{resolveMobilePhone(student) || 'Não informado'}</p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CalendarDays className="h-4 w-4" />
+                Último acesso (data completa)
+              </p>
+              <p className="text-sm font-medium">{formatDate(student.last_access)}</p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CalendarDays className="h-4 w-4" />
+                Criado em
+              </p>
+              <p className="text-sm font-medium">{formatDate(student.created_at)}</p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CalendarDays className="h-4 w-4" />
+                Atualizado em
+              </p>
+              <p className="text-sm font-medium">{formatDate(student.updated_at)}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start">

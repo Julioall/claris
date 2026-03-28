@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, ChevronDown, ChevronUp, Bell } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface SupportTicket {
@@ -49,6 +49,8 @@ const PRIORITY_COLORS: Record<string, string> = {
   critica: 'destructive',
 };
 
+const PAGE_SIZE = 30;
+
 export default function AdminSuporte() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -57,6 +59,11 @@ export default function AdminSuporte() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
   const [newTicketCount, setNewTicketCount] = useState(0);
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, typeFilter]);
 
   // Realtime subscription for new tickets
   useEffect(() => {
@@ -71,17 +78,22 @@ export default function AdminSuporte() {
     };
   }, [queryClient]);
 
-  const { data: tickets = [], isLoading } = useQuery({
-    queryKey: ['admin-support-tickets', statusFilter, typeFilter],
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-support-tickets', statusFilter, typeFilter, search, page],
     queryFn: async () => {
-      const { data, error } = await listSupportTickets({
+      return listSupportTickets({
         status: statusFilter !== 'all' ? statusFilter : undefined,
         type: typeFilter !== 'all' ? typeFilter : undefined,
+        search,
+        page,
+        pageSize: PAGE_SIZE,
       });
-      if (error) throw error;
-      return (data ?? []) as SupportTicket[];
     },
   });
+
+  const tickets = (data?.items ?? []) as SupportTicket[];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const updateTicketMutation = useMutation({
     mutationFn: async ({ id, status, notes }: { id: string; status: string; notes: string }) => {
@@ -96,10 +108,11 @@ export default function AdminSuporte() {
     },
   });
 
-  const filtered = tickets.filter((t) => {
-    if (!search) return true;
-    return t.title.toLowerCase().includes(search.toLowerCase()) || t.description.toLowerCase().includes(search.toLowerCase());
-  });
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   return (
     <div className="space-y-6">
@@ -168,7 +181,7 @@ export default function AdminSuporte() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-          ) : filtered.length === 0 ? (
+          ) : tickets.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Nenhum ticket encontrado.</div>
           ) : (
             <Table>
@@ -183,7 +196,7 @@ export default function AdminSuporte() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((ticket) => (
+                {tickets.map((ticket) => (
                   <Fragment key={ticket.id}>
                     <TableRow
                       className="cursor-pointer"
@@ -268,6 +281,37 @@ export default function AdminSuporte() {
           )}
         </CardContent>
       </Card>
+
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {(page - 1) * PAGE_SIZE + (tickets.length > 0 ? 1 : 0)}-{(page - 1) * PAGE_SIZE + tickets.length} de {totalCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

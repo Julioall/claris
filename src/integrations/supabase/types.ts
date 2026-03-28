@@ -3202,6 +3202,31 @@ export type Database = {
           course_id: string
         }[]
       }
+      list_students_paginated: {
+        Args: {
+          p_course_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_risk_filter?: string
+          p_search?: string
+          p_status_filter?: string
+        }
+        Returns: {
+          avatar_url: string
+          created_at: string
+          current_risk_level: string
+          email: string
+          enrollment_status: string
+          full_name: string
+          id: string
+          last_access: string
+          moodle_user_id: string
+          risk_reasons: string[]
+          tags: string[]
+          total_count: number
+          updated_at: string
+        }[]
+      }
       resolve_current_app_user_id: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

@@ -1,120 +1,54 @@
 import { supabase } from '@/integrations/supabase/client';
-import { listAccessibleCourseIds } from '@/lib/course-access';
 
-import type { EnrollmentStatus, RiskLevel, StudentListItem, StudentProfile, StudentRecord } from '../types';
+import type { EnrollmentStatus, RiskLevel, StudentListPage, StudentProfile, StudentRecord } from '../types';
 
-const RISK_ORDER: Record<RiskLevel, number> = {
-  critico: 0,
-  risco: 1,
-  atencao: 2,
-  normal: 3,
-  inativo: 4,
-};
-
-interface StudentCourseRow {
-  student_id: string;
-  enrollment_status: string | null;
-  courses: {
-    start_date?: string | null;
-  } | null;
-  students: StudentRecord | null;
+interface StudentPaginatedRow extends StudentRecord {
+  enrollment_status: EnrollmentStatus;
+  total_count: number;
 }
 
-interface StudentAggregate {
-  student: StudentRecord;
-  allStatuses: Set<EnrollmentStatus>;
-  validStatuses: Set<EnrollmentStatus>;
-}
-
-function normalizeEnrollmentStatus(status: string | null | undefined): EnrollmentStatus {
-  const normalized = (status || '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-
-  if (normalized === 'ativo' || normalized === 'active') return 'ativo';
-  if (normalized === 'suspenso' || normalized === 'suspended') return 'suspenso';
-  if (normalized === 'concluido' || normalized === 'completed') return 'concluido';
-  if (normalized === 'inativo' || normalized === 'inactive') return 'inativo';
-  if (normalized === 'nao atualmente' || normalized === 'not current' || normalized === 'not_current' || normalized === 'notcurrently') {
-    return 'inativo';
+function mapPagedStudents(rows: StudentPaginatedRow[]): StudentListPage {
+  if (rows.length === 0) {
+    return {
+      items: [],
+      totalCount: 0,
+    };
   }
 
-  return 'ativo';
-}
-
-function resolveEnrollmentStatus(statuses: Set<EnrollmentStatus>): EnrollmentStatus {
-  if (statuses.has('ativo')) return 'ativo';
-  if (statuses.has('suspenso')) return 'suspenso';
-  if (statuses.has('concluido')) return 'concluido';
-  return 'inativo';
-}
-
-async function listTutorCourseIds(userId: string): Promise<string[]> {
-  return listAccessibleCourseIds(userId, 'tutor');
-}
-
-function mapStudentEntries(studentCourses: StudentCourseRow[]): StudentListItem[] {
-  const now = new Date();
-  const aggregatedStudents = new Map<string, StudentAggregate>();
-
-  studentCourses.forEach((studentCourse) => {
-    const relatedStudent = studentCourse.students;
-    if (!relatedStudent) return;
-
-    const normalizedStatus = normalizeEnrollmentStatus(studentCourse.enrollment_status);
-    const isValidCourse = !studentCourse.courses?.start_date || new Date(studentCourse.courses.start_date) <= now;
-    const existing = aggregatedStudents.get(relatedStudent.id);
-
-    if (!existing) {
-      aggregatedStudents.set(relatedStudent.id, {
-        student: relatedStudent,
-        allStatuses: new Set([normalizedStatus]),
-        validStatuses: isValidCourse ? new Set([normalizedStatus]) : new Set<EnrollmentStatus>(),
-      });
-      return;
-    }
-
-    existing.allStatuses.add(normalizedStatus);
-    if (isValidCourse) {
-      existing.validStatuses.add(normalizedStatus);
-    }
-  });
-
-  return Array.from(aggregatedStudents.values())
-    .map(({ student, allStatuses, validStatuses }) => ({
-      ...student,
-      current_risk_level: student.current_risk_level as RiskLevel,
-      enrollment_status: resolveEnrollmentStatus(validStatuses.size > 0 ? validStatuses : allStatuses),
-    }))
-    .sort((left, right) => RISK_ORDER[left.current_risk_level] - RISK_ORDER[right.current_risk_level]);
+  return {
+    items: rows.map((row) => ({
+      ...row,
+      current_risk_level: row.current_risk_level as RiskLevel,
+      enrollment_status: row.enrollment_status,
+    })),
+    totalCount: rows[0].total_count ?? 0,
+  };
 }
 
 export async function listStudentsForUser(params: {
-  userId: string;
   courseId?: string;
-}): Promise<StudentListItem[]> {
-  const tutorCourseIds = await listTutorCourseIds(params.userId);
-  if (tutorCourseIds.length === 0) {
-    return [];
-  }
+  searchQuery?: string;
+  riskFilter?: string;
+  statusFilter?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<StudentListPage> {
+  const page = Math.max(params.page ?? 1, 1);
+  const pageSize = Math.min(Math.max(params.pageSize ?? 30, 1), 100);
+  const offset = (page - 1) * pageSize;
 
-  const courseIds = params.courseId ? [params.courseId] : tutorCourseIds;
-
-  const { data, error } = await supabase
-    .from('student_courses')
-    .select(`
-      student_id,
-      enrollment_status,
-      courses (start_date),
-      students (*)
-    `)
-    .in('course_id', courseIds);
+  const { data, error } = await supabase.rpc('list_students_paginated' as never, {
+    p_course_id: params.courseId ?? null,
+    p_search: params.searchQuery?.trim() || null,
+    p_risk_filter: params.riskFilter && params.riskFilter !== 'all' ? params.riskFilter : null,
+    p_status_filter: params.statusFilter && params.statusFilter !== 'all' ? params.statusFilter : null,
+    p_limit: pageSize,
+    p_offset: offset,
+  } as never);
 
   if (error) throw error;
 
-  return mapStudentEntries((data || []) as StudentCourseRow[]);
+  return mapPagedStudents((data || []) as StudentPaginatedRow[]);
 }
 
 export async function getStudentProfile(studentId: string): Promise<StudentProfile | null> {

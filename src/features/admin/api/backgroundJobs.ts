@@ -83,7 +83,14 @@ export interface AdminBackgroundJobFilters {
   status?: AdminBackgroundJobStatus | 'all';
   source?: string | 'all';
   jobType?: string | 'all';
-  limit?: number;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedAdminBackgroundJobs {
+  items: AdminBackgroundJobRow[];
+  totalCount: number;
 }
 
 interface UserRow {
@@ -156,38 +163,60 @@ async function loadUsersMap(userIds: string[]) {
 
 export async function listAdminBackgroundJobs(
   filters: AdminBackgroundJobFilters = {},
-): Promise<AdminBackgroundJobRow[]> {
-  const { jobType, limit = 200, source, status } = filters;
+): Promise<PaginatedAdminBackgroundJobs> {
+  const {
+    jobType,
+    page = 1,
+    pageSize = 30,
+    search,
+    source,
+    status,
+  } = filters;
 
-  let query = supabase
+  const normalizedPage = Math.max(page, 1);
+  const normalizedPageSize = Math.min(Math.max(pageSize, 1), 100);
+  const from = (normalizedPage - 1) * normalizedPageSize;
+  const to = from + normalizedPageSize - 1;
+
+  let listQuery = supabase
     .from(BACKGROUND_JOBS_TABLE)
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(from, to);
 
   if (status && status !== 'all') {
-    query = query.eq('status', status);
+    listQuery = listQuery.eq('status', status);
   }
 
   if (source && source !== 'all') {
-    query = query.eq('source', source);
+    listQuery = listQuery.eq('source', source);
   }
 
   if (jobType && jobType !== 'all') {
-    query = query.eq('job_type', jobType);
+    listQuery = listQuery.eq('job_type', jobType);
   }
 
-  const { data, error } = await query;
+  if (search?.trim()) {
+    const normalizedSearch = search.trim();
+    listQuery = listQuery.or(
+      `title.ilike.%${normalizedSearch}%,description.ilike.%${normalizedSearch}%,job_type.ilike.%${normalizedSearch}%,source.ilike.%${normalizedSearch}%`,
+    );
+  }
+
+  const { data, error, count } = await listQuery;
 
   if (error) throw error;
 
   const rows = (data || []) as Omit<AdminBackgroundJobRow, 'user'>[];
   const usersMap = await loadUsersMap(rows.map((row) => row.user_id));
 
-  return rows.map((row) => ({
-    ...row,
-    user: usersMap.get(row.user_id) ?? null,
-  }));
+  return {
+    items: rows.map((row) => ({
+      ...row,
+      user: usersMap.get(row.user_id) ?? null,
+    })),
+    totalCount: count ?? 0,
+  };
 }
 
 export async function getAdminBackgroundJobDetails(jobId: string): Promise<AdminBackgroundJobDetails> {

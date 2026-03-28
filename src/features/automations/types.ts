@@ -10,6 +10,18 @@ export interface BulkJobListItem extends BulkMessageJobPreview {
   user_id: string;
 }
 
+export interface BulkJobListFilters {
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedBulkJobs {
+  items: BulkJobListItem[];
+  totalCount: number;
+}
+
 export type BulkJobDetail = BulkJobListItem;
 
 export interface BulkJobRecipient {
@@ -41,6 +53,18 @@ export interface ScheduledMessage {
   executed_bulk_job_id: string | null;
   execution_attempts: number;
   last_execution_at: string | null;
+}
+
+export interface ScheduledMessageListFilters {
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedScheduledMessages {
+  items: ScheduledMessage[];
+  totalCount: number;
 }
 
 export interface ScheduledMessageFormValues {

@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listAdminLogs, resolveAdminLog } from '../api/logs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format, endOfDay, startOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { exportToCsv } from '@/lib/csv';
 
@@ -33,6 +33,8 @@ const SEVERITY_COLORS: Record<string, string> = {
   critical: 'bg-red-900 text-red-100',
 };
 
+const PAGE_SIZE = 30;
+
 export default function AdminLogsErros() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -42,21 +44,31 @@ export default function AdminLogsErros() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  const { data: logs = [], isLoading } = useQuery({
-    queryKey: ['admin-error-logs', severityFilter, categoryFilter, resolvedFilter, dateFrom, dateTo],
+  useEffect(() => {
+    setPage(1);
+  }, [search, severityFilter, categoryFilter, resolvedFilter, dateFrom, dateTo]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-error-logs', severityFilter, categoryFilter, resolvedFilter, dateFrom, dateTo, search, page],
     queryFn: async () => {
-      const { data, error } = await listAdminLogs({
+      return listAdminLogs({
         severity: severityFilter !== 'all' ? severityFilter : undefined,
         category: categoryFilter !== 'all' ? categoryFilter : undefined,
         resolved: resolvedFilter === 'all' ? undefined : resolvedFilter === 'resolved',
         dateFrom: dateFrom ? startOfDay(new Date(dateFrom)).toISOString() : undefined,
         dateTo: dateTo ? endOfDay(new Date(dateTo)).toISOString() : undefined,
+        search,
+        page,
+        pageSize: PAGE_SIZE,
       });
-      if (error) throw error;
-      return (data ?? []) as ErrorLog[];
     },
   });
+
+  const logs = (data?.items ?? []) as ErrorLog[];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const resolveMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -69,15 +81,10 @@ export default function AdminLogsErros() {
     },
   });
 
-  const filtered = logs.filter((log) => {
-    if (!search) return true;
-    return log.message.toLowerCase().includes(search.toLowerCase());
-  });
-
   const handleExport = () => {
     exportToCsv(
       `logs-erros-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`,
-      filtered.map((l) => ({
+      logs.map((l) => ({
         id: l.id,
         user_id: l.user_id ?? '',
         severity: l.severity,
@@ -90,6 +97,12 @@ export default function AdminLogsErros() {
     );
   };
 
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -97,7 +110,7 @@ export default function AdminLogsErros() {
           <h1 className="text-2xl font-bold tracking-tight">Logs de Erro</h1>
           <p className="text-muted-foreground">Monitore e resolva erros da plataforma</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleExport} disabled={filtered.length === 0}>
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={logs.length === 0}>
           <Download className="h-4 w-4 mr-2" />
           Exportar CSV
         </Button>
@@ -177,7 +190,7 @@ export default function AdminLogsErros() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-          ) : filtered.length === 0 ? (
+          ) : logs.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Nenhum log encontrado.</div>
           ) : (
             <Table>
@@ -192,7 +205,7 @@ export default function AdminLogsErros() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((log) => (
+                {logs.map((log) => (
                   <Fragment key={log.id}>
                     <TableRow
                       className="cursor-pointer"
@@ -262,6 +275,37 @@ export default function AdminLogsErros() {
           )}
         </CardContent>
       </Card>
+
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {(page - 1) * PAGE_SIZE + (logs.length > 0 ? 1 : 0)}-{(page - 1) * PAGE_SIZE + logs.length} de {totalCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

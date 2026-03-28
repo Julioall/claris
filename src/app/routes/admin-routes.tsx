@@ -13,6 +13,7 @@ import {
   AdminSupportPage,
   AdminUsersPage,
 } from './lazy-pages';
+import { AdminErrorBoundary } from './admin/AdminErrorBoundary';
 import { AdminLayout } from './admin/AdminLayout';
 import { AdminRoute } from './admin/AdminRoute';
 
@@ -21,7 +22,9 @@ export function renderAdminRoutes() {
     <Route
       element={(
         <AdminRoute>
-          <AdminLayout />
+          <AdminErrorBoundary>
+            <AdminLayout />
+          </AdminErrorBoundary>
         </AdminRoute>
       )}
     >

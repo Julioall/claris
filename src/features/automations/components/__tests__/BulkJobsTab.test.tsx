@@ -43,7 +43,7 @@ describe('BulkJobsTab', () => {
       user: { id: 'user-1' },
     });
 
-    listBulkJobsMock.mockResolvedValue([
+    const jobs = [
       {
         id: 'job-1',
         message_content: 'Primeiro envio em massa',
@@ -74,7 +74,19 @@ describe('BulkJobsTab', () => {
         template_id: null,
         user_id: 'user-1',
       },
-    ]);
+    ];
+
+    listBulkJobsMock.mockImplementation(async ({ search = '' }: { search?: string }) => {
+      const normalizedSearch = search.toLowerCase();
+      const items = jobs.filter((job) =>
+        !normalizedSearch || job.message_content.toLowerCase().includes(normalizedSearch),
+      );
+
+      return {
+        items,
+        totalCount: items.length,
+      };
+    });
   });
 
   it('loads jobs through the automations repository and filters by search', async () => {
@@ -83,7 +95,12 @@ describe('BulkJobsTab', () => {
     renderTab();
 
     await waitFor(() => {
-      expect(listBulkJobsMock).toHaveBeenCalledWith('all');
+      expect(listBulkJobsMock).toHaveBeenCalledWith({
+        status: 'all',
+        search: '',
+        page: 1,
+        pageSize: 20,
+      });
     });
 
     expect(screen.getByText(/primeiro envio em massa/i)).toBeInTheDocument();
@@ -92,6 +109,15 @@ describe('BulkJobsTab', () => {
     expect(screen.getByText(/claris ia/i)).toBeInTheDocument();
 
     await user.type(screen.getByPlaceholderText(/buscar por conte/i), 'segundo');
+
+    await waitFor(() => {
+      expect(listBulkJobsMock).toHaveBeenLastCalledWith({
+        status: 'all',
+        search: 'segundo',
+        page: 1,
+        pageSize: 20,
+      });
+    });
 
     expect(screen.queryByText(/primeiro envio em massa/i)).not.toBeInTheDocument();
     expect(screen.getByText(/segundo aviso importante/i)).toBeInTheDocument();

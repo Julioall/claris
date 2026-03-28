@@ -13,9 +13,9 @@ interface PermissionRouteProps {
 export function PermissionRoute({ children, permission }: PermissionRouteProps) {
   const location = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
-  const { isAdmin, can } = usePermissions();
+  const { isAdmin, can, isLoading: isPermissionsLoading } = usePermissions();
 
-  if (isLoading) {
+  if (isLoading || (isAuthenticated && isPermissionsLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Spinner className="h-8 w-8" />

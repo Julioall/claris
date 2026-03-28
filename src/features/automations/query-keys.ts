@@ -1,9 +1,18 @@
 export const automationsKeys = {
-  bulkJobs: (statusFilter = 'all') => ['automations', 'bulk-jobs', statusFilter] as const,
+  bulkJobs: (filters?: { status?: string; search?: string; page?: number }) =>
+    ['automations', 'bulk-jobs', filters?.status ?? 'all', filters?.search ?? '', filters?.page ?? 1] as const,
   bulkJobDetail: (jobId?: string | null) => ['automations', 'bulk-job-detail', jobId ?? 'none'] as const,
   bulkJobRecipients: (jobId?: string | null) =>
     ['automations', 'bulk-job-recipients', jobId ?? 'none'] as const,
-  scheduledMessages: (userId?: string) => ['automations', 'scheduled-messages', userId ?? 'anonymous'] as const,
+  scheduledMessages: (filters?: { userId?: string; status?: string; search?: string; page?: number }) =>
+    [
+      'automations',
+      'scheduled-messages',
+      filters?.userId ?? 'anonymous',
+      filters?.status ?? 'all',
+      filters?.search ?? '',
+      filters?.page ?? 1,
+    ] as const,
   accessibleWhatsappInstances: (userId?: string) =>
     ['automations', 'whatsapp-instances', userId ?? 'anonymous'] as const,
 };

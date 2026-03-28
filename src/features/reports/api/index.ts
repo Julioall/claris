@@ -49,6 +49,18 @@ export interface CourseTotalRow {
 }
 
 const PAGE_SIZE = 1000;
+const REPORT_BATCH_SIZE = 120;
+
+function chunkValues<T>(values: T[], size = REPORT_BATCH_SIZE) {
+  const uniqueValues = Array.from(new Set(values));
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < uniqueValues.length; index += size) {
+    chunks.push(uniqueValues.slice(index, index + size));
+  }
+
+  return chunks;
+}
 
 async function paginateRows<T>(fetchPage: (page: number) => Promise<{ data: T[] | null; error: Error | null }>) {
   const rows: T[] = [];
@@ -80,16 +92,22 @@ export async function fetchTutorCourses(userId: string): Promise<TutorCourse[]> 
     return [];
   }
 
-  const { data, error } = await supabase
-    .from('courses')
-    .select('id, name, short_name, category, start_date, end_date')
-    .in('id', accessibleCourseIds);
+  const courseResults = await Promise.all(
+    chunkValues(accessibleCourseIds).map(async (courseIdBatch) => {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('id, name, short_name, category, start_date, end_date')
+        .in('id', courseIdBatch);
 
-  if (error) {
-    throw error;
-  }
+      if (error) {
+        throw error;
+      }
 
-  const normalizedCourses = (data ?? []).map((course) => ({
+      return data ?? [];
+    }),
+  );
+
+  const normalizedCourses = courseResults.flat().map((course) => ({
     id: course.id,
     name: course.name,
     short_name: course.short_name,
@@ -108,67 +126,83 @@ export async function fetchTutorCourses(userId: string): Promise<TutorCourse[]> 
 }
 
 export async function fetchAllReportEnrollments(courseIds: string[]) {
-  return paginateRows<EnrollmentRow>(async (page) => {
-    const { data, error } = await supabase
-      .from('student_courses')
-      .select(`
-        student_id,
-        course_id,
-        enrollment_status,
-        students!inner(full_name, last_access)
-      `)
-      .in('course_id', courseIds)
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+  const results = await Promise.all(
+    chunkValues(courseIds).map((courseIdBatch) => paginateRows<EnrollmentRow>(async (page) => {
+      const { data, error } = await supabase
+        .from('student_courses')
+        .select(`
+          student_id,
+          course_id,
+          enrollment_status,
+          students!inner(full_name, last_access)
+        `)
+        .in('course_id', courseIdBatch)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    return { data: (data ?? []) as EnrollmentRow[], error };
-  });
+      return { data: (data ?? []) as EnrollmentRow[], error };
+    })),
+  );
+
+  return results.flat();
 }
 
 export async function fetchAllReportActivityGrades(courseIds: string[]) {
-  return paginateRows<ActivityGradeRow>(async (page) => {
-    const { data, error } = await supabase
-      .from('student_activities')
-      .select(`
-        student_id,
-        course_id,
-        activity_type,
-        grade,
-        grade_max,
-        hidden,
-        status,
-        completed_at,
-        graded_at,
-        submitted_at
-      `)
-      .in('course_id', courseIds)
-      .neq('activity_type', 'scorm')
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+  const results = await Promise.all(
+    chunkValues(courseIds).map((courseIdBatch) => paginateRows<ActivityGradeRow>(async (page) => {
+      const { data, error } = await supabase
+        .from('student_activities')
+        .select(`
+          student_id,
+          course_id,
+          activity_type,
+          grade,
+          grade_max,
+          hidden,
+          status,
+          completed_at,
+          graded_at,
+          submitted_at
+        `)
+        .in('course_id', courseIdBatch)
+        .neq('activity_type', 'scorm')
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    return { data: (data ?? []) as ActivityGradeRow[], error };
-  });
+      return { data: (data ?? []) as ActivityGradeRow[], error };
+    })),
+  );
+
+  return results.flat();
 }
 
 export async function fetchAllReportActivityDetails(courseIds: string[]) {
-  return paginateRows<ActivityDetailRow>(async (page) => {
-    const { data, error } = await supabase
-      .from('student_activities')
-      .select('student_id, course_id, moodle_activity_id, activity_name, activity_type, status, grade, grade_max, due_date, hidden, completed_at, graded_at, submitted_at')
-      .in('course_id', courseIds)
-      .neq('activity_type', 'scorm')
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+  const results = await Promise.all(
+    chunkValues(courseIds).map((courseIdBatch) => paginateRows<ActivityDetailRow>(async (page) => {
+      const { data, error } = await supabase
+        .from('student_activities')
+        .select('student_id, course_id, moodle_activity_id, activity_name, activity_type, status, grade, grade_max, due_date, hidden, completed_at, graded_at, submitted_at')
+        .in('course_id', courseIdBatch)
+        .neq('activity_type', 'scorm')
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    return { data: (data ?? []) as ActivityDetailRow[], error };
-  });
+      return { data: (data ?? []) as ActivityDetailRow[], error };
+    })),
+  );
+
+  return results.flat();
 }
 
 export async function fetchAllReportCourseTotals(courseIds: string[]) {
-  return paginateRows<CourseTotalRow>(async (page) => {
-    const { data, error } = await supabase
-      .from('student_course_grades')
-      .select('student_id, course_id, grade_raw, grade_percentage')
-      .in('course_id', courseIds)
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+  const results = await Promise.all(
+    chunkValues(courseIds).map((courseIdBatch) => paginateRows<CourseTotalRow>(async (page) => {
+      const { data, error } = await supabase
+        .from('student_course_grades')
+        .select('student_id, course_id, grade_raw, grade_percentage')
+        .in('course_id', courseIdBatch)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
-    return { data: (data ?? []) as CourseTotalRow[], error };
-  });
+      return { data: (data ?? []) as CourseTotalRow[], error };
+    })),
+  );
+
+  return results.flat();
 }

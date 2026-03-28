@@ -4,7 +4,14 @@ import { supabase } from '@/integrations/supabase/client';
 export interface SupportTicketFilters {
   status?: string;
   type?: string;
-  limit?: number;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedSupportTickets {
+  items: unknown[];
+  totalCount: number;
 }
 
 export interface SupportTicketUpdate {
@@ -25,16 +32,23 @@ export interface CreateSupportTicketInput {
 
 export async function listSupportTickets(filters: SupportTicketFilters = {}) {
   const {
-    limit = 200,
+    page = 1,
+    pageSize = 30,
+    search,
     status,
     type,
   } = filters;
 
+  const normalizedPage = Math.max(page, 1);
+  const normalizedPageSize = Math.min(Math.max(pageSize, 1), 100);
+  const from = (normalizedPage - 1) * normalizedPageSize;
+  const to = from + normalizedPageSize - 1;
+
   let query = supabase
     .from('support_tickets')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(from, to);
 
   if (status) {
     query = query.eq('status', status);
@@ -44,7 +58,18 @@ export async function listSupportTickets(filters: SupportTicketFilters = {}) {
     query = query.eq('type', type);
   }
 
-  return query;
+  if (search?.trim()) {
+    const normalizedSearch = search.trim();
+    query = query.or(`title.ilike.%${normalizedSearch}%,description.ilike.%${normalizedSearch}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return {
+    items: data ?? [],
+    totalCount: count ?? 0,
+  };
 }
 
 export async function updateSupportTicket(id: string, update: SupportTicketUpdate) {

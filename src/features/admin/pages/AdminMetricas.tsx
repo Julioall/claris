@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listUsageEvents } from '../api/metrics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { format, subDays, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Search, ChevronDown, ChevronUp, Download } from 'lucide-react';
+import { Search, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import { exportToCsv } from '@/lib/csv';
 
@@ -22,6 +22,8 @@ interface UsageEvent {
   created_at: string;
 }
 
+const PAGE_SIZE = 50;
+
 export default function AdminMetricas() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -29,20 +31,30 @@ export default function AdminMetricas() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  const { data: events = [], isLoading } = useQuery({
-    queryKey: ['admin-usage-events', typeFilter, userFilter, dateFrom, dateTo],
+  useEffect(() => {
+    setPage(1);
+  }, [search, typeFilter, userFilter, dateFrom, dateTo]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-usage-events', typeFilter, userFilter, dateFrom, dateTo, search, page],
     queryFn: async () => {
-      const { data, error } = await listUsageEvents({
+      return listUsageEvents({
         eventType: typeFilter !== 'all' ? typeFilter : undefined,
         userId: userFilter.trim() || undefined,
         dateFrom: dateFrom ? startOfDay(new Date(dateFrom)).toISOString() : undefined,
         dateTo: dateTo ? endOfDay(new Date(dateTo)).toISOString() : undefined,
+        search,
+        page,
+        pageSize: PAGE_SIZE,
       });
-      if (error) throw error;
-      return (data ?? []) as UsageEvent[];
     },
   });
+
+  const events = (data?.items ?? []) as UsageEvent[];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   // Aggregate events by type for bar chart
   const eventsByType = events.reduce<Record<string, number>>((acc, event) => {
@@ -71,20 +83,12 @@ export default function AdminMetricas() {
     return { date: label, eventos: count };
   });
 
-  const filtered = events.filter((e) => {
-    if (!search) return true;
-    return (
-      e.event_type.toLowerCase().includes(search.toLowerCase()) ||
-      (e.route ?? '').toLowerCase().includes(search.toLowerCase())
-    );
-  });
-
   const uniqueTypes = Array.from(new Set(events.map((e) => e.event_type)));
 
   const handleExport = () => {
     exportToCsv(
       `metricas-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`,
-      filtered.map((e) => ({
+      events.map((e) => ({
         id: e.id,
         user_id: e.user_id ?? '',
         event_type: e.event_type,
@@ -95,6 +99,12 @@ export default function AdminMetricas() {
     );
   };
 
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -102,7 +112,7 @@ export default function AdminMetricas() {
           <h1 className="text-2xl font-bold tracking-tight">Metricas de Uso</h1>
           <p className="text-muted-foreground">Acompanhe os eventos de uso da plataforma</p>
         </div>
-        <Button variant="outline" size="sm" onClick={handleExport} disabled={filtered.length === 0}>
+        <Button variant="outline" size="sm" onClick={handleExport} disabled={events.length === 0}>
           <Download className="h-4 w-4 mr-2" />
           Exportar CSV
         </Button>
@@ -200,7 +210,7 @@ export default function AdminMetricas() {
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-8 text-center text-muted-foreground">Carregando...</div>
-          ) : filtered.length === 0 ? (
+          ) : events.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">Nenhum evento encontrado.</div>
           ) : (
             <Table>
@@ -214,10 +224,9 @@ export default function AdminMetricas() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((event) => (
-                  <>
+                {events.map((event) => (
+                  <Fragment key={event.id}>
                     <TableRow
-                      key={event.id}
                       className="cursor-pointer"
                       onClick={() => setExpandedId(expandedId === event.id ? null : event.id)}
                     >
@@ -232,7 +241,7 @@ export default function AdminMetricas() {
                       </TableCell>
                     </TableRow>
                     {expandedId === event.id && (
-                      <TableRow key={`${event.id}-detail`}>
+                      <TableRow>
                         <TableCell colSpan={5} className="bg-muted/30 p-4">
                           <pre className="text-xs overflow-auto max-h-32">
                             {JSON.stringify(event.metadata, null, 2)}
@@ -240,13 +249,44 @@ export default function AdminMetricas() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
           )}
         </CardContent>
       </Card>
+
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {(page - 1) * PAGE_SIZE + (events.length > 0 ? 1 : 0)}-{(page - 1) * PAGE_SIZE + events.length} de {totalCount}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Página {page} de {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

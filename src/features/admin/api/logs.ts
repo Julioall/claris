@@ -6,7 +6,14 @@ export interface AdminErrorLogFilters {
   resolved?: boolean;
   dateFrom?: string;
   dateTo?: string;
-  limit?: number;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedAdminLogs {
+  items: unknown[];
+  totalCount: number;
 }
 
 export async function listAdminLogs(filters: AdminErrorLogFilters = {}) {
@@ -14,16 +21,23 @@ export async function listAdminLogs(filters: AdminErrorLogFilters = {}) {
     category,
     dateFrom,
     dateTo,
-    limit = 200,
+    page = 1,
+    pageSize = 30,
     resolved,
+    search,
     severity,
   } = filters;
 
+  const normalizedPage = Math.max(page, 1);
+  const normalizedPageSize = Math.min(Math.max(pageSize, 1), 100);
+  const from = (normalizedPage - 1) * normalizedPageSize;
+  const to = from + normalizedPageSize - 1;
+
   let query = supabase
     .from('app_error_logs')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(from, to);
 
   if (severity) {
     query = query.eq('severity', severity);
@@ -45,7 +59,18 @@ export async function listAdminLogs(filters: AdminErrorLogFilters = {}) {
     query = query.lte('created_at', dateTo);
   }
 
-  return query;
+  if (search?.trim()) {
+    const normalizedSearch = search.trim();
+    query = query.or(`message.ilike.%${normalizedSearch}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return {
+    items: data ?? [],
+    totalCount: count ?? 0,
+  };
 }
 
 export async function resolveAdminLog(id: string) {

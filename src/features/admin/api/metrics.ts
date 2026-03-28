@@ -5,7 +5,14 @@ export interface AdminUsageEventFilters {
   userId?: string;
   dateFrom?: string;
   dateTo?: string;
-  limit?: number;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedUsageEvents {
+  items: unknown[];
+  totalCount: number;
 }
 
 export async function fetchAppUsageEventsCount() {
@@ -47,15 +54,22 @@ export async function listUsageEvents(filters: AdminUsageEventFilters = {}) {
     dateFrom,
     dateTo,
     eventType,
-    limit = 500,
+    page = 1,
+    pageSize = 50,
+    search,
     userId,
   } = filters;
 
+  const normalizedPage = Math.max(page, 1);
+  const normalizedPageSize = Math.min(Math.max(pageSize, 1), 200);
+  const from = (normalizedPage - 1) * normalizedPageSize;
+  const to = from + normalizedPageSize - 1;
+
   let query = supabase
     .from('app_usage_events')
-    .select('*')
+    .select('*', { count: 'exact' })
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .range(from, to);
 
   if (eventType) {
     query = query.eq('event_type', eventType);
@@ -73,5 +87,16 @@ export async function listUsageEvents(filters: AdminUsageEventFilters = {}) {
     query = query.lte('created_at', dateTo);
   }
 
-  return query;
+  if (search?.trim()) {
+    const normalizedSearch = search.trim();
+    query = query.or(`event_type.ilike.%${normalizedSearch}%,route.ilike.%${normalizedSearch}%`);
+  }
+
+  const { data, error, count } = await query;
+  if (error) throw error;
+
+  return {
+    items: data ?? [],
+    totalCount: count ?? 0,
+  };
 }

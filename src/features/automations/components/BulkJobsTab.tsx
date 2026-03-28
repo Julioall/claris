@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Eye, CheckCircle2, AlertCircle, Clock, Loader2, Search, Filter } from 'lucide-react';
+import { Eye, CheckCircle2, AlertCircle, Clock, Loader2, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,8 @@ const STATUS_OPTIONS = [
   { value: 'failed', label: 'Falhou' },
   { value: 'cancelled', label: 'Cancelado' },
 ];
+
+const PAGE_SIZE = 20;
 
 function getStatusBadge(status: string) {
   const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: ReactNode }> = {
@@ -58,21 +60,32 @@ export function BulkJobsTab() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  const { data: jobs = [], isLoading } = useQuery({
-    queryKey: automationsKeys.bulkJobs(statusFilter),
-    queryFn: () => listBulkJobs(statusFilter),
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, search]);
+
+  const { data, isLoading } = useQuery({
+    queryKey: automationsKeys.bulkJobs({ status: statusFilter, search, page }),
+    queryFn: () => listBulkJobs({ status: statusFilter, search, page, pageSize: PAGE_SIZE }),
     enabled: !!user,
     refetchInterval: (query) => {
-      const jobs = query.state.data as BulkJobListItem[] | undefined;
-      const hasActive = jobs?.some(j => j.status === 'pending' || j.status === 'processing');
+      const paginated = query.state.data as { items?: BulkJobListItem[] } | undefined;
+      const hasActive = paginated?.items?.some(j => j.status === 'pending' || j.status === 'processing');
       return hasActive ? 5000 : false;
     },
   });
 
-  const filtered = jobs.filter(j =>
-    !search.trim() || j.message_content.toLowerCase().includes(search.toLowerCase())
-  );
+  const jobs = data?.items ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   return (
     <div className="space-y-4">
@@ -103,7 +116,7 @@ export function BulkJobsTab() {
       {/* Stats summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Total', count: jobs.length, color: 'text-foreground' },
+          { label: 'Total filtrado', count: totalCount, color: 'text-foreground' },
           { label: 'Em andamento', count: jobs.filter(j => j.status === 'pending' || j.status === 'processing').length, color: 'text-blue-600' },
           { label: 'Concluídos', count: jobs.filter(j => j.status === 'completed').length, color: 'text-green-600' },
           { label: 'Com falha', count: jobs.filter(j => j.status === 'failed').length, color: 'text-destructive' },
@@ -122,14 +135,14 @@ export function BulkJobsTab() {
         <div className="flex justify-center py-12">
           <Spinner className="h-6 w-6" />
         </div>
-      ) : filtered.length === 0 ? (
+      ) : jobs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
           <p className="text-sm">Nenhum job encontrado</p>
           <p className="text-xs mt-1">Os jobs de envio em massa aparecerão aqui</p>
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map(job => {
+          {jobs.map(job => {
             const progress = job.total_recipients > 0
               ? Math.round(((job.sent_count + job.failed_count) / job.total_recipients) * 100)
               : 0;
@@ -176,6 +189,37 @@ export function BulkJobsTab() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {totalCount > 0 && (
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {(page - 1) * PAGE_SIZE + 1}-{(page - 1) * PAGE_SIZE + jobs.length} de {totalCount} jobs
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 

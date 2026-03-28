@@ -11,6 +11,7 @@ export const TasksPage = lazy(() => import('@/features/tasks/pages/TasksPage'));
 export const AgendaPage = lazy(() => import('@/features/agenda/pages/AgendaPage'));
 export const MessagesPage = lazy(() => import('@/features/messages/pages/MessagesPage'));
 export const WhatsAppPage = lazy(() => import('@/features/whatsapp/pages/WhatsAppPage'));
+export const CampaignsPage = lazy(() => import('@/features/campaigns/pages/CampaignsPage'));
 export const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'));
 export const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'));
 export const ClarisPage = lazy(() => import('@/features/claris/pages/ClarisPage'));

@@ -114,6 +114,8 @@ const ROUTE_QUICK_SUGGESTIONS: Array<{ match: RegExp; suggestions: string[] }> =
   { match: /\/tarefas(?:\/|$)/, suggestions: ['Tarefas em aberto por aluno', 'Tarefas com prazo próximo', 'Resumo de tarefas por curso'] },
   { match: /\/agenda(?:\/|$)/, suggestions: ['Próximos compromissos desta semana', 'Eventos por curso', 'Resumo da agenda mensal'] },
   { match: /\/mensagens(?:\/|$)/, suggestions: ['Templates para alunos em risco', 'Rascunho de acompanhamento', 'Alunos que precisam de contato'] },
+  { match: /\/campanhas(?:\/|$)/, suggestions: ['Criar campanha para alunos em risco', 'Rascunho de comunicacao em massa', 'Modelos para lembrete de atividade'] },
+  { match: /\/automacoes(?:\/|$)/, suggestions: ['Automacao para atividade atrasada', 'Fluxos para falta de resposta', 'Regras de acompanhamento automatico'] },
 ];
 
 const CLEAR_HISTORY_COMMANDS = new Set(['/limpar', '/limparhistorico', '/limpar-historico', '/clear']);

@@ -14,7 +14,6 @@ export interface Course {
   updated_at: string;
   students_count?: number;
   at_risk_count?: number;
-  pending_tasks_count?: number;
 }
 
 export interface CourseWithStats extends Course {

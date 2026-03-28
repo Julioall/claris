@@ -1,12 +1,43 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Send, Search, X, Users, FileText, Eye, CheckCircle2, AlertCircle, CalendarClock } from 'lucide-react';
-import { Spinner } from '@/components/ui/spinner';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Progress } from '@/components/ui/progress';
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useDeferredValue,
+} from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ChevronLeft,
+  ChevronRight,
+  Send,
+  Search,
+  X,
+  FileText,
+  Eye,
+  CheckCircle2,
+  AlertCircle,
+  CalendarClock,
+  Clock3,
+  Sparkles,
+  Workflow,
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Spinner } from "@/components/ui/spinner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
   DialogContent,
@@ -14,141 +45,211 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { DynamicVariableInput, resolveVariables, DYNAMIC_VARIABLES } from './DynamicVariableInput';
-import { useAuth } from '@/contexts/AuthContext';
-import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
-import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
-import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
-import { buildCourseCategoryFilterOptions, parseCourseCategoryPath } from '@/lib/course-category';
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  DynamicVariableInput,
+  resolveVariables,
+  DYNAMIC_VARIABLES,
+} from "./DynamicVariableInput";
+import { useAuth } from "@/contexts/AuthContext";
+import { useBackgroundActivityFlag } from "@/contexts/BackgroundActivityContext";
+import { useMoodleSession } from "@/features/auth/context/MoodleSessionContext";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import {
+  buildCourseCategoryFilterOptions,
+  parseCourseCategoryPath,
+} from "@/lib/course-category";
 import {
   buildBulkMessageVariableAvailability,
   getAvailableVariableKeys,
   getUnavailableTemplateVariables,
   resolveStudentCourseContext,
   type DynamicVariableKey,
-} from '@/lib/message-template-context';
-import { MESSAGE_TEMPLATE_CATEGORIES } from '@/lib/message-template-defaults';
+} from "@/lib/message-template-context";
+import { MESSAGE_TEMPLATE_CATEGORIES } from "@/lib/message-template-defaults";
 import {
   buildStudentCourseKey,
   listBulkSendAudienceForUser,
   listRecentBulkMessageJobsForUser,
   startBulkMessageSend,
-} from '@/features/messages/api/bulk-messaging.repository';
-import { createScheduledMessage } from '@/features/automations/api/automations.repository';
-import { listMessageTemplateOptionsForUser } from '@/features/messages/api/message-templates.repository';
+} from "@/features/messages/api/bulk-messaging.repository";
+import { createScheduledMessage } from "@/features/automations/api/automations.repository";
+import { writeCampaignRoutineDraft } from "@/features/automations/lib/campaign-routine-draft";
+import { listMessageTemplateOptionsForUser } from "@/features/messages/api/message-templates.repository";
 import type {
   BulkMessageJobPreview,
   GradeLookupValue,
   MessageTemplateOption,
   StudentOption,
-} from '@/features/messages/types';
+} from "@/features/messages/types";
 
-const variableLabels = new Map(DYNAMIC_VARIABLES.map(variable => [variable.key, variable.label]));
-const categoryLabels = new Map(MESSAGE_TEMPLATE_CATEGORIES.map(category => [category.value, category.label]));
+const variableLabels = new Map(
+  DYNAMIC_VARIABLES.map((variable) => [variable.key, variable.label]),
+);
+const categoryLabels = new Map(
+  MESSAGE_TEMPLATE_CATEGORIES.map((category) => [
+    category.value,
+    category.label,
+  ]),
+);
 const riskLevelLabels: Record<string, string> = {
-  todos: 'Todos riscos',
-  normal: 'Normal',
-  atencao: 'Atencao',
-  risco: 'Risco',
-  critico: 'Critico',
-  inativo: 'Inativo',
+  todos: "Todos riscos",
+  normal: "Normal",
+  atencao: "Atencao",
+  risco: "Risco",
+  critico: "Critico",
+  inativo: "Inativo",
 };
 
-const dateFormatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' });
+const dateFormatter = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" });
 
 function getVariableLabel(key: DynamicVariableKey) {
   return variableLabels.get(key) || key;
 }
 
 function getCategoryLabel(value?: string | null) {
-  if (!value) return 'Geral';
+  if (!value) return "Geral";
   return categoryLabels.get(value) || value;
 }
 
 function formatDateLabel(value?: string | null) {
-  if (!value) return 'Sem registro';
+  if (!value) return "Sem registro";
 
   const parsedDate = new Date(value);
-  if (Number.isNaN(parsedDate.getTime())) return 'Sem registro';
+  if (Number.isNaN(parsedDate.getTime())) return "Sem registro";
 
   return dateFormatter.format(parsedDate);
 }
 
 function formatRiskLevel(value?: string | null) {
-  if (!value) return 'Sem classificacao';
+  if (!value) return "Sem classificacao";
   return riskLevelLabels[value] || value;
 }
 
 function normalizeRiskLevel(value?: string | null) {
-  if (!value) return 'inativo';
+  if (!value) return "inativo";
   return value.toLowerCase();
 }
 
 function formatGradeLabel(grade?: GradeLookupValue) {
   if (grade?.gradeFormatted) return grade.gradeFormatted;
-  if (grade?.gradePercentage != null) return `${Number(grade.gradePercentage).toFixed(1)}%`;
-  return 'Sem nota';
+  if (grade?.gradePercentage != null)
+    return `${Number(grade.gradePercentage).toFixed(1)}%`;
+  return "Sem nota";
 }
 
-function buildUnavailableVariablesText(unavailableVariables: Array<{ key: DynamicVariableKey; reason?: string }>) {
-  const labels = unavailableVariables.map(item => getVariableLabel(item.key)).join(', ');
+function buildUnavailableVariablesText(
+  unavailableVariables: Array<{ key: DynamicVariableKey; reason?: string }>,
+) {
+  const labels = unavailableVariables
+    .map((item) => getVariableLabel(item.key))
+    .join(", ");
   const reasons = Array.from(
     new Set(
       unavailableVariables
-        .map(item => item.reason)
+        .map((item) => item.reason)
         .filter((reason): reason is string => Boolean(reason)),
     ),
   );
 
-  return reasons.length > 0 ? `${labels}. ${reasons.join(' ')}` : labels;
+  return reasons.length > 0 ? `${labels}. ${reasons.join(" ")}` : labels;
 }
 
 function buildDefaultScheduledTitle(selectedCount: number) {
-  return `Envio agendado para ${selectedCount} aluno${selectedCount !== 1 ? 's' : ''}`;
+  return `Envio agendado para ${selectedCount} aluno${selectedCount !== 1 ? "s" : ""}`;
 }
 
+type DeliveryMode = "now" | "scheduled" | "routine";
+type CampaignStep = "audience" | "message" | "review";
+
+const campaignSteps: Array<{
+  id: CampaignStep;
+  title: string;
+  description: string;
+}> = [
+  {
+    id: "audience",
+    title: "Destinatarios",
+    description: "Escolha quem vai receber a campanha.",
+  },
+  {
+    id: "message",
+    title: "Mensagem",
+    description: "Monte o conteudo e personalize o envio.",
+  },
+  {
+    id: "review",
+    title: "Revisao",
+    description: "Valide o que sera enviado e decida a execucao.",
+  },
+];
+
+const AUDIENCE_PAGE_SIZE = 25;
+
 export function BulkSendTab() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const moodleSession = useMoodleSession();
   const [students, setStudents] = useState<StudentOption[]>([]);
-  const [gradeLookup, setGradeLookup] = useState<Record<string, GradeLookupValue>>({});
-  const [pendingLookup, setPendingLookup] = useState<Record<string, number>>({});
-  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(new Set());
-  const [searchQuery, setSearchQuery] = useState('');
+  const [gradeLookup, setGradeLookup] = useState<
+    Record<string, GradeLookupValue>
+  >({});
+  const [pendingLookup, setPendingLookup] = useState<Record<string, number>>(
+    {},
+  );
+  const [selectedStudentIds, setSelectedStudentIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [searchQuery, setSearchQuery] = useState("");
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
-  const [messageContent, setMessageContent] = useState('');
+  const [messageContent, setMessageContent] = useState("");
   const [templates, setTemplates] = useState<MessageTemplateOption[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
-  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [recentJobs, setRecentJobs] = useState<BulkMessageJobPreview[]>([]);
-  const [scheduledTitle, setScheduledTitle] = useState('');
-  const [scheduledAt, setScheduledAt] = useState('');
-  const [scheduledNotes, setScheduledNotes] = useState('');
+  const [currentStep, setCurrentStep] = useState<CampaignStep>("audience");
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("now");
+  const [scheduledTitle, setScheduledTitle] = useState("");
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [scheduledNotes, setScheduledNotes] = useState("");
 
-  const [filterSchool, setFilterSchool] = useState<string>('todos');
-  const [filterCourse, setFilterCourse] = useState<string>('todos');
-  const [filterClass, setFilterClass] = useState<string>('todos');
-  const [filterUC, setFilterUC] = useState<string>('todos');
-  const [filterRiskStatus, setFilterRiskStatus] = useState<string>('todos');
+  const [filterSchool, setFilterSchool] = useState<string>("todos");
+  const [filterCourse, setFilterCourse] = useState<string>("todos");
+  const [filterClass, setFilterClass] = useState<string>("todos");
+  const [filterUC, setFilterUC] = useState<string>("todos");
+  const [filterRiskStatus, setFilterRiskStatus] = useState<string>("todos");
+  const [audiencePage, setAudiencePage] = useState(1);
+  const deferredSearchQuery = useDeferredValue(
+    searchQuery.trim().toLowerCase(),
+  );
 
-  const currentFilters = useMemo(() => ({
-    school: filterSchool,
-    course: filterCourse,
-    className: filterClass,
-    uc: filterUC,
-  }), [filterSchool, filterCourse, filterClass, filterUC]);
+  const currentFilters = useMemo(
+    () => ({
+      school: filterSchool,
+      course: filterCourse,
+      className: filterClass,
+      uc: filterUC,
+    }),
+    [filterSchool, filterCourse, filterClass, filterUC],
+  );
 
   const fetchStudents = useCallback(async () => {
     if (!user) return;
@@ -165,7 +266,7 @@ export function BulkSendTab() {
       setStudents([]);
       setGradeLookup({});
       setPendingLookup({});
-      toast.error('Erro ao carregar alunos');
+      toast.error("Erro ao carregar alunos");
     } finally {
       setIsLoadingStudents(false);
     }
@@ -178,22 +279,25 @@ export function BulkSendTab() {
       setTemplates(await listMessageTemplateOptionsForUser(user.id));
     } catch (error) {
       console.error(error);
-      toast.error('Erro ao carregar modelos');
+      toast.error("Erro ao carregar modelos");
     }
   }, [user]);
 
-  const fetchRecentJobs = useCallback(async (options?: { silent?: boolean }) => {
-    if (!user) return;
+  const fetchRecentJobs = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!user) return;
 
-    try {
-      setRecentJobs(await listRecentBulkMessageJobsForUser(user.id));
-    } catch (error) {
-      console.error(error);
-      if (!options?.silent) {
-        toast.error('Erro ao carregar envios recentes');
+      try {
+        setRecentJobs(await listRecentBulkMessageJobsForUser(user.id));
+      } catch (error) {
+        console.error(error);
+        if (!options?.silent) {
+          toast.error("Erro ao carregar envios recentes");
+        }
       }
-    }
-  }, [user]);
+    },
+    [user],
+  );
 
   useEffect(() => {
     fetchStudents();
@@ -202,10 +306,13 @@ export function BulkSendTab() {
   }, [fetchStudents, fetchTemplates, fetchRecentJobs]);
 
   const categorySources = useMemo(
-    () => students.flatMap(student => student.courses.map(course => ({
-      category: course.category,
-      courseName: course.course_name,
-    }))),
+    () =>
+      students.flatMap((student) =>
+        student.courses.map((course) => ({
+          category: course.category,
+          courseName: course.course_name,
+        })),
+      ),
     [students],
   );
 
@@ -218,68 +325,107 @@ export function BulkSendTab() {
   }, [categorySources, filterSchool, filterCourse, filterClass]);
 
   useEffect(() => {
-    if (filterSchool !== 'todos' && !filterOptions.schools.includes(filterSchool)) {
-      setFilterSchool('todos');
-      setFilterCourse('todos');
-      setFilterClass('todos');
-      setFilterUC('todos');
+    if (
+      filterSchool !== "todos" &&
+      !filterOptions.schools.includes(filterSchool)
+    ) {
+      setFilterSchool("todos");
+      setFilterCourse("todos");
+      setFilterClass("todos");
+      setFilterUC("todos");
       return;
     }
 
-    if (filterCourse !== 'todos' && !filterOptions.courses.includes(filterCourse)) {
-      setFilterCourse('todos');
-      setFilterClass('todos');
-      setFilterUC('todos');
+    if (
+      filterCourse !== "todos" &&
+      !filterOptions.courses.includes(filterCourse)
+    ) {
+      setFilterCourse("todos");
+      setFilterClass("todos");
+      setFilterUC("todos");
       return;
     }
 
-    if (filterClass !== 'todos' && !filterOptions.classes.includes(filterClass)) {
-      setFilterClass('todos');
-      setFilterUC('todos');
+    if (
+      filterClass !== "todos" &&
+      !filterOptions.classes.includes(filterClass)
+    ) {
+      setFilterClass("todos");
+      setFilterUC("todos");
       return;
     }
 
-    if (filterUC !== 'todos' && !filterOptions.ucs.includes(filterUC)) {
-      setFilterUC('todos');
+    if (filterUC !== "todos" && !filterOptions.ucs.includes(filterUC)) {
+      setFilterUC("todos");
     }
   }, [filterSchool, filterCourse, filterClass, filterUC, filterOptions]);
 
   const filteredStudents = useMemo(() => {
-    return students.filter(student => {
+    return students.filter((student) => {
       if (
-        searchQuery &&
-        !student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !student.email?.toLowerCase().includes(searchQuery.toLowerCase())
+        deferredSearchQuery &&
+        !student.full_name.toLowerCase().includes(deferredSearchQuery) &&
+        !student.email?.toLowerCase().includes(deferredSearchQuery)
       ) {
         return false;
       }
 
-      if (filterSchool !== 'todos' || filterCourse !== 'todos' || filterClass !== 'todos' || filterUC !== 'todos') {
-        const matchesCourse = student.courses.some(course => {
+      if (
+        filterSchool !== "todos" ||
+        filterCourse !== "todos" ||
+        filterClass !== "todos" ||
+        filterUC !== "todos"
+      ) {
+        const matchesCourse = student.courses.some((course) => {
           const parsed = parseCourseCategoryPath(course.category);
-          if (filterSchool !== 'todos' && parsed.school !== filterSchool) return false;
-          if (filterCourse !== 'todos' && parsed.course !== filterCourse) return false;
-          if (filterClass !== 'todos' && parsed.className !== filterClass) return false;
-          if (filterUC !== 'todos' && (parsed.uc || course.course_name) !== filterUC) return false;
+          if (filterSchool !== "todos" && parsed.school !== filterSchool)
+            return false;
+          if (filterCourse !== "todos" && parsed.course !== filterCourse)
+            return false;
+          if (filterClass !== "todos" && parsed.className !== filterClass)
+            return false;
+          if (
+            filterUC !== "todos" &&
+            (parsed.uc || course.course_name) !== filterUC
+          )
+            return false;
           return true;
         });
         if (!matchesCourse) return false;
       }
 
-      if (filterRiskStatus !== 'todos') {
-        if (normalizeRiskLevel(student.current_risk_level) !== filterRiskStatus) {
+      if (filterRiskStatus !== "todos") {
+        if (
+          normalizeRiskLevel(student.current_risk_level) !== filterRiskStatus
+        ) {
           return false;
         }
       }
 
       return true;
     });
-  }, [students, searchQuery, filterSchool, filterCourse, filterClass, filterUC, filterRiskStatus]);
+  }, [
+    students,
+    deferredSearchQuery,
+    filterSchool,
+    filterCourse,
+    filterClass,
+    filterUC,
+    filterRiskStatus,
+  ]);
 
   const selectedStudents = useMemo(
-    () => students.filter(student => selectedStudentIds.has(student.id)),
+    () => students.filter((student) => selectedStudentIds.has(student.id)),
     [selectedStudentIds, students],
   );
+  const audienceTotalPages = Math.max(
+    1,
+    Math.ceil(filteredStudents.length / AUDIENCE_PAGE_SIZE),
+  );
+  const paginatedFilteredStudents = useMemo(() => {
+    const startIndex = (audiencePage - 1) * AUDIENCE_PAGE_SIZE;
+    return filteredStudents.slice(startIndex, startIndex + AUDIENCE_PAGE_SIZE);
+  }, [audiencePage, filteredStudents]);
 
   const contextStudents = useMemo(
     () => (selectedStudents.length > 0 ? selectedStudents : filteredStudents),
@@ -303,25 +449,77 @@ export function BulkSendTab() {
 
   const templateUnavailableVariables = useMemo(() => {
     return new Map(
-      templates.map(template => [
+      templates.map((template) => [
         template.id,
         getUnavailableTemplateVariables(template.content, variableAvailability),
       ]),
     );
   }, [templates, variableAvailability]);
 
-  const canPreviewOrSend = selectedStudents.length > 0 && messageContent.trim().length > 0 && messageUnavailableVariables.length === 0;
+  const canPreviewOrSend =
+    selectedStudents.length > 0 &&
+    messageContent.trim().length > 0 &&
+    messageUnavailableVariables.length === 0;
+  const canLaunchCampaign =
+    canPreviewOrSend &&
+    (deliveryMode === "now" ||
+      deliveryMode === "routine" ||
+      scheduledAt.trim().length > 0);
   const hasActiveJobs = useMemo(
-    () => recentJobs.some(job => job.status === 'pending' || job.status === 'processing'),
+    () =>
+      recentJobs.some(
+        (job) => job.status === "pending" || job.status === "processing",
+      ),
     [recentJobs],
   );
+  const currentStepIndex = useMemo(
+    () => campaignSteps.findIndex((step) => step.id === currentStep),
+    [currentStep],
+  );
+  const stepProgress = useMemo(
+    () => ((currentStepIndex + 1) / campaignSteps.length) * 100,
+    [currentStepIndex],
+  );
+  const allFilteredSelected = useMemo(
+    () =>
+      filteredStudents.length > 0 &&
+      filteredStudents.every((student) => selectedStudentIds.has(student.id)),
+    [filteredStudents, selectedStudentIds],
+  );
+  const someFilteredSelected = useMemo(
+    () =>
+      !allFilteredSelected &&
+      filteredStudents.some((student) => selectedStudentIds.has(student.id)),
+    [allFilteredSelected, filteredStudents, selectedStudentIds],
+  );
+  const activeFilterBadges = useMemo(() => {
+    const badges: string[] = [];
+
+    if (filterSchool !== "todos") badges.push(`Escola: ${filterSchool}`);
+    if (filterCourse !== "todos") badges.push(`Curso: ${filterCourse}`);
+    if (filterClass !== "todos") badges.push(`Turma: ${filterClass}`);
+    if (filterUC !== "todos") badges.push(`UC: ${filterUC}`);
+    if (filterRiskStatus !== "todos") {
+      badges.push(`Risco: ${formatRiskLevel(filterRiskStatus)}`);
+    }
+
+    return badges;
+  }, [filterClass, filterCourse, filterRiskStatus, filterSchool, filterUC]);
 
   useBackgroundActivityFlag({
-    id: user?.id ? `messages:bulk-send:request:${user.id}` : 'messages:bulk-send:request',
-    active: Boolean(user?.id) && isSending,
-    label: 'Preparando envio em massa',
-    description: 'Enfileirando destinatarios e validando o disparo.',
-    source: 'messages',
+    id: user?.id
+      ? `messages:bulk-send:request:${user.id}`
+      : "messages:bulk-send:request",
+    active: Boolean(user?.id) && (isSending || isScheduling),
+    label:
+      deliveryMode === "scheduled"
+        ? "Agendando campanha"
+        : "Preparando envio em massa",
+    description:
+      deliveryMode === "scheduled"
+        ? "Congelando destinatarios e configurando a entrega futura."
+        : "Enfileirando destinatarios e validando o disparo.",
+    source: "messages",
   });
 
   useEffect(() => {
@@ -336,74 +534,118 @@ export function BulkSendTab() {
     };
   }, [fetchRecentJobs, hasActiveJobs, user]);
 
+  useEffect(() => {
+    setAudiencePage(1);
+  }, [deferredSearchQuery, filterSchool, filterCourse, filterClass, filterUC, filterRiskStatus]);
+
+  useEffect(() => {
+    if (audiencePage > audienceTotalPages) {
+      setAudiencePage(audienceTotalPages);
+    }
+  }, [audiencePage, audienceTotalPages]);
+
   const toggleStudent = (id: string) => {
-    setSelectedStudentIds(prev => {
+    setSelectedStudentIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
   const selectAll = () => {
-    setSelectedStudentIds(new Set(filteredStudents.map(s => s.id)));
+    setSelectedStudentIds(new Set(filteredStudents.map((s) => s.id)));
   };
 
   const clearAll = () => setSelectedStudentIds(new Set());
 
   const handleSchoolChange = (value: string) => {
     setFilterSchool(value);
-    setFilterCourse('todos');
-    setFilterClass('todos');
-    setFilterUC('todos');
+    setFilterCourse("todos");
+    setFilterClass("todos");
+    setFilterUC("todos");
   };
 
   const handleCourseChange = (value: string) => {
     setFilterCourse(value);
-    setFilterClass('todos');
-    setFilterUC('todos');
+    setFilterClass("todos");
+    setFilterUC("todos");
   };
 
   const handleClassChange = (value: string) => {
     setFilterClass(value);
-    setFilterUC('todos');
+    setFilterUC("todos");
   };
 
-  const validateMessageContext = useCallback((content: string, sourceLabel: string) => {
-    const unavailableVariables = getUnavailableTemplateVariables(content, variableAvailability);
+  const resetCampaignBuilder = useCallback(() => {
+    setSelectedStudentIds(new Set());
+    setMessageContent("");
+    setDeliveryMode("now");
+    setScheduledTitle("");
+    setScheduledAt("");
+    setScheduledNotes("");
+    setCurrentStep("audience");
+  }, []);
 
-    if (unavailableVariables.length === 0) return true;
+  const validateMessageContext = useCallback(
+    (content: string, sourceLabel: string) => {
+      const unavailableVariables = getUnavailableTemplateVariables(
+        content,
+        variableAvailability,
+      );
 
-    toast.error(`${sourceLabel} usa variaveis indisponiveis neste contexto: ${buildUnavailableVariablesText(unavailableVariables)}`);
-    return false;
-  }, [variableAvailability]);
+      if (unavailableVariables.length === 0) return true;
 
-  const buildStudentVariableData = useCallback((student: StudentOption) => {
-    const resolvedContext = resolveStudentCourseContext(student, currentFilters);
-    const selectedCourse = resolvedContext.selectedCourse;
-    const courseLookupKey = selectedCourse
-      ? buildStudentCourseKey(student.id, selectedCourse.course_id)
-      : null;
+      toast.error(
+        `${sourceLabel} usa variaveis indisponiveis neste contexto: ${buildUnavailableVariablesText(unavailableVariables)}`,
+      );
+      return false;
+    },
+    [variableAvailability],
+  );
 
-    return {
-      nome_aluno: student.full_name,
-      email_aluno: student.email || 'Sem email',
-      ultimo_acesso: formatDateLabel(selectedCourse?.last_access || student.last_access),
-      nivel_risco: formatRiskLevel(student.current_risk_level),
-      nota_media: formatGradeLabel(courseLookupKey ? gradeLookup[courseLookupKey] : undefined),
-      atividades_pendentes: String(courseLookupKey ? (pendingLookup[courseLookupKey] || 0) : 0),
-      unidade_curricular: resolvedContext.unidadeCurricular || 'N/A',
-      turma: resolvedContext.className || 'N/A',
-      curso: resolvedContext.course || 'N/A',
-      escola: resolvedContext.school || 'N/A',
-      nome_tutor: user?.full_name || 'Tutor',
-    };
-  }, [currentFilters, gradeLookup, pendingLookup, user]);
+  const buildStudentVariableData = useCallback(
+    (student: StudentOption) => {
+      const resolvedContext = resolveStudentCourseContext(
+        student,
+        currentFilters,
+      );
+      const selectedCourse = resolvedContext.selectedCourse;
+      const courseLookupKey = selectedCourse
+        ? buildStudentCourseKey(student.id, selectedCourse.course_id)
+        : null;
+
+      return {
+        nome_aluno: student.full_name,
+        email_aluno: student.email || "Sem email",
+        ultimo_acesso: formatDateLabel(
+          selectedCourse?.last_access || student.last_access,
+        ),
+        nivel_risco: formatRiskLevel(student.current_risk_level),
+        nota_media: formatGradeLabel(
+          courseLookupKey ? gradeLookup[courseLookupKey] : undefined,
+        ),
+        atividades_pendentes: String(
+          courseLookupKey ? pendingLookup[courseLookupKey] || 0 : 0,
+        ),
+        unidade_curricular: resolvedContext.unidadeCurricular || "N/A",
+        turma: resolvedContext.className || "N/A",
+        curso: resolvedContext.course || "N/A",
+        escola: resolvedContext.school || "N/A",
+        nome_tutor: user?.full_name || "Tutor",
+      };
+    },
+    [currentFilters, gradeLookup, pendingLookup, user],
+  );
 
   const applyTemplate = (template: MessageTemplateOption) => {
-    const unavailableVariables = templateUnavailableVariables.get(template.id) || [];
+    const unavailableVariables =
+      templateUnavailableVariables.get(template.id) || [];
 
     if (unavailableVariables.length > 0) {
-      toast.error(`O modelo "${template.title}" nao pode ser usado neste contexto: ${buildUnavailableVariablesText(unavailableVariables)}`);
+      toast.error(
+        `O modelo "${template.title}" nao pode ser usado neste contexto: ${buildUnavailableVariablesText(unavailableVariables)}`,
+      );
       return;
     }
 
@@ -417,27 +659,27 @@ export function BulkSendTab() {
   }, [selectedStudents]);
 
   const previewMessage = useMemo(() => {
-    if (!previewStudent || !messageContent) return '';
-    return resolveVariables(messageContent, buildStudentVariableData(previewStudent));
+    if (!previewStudent || !messageContent) return "";
+    return resolveVariables(
+      messageContent,
+      buildStudentVariableData(previewStudent),
+    );
   }, [buildStudentVariableData, messageContent, previewStudent]);
 
   const handlePreview = () => {
-    if (!validateMessageContext(messageContent, 'A mensagem')) return;
+    if (!validateMessageContext(messageContent, "A mensagem")) return;
     setPreviewDialogOpen(true);
   };
 
-  const openScheduleDialog = useCallback(() => {
-    if (!validateMessageContext(messageContent, 'A mensagem')) return;
-
-    setScheduledTitle(buildDefaultScheduledTitle(selectedStudents.length));
-    setScheduledAt('');
-    setScheduledNotes('');
-    setScheduleDialogOpen(true);
-  }, [messageContent, selectedStudents.length, validateMessageContext]);
-
   const handleSchedule = useCallback(async () => {
-    if (!user || selectedStudents.length === 0 || !messageContent.trim() || !scheduledAt.trim()) return;
-    if (!validateMessageContext(messageContent, 'A mensagem')) return;
+    if (
+      !user ||
+      selectedStudents.length === 0 ||
+      !messageContent.trim() ||
+      !scheduledAt.trim()
+    )
+      return;
+    if (!validateMessageContext(messageContent, "A mensagem")) return;
 
     setIsScheduling(true);
 
@@ -446,36 +688,40 @@ export function BulkSendTab() {
         student_id: student.id,
         moodle_user_id: student.moodle_user_id,
         student_name: student.full_name,
-        personalized_message: resolveVariables(messageContent, buildStudentVariableData(student)),
+        personalized_message: resolveVariables(
+          messageContent,
+          buildStudentVariableData(student),
+        ),
       }));
 
       await createScheduledMessage(user.id, {
-        title: scheduledTitle.trim() || buildDefaultScheduledTitle(selectedStudents.length),
+        title:
+          scheduledTitle.trim() ||
+          buildDefaultScheduledTitle(selectedStudents.length),
         message_content: messageContent,
         scheduled_at: scheduledAt,
         recipient_count: selectedStudents.length,
         notes: scheduledNotes.trim() || undefined,
-        channel: 'moodle',
+        channel: "moodle",
         execution_context: {
           schema_version: 1,
-          mode: 'bulk_message_snapshot',
-          channel: 'moodle',
-          created_via: 'bulk_send_tab',
+          mode: "bulk_message_snapshot",
+          channel: "moodle",
+          created_via: "bulk_send_tab",
           automatic_execution_supported: false,
-          blocking_reason: moodleSession ? 'credential_snapshot_missing' : 'moodle_session_missing',
+          blocking_reason: moodleSession
+            ? "credential_snapshot_missing"
+            : "moodle_session_missing",
           moodle_url: moodleSession?.moodleUrl,
           recipient_snapshot: recipientSnapshot,
         },
       });
 
-      toast.success('Agendamento criado com snapshot de destinatários');
-      setScheduleDialogOpen(false);
-      setScheduledTitle('');
-      setScheduledAt('');
-      setScheduledNotes('');
+      toast.success("Campanha agendada com snapshot de destinatarios");
+      resetCampaignBuilder();
     } catch (error) {
       console.error(error);
-      toast.error('Erro ao criar agendamento');
+      toast.error("Erro ao criar agendamento");
     } finally {
       setIsScheduling(false);
     }
@@ -489,14 +735,23 @@ export function BulkSendTab() {
     selectedStudents,
     user,
     validateMessageContext,
+    resetCampaignBuilder,
   ]);
 
   const handleSend = useCallback(async () => {
-    if (!user || !moodleSession || selectedStudents.length === 0 || !messageContent.trim()) return;
-    if (!validateMessageContext(messageContent, 'A mensagem')) return;
+    if (
+      !user ||
+      !moodleSession ||
+      selectedStudents.length === 0 ||
+      !messageContent.trim()
+    )
+      return;
+    if (!validateMessageContext(messageContent, "A mensagem")) return;
 
     if (hasActiveJobs) {
-      toast.error('Ja existe um envio em andamento ou na fila. Aguarde a finalizacao para evitar duplicidade.');
+      toast.error(
+        "Ja existe um envio em andamento ou na fila. Aguarde a finalizacao para evitar duplicidade.",
+      );
       return;
     }
 
@@ -512,291 +767,1243 @@ export function BulkSendTab() {
           studentId: student.id,
           moodleUserId: student.moodle_user_id,
           studentName: student.full_name,
-          personalizedMessage: resolveVariables(messageContent, buildStudentVariableData(student)),
+          personalizedMessage: resolveVariables(
+            messageContent,
+            buildStudentVariableData(student),
+          ),
         })),
       });
 
-      if (result.kind === 'duplicate') {
-        toast.error('Envio semelhante ja existe na fila/processamento. Evite duplicar o disparo.');
+      if (result.kind === "duplicate") {
+        toast.error(
+          "Envio semelhante ja existe na fila/processamento. Evite duplicar o disparo.",
+        );
         await fetchRecentJobs();
         return;
       }
 
-      toast.success(`Envio em massa iniciado para ${selectedStudents.length} alunos`);
-      setSelectedStudentIds(new Set());
-      setMessageContent('');
+      toast.success(
+        `Envio em massa iniciado para ${selectedStudents.length} alunos`,
+      );
+      resetCampaignBuilder();
       await fetchRecentJobs();
     } catch (err) {
       console.error(err);
-      toast.error('Erro ao iniciar envio em massa');
+      toast.error("Erro ao iniciar envio em massa");
     } finally {
       setIsSending(false);
     }
-  }, [buildStudentVariableData, fetchRecentJobs, hasActiveJobs, messageContent, moodleSession, selectedStudents, user, validateMessageContext]);
+  }, [
+    buildStudentVariableData,
+    fetchRecentJobs,
+    hasActiveJobs,
+    messageContent,
+    moodleSession,
+    resetCampaignBuilder,
+    selectedStudents,
+    user,
+    validateMessageContext,
+  ]);
+
+  const handleTransformToRoutine = useCallback(() => {
+    if (!validateMessageContext(messageContent, "A mensagem")) return;
+    if (selectedStudents.length === 0 || !messageContent.trim()) return;
+
+    writeCampaignRoutineDraft({
+      channel: "moodle",
+      createdAt: new Date().toISOString(),
+      messageContent,
+      previewMessage: previewMessage || undefined,
+      recipientCount: selectedStudents.length,
+      recipientsPreview: selectedStudents.slice(0, 8).map((student) => ({
+        id: student.id,
+        name: student.full_name,
+        email: student.email,
+        riskLevel: student.current_risk_level,
+      })),
+      filters: {
+        school: filterSchool !== "todos" ? filterSchool : undefined,
+        course: filterCourse !== "todos" ? filterCourse : undefined,
+        className: filterClass !== "todos" ? filterClass : undefined,
+        uc: filterUC !== "todos" ? filterUC : undefined,
+        riskStatus: filterRiskStatus !== "todos" ? filterRiskStatus : undefined,
+      },
+    });
+
+    toast.success("Rascunho enviado para Automacoes");
+    navigate("/automacoes?tab=gatilhos");
+  }, [
+    filterClass,
+    filterCourse,
+    filterRiskStatus,
+    filterSchool,
+    filterUC,
+    messageContent,
+    navigate,
+    previewMessage,
+    selectedStudents,
+    validateMessageContext,
+  ]);
+
+  const handleLaunchCampaign = useCallback(async () => {
+    if (deliveryMode === "scheduled") {
+      await handleSchedule();
+      return;
+    }
+
+    if (deliveryMode === "routine") {
+      handleTransformToRoutine();
+      return;
+    }
+
+    await handleSend();
+  }, [deliveryMode, handleSchedule, handleSend, handleTransformToRoutine]);
+
+  const handleStepChange = useCallback(
+    (nextStep: CampaignStep) => {
+      if (nextStep === currentStep) return;
+
+      if (nextStep === "message" && selectedStudents.length === 0) {
+        toast.error("Selecione pelo menos um destinatario para continuar.");
+        return;
+      }
+
+      if (nextStep === "review") {
+        if (selectedStudents.length === 0) {
+          toast.error("Selecione pelo menos um destinatario para revisar.");
+          return;
+        }
+
+        if (!messageContent.trim()) {
+          toast.error("Escreva a mensagem da campanha antes de revisar.");
+          return;
+        }
+
+        if (!validateMessageContext(messageContent, "A mensagem")) return;
+      }
+
+      setCurrentStep(nextStep);
+    },
+    [
+      currentStep,
+      messageContent,
+      selectedStudents.length,
+      validateMessageContext,
+    ],
+  );
 
   const getStatusBadge = (status: string) => {
-    const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
-      pending: { label: 'Na fila', variant: 'outline' },
-      processing: { label: 'Enviando...', variant: 'default' },
-      completed: { label: 'Concluido', variant: 'secondary' },
-      failed: { label: 'Falhou', variant: 'destructive' },
-      cancelled: { label: 'Cancelado', variant: 'outline' },
+    const map: Record<
+      string,
+      {
+        label: string;
+        variant: "default" | "secondary" | "destructive" | "outline";
+      }
+    > = {
+      pending: { label: "Na fila", variant: "outline" },
+      processing: { label: "Enviando...", variant: "default" },
+      completed: { label: "Concluido", variant: "secondary" },
+      failed: { label: "Falhou", variant: "destructive" },
+      cancelled: { label: "Cancelado", variant: "outline" },
     };
-    const m = map[status] || { label: status, variant: 'outline' as const };
+    const m = map[status] || { label: status, variant: "outline" as const };
     return <Badge variant={m.variant}>{m.label}</Badge>;
   };
 
-  return (
-    <div className="flex flex-col h-full gap-4">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 min-h-0">
-        <Card className="flex flex-col min-h-0">
-          <CardHeader className="pb-3 shrink-0">
-            <CardTitle className="text-sm flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Destinatarios
-                {selectedStudents.length > 0 && (
-                  <Badge variant="default" className="text-[10px]">{selectedStudents.length}</Badge>
-                )}
-              </span>
-              <div className="flex gap-1">
-                <Button variant="ghost" size="sm" className="text-xs h-7" onClick={selectAll}>
-                  Todos ({filteredStudents.length})
-                </Button>
-                {selectedStudents.length > 0 && (
-                  <Button variant="ghost" size="sm" className="text-xs h-7" onClick={clearAll}>
-                    Limpar
-                  </Button>
-                )}
-              </div>
+  const renderAudienceStep = () => (
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className="text-base">
+              Etapa 1: selecionar destinatarios
             </CardTitle>
-          </CardHeader>
-          <CardContent className="flex-1 flex flex-col gap-3 min-h-0 pt-0">
-            {/* Filters */}
-            <div className="grid grid-cols-2 gap-2 shrink-0 md:grid-cols-3">
-              <Select value={filterSchool} onValueChange={handleSchoolChange}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Escola" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas escolas</SelectItem>
-                  {filterOptions.schools.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterCourse} onValueChange={handleCourseChange}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Curso" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos cursos</SelectItem>
-                  {filterOptions.courses.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterClass} onValueChange={handleClassChange}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Turma" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas turmas</SelectItem>
-                  {filterOptions.classes.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterUC} onValueChange={setFilterUC}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="UC" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todas UCs</SelectItem>
-                  {filterOptions.ucs.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={filterRiskStatus} onValueChange={setFilterRiskStatus}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue placeholder="Status de risco" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(riskLevelLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <CardDescription className="mt-1">
+              Comece pela audiencia. Use filtros, tabela e selecao em lote para
+              fechar o recorte antes de escrever a mensagem.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">
+              {filteredStudents.length} no recorte
+            </Badge>
+            <Badge
+              variant={selectedStudents.length > 0 ? "default" : "secondary"}
+            >
+              {selectedStudents.length} selecionados
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
 
-            {/* Search */}
-            <div className="relative shrink-0">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Buscar aluno..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="pl-9 h-8 text-xs"
-              />
-            </div>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+          <Select value={filterSchool} onValueChange={handleSchoolChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Escola" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas escolas</SelectItem>
+              {filterOptions.schools.map((school) => (
+                <SelectItem key={school} value={school}>
+                  {school}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            {/* Selected tags */}
-            {selectedStudents.length > 0 && (
-              <div className="flex flex-wrap gap-1 shrink-0 max-h-20 overflow-y-auto">
-                {selectedStudents.slice(0, 20).map(student => (
-                  <Badge key={student.id} variant="secondary" className="text-[10px] pr-1 gap-1">
-                    {student.full_name}
-                    <button type="button" onClick={() => toggleStudent(student.id)} className="ml-0.5 hover:text-destructive">
-                        <X className="h-3 w-3" />
-                    </button>
+          <Select value={filterCourse} onValueChange={handleCourseChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Curso" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos cursos</SelectItem>
+              {filterOptions.courses.map((course) => (
+                <SelectItem key={course} value={course}>
+                  {course}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterClass} onValueChange={handleClassChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Turma" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas turmas</SelectItem>
+              {filterOptions.classes.map((className) => (
+                <SelectItem key={className} value={className}>
+                  {className}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterUC} onValueChange={setFilterUC}>
+            <SelectTrigger>
+              <SelectValue placeholder="UC" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas UCs</SelectItem>
+              {filterOptions.ucs.map((uc) => (
+                <SelectItem key={uc} value={uc}>
+                  {uc}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterRiskStatus} onValueChange={setFilterRiskStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status de risco" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(riskLevelLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Buscar aluno por nome ou email..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={selectAll}>
+              Selecionar todos
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAll}
+              disabled={selectedStudents.length === 0}
+            >
+              Limpar
+            </Button>
+          </div>
+        </div>
+
+        {selectedStudents.length > 0 && (
+          <div className="flex flex-wrap gap-2 rounded-2xl border bg-muted/20 p-3">
+            {selectedStudents.slice(0, 10).map((student) => (
+              <Badge
+                key={student.id}
+                variant="secondary"
+                className="gap-1 pr-1 text-[11px]"
+              >
+                {student.full_name}
+                <button
+                  type="button"
+                  onClick={() => toggleStudent(student.id)}
+                  className="rounded-full p-0.5 hover:bg-background/70 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+            {selectedStudents.length > 10 && (
+              <Badge variant="outline" className="text-[11px]">
+                +{selectedStudents.length - 10} mais
+              </Badge>
+            )}
+          </div>
+        )}
+
+        <div className="overflow-hidden rounded-2xl border">
+          {isLoadingStudents ? (
+            <div className="flex items-center justify-center py-16">
+              <Spinner className="h-5 w-5" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={
+                        allFilteredSelected
+                          ? true
+                          : someFilteredSelected
+                            ? "indeterminate"
+                            : false
+                      }
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          selectAll();
+                          return;
+                        }
+
+                        clearAll();
+                      }}
+                      aria-label="Selecionar todos os alunos filtrados"
+                    />
+                  </TableHead>
+                  <TableHead>Aluno</TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    Contexto academico
+                  </TableHead>
+                  <TableHead>Risco</TableHead>
+                  <TableHead className="hidden lg:table-cell">Status</TableHead>
+                  <TableHead className="hidden xl:table-cell">
+                    Ultimo acesso
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {filteredStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Nenhum aluno corresponde aos filtros atuais.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedFilteredStudents.map((student) => {
+                    const isSelected = selectedStudentIds.has(student.id);
+                    const courseNames = student.courses
+                      .slice(0, 2)
+                      .map((course) => course.course_name)
+                      .join(", ");
+
+                    return (
+                      <TableRow
+                        key={student.id}
+                        data-state={isSelected ? "selected" : undefined}
+                        className="cursor-pointer"
+                        onClick={() => toggleStudent(student.id)}
+                      >
+                        <TableCell
+                          className="w-12"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleStudent(student.id)}
+                            aria-label={`Selecionar ${student.full_name}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
+                              {student.full_name.charAt(0)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">
+                                {student.full_name}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {student.email || "Sem email"}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="space-y-1">
+                            <p className="text-sm text-foreground">
+                              {courseNames || "Sem curso vinculado"}
+                            </p>
+                            {student.courses.length > 2 && (
+                              <p className="text-[11px] text-muted-foreground">
+                                +{student.courses.length - 2} outros cursos no
+                                perfil
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {formatRiskLevel(student.current_risk_level)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="text-sm text-muted-foreground">
+                            {student.enrollment_status || "ativo"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <span className="text-sm text-muted-foreground">
+                            {formatDateLabel(student.last_access)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </div>
+
+        {filteredStudents.length > 0 && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-dashed px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Exibindo {(audiencePage - 1) * AUDIENCE_PAGE_SIZE + 1}-
+              {(audiencePage - 1) * AUDIENCE_PAGE_SIZE +
+                paginatedFilteredStudents.length}{" "}
+              de {filteredStudents.length} destinatarios
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setAudiencePage((current) => Math.max(1, current - 1))
+                }
+                disabled={audiencePage === 1}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Anterior
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Pagina {audiencePage} de {audienceTotalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setAudiencePage((current) =>
+                    Math.min(audienceTotalPages, current + 1),
+                  )
+                }
+                disabled={audiencePage >= audienceTotalPages}
+              >
+                Proxima
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Feche o recorte agora. A etapa seguinte usa essa audiencia para
+            liberar modelos, variaveis e preview.
+          </p>
+          <Button
+            onClick={() => handleStepChange("message")}
+            disabled={selectedStudents.length === 0}
+          >
+            Avancar para mensagem
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderMessageStep = () => (
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className="text-base">
+              Etapa 2: construir a mensagem
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Escreva a mensagem, aplique modelos e valide o contexto dinamico
+              antes de seguir para a revisao.
+            </CardDescription>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              fetchTemplates();
+              setTemplateDialogOpen(true);
+            }}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Usar modelo
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Destinatarios
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {selectedStudents.length}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Variaveis liberadas
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {availableVariableKeys.length}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Contexto UC
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {filterUC !== "todos" ? filterUC : "Amplo"}
+            </p>
+          </div>
+        </div>
+
+        <DynamicVariableInput
+          value={messageContent}
+          onChange={setMessageContent}
+          rows={14}
+          className="min-h-[20rem] resize-none"
+          availableVariableKeys={availableVariableKeys}
+          showInlinePreview={false}
+        />
+
+        {messageUnavailableVariables.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+            <p className="font-medium">
+              Este conteudo precisa de um contexto mais especifico para ser
+              enviado.
+            </p>
+            <div className="mt-2 space-y-1">
+              {messageUnavailableVariables.map((item) => (
+                <p key={item.key}>
+                  <span className="font-medium">
+                    {getVariableLabel(item.key)}:
+                  </span>{" "}
+                  {item.reason}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground">
+              Variaveis disponiveis agora
+            </p>
+
+            {availableVariableKeys.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {availableVariableKeys.map((key) => (
+                  <Badge key={key} variant="outline" className="gap-1">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    {getVariableLabel(key)}
                   </Badge>
                 ))}
-                {selectedStudents.length > 20 && (
-                  <Badge variant="outline" className="text-[10px]">
-                    +{selectedStudents.length - 20} mais
-                  </Badge>
-                )}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                Ajuste o recorte da audiencia para liberar variaveis mais
+                especificas, principalmente quando precisar de UC, nota ou
+                pendencias.
               </div>
             )}
+          </div>
 
-            {/* Student list */}
-            <ScrollArea className="flex-1 min-h-0">
-              {isLoadingStudents ? (
-                <div className="flex items-center justify-center py-8">
-                  <Spinner className="h-5 w-5" />
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              Preview de referencia
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Usamos o primeiro destinatario selecionado para validar o tom e a
+              substituicao das variaveis.
+            </p>
+
+            {previewStudent ? (
+              <div className="mt-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    {previewStudent.full_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {previewStudent.email || "Sem email"}
+                  </p>
                 </div>
-              ) : (
-                <div className="space-y-0.5">
-                  {filteredStudents.map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => toggleStudent(s.id)}
-                      className={cn(
-                        'w-full text-left px-3 py-2 rounded-md text-sm flex items-center gap-3 transition-colors hover:bg-muted/50',
-                        selectedStudentIds.has(s.id) && 'bg-primary/10'
-                      )}
-                    >
-                      <div className={cn(
-                        'h-4 w-4 rounded border flex items-center justify-center shrink-0',
-                        selectedStudentIds.has(s.id) ? 'bg-primary border-primary' : 'border-input'
-                      )}>
-                        {selectedStudentIds.has(s.id) && <CheckCircle2 className="h-3 w-3 text-primary-foreground" />}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm truncate">{s.full_name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          {s.courses.map(c => c.course_name).join(', ')}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate">
-                          Risco: {formatRiskLevel(s.current_risk_level)}
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                <div className="rounded-2xl border bg-background p-3">
+                  <p className="line-clamp-6 whitespace-pre-wrap text-sm text-foreground">
+                    {previewMessage || messageContent || "Sem conteudo"}
+                  </p>
                 </div>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                Selecione destinatarios na etapa anterior para gerar um preview
+                realista da mensagem.
+              </div>
+            )}
+          </div>
+        </div>
 
-        <div className="flex flex-col gap-4 min-h-0">
-          <Card className="flex-1 flex flex-col min-h-0 overflow-hidden">
-            <CardHeader className="pb-3 shrink-0">
-              <CardTitle className="text-sm flex items-center justify-between">
-                <span>Mensagem</span>
-                <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => { fetchTemplates(); setTemplateDialogOpen(true); }}>
-                  <FileText className="h-3.5 w-3.5 mr-1" />
-                  Usar modelo
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col gap-3 pt-0 min-h-0 overflow-hidden">
-              <DynamicVariableInput
-                value={messageContent}
-                onChange={setMessageContent}
-                rows={10}
-                className="min-h-[18rem] resize-none"
-                availableVariableKeys={availableVariableKeys}
-                showInlinePreview={false}
-              />
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <Button variant="outline" onClick={() => setCurrentStep("audience")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar para destinatarios
+          </Button>
 
-              {messageUnavailableVariables.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                  <p className="font-medium">Este conteudo precisa de um contexto mais especifico para ser enviado.</p>
-                  <div className="mt-2 space-y-1">
-                    {messageUnavailableVariables.map(item => (
-                      <p key={item.key}>
-                        <span className="font-medium">{getVariableLabel(item.key)}:</span> {item.reason}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Action buttons */}
-          <div className="flex items-center justify-between gap-3 shrink-0">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
-              size="sm"
               onClick={handlePreview}
               disabled={!canPreviewOrSend}
             >
-              <Eye className="h-4 w-4 mr-1" />
+              <Eye className="mr-2 h-4 w-4" />
               Pre-visualizar
             </Button>
             <Button
-              variant="outline"
-              size="sm"
-              onClick={openScheduleDialog}
-              disabled={!canPreviewOrSend || isScheduling}
+              onClick={() => handleStepChange("review")}
+              disabled={!canPreviewOrSend}
             >
-              <CalendarClock className="h-4 w-4 mr-1" />
-              Agendar
-            </Button>
-            <Button
-              onClick={handleSend}
-              disabled={isSending || !canPreviewOrSend}
-            >
-              {isSending ? <Spinner className="h-4 w-4 mr-1" onAccent /> : <Send className="h-4 w-4 mr-1" />}
-              Enviar para {selectedStudents.length} aluno{selectedStudents.length !== 1 ? 's' : ''}
+              Revisar campanha
+              <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
-          {selectedStudents.length > 0 && filterUC === 'todos' && (
-            <p className="text-[11px] text-muted-foreground">
-              Selecione uma UC especifica para liberar variaveis como Unidade Curricular, Nota Media e Atividades Pendentes.
+  const renderReviewStep = () => (
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">Etapa 3: revisar o envio</CardTitle>
+        <CardDescription className="mt-1">
+          Confira quem vai receber, veja o preview final e use o painel ao lado
+          para enviar agora, agendar ou transformar em rotina.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Canal
             </p>
-          )}
+            <p className="mt-1 text-sm font-semibold">Moodle</p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Destinatarios
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {selectedStudents.length}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Variaveis
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {availableVariableKeys.length}
+            </p>
+          </div>
+        </div>
 
-          {/* Recent jobs */}
-          {recentJobs.length > 0 && (
-            <Card className="shrink-0">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-xs text-muted-foreground">Envios recentes</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0 space-y-2">
-                {recentJobs.map(job => (
-                  <div key={job.id} className="flex items-center justify-between text-xs border rounded-md px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      {getStatusBadge(job.status)}
-                      <span className="text-muted-foreground">
-                        {job.sent_count}/{job.total_recipients} enviados
-                      </span>
-                    </div>
-                    {job.status === 'processing' && (
-                      <Progress
-                        value={(job.sent_count / job.total_recipients) * 100}
-                        className="w-20 h-1.5"
-                      />
-                    )}
-                    {job.failed_count > 0 && (
-                      <span className="text-destructive flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" />
-                        {job.failed_count} falhas
-                      </span>
-                    )}
+        {selectedStudents.length > 0 && filterUC === "todos" && (
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+            Selecione uma UC especifica se precisar liberar variaveis como
+            Unidade Curricular, Nota Media e Atividades Pendentes.
+          </div>
+        )}
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              Preview da mensagem
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Exemplo real da mensagem que sera gerada para o primeiro
+              destinatario selecionado.
+            </p>
+
+            {previewStudent ? (
+              <div className="mt-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
+                    {previewStudent.full_name.charAt(0)}
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {previewStudent.full_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {previewStudent.email || "Sem email"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-background p-4">
+                  <p className="whitespace-pre-wrap text-sm text-foreground">
+                    {previewMessage || messageContent}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
+                Selecione ao menos um destinatario para montar o preview.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">
+                Quem vai receber
+              </p>
+              <Badge variant="outline">{selectedStudents.length} alunos</Badge>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {selectedStudents.length > 0 ? (
+                <>
+                  {selectedStudents.slice(0, 6).map((student) => (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between rounded-2xl border bg-background px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {student.full_name}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {student.email || "Sem email"}
+                        </p>
+                      </div>
+                      <Badge variant="outline">
+                        {formatRiskLevel(student.current_risk_level)}
+                      </Badge>
+                    </div>
+                  ))}
+
+                  {selectedStudents.length > 6 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      +{selectedStudents.length - 6} outros destinatarios entram
+                      neste envio.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="rounded-2xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                  Nenhum destinatario selecionado.
+                </div>
+              )}
+            </div>
+
+            {activeFilterBadges.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Filtros ativos
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {activeFilterBadges.map((badge) => (
+                    <Badge
+                      key={badge}
+                      variant="outline"
+                      className="text-[11px]"
+                    >
+                      {badge}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <Button variant="outline" onClick={() => setCurrentStep("message")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar para mensagem
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handlePreview}
+            disabled={!canPreviewOrSend}
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            Abrir preview completo
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderSidebarCard = () => (
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">
+          {currentStep === "audience"
+            ? "Resumo da audiencia"
+            : currentStep === "message"
+              ? "Checklist da mensagem"
+              : "Entrega da campanha"}
+        </CardTitle>
+        <CardDescription className="mt-1">
+          {currentStep === "audience"
+            ? "Veja rapidamente o recorte atual e siga para a criacao da mensagem."
+            : currentStep === "message"
+              ? "Valide se o conteudo esta pronto antes de entrar na fase final."
+              : "Escolha se a campanha sera enviada agora, agendada ou convertida em rotina."}
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Etapa atual
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {campaignSteps[currentStepIndex]?.title}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Selecionados
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {selectedStudents.length}
+            </p>
+          </div>
+        </div>
+
+        {activeFilterBadges.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {activeFilterBadges.map((badge) => (
+              <Badge key={badge} variant="outline" className="text-[11px]">
+                {badge}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold">Amostra da audiencia</p>
+          {selectedStudents.length > 0 ? (
+            <div className="space-y-2">
+              {selectedStudents.slice(0, 5).map((student) => (
+                <div
+                  key={student.id}
+                  className="flex items-center justify-between rounded-2xl border px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {student.full_name}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {student.email || "Sem email"}
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {formatRiskLevel(student.current_risk_level)}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
+              Selecione destinatarios para ativar a campanha.
+            </div>
           )}
+        </div>
+
+        {currentStep === "audience" && (
+          <Button
+            className="w-full"
+            onClick={() => handleStepChange("message")}
+            disabled={selectedStudents.length === 0}
+          >
+            Ir para mensagem
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        )}
+
+        {currentStep === "message" && (
+          <>
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="rounded-2xl border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                {messageContent.trim()
+                  ? "A mensagem ja tem conteudo. Revise variaveis e siga para a etapa final."
+                  : "Escreva a mensagem antes de liberar a revisao da campanha."}
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handlePreview}
+                disabled={!canPreviewOrSend}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                Pre-visualizar mensagem
+              </Button>
+              <Button
+                className="w-full"
+                onClick={() => handleStepChange("review")}
+                disabled={!canPreviewOrSend}
+              >
+                Revisar campanha
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </>
+        )}
+
+        {currentStep === "review" && (
+          <>
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("now")}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
+                    deliveryMode === "now" && "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Send className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">Enviar agora</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Disparo imediato com job monitorado.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("scheduled")}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
+                    deliveryMode === "scheduled" &&
+                      "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">Agendar</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Congela audiencia e mensagem para entrega futura.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("routine")}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
+                    deliveryMode === "routine" && "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Workflow className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">
+                      Transformar em rotina
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Envia a campanha para Automacoes como rascunho de base.
+                  </p>
+                </button>
+              </div>
+
+              {deliveryMode === "scheduled" && (
+                <div className="space-y-3 rounded-2xl border bg-muted/20 p-4">
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="campaign-schedule-title"
+                      className="text-sm font-medium"
+                    >
+                      Nome interno do agendamento
+                    </label>
+                    <Input
+                      id="campaign-schedule-title"
+                      value={scheduledTitle}
+                      onChange={(event) =>
+                        setScheduledTitle(event.target.value)
+                      }
+                      placeholder={buildDefaultScheduledTitle(
+                        selectedStudents.length,
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="campaign-schedule-at"
+                      className="text-sm font-medium"
+                    >
+                      Data e horario
+                    </label>
+                    <Input
+                      id="campaign-schedule-at"
+                      type="datetime-local"
+                      value={scheduledAt}
+                      onChange={(event) => setScheduledAt(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="campaign-schedule-notes"
+                      className="text-sm font-medium"
+                    >
+                      Observacoes
+                    </label>
+                    <Input
+                      id="campaign-schedule-notes"
+                      value={scheduledNotes}
+                      onChange={(event) =>
+                        setScheduledNotes(event.target.value)
+                      }
+                      placeholder="Opcional"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {deliveryMode === "now" && hasActiveJobs && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                  Ja existe um envio em andamento ou na fila. Aguarde a
+                  conclusao antes de disparar outra campanha.
+                </div>
+              )}
+
+              {deliveryMode === "scheduled" && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                  {moodleSession
+                    ? "O agendamento salva o snapshot da audiencia e da mensagem personalizada."
+                    : "Sem sessao atual do Moodle, o snapshot sera salvo, mas a execucao futura depende de reautorizacao habilitada."}
+                </div>
+              )}
+
+              {deliveryMode === "routine" && (
+                <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                  A audiencia e a mensagem serao entregues ao modulo Automacoes
+                  como rascunho. O proximo passo la e definir gatilho, espera e
+                  condicoes.
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handlePreview}
+                  disabled={!canPreviewOrSend}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Pre-visualizar campanha
+                </Button>
+                <Button
+                  onClick={handleLaunchCampaign}
+                  disabled={!canLaunchCampaign || isSending || isScheduling}
+                >
+                  {isSending || isScheduling ? (
+                    <Spinner className="mr-2 h-4 w-4" onAccent />
+                  ) : deliveryMode === "scheduled" ? (
+                    <Clock3 className="mr-2 h-4 w-4" />
+                  ) : deliveryMode === "routine" ? (
+                    <Workflow className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  {deliveryMode === "scheduled"
+                    ? `Agendar para ${selectedStudents.length} aluno${selectedStudents.length !== 1 ? "s" : ""}`
+                    : deliveryMode === "routine"
+                      ? "Transformar em rotina"
+                      : `Enviar agora para ${selectedStudents.length} aluno${selectedStudents.length !== 1 ? "s" : ""}`}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const renderRecentJobsCard = () =>
+    recentJobs.length > 0 ? (
+      <Card className="border-border/70 shadow-none">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Execucoes recentes</CardTitle>
+          <CardDescription>
+            Acompanhe os ultimos disparos sem sair da tela.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {recentJobs.map((job) => (
+            <div key={job.id} className="space-y-2 rounded-2xl border p-3">
+              <div className="flex items-center justify-between gap-2">
+                {getStatusBadge(job.status)}
+                <span className="text-[11px] text-muted-foreground">
+                  {job.sent_count}/{job.total_recipients} enviados
+                </span>
+              </div>
+              <p className="line-clamp-2 text-xs text-foreground">
+                {job.message_content}
+              </p>
+              {job.status === "processing" && (
+                <Progress
+                  value={(job.sent_count / job.total_recipients) * 100}
+                  className="h-1.5"
+                />
+              )}
+              {job.failed_count > 0 && (
+                <span className="flex items-center gap-1 text-[11px] text-destructive">
+                  <AlertCircle className="h-3 w-3" />
+                  {job.failed_count} falhas
+                </span>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    ) : null;
+
+  return (
+    <div className="space-y-4">
+      <Card className="border-border/70 shadow-none">
+        <CardContent className="space-y-4 p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                Construtor da campanha
+              </p>
+              <div>
+                <p className="text-lg font-semibold text-foreground">
+                  Primeiro defina a audiencia, depois monte a mensagem e
+                  finalize a execucao.
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  O fluxo foi reorganizado para funcionar como um wizard de CRM:
+                  selecao, criacao e revisao.
+                </p>
+              </div>
+            </div>
+
+            <Badge variant="secondary" className="w-fit">
+              Canal Moodle
+            </Badge>
+          </div>
+
+          <Progress value={stepProgress} className="h-2" />
+
+          <div className="grid gap-3 md:grid-cols-3">
+            {campaignSteps.map((step, index) => {
+              const isActive = currentStep === step.id;
+              const isCompleted = index < currentStepIndex;
+
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => handleStepChange(step.id)}
+                  className={cn(
+                    "rounded-2xl border px-4 py-4 text-left transition-colors hover:bg-muted/40",
+                    isActive && "border-primary bg-primary/5",
+                    isCompleted && "border-primary/30",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                        isActive || isCompleted
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground",
+                      )}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        index + 1
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {step.title}
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="space-y-4">
+          {currentStep === "audience" && renderAudienceStep()}
+          {currentStep === "message" && renderMessageStep()}
+          {currentStep === "review" && renderReviewStep()}
+        </div>
+
+        <div className="space-y-4">
+          {renderSidebarCard()}
+          {renderRecentJobsCard()}
         </div>
       </div>
 
@@ -805,7 +2012,8 @@ export function BulkSendTab() {
           <DialogHeader>
             <DialogTitle>Escolher Modelo</DialogTitle>
             <DialogDescription>
-              Selecione um modelo compativel com os filtros atuais de destinatarios.
+              Selecione um modelo compativel com os filtros atuais de
+              destinatarios.
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-80">
@@ -815,8 +2023,9 @@ export function BulkSendTab() {
               </p>
             ) : (
               <div className="space-y-2">
-                {templates.map(template => {
-                  const unavailableVariables = templateUnavailableVariables.get(template.id) || [];
+                {templates.map((template) => {
+                  const unavailableVariables =
+                    templateUnavailableVariables.get(template.id) || [];
                   const disabled = unavailableVariables.length > 0;
 
                   return (
@@ -825,10 +2034,10 @@ export function BulkSendTab() {
                       type="button"
                       disabled={disabled}
                       className={cn(
-                        'w-full text-left p-3 rounded-lg border transition-colors',
+                        "w-full text-left p-3 rounded-lg border transition-colors",
                         disabled
-                          ? 'cursor-not-allowed border-dashed opacity-70'
-                          : 'hover:bg-muted/50',
+                          ? "cursor-not-allowed border-dashed opacity-70"
+                          : "hover:bg-muted/50",
                       )}
                       onClick={() => applyTemplate(template)}
                     >
@@ -839,11 +2048,13 @@ export function BulkSendTab() {
                         </Badge>
                         {template.is_favorite && (
                           <Badge variant="secondary" className="text-[10px]">
-                            ★
+                            Favorito
                           </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">{template.content}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                        {template.content}
+                      </p>
                       {disabled && (
                         <p className="mt-2 text-[11px] text-amber-700">
                           {buildUnavailableVariablesText(unavailableVariables)}
@@ -863,7 +2074,8 @@ export function BulkSendTab() {
           <DialogHeader>
             <DialogTitle>Pre-visualizacao da Mensagem</DialogTitle>
             <DialogDescription>
-              Confira como a mensagem personalizada sera enviada para o primeiro destinatario selecionado.
+              Confira como a mensagem personalizada sera enviada para o primeiro
+              destinatario selecionado.
             </DialogDescription>
           </DialogHeader>
           {previewStudent && (
@@ -873,82 +2085,29 @@ export function BulkSendTab() {
                   {previewStudent.full_name.charAt(0)}
                 </div>
                 <div>
-                  <p className="text-sm font-medium">{previewStudent.full_name}</p>
-                  <p className="text-xs text-muted-foreground">Exemplo de como a mensagem sera enviada</p>
+                  <p className="text-sm font-medium">
+                    {previewStudent.full_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Exemplo de como a mensagem sera enviada
+                  </p>
                 </div>
               </div>
               <div className="rounded-lg bg-muted p-4">
                 <p className="text-sm whitespace-pre-wrap">{previewMessage}</p>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Variaveis dependentes de UC ficam disponiveis somente quando uma Unidade Curricular especifica esta selecionada.
+                Variaveis dependentes de UC ficam disponiveis somente quando uma
+                Unidade Curricular especifica esta selecionada.
               </p>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPreviewDialogOpen(false)}>Fechar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Agendar Envio</DialogTitle>
-            <DialogDescription>
-              Este agendamento já guarda o snapshot dos destinatários e das mensagens personalizadas. Se a reautorização automática do Moodle estiver habilitada nas suas configurações, o executor poderá disparar o job sem depender da aba aberta.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label htmlFor="bulk-schedule-title" className="text-sm font-medium">
-                Título
-              </label>
-              <Input
-                id="bulk-schedule-title"
-                value={scheduledTitle}
-                onChange={(event) => setScheduledTitle(event.target.value)}
-                placeholder={buildDefaultScheduledTitle(selectedStudents.length)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="bulk-schedule-at" className="text-sm font-medium">
-                Data e horário
-              </label>
-              <Input
-                id="bulk-schedule-at"
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(event) => setScheduledAt(event.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="bulk-schedule-notes" className="text-sm font-medium">
-                Observações
-              </label>
-              <Input
-                id="bulk-schedule-notes"
-                value={scheduledNotes}
-                onChange={(event) => setScheduledNotes(event.target.value)}
-                placeholder="Opcional"
-              />
-            </div>
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {moodleSession
-                ? 'Os destinatários ficam congelados neste agendamento. Para execução automática, habilite a reautorização do Moodle nas suas configurações.'
-                : 'Os destinatários ficam congelados neste agendamento, mas a sessão atual do Moodle não está disponível. O executor registrará falha se o job vencer sem reautorização habilitada.'}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setScheduleDialogOpen(false)}>
-              Cancelar
-            </Button>
             <Button
-              onClick={handleSchedule}
-              disabled={isScheduling || !scheduledAt.trim() || !canPreviewOrSend}
+              variant="outline"
+              onClick={() => setPreviewDialogOpen(false)}
             >
-              {isScheduling ? <Spinner className="h-4 w-4 mr-1" onAccent /> : <CalendarClock className="h-4 w-4 mr-1" />}
-              Confirmar agendamento
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>

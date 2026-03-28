@@ -118,12 +118,12 @@ export default function SettingsPage() {
                 disabled={isOfflineMode || isSyncing || courses.length > 0}
                 className="w-full"
               >
-                {isSyncing ? 'Sincronizando...' : 'Sincronizacao geral inicial'}
+                {isSyncing ? 'Sincronizando...' : 'Sincronizacao Geral'}
               </Button>
 
               {courses.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  A sincronizacao geral inicial fica disponivel apenas quando ainda nao houver dados na plataforma.
+                  A Sincronizacao Geral fica disponivel apenas quando ainda nao houver dados na plataforma.
                 </p>
               )}
             </CardContent>

@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react';
 import { AlertCircle, Search, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -188,6 +190,36 @@ export function WhatsAppSidebar({
   onSearchChange,
   onSelectThread,
 }: WhatsAppSidebarProps) {
+  const [chatsPage, setChatsPage] = useState(1);
+  const [contactsPage, setContactsPage] = useState(1);
+  const pageSize = 30;
+
+  const chatsTotalPages = Math.max(1, Math.ceil(chats.length / pageSize));
+  const contactsTotalPages = Math.max(1, Math.ceil(contacts.length / pageSize));
+
+  const chatsPageSafe = Math.min(chatsPage, chatsTotalPages);
+  const contactsPageSafe = Math.min(contactsPage, contactsTotalPages);
+
+  const paginatedChats = chats.slice((chatsPageSafe - 1) * pageSize, chatsPageSafe * pageSize);
+  const paginatedContacts = contacts.slice((contactsPageSafe - 1) * pageSize, contactsPageSafe * pageSize);
+
+  useEffect(() => {
+    setChatsPage(1);
+    setContactsPage(1);
+  }, [searchQuery, directoryTab]);
+
+  useEffect(() => {
+    if (chatsPage > chatsTotalPages) {
+      setChatsPage(chatsTotalPages);
+    }
+  }, [chatsPage, chatsTotalPages]);
+
+  useEffect(() => {
+    if (contactsPage > contactsTotalPages) {
+      setContactsPage(contactsTotalPages);
+    }
+  }, [contactsPage, contactsTotalPages]);
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-r bg-card">
       <Tabs
@@ -253,7 +285,7 @@ export function WhatsAppSidebar({
                 />
               ) : (
                 <div className="space-y-2 p-4">
-                  {chats.map((chat) => (
+                  {paginatedChats.map((chat) => (
                     <ChatRow
                       key={chat.id}
                       chat={chat}
@@ -261,6 +293,36 @@ export function WhatsAppSidebar({
                       onSelect={() => onSelectThread(chat.id)}
                     />
                   ))}
+
+                  <div className="flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+                    <span>
+                      Exibindo {(chatsPageSafe - 1) * pageSize + 1}-
+                      {Math.min(chatsPageSafe * pageSize, chats.length)} de {chats.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setChatsPage((current) => Math.max(1, current - 1))}
+                        disabled={chatsPageSafe <= 1}
+                      >
+                        Anterior
+                      </Button>
+                      <span>
+                        {chatsPageSafe}/{chatsTotalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setChatsPage((current) => Math.min(chatsTotalPages, current + 1))}
+                        disabled={chatsPageSafe >= chatsTotalPages}
+                      >
+                        Próxima
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </ScrollArea>
@@ -281,7 +343,7 @@ export function WhatsAppSidebar({
                 />
               ) : (
                 <div className="space-y-2 p-4">
-                  {contacts.map((contact) => (
+                  {paginatedContacts.map((contact) => (
                     <ContactRow
                       key={contact.id}
                       contact={contact}
@@ -289,6 +351,36 @@ export function WhatsAppSidebar({
                       onSelect={() => onSelectThread(contact.id)}
                     />
                   ))}
+
+                  <div className="flex items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+                    <span>
+                      Exibindo {(contactsPageSafe - 1) * pageSize + 1}-
+                      {Math.min(contactsPageSafe * pageSize, contacts.length)} de {contacts.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setContactsPage((current) => Math.max(1, current - 1))}
+                        disabled={contactsPageSafe <= 1}
+                      >
+                        Anterior
+                      </Button>
+                      <span>
+                        {contactsPageSafe}/{contactsTotalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setContactsPage((current) => Math.min(contactsTotalPages, current + 1))}
+                        disabled={contactsPageSafe >= contactsTotalPages}
+                      >
+                        Próxima
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </ScrollArea>

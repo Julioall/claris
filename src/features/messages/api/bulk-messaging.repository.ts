@@ -1,9 +1,9 @@
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from "@/integrations/supabase/client";
 import {
   isStudentActivityPendingSubmission,
   isStudentActivityWeightedInGradebook,
-} from '@/lib/student-activity-status';
-import { listAccessibleCourseIds } from '@/lib/course-access';
+} from "@/lib/student-activity-status";
+import { listAccessibleCourseIds } from "@/lib/course-access";
 
 import type {
   BulkMessageJobPreview,
@@ -12,7 +12,7 @@ import type {
   GradeLookup,
   PendingLookup,
   StudentOption,
-} from '../types';
+} from "../types";
 
 interface AccessibleCourseRow {
   id: string;
@@ -65,13 +65,15 @@ interface StartBulkMessageSendInput {
 }
 
 export type StartBulkMessageSendResult =
-  | { kind: 'duplicate'; jobId: string }
-  | { kind: 'started'; jobId: string };
+  | { kind: "duplicate"; jobId: string }
+  | { kind: "started"; jobId: string };
 
 interface StartBulkMessageSendFunctionResult {
   jobId?: string;
   kind?: string;
 }
+
+const BULK_AUDIENCE_IN_BATCH_SIZE = 50;
 
 function emptyAudienceData(): BulkSendAudienceData {
   return {
@@ -81,45 +83,137 @@ function emptyAudienceData(): BulkSendAudienceData {
   };
 }
 
-function resolveEnrollmentStatus(statusEntry?: { validStatuses: Set<string>; allStatuses: Set<string> }) {
-  if (!statusEntry) return 'inativo';
+function chunkValues<T>(
+  values: T[],
+  size = BULK_AUDIENCE_IN_BATCH_SIZE,
+): T[][] {
+  const uniqueValues = Array.from(new Set(values));
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < uniqueValues.length; index += size) {
+    chunks.push(uniqueValues.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
+async function listCoursesByIds(
+  courseIds: string[],
+): Promise<AccessibleCourseRow[]> {
+  const results = await Promise.all(
+    chunkValues(courseIds).map(async (courseIdBatch) => {
+      const { data, error } = await supabase
+        .from("courses")
+        .select("id, name, category, start_date")
+        .in("id", courseIdBatch);
+
+      if (error) throw error;
+      return (data || []) as AccessibleCourseRow[];
+    }),
+  );
+
+  return results.flat();
+}
+
+async function listStudentCoursesByCourseIds(
+  courseIds: string[],
+): Promise<StudentCourseRow[]> {
+  const results = await Promise.all(
+    chunkValues(courseIds).map(async (courseIdBatch) => {
+      const { data, error } = await supabase
+        .from("student_courses")
+        .select(
+          "student_id, course_id, enrollment_status, last_access, students(id, full_name, email, moodle_user_id, current_risk_level, last_access)",
+        )
+        .in("course_id", courseIdBatch);
+
+      if (error) throw error;
+      return (data || []) as StudentCourseRow[];
+    }),
+  );
+
+  return results.flat();
+}
+
+async function listStudentCourseGradesByCourseIds(
+  courseIds: string[],
+): Promise<StudentCourseGradeRow[]> {
+  const results = await Promise.all(
+    chunkValues(courseIds).map(async (courseIdBatch) => {
+      const { data, error } = await supabase
+        .from("student_course_grades")
+        .select("student_id, course_id, grade_formatted, grade_percentage")
+        .in("course_id", courseIdBatch);
+
+      if (error) throw error;
+      return (data || []) as StudentCourseGradeRow[];
+    }),
+  );
+
+  return results.flat();
+}
+
+async function listPendingActivitiesByCourseIds(
+  courseIds: string[],
+): Promise<StudentActivityRow[]> {
+  const results = await Promise.all(
+    chunkValues(courseIds).map(async (courseIdBatch) => {
+      const { data, error } = await supabase
+        .from("student_activities")
+        .select(
+          "student_id, course_id, activity_type, grade, grade_max, percentage, submitted_at, completed_at, graded_at, status, hidden",
+        )
+        .eq("hidden", false)
+        .in("course_id", courseIdBatch);
+
+      if (error) throw error;
+      return (data || []) as StudentActivityRow[];
+    }),
+  );
+
+  return results.flat();
+}
+
+function resolveEnrollmentStatus(statusEntry?: {
+  validStatuses: Set<string>;
+  allStatuses: Set<string>;
+}) {
+  if (!statusEntry) return "inativo";
 
   const { validStatuses, allStatuses } = statusEntry;
 
   if (validStatuses.size > 0) {
-    if (validStatuses.has('suspenso')) return 'suspenso';
-    if (validStatuses.has('concluido')) return 'concluido';
-    if (validStatuses.has('ativo')) return 'ativo';
-    return 'inativo';
+    if (validStatuses.has("suspenso")) return "suspenso";
+    if (validStatuses.has("concluido")) return "concluido";
+    if (validStatuses.has("ativo")) return "ativo";
+    return "inativo";
   }
 
-  if (allStatuses.has('concluido')) return 'concluido';
-  if (allStatuses.has('ativo')) return 'ativo';
-  if (allStatuses.has('suspenso')) return 'suspenso';
-  return 'inativo';
+  if (allStatuses.has("concluido")) return "concluido";
+  if (allStatuses.has("ativo")) return "ativo";
+  if (allStatuses.has("suspenso")) return "suspenso";
+  return "inativo";
 }
 
 export function buildStudentCourseKey(studentId: string, courseId: string) {
   return `${studentId}:${courseId}`;
 }
 
-export async function listBulkSendAudienceForUser(userId: string): Promise<BulkSendAudienceData> {
-  const accessibleCourseIds = await listAccessibleCourseIds(userId, 'tutor');
+export async function listBulkSendAudienceForUser(
+  userId: string,
+): Promise<BulkSendAudienceData> {
+  const accessibleCourseIds = await listAccessibleCourseIds(userId, "tutor");
 
   if (accessibleCourseIds.length === 0) {
     return emptyAudienceData();
   }
 
-  const { data: courses, error: coursesError } = await supabase
-    .from('courses')
-    .select('id, name, category, start_date')
-    .in('id', accessibleCourseIds);
+  const courseMap = new Map<
+    string,
+    { id: string; name: string; category?: string; start_date?: string | null }
+  >();
 
-  if (coursesError) throw coursesError;
-
-  const courseMap = new Map<string, { id: string; name: string; category?: string; start_date?: string | null }>();
-
-  (courses as AccessibleCourseRow[]).forEach((course) => {
+  (await listCoursesByIds(accessibleCourseIds)).forEach((course) => {
     courseMap.set(course.id, {
       id: course.id,
       name: course.name,
@@ -134,14 +228,7 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
     return emptyAudienceData();
   }
 
-  const { data: studentCourses, error: studentCoursesError } = await supabase
-    .from('student_courses')
-    .select(
-      'student_id, course_id, enrollment_status, last_access, students(id, full_name, email, moodle_user_id, current_risk_level, last_access)',
-    )
-    .in('course_id', courseIds);
-
-  if (studentCoursesError) throw studentCoursesError;
+  const studentCourses = await listStudentCoursesByCourseIds(courseIds);
 
   if (!studentCourses?.length) {
     return emptyAudienceData();
@@ -149,20 +236,28 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
 
   const now = new Date();
   const studentMap = new Map<string, StudentOption>();
-  const statusMap = new Map<string, { validStatuses: Set<string>; allStatuses: Set<string> }>();
+  const statusMap = new Map<
+    string,
+    { validStatuses: Set<string>; allStatuses: Set<string> }
+  >();
 
   (studentCourses as StudentCourseRow[]).forEach((studentCourse) => {
     const student = studentCourse.students;
     if (!student) return;
 
     const course = courseMap.get(studentCourse.course_id);
-    const enrollmentStatus = (studentCourse.enrollment_status || 'ativo').toLowerCase();
-    const isValidCourse = !course?.start_date || new Date(course.start_date) <= now;
+    const enrollmentStatus = (
+      studentCourse.enrollment_status || "ativo"
+    ).toLowerCase();
+    const isValidCourse =
+      !course?.start_date || new Date(course.start_date) <= now;
 
     const currentStatus = statusMap.get(student.id);
     if (!currentStatus) {
       statusMap.set(student.id, {
-        validStatuses: isValidCourse ? new Set([enrollmentStatus]) : new Set<string>(),
+        validStatuses: isValidCourse
+          ? new Set([enrollmentStatus])
+          : new Set<string>(),
         allStatuses: new Set([enrollmentStatus]),
       });
     } else {
@@ -180,7 +275,7 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
         moodle_user_id: student.moodle_user_id,
         current_risk_level: student.current_risk_level,
         last_access: student.last_access,
-        enrollment_status: 'ativo',
+        enrollment_status: "ativo",
         courses: [],
       });
     }
@@ -192,7 +287,7 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
         category: course.category,
         last_access: studentCourse.last_access,
         start_date: course.start_date,
-        enrollment_status,
+        enrollment_status: enrollmentStatus,
       });
     }
   });
@@ -202,32 +297,19 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
       ...student,
       enrollment_status: resolveEnrollmentStatus(statusMap.get(student.id)),
     }))
-    .sort((a, b) => a.full_name.localeCompare(b.full_name, 'pt-BR'));
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, "pt-BR"));
 
-  const studentIds = Array.from(
-    new Set((studentCourses as StudentCourseRow[]).map((studentCourse) => studentCourse.student_id)),
-  );
+  const knownStudentIds = new Set(studentMap.keys());
 
-  const [{ data: grades, error: gradesError }, { data: pendingActivities, error: pendingActivitiesError }] =
-    await Promise.all([
-      supabase
-        .from('student_course_grades')
-        .select('student_id, course_id, grade_formatted, grade_percentage')
-        .in('course_id', courseIds)
-        .in('student_id', studentIds),
-      supabase
-        .from('student_activities')
-        .select('student_id, course_id, activity_type, grade, grade_max, percentage, submitted_at, completed_at, graded_at, status, hidden')
-        .in('course_id', courseIds)
-        .in('student_id', studentIds)
-        .eq('hidden', false),
-    ]);
-
-  if (gradesError) throw gradesError;
-  if (pendingActivitiesError) throw pendingActivitiesError;
+  const [grades, pendingActivities] = await Promise.all([
+    listStudentCourseGradesByCourseIds(courseIds),
+    listPendingActivitiesByCourseIds(courseIds),
+  ]);
 
   const gradeLookup: GradeLookup = {};
-  (grades as StudentCourseGradeRow[] | null)?.forEach((grade) => {
+  grades.forEach((grade) => {
+    if (!knownStudentIds.has(grade.student_id)) return;
+
     gradeLookup[buildStudentCourseKey(grade.student_id, grade.course_id)] = {
       gradeFormatted: grade.grade_formatted,
       gradePercentage: grade.grade_percentage,
@@ -235,7 +317,8 @@ export async function listBulkSendAudienceForUser(userId: string): Promise<BulkS
   });
 
   const pendingLookup: PendingLookup = {};
-  (pendingActivities as StudentActivityRow[] | null)?.forEach((activity) => {
+  pendingActivities.forEach((activity) => {
+    if (!knownStudentIds.has(activity.student_id)) return;
     if (!isStudentActivityWeightedInGradebook(activity)) return;
     if (!isStudentActivityPendingSubmission(activity)) return;
 
@@ -255,10 +338,12 @@ export async function listRecentBulkMessageJobsForUser(
   limit = 5,
 ): Promise<BulkMessageJobPreview[]> {
   const { data, error } = await supabase
-    .from('bulk_message_jobs')
-    .select('id, message_content, total_recipients, sent_count, failed_count, status, created_at, origin')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
+    .from("bulk_message_jobs")
+    .select(
+      "id, message_content, total_recipients, sent_count, failed_count, status, created_at, origin",
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error) throw error;
@@ -266,13 +351,17 @@ export async function listRecentBulkMessageJobsForUser(
   return (data || []) as BulkMessageJobPreview[];
 }
 
-export async function listActiveBulkMessageJobsForUser(userId: string): Promise<BulkMessageJobPreview[]> {
+export async function listActiveBulkMessageJobsForUser(
+  userId: string,
+): Promise<BulkMessageJobPreview[]> {
   const { data, error } = await supabase
-    .from('bulk_message_jobs')
-    .select('id, message_content, total_recipients, sent_count, failed_count, status, created_at, origin')
-    .eq('user_id', userId)
-    .in('status', ['pending', 'processing'])
-    .order('created_at', { ascending: false });
+    .from("bulk_message_jobs")
+    .select(
+      "id, message_content, total_recipients, sent_count, failed_count, status, created_at, origin",
+    )
+    .eq("user_id", userId)
+    .in("status", ["pending", "processing"])
+    .order("created_at", { ascending: false });
 
   if (error) throw error;
 
@@ -283,16 +372,16 @@ export async function startBulkMessageSend(
   input: StartBulkMessageSendInput,
 ): Promise<StartBulkMessageSendResult> {
   if (input.recipients.length === 0) {
-    throw new Error('Nenhum destinatario informado para o envio em massa');
+    throw new Error("Nenhum destinatario informado para o envio em massa");
   }
 
   const normalizedMessage = input.messageContent.trim();
 
-  const { data, error } = await supabase.functions.invoke('bulk-message-send', {
+  const { data, error } = await supabase.functions.invoke("bulk-message-send", {
     body: {
       message_content: normalizedMessage,
       moodleUrl: input.moodleUrl,
-      origin: 'manual',
+      origin: "manual",
       recipients: input.recipients.map((recipient) => ({
         moodle_user_id: recipient.moodleUserId,
         personalized_message: recipient.personalizedMessage,
@@ -307,19 +396,19 @@ export async function startBulkMessageSend(
 
   const result = (data || {}) as StartBulkMessageSendFunctionResult;
 
-  if (result.kind === 'duplicate' && typeof result.jobId === 'string') {
+  if (result.kind === "duplicate" && typeof result.jobId === "string") {
     return {
-      kind: 'duplicate',
+      kind: "duplicate",
       jobId: result.jobId,
     };
   }
 
-  if (result.kind === 'started' && typeof result.jobId === 'string') {
+  if (result.kind === "started" && typeof result.jobId === "string") {
     return {
-      kind: 'started',
+      kind: "started",
       jobId: result.jobId,
     };
   }
 
-  throw new Error('Resposta invalida da edge function bulk-message-send');
+  throw new Error("Resposta invalida da edge function bulk-message-send");
 }

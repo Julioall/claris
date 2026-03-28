@@ -9,9 +9,9 @@ interface AdminRouteProps {
 
 export function AdminRoute({ children }: AdminRouteProps) {
   const { isAuthenticated, isLoading } = useAuth();
-  const { isAdmin } = usePermissions();
+  const { isAdmin, isLoading: isPermissionsLoading } = usePermissions();
 
-  if (isLoading) {
+  if (isLoading || (isAuthenticated && isPermissionsLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Spinner className="h-8 w-8" />

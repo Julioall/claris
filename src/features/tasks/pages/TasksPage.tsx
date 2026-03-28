@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CalendarRange,
+  ChevronLeft,
+  ChevronRight,
   CheckSquare,
   LayoutDashboard,
   List,
@@ -37,6 +39,8 @@ const STATUS_TABS: { value: StatusFilter; label: string }[] = [
   { value: 'done', label: 'Concluído' },
 ];
 
+const TASKS_PAGE_SIZE = 24;
+
 export default function TasksPage() {
   const { tasks, isLoading, createTask, updateTask, deleteTask, isCreating, isUpdating } = useTasks();
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
@@ -50,6 +54,7 @@ export default function TasksPage() {
   const [defaultStatus, setDefaultStatus] = useState<TaskStatus>('todo');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<Task | null>(null);
+  const [page, setPage] = useState(1);
 
   const baseFiltered = useMemo(() => {
     const tagQuery = tagSearch.trim().toLowerCase();
@@ -86,6 +91,21 @@ export default function TasksPage() {
 
   const aiTaskCount = useMemo(() => tasks.filter((task) => task.suggested_by_ai).length, [tasks]);
   const isKanban = viewMode === 'kanban';
+  const totalPages = Math.max(1, Math.ceil(filtered.length / TASKS_PAGE_SIZE));
+  const paginatedTasks = useMemo(() => {
+    const startIndex = (page - 1) * TASKS_PAGE_SIZE;
+    return filtered.slice(startIndex, startIndex + TASKS_PAGE_SIZE);
+  }, [filtered, page]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [viewMode, statusFilter, priorityFilter, dateWindow, tagSearch, aiOnly]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const openCreate = (status: TaskStatus = 'todo') => {
     setDefaultStatus(status);
@@ -258,7 +278,7 @@ export default function TasksPage() {
         </div>
       ) : isKanban ? (
         <TaskKanbanBoard
-          tasks={filtered}
+          tasks={paginatedTasks}
           isLoading={isLoading}
           onEdit={openEdit}
           onDelete={(id) => setDeleteId(id)}
@@ -285,7 +305,7 @@ export default function TasksPage() {
         </div>
       ) : (
         <div className="space-y-2">
-          {filtered.map((task) => (
+          {paginatedTasks.map((task) => (
             <TaskCard
               key={task.id}
               task={task}
@@ -295,6 +315,37 @@ export default function TasksPage() {
               onClick={setDetailTask}
             />
           ))}
+        </div>
+      )}
+
+      {filtered.length > 0 && (
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {(page - 1) * TASKS_PAGE_SIZE + 1}-{(page - 1) * TASKS_PAGE_SIZE + paginatedTasks.length} de {filtered.length} tarefas
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       )}
 

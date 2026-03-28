@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
 import { useStudentsData } from "@/features/students/hooks/useStudentsData";
 import { createQueryClientWrapper } from "@/test/query-client";
-import type { StudentListItem } from "@/features/students/types";
+import type { StudentListItem, StudentListPage } from "@/features/students/types";
 
 const useAuthMock = vi.fn();
 const listStudentsForUserMock = vi.fn();
@@ -15,7 +15,7 @@ vi.mock("@/features/students/api/students.repository", () => ({
   listStudentsForUser: (...args: unknown[]) => listStudentsForUserMock(...args),
 }));
 
-const studentsResponse: StudentListItem[] = [
+const studentsItems: StudentListItem[] = [
   {
     id: "s-2",
     moodle_user_id: "11",
@@ -45,6 +45,11 @@ const studentsResponse: StudentListItem[] = [
   },
 ];
 
+const studentsResponse: StudentListPage = {
+  items: studentsItems,
+  totalCount: studentsItems.length,
+};
+
 describe("useStudentsData", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -61,8 +66,9 @@ describe("useStudentsData", () => {
     });
 
     expect(result.current.error).toBeNull();
-    expect(result.current.students).toEqual(studentsResponse);
-    expect(listStudentsForUserMock).toHaveBeenCalledWith({ userId: "user-1", courseId: undefined });
+    expect(result.current.students).toEqual(studentsItems);
+    expect(result.current.totalCount).toBe(studentsItems.length);
+    expect(listStudentsForUserMock).toHaveBeenCalledWith({ courseId: undefined, page: 1, pageSize: 30, riskFilter: undefined, searchQuery: undefined, statusFilter: undefined });
   });
 
   it("returns empty data when user is not authenticated", async () => {
@@ -76,6 +82,7 @@ describe("useStudentsData", () => {
     });
 
     expect(result.current.students).toEqual([]);
+    expect(result.current.totalCount).toBe(0);
     expect(listStudentsForUserMock).not.toHaveBeenCalled();
   });
 
@@ -92,12 +99,12 @@ describe("useStudentsData", () => {
 
   it("applies explicit course filter when provided", async () => {
     const { wrapper } = createQueryClientWrapper();
-    const { result } = renderHook(() => useStudentsData("course-fixed"), { wrapper });
+    const { result } = renderHook(() => useStudentsData({ courseId: "course-fixed" }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(listStudentsForUserMock).toHaveBeenCalledWith({ userId: "user-1", courseId: "course-fixed" });
+    expect(listStudentsForUserMock).toHaveBeenCalledWith({ courseId: "course-fixed", page: 1, pageSize: 30, riskFilter: undefined, searchQuery: undefined, statusFilter: undefined });
   });
 });

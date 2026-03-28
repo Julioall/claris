@@ -10,6 +10,9 @@ export interface Student {
   moodle_user_id: string;
   full_name: string;
   email?: string;
+  phone?: string;
+  phone_number?: string;
+  mobile_phone?: string;
   avatar_url?: string;
   current_risk_level: RiskLevel;
   risk_reasons?: string[];
@@ -18,7 +21,6 @@ export interface Student {
   created_at: string;
   updated_at: string;
   courses?: Course[];
-  pending_tasks_count?: number;
 }
 
 export interface StudentRecord {
@@ -26,6 +28,9 @@ export interface StudentRecord {
   moodle_user_id: string | number;
   full_name: string;
   email?: string | null;
+  phone?: string | null;
+  phone_number?: string | null;
+  mobile_phone?: string | null;
   avatar_url?: string | null;
   current_risk_level: RiskLevel;
   risk_reasons?: string[] | null;
@@ -33,11 +38,15 @@ export interface StudentRecord {
   last_access?: string | null;
   created_at: string | null;
   updated_at: string | null;
-  pending_tasks_count?: number | null;
 }
 
 export interface StudentListItem extends StudentRecord {
   enrollment_status: EnrollmentStatus;
+}
+
+export interface StudentListPage {
+  items: StudentListItem[];
+  totalCount: number;
 }
 
 export type StudentProfile = StudentRecord;

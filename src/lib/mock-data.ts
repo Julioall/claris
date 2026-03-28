@@ -34,7 +34,6 @@ export const mockCourses: Course[] = [
     updated_at: daysAgo(0),
     students_count: 32,
     at_risk_count: 5,
-    pending_tasks_count: 12,
   },
   {
     id: 'course-2',
@@ -49,7 +48,6 @@ export const mockCourses: Course[] = [
     updated_at: daysAgo(0),
     students_count: 28,
     at_risk_count: 3,
-    pending_tasks_count: 8,
   },
   {
     id: 'course-3',
@@ -64,7 +62,6 @@ export const mockCourses: Course[] = [
     updated_at: daysAgo(1),
     students_count: 18,
     at_risk_count: 2,
-    pending_tasks_count: 5,
   },
 ];
 
@@ -81,7 +78,6 @@ export const mockStudents: Student[] = [
     last_access: daysAgo(12),
     created_at: daysAgo(90),
     updated_at: daysAgo(1),
-    pending_tasks_count: 4,
   },
   {
     id: 'student-2',
@@ -94,7 +90,6 @@ export const mockStudents: Student[] = [
     last_access: daysAgo(5),
     created_at: daysAgo(90),
     updated_at: daysAgo(2),
-    pending_tasks_count: 2,
   },
   {
     id: 'student-3',
@@ -107,7 +102,6 @@ export const mockStudents: Student[] = [
     last_access: daysAgo(2),
     created_at: daysAgo(90),
     updated_at: daysAgo(2),
-    pending_tasks_count: 1,
   },
   {
     id: 'student-4',
@@ -120,7 +114,6 @@ export const mockStudents: Student[] = [
     last_access: daysAgo(1),
     created_at: daysAgo(90),
     updated_at: daysAgo(1),
-    pending_tasks_count: 0,
   },
   {
     id: 'student-5',
@@ -133,7 +126,6 @@ export const mockStudents: Student[] = [
     last_access: daysAgo(8),
     created_at: daysAgo(60),
     updated_at: daysAgo(1),
-    pending_tasks_count: 3,
   },
   {
     id: 'student-6',
@@ -146,7 +138,6 @@ export const mockStudents: Student[] = [
     last_access: daysAgo(15),
     created_at: daysAgo(60),
     updated_at: daysAgo(0),
-    pending_tasks_count: 5,
   },
 ];
 

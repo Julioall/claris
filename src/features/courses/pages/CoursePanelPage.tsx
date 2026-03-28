@@ -56,9 +56,32 @@ export default function CoursePanelPage() {
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
   const [isSyncingSection, setIsSyncingSection] = useState<'students' | 'activities' | null>(null);
+  const [studentsPage, setStudentsPage] = useState(1);
+  const [activitiesPage, setActivitiesPage] = useState(1);
+
+  const studentsPageSize = 25;
+  const activitiesPageSize = 12;
 
   const activeStudentIds = new Set(students.map((student) => student.id));
   const studentsById = new Map(students.map((student) => [student.id, student]));
+  const visibleActivities = isEditMode
+    ? activities
+    : activities.filter((activity) => !activity.hidden);
+
+  const studentsTotalPages = Math.max(1, Math.ceil(students.length / studentsPageSize));
+  const activitiesTotalPages = Math.max(1, Math.ceil(visibleActivities.length / activitiesPageSize));
+
+  const studentsPageSafe = Math.min(studentsPage, studentsTotalPages);
+  const activitiesPageSafe = Math.min(activitiesPage, activitiesTotalPages);
+
+  const paginatedStudents = students.slice(
+    (studentsPageSafe - 1) * studentsPageSize,
+    studentsPageSafe * studentsPageSize,
+  );
+  const paginatedActivities = visibleActivities.slice(
+    (activitiesPageSafe - 1) * activitiesPageSize,
+    activitiesPageSafe * activitiesPageSize,
+  );
 
   const formatDate = (date: string | null | undefined) => {
     if (!date) return '-';
@@ -104,6 +127,26 @@ export default function CoursePanelPage() {
   useEffect(() => {
     setExpandedActivities({});
   }, [course?.id]);
+
+  useEffect(() => {
+    setStudentsPage(1);
+  }, [course?.id]);
+
+  useEffect(() => {
+    setActivitiesPage(1);
+  }, [course?.id, isEditMode]);
+
+  useEffect(() => {
+    if (studentsPage > studentsTotalPages) {
+      setStudentsPage(studentsTotalPages);
+    }
+  }, [studentsPage, studentsTotalPages]);
+
+  useEffect(() => {
+    if (activitiesPage > activitiesTotalPages) {
+      setActivitiesPage(activitiesTotalPages);
+    }
+  }, [activitiesPage, activitiesTotalPages]);
 
   if (isLoading) {
     return (
@@ -361,191 +404,245 @@ export default function CoursePanelPage() {
                   </p>
                 </div>
               ) : (
-                <div className="divide-y">
-                  {students.map((student) => (
-                    <Link
-                      key={student.id}
-                      to={`/alunos/${student.id}`}
-                      className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                          {student.avatar_url ? (
-                            <img src={student.avatar_url} alt="" className="h-10 w-10 rounded-full" />
-                          ) : (
-                            <GraduationCap className="h-5 w-5 text-muted-foreground" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium">{student.full_name}</p>
-                          {student.email && (
-                            <p className="text-xs text-muted-foreground">{student.email}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <RiskBadge level={student.current_risk_level || 'normal'} />
-                        {student.last_access && (
-                          <span className="hidden text-xs text-muted-foreground md:block">
-                            Último acesso: {formatDateTime(student.last_access)}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="activities" className="mt-4">
-          <Card>
-            <CardContent className="p-0">
-              {(() => {
-                const visibleActivities = isEditMode
-                  ? activities
-                  : activities.filter((activity) => !activity.hidden);
-
-                if (visibleActivities.length === 0) {
-                  return (
-                    <div className="flex flex-col items-center justify-center py-12">
-                      <ClipboardList className="mb-4 h-12 w-12 text-muted-foreground/50" />
-                      <h3 className="text-lg font-medium">Nenhuma atividade encontrada</h3>
-                      <p className="text-sm text-muted-foreground">
-                        Use o botão "Sincronizar atividades e notas" nesta aba para carregar as atividades.
-                      </p>
-                    </div>
-                  );
-                }
-
-                return (
+                <>
                   <div className="divide-y">
-                    {visibleActivities.map((activity) => {
-                      const isAssignment = activity.activity_type === 'assign' || activity.activity_type === 'assignment';
-                      const activitySubmissionsForAssign = isAssignment
-                        ? activitySubmissions
-                          .filter((submission) =>
-                            submission.moodle_activity_id === activity.moodle_activity_id
-                            && activeStudentIds.has(submission.student_id),
-                          )
-                          .sort((left, right) => {
-                            const studentA = studentsById.get(left.student_id)?.full_name || '';
-                            const studentB = studentsById.get(right.student_id)?.full_name || '';
-                            return studentA.localeCompare(studentB, 'pt-BR');
-                          })
-                        : [];
-                      const pendingSubmissionCount = activitySubmissionsForAssign.filter(
-                        (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_submission',
-                      ).length;
-                      const pendingCorrectionCount = activitySubmissionsForAssign.filter(
-                        (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_correction',
-                      ).length;
-                      const isExpanded = Boolean(expandedActivities[activity.moodle_activity_id]);
-
-                      return (
-                        <div
-                          key={activity.id}
-                          className={cn(
-                            'p-4 transition-opacity',
-                            activity.hidden && 'bg-muted/30 opacity-50',
-                          )}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0 flex-1 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <p
-                                  className={cn(
-                                    'font-medium',
-                                    activity.hidden && 'line-through text-muted-foreground',
-                                  )}
-                                >
-                                  {activity.activity_name}
-                                </p>
-                                {activity.hidden && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    <EyeOff className="mr-1 h-3 w-3" />
-                                    Oculta
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                {activity.activity_type && (
-                                  <Badge variant="outline" className="text-xs">
-                                    {activity.activity_type}
-                                  </Badge>
-                                )}
-                                {activity.due_date && (
-                                  <span>Prazo: {formatDate(activity.due_date)}</span>
-                                )}
-                              </div>
-                              {isAssignment && (
-                                <div className="text-xs text-muted-foreground">
-                                  <span>Entregas: {activitySubmissionsForAssign.length}</span>
-                                  <span className="mx-2">•</span>
-                                  <span>Pendente de Envio: {pendingSubmissionCount}</span>
-                                  <span className="mx-2">•</span>
-                                  <span>Pendente de Correção: {pendingCorrectionCount}</span>
-                                </div>
-                              )}
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                              {isEditMode && (
-                                <div className="flex items-center gap-4">
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div className="flex items-center gap-2">
-                                          <Switch
-                                            checked={!activity.hidden}
-                                            onCheckedChange={(checked) => {
-                                              void toggleActivityVisibility(activity.moodle_activity_id, !checked);
-                                            }}
-                                          />
-                                          {activity.hidden ? (
-                                            <EyeOff className="h-4 w-4 text-muted-foreground" />
-                                          ) : (
-                                            <Eye className="h-4 w-4 text-primary" />
-                                          )}
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p>
-                                          {activity.hidden
-                                            ? 'Exibir atividade nas métricas'
-                                            : 'Ocultar atividade das métricas'}
-                                        </p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </div>
-                              )}
-
-                            </div>
+                    {paginatedStudents.map((student) => (
+                      <Link
+                        key={student.id}
+                        to={`/alunos/${student.id}`}
+                        className="flex items-center justify-between p-4 transition-colors hover:bg-muted/50"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
+                            {student.avatar_url ? (
+                              <img src={student.avatar_url} alt="" className="h-10 w-10 rounded-full" />
+                            ) : (
+                              <GraduationCap className="h-5 w-5 text-muted-foreground" />
+                            )}
                           </div>
-
-                            {isAssignment && (
-                              <AssignmentSuggestionPanel
-                                activity={activity}
-                                submissions={activitySubmissionsForAssign}
-                                studentsById={studentsById}
-                                isExpanded={isExpanded}
-                                onToggleExpand={() => toggleActivityExpansion(activity.moodle_activity_id)}
-                                onApproved={refetch}
-                              />
+                          <div>
+                            <p className="font-medium">{student.full_name}</p>
+                            {student.email && (
+                              <p className="text-xs text-muted-foreground">{student.email}</p>
                             )}
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className="flex items-center gap-3">
+                          <RiskBadge level={student.current_risk_level || 'normal'} />
+                          {student.last_access && (
+                            <span className="hidden text-xs text-muted-foreground md:block">
+                              Último acesso: {formatDateTime(student.last_access)}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
                   </div>
-                );
-              })()}
-            </CardContent>
-          </Card>
-        </TabsContent>
+
+                  <div className="flex items-center justify-between gap-3 border-t px-4 py-3 text-xs text-muted-foreground">
+                    <span>
+                      Exibindo {(studentsPageSafe - 1) * studentsPageSize + 1}-
+                      {Math.min(studentsPageSafe * studentsPageSize, students.length)} de {students.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStudentsPage((current) => Math.max(1, current - 1))}
+                        disabled={studentsPageSafe <= 1}
+                      >
+                        Anterior
+                      </Button>
+                      <span>
+                        Página {studentsPageSafe} de {studentsTotalPages}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setStudentsPage((current) => Math.min(studentsTotalPages, current + 1))}
+                        disabled={studentsPageSafe >= studentsTotalPages}
+                      >
+                        Próxima
+                      </Button>
+                    </div>
+                  </div>
+                </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="activities" className="mt-4">
+            <Card>
+              <CardContent className="p-0">
+                {visibleActivities.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <ClipboardList className="mb-4 h-12 w-12 text-muted-foreground/50" />
+                    <h3 className="text-lg font-medium">Nenhuma atividade encontrada</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Use o botão "Sincronizar atividades e notas" nesta aba para carregar as atividades.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="divide-y">
+                      {paginatedActivities.map((activity) => {
+                        const isAssignment = activity.activity_type === 'assign' || activity.activity_type === 'assignment';
+                        const activitySubmissionsForAssign = isAssignment
+                          ? activitySubmissions
+                            .filter((submission) =>
+                              submission.moodle_activity_id === activity.moodle_activity_id
+                              && activeStudentIds.has(submission.student_id),
+                            )
+                            .sort((left, right) => {
+                              const studentA = studentsById.get(left.student_id)?.full_name || '';
+                              const studentB = studentsById.get(right.student_id)?.full_name || '';
+                              return studentA.localeCompare(studentB, 'pt-BR');
+                            })
+                          : [];
+                        const pendingSubmissionCount = activitySubmissionsForAssign.filter(
+                          (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_submission',
+                        ).length;
+                        const pendingCorrectionCount = activitySubmissionsForAssign.filter(
+                          (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_correction',
+                        ).length;
+                        const isExpanded = Boolean(expandedActivities[activity.moodle_activity_id]);
+
+                        return (
+                          <div
+                            key={activity.id}
+                            className={cn(
+                              'p-4 transition-opacity',
+                              activity.hidden && 'bg-muted/30 opacity-50',
+                            )}
+                          >
+                            <div className="space-y-3">
+                              <div className="flex items-start justify-between gap-4">
+                              <div className="min-w-0 flex-1 space-y-1">
+                                <div className="flex items-center gap-2">
+                                  <p
+                                    className={cn(
+                                      'font-medium',
+                                      activity.hidden && 'line-through text-muted-foreground',
+                                    )}
+                                  >
+                                    {activity.activity_name}
+                                  </p>
+                                  {activity.hidden && (
+                                    <Badge variant="secondary" className="text-xs">
+                                      <EyeOff className="mr-1 h-3 w-3" />
+                                      Oculta
+                                    </Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  {activity.activity_type && (
+                                    <Badge variant="outline" className="text-xs">
+                                      {activity.activity_type}
+                                    </Badge>
+                                  )}
+                                  {activity.due_date && (
+                                    <span>Prazo: {formatDate(activity.due_date)}</span>
+                                  )}
+                                </div>
+                                {isAssignment && (
+                                  <div className="text-xs text-muted-foreground">
+                                    <span>Entregas: {activitySubmissionsForAssign.length}</span>
+                                    <span className="mx-2">•</span>
+                                    <span>Pendente de Envio: {pendingSubmissionCount}</span>
+                                    <span className="mx-2">•</span>
+                                    <span>Pendente de Correção: {pendingCorrectionCount}</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                {isEditMode && (
+                                  <div className="flex items-center gap-4">
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div className="flex items-center gap-2">
+                                            <Switch
+                                              checked={!activity.hidden}
+                                              onCheckedChange={(checked) => {
+                                                void toggleActivityVisibility(activity.moodle_activity_id, !checked);
+                                              }}
+                                            />
+                                            {activity.hidden ? (
+                                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                            ) : (
+                                              <Eye className="h-4 w-4 text-primary" />
+                                            )}
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p>
+                                            {activity.hidden
+                                              ? 'Exibir atividade nas métricas'
+                                              : 'Ocultar atividade das métricas'}
+                                          </p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </div>
+                                )}
+
+                              </div>
+                            </div>
+
+                              {isAssignment && (
+                                <AssignmentSuggestionPanel
+                                  activity={activity}
+                                  submissions={activitySubmissionsForAssign}
+                                  studentsById={studentsById}
+                                  isExpanded={isExpanded}
+                                  onToggleExpand={() => toggleActivityExpansion(activity.moodle_activity_id)}
+                                  onApproved={refetch}
+                                />
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 border-t px-4 py-3 text-xs text-muted-foreground">
+                      <span>
+                        Exibindo {(activitiesPageSafe - 1) * activitiesPageSize + 1}-
+                        {Math.min(activitiesPageSafe * activitiesPageSize, visibleActivities.length)} de {visibleActivities.length}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActivitiesPage((current) => Math.max(1, current - 1))}
+                          disabled={activitiesPageSafe <= 1}
+                        >
+                          Anterior
+                        </Button>
+                        <span>
+                          Página {activitiesPageSafe} de {activitiesTotalPages}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setActivitiesPage((current) => Math.min(activitiesTotalPages, current + 1))}
+                          disabled={activitiesPageSafe >= activitiesTotalPages}
+                        >
+                          Próxima
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
 
         {isAttendanceEnabled && (
           <TabsContent value="attendance" className="mt-4">

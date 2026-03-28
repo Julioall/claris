@@ -39,15 +39,17 @@ function riskIndex(level: string): number {
 interface SnapshotCardProps {
   snapshot: StudentSyncSnapshot;
   prev: StudentSyncSnapshot | undefined;
-  isFirst: boolean;
+  isLatest: boolean;
 }
 
-function SnapshotCard({ snapshot, prev, isFirst }: SnapshotCardProps) {
+function SnapshotCard({ snapshot, prev, isLatest }: SnapshotCardProps) {
   const isDropout = (snapshot.days_since_access ?? 0) > DROPOUT_THRESHOLD_DAYS;
   const riskLevelChanged = riskChanged(prev, snapshot);
   const accessGot = accessImproved(prev, snapshot);
   const riskWorsened = prev && riskIndex(snapshot.risk_level) > riskIndex(prev.risk_level);
   const riskImproved = prev && riskIndex(snapshot.risk_level) < riskIndex(prev.risk_level);
+  const pendingActivities = snapshot.resolved_pending_activities ?? snapshot.pending_activities;
+  const overdueActivities = snapshot.resolved_overdue_activities ?? snapshot.overdue_activities;
 
   return (
     <div className="relative pl-6">
@@ -56,7 +58,7 @@ function SnapshotCard({ snapshot, prev, isFirst }: SnapshotCardProps) {
       {/* Timeline dot */}
       <div className={cn(
         "absolute left-[-4px] top-4 h-2 w-2 rounded-full border-2 border-background",
-        isFirst ? "bg-primary" : "bg-muted-foreground/40"
+        isLatest ? "bg-primary" : "bg-muted-foreground/40"
       )} />
 
       <Card className={cn(
@@ -112,8 +114,8 @@ function SnapshotCard({ snapshot, prev, isFirst }: SnapshotCardProps) {
               <BookOpen className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Pendentes</p>
-                <p className={cn("font-medium", snapshot.pending_activities > 0 && "text-yellow-600")}>
-                  {snapshot.pending_activities}
+                <p className={cn("font-medium", pendingActivities > 0 && "text-yellow-600")}>
+                  {pendingActivities}
                 </p>
               </div>
             </div>
@@ -122,8 +124,8 @@ function SnapshotCard({ snapshot, prev, isFirst }: SnapshotCardProps) {
               <AlertTriangle className="h-4 w-4 text-muted-foreground shrink-0" />
               <div>
                 <p className="text-xs text-muted-foreground">Atrasadas</p>
-                <p className={cn("font-medium", snapshot.overdue_activities > 0 && "text-risk-risco")}>
-                  {snapshot.overdue_activities}
+                <p className={cn("font-medium", overdueActivities > 0 && "text-risk-risco")}>
+                  {overdueActivities}
                 </p>
               </div>
             </div>
@@ -193,18 +195,23 @@ export function StudentHistoryTab({ studentId }: StudentHistoryTabProps) {
     );
   }
 
+  const mostRecentSyncedAt = snapshots.reduce((max, snapshot) => {
+    const time = new Date(snapshot.synced_at).getTime();
+    return Number.isNaN(time) ? max : Math.max(max, time);
+  }, Number.NEGATIVE_INFINITY);
+
   return (
     <div className="space-y-1">
       <p className="text-sm text-muted-foreground mb-4">
         {snapshots.length} {snapshots.length === 1 ? 'registro' : 'registros'} de sincronização.
-        O histórico é atualizado a cada sincronização com o Moodle.
+        Priorizando unidades atuais e futuras; unidades já encerradas aparecem por último.
       </p>
       {snapshots.map((snapshot, index) => (
         <SnapshotCard
           key={snapshot.id}
           snapshot={snapshot}
-          prev={snapshots[index + 1]}
-          isFirst={index === 0}
+          prev={snapshots.slice(index + 1).find((nextSnapshot) => nextSnapshot.course_id === snapshot.course_id)}
+          isLatest={new Date(snapshot.synced_at).getTime() === mostRecentSyncedAt}
         />
       ))}
     </div>

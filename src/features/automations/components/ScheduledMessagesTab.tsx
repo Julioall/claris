@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Plus, Trash2, CalendarClock, AlertCircle, Pencil, MessageCircle } from 'lucide-react';
+import { Plus, Trash2, CalendarClock, AlertCircle, Pencil, MessageCircle, Search, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -75,6 +76,17 @@ const EMPTY_FORM: ScheduledMessageFormValues = {
   whatsapp_instance_id: undefined,
 };
 
+const STATUS_OPTIONS = [
+  { value: 'all', label: 'Todos os status' },
+  { value: 'pending', label: 'Agendado' },
+  { value: 'processing', label: 'Enviando' },
+  { value: 'sent', label: 'Enviado' },
+  { value: 'failed', label: 'Falhou' },
+  { value: 'cancelled', label: 'Cancelado' },
+];
+
+const PAGE_SIZE = 20;
+
 export function ScheduledMessagesTab() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -82,6 +94,13 @@ export function ScheduledMessagesTab() {
   const [editing, setEditing] = useState<ScheduledMessage | null>(null);
   const [form, setForm] = useState<ScheduledMessageFormValues>(EMPTY_FORM);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter]);
 
   // Fetch accessible WhatsApp instances for the current user
   const { data: whatsappInstances = [] } = useQuery({
@@ -90,16 +109,26 @@ export function ScheduledMessagesTab() {
     enabled: !!user,
   });
 
-  const { data: messages = [], isLoading } = useQuery({
-    queryKey: automationsKeys.scheduledMessages(user?.id),
-    queryFn: () => listScheduledMessages(),
+  const { data, isLoading } = useQuery({
+    queryKey: automationsKeys.scheduledMessages({ userId: user?.id, status: statusFilter, search, page }),
+    queryFn: () => listScheduledMessages({ status: statusFilter, search, page, pageSize: PAGE_SIZE }),
     enabled: !!user,
   });
+
+  const messages = data?.items ?? [];
+  const totalCount = data?.totalCount ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   const createMutation = useMutation({
     mutationFn: (values: ScheduledMessageFormValues) => createScheduledMessage(user!.id, values),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages(user?.id) });
+      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages({ userId: user?.id }) });
       toast.success('Agendamento criado');
       closeForm();
     },
@@ -110,7 +139,7 @@ export function ScheduledMessagesTab() {
     mutationFn: ({ id, values }: { id: string; values: ScheduledMessageFormValues }) =>
       updateScheduledMessage(id, values),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages(user?.id) });
+      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages({ userId: user?.id }) });
       toast.success('Agendamento atualizado');
       closeForm();
     },
@@ -120,7 +149,7 @@ export function ScheduledMessagesTab() {
   const cancelMutation = useMutation({
     mutationFn: (id: string) => cancelScheduledMessage(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages(user?.id) });
+      qc.invalidateQueries({ queryKey: automationsKeys.scheduledMessages({ userId: user?.id }) });
       toast.success('Agendamento cancelado');
       setDeleteId(null);
     },
@@ -172,14 +201,37 @@ export function ScheduledMessagesTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <p className="text-sm text-muted-foreground lg:max-w-3xl">
           Programe mensagens em datas específicas. Para agendamentos já com snapshot de destinatários, use o botão "Agendar" na tela de envio em massa.
         </p>
-        <Button size="sm" onClick={openCreate} className="gap-1.5">
+        <Button size="sm" onClick={openCreate} className="gap-1.5 lg:shrink-0">
           <Plus className="h-4 w-4" />
           Novo Agendamento
         </Button>
+      </div>
+
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por título ou mensagem..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-52 gap-1.5">
+            <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {STATUS_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {isLoading ? (
@@ -258,6 +310,37 @@ export function ScheduledMessagesTab() {
         </div>
       )}
 
+      {totalCount > 0 && (
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-muted-foreground">
+            Exibindo {(page - 1) * PAGE_SIZE + 1}-{(page - 1) * PAGE_SIZE + messages.length} de {totalCount} agendamentos
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={page === 1}
+            >
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="text-sm text-muted-foreground">Página {page} de {totalPages}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={page >= totalPages}
+            >
+              Próxima
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Form dialog */}
       <Dialog open={formOpen} onOpenChange={v => { if (!v) closeForm(); }}>
         <DialogContent className="max-w-lg">
@@ -302,7 +385,7 @@ export function ScheduledMessagesTab() {
                 {whatsappInstances.length === 0 ? (
                   <div className="rounded-md border border-dashed p-3 text-center text-sm text-muted-foreground">
                     Nenhuma instância de WhatsApp disponível.{' '}
-                    <a href="/meus-servicos" className="underline">Configure em Meus Serviços</a>.
+                    <Link to="/meus-servicos" className="underline">Configure em Meus Serviços</Link>.
                   </div>
                 ) : (
                   <Select
