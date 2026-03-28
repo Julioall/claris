@@ -58,6 +58,20 @@ const DELETE_ORDER = [
 
 const ALLOWED_TABLES = new Set(DELETE_ORDER.map(({ table }) => table))
 
+type CleanupTableRpcResult = {
+  deleted_table: string
+}
+
+async function deleteAllRowsFromTable(
+  supabase: ReturnType<typeof createServiceClient>,
+  table: string,
+) {
+  return await supabase.rpc(
+    'admin_cleanup_table' as never,
+    { target_table: table } as never,
+  ) as { data: CleanupTableRpcResult | null; error: { message?: string } | null }
+}
+
 async function isAdminUser(
   supabase: ReturnType<typeof createServiceClient>,
   userId: string
@@ -113,9 +127,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
   const results: { table: string; success: boolean; error?: string }[] = []
 
   for (const { table, label } of tablesToDelete) {
-    const { error } = await supabase
-      .from(table)
-      .delete()
+    const { error } = await deleteAllRowsFromTable(supabase, table)
 
     results.push({
       table,
