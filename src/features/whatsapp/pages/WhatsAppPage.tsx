@@ -276,7 +276,7 @@ const ConversationList = memo(function ConversationList({
         </p>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea className="flex-1 min-h-0" preventContentOverflow>
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Spinner className="h-6 w-6" />
@@ -299,7 +299,7 @@ const ConversationList = memo(function ConversationList({
             </p>
           </div>
         ) : (
-          <div className="space-y-2 p-2">
+          <div className="space-y-2 p-4">
             {conversations.map((conversation) => (
               <ConversationItem
                 key={conversation.id}

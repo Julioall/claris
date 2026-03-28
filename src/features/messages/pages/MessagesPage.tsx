@@ -1,17 +1,30 @@
-import { useState, useEffect } from 'react';
-import { MessageSquare, Search, AlertCircle, Send, FileText } from 'lucide-react';
-import { Spinner } from '@/components/ui/spinner';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, MessageSquare, Search } from 'lucide-react';
+import { format, isToday, isYesterday } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Link } from 'react-router-dom';
+
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Spinner } from '@/components/ui/spinner';
 import { ChatWindow } from '@/features/claris/components/ChatWindow';
 import { useChat, type Conversation } from '@/features/claris/hooks/useChat';
-import { formatDistanceToNow } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
-import { Link } from 'react-router-dom';
+
+function formatConversationTime(timecreated?: number) {
+  if (!timecreated) return '';
+
+  const date = new Date(timecreated * 1000);
+  if (isToday(date)) return format(date, 'HH:mm', { locale: ptBR });
+  if (isYesterday(date)) return 'Ontem';
+  return format(date, 'dd/MM', { locale: ptBR });
+}
+
+function getConversationPreview(conversation: Conversation) {
+  return conversation.lastMessage?.text?.replace(/<[^>]*>/g, '').trim() || 'Sem mensagens';
+}
 
 function ConversationItem({
   conversation,
@@ -22,42 +35,45 @@ function ConversationItem({
   isSelected: boolean;
   onClick: () => void;
 }) {
-  const lastMsgTime = conversation.lastMessage
-    ? formatDistanceToNow(new Date(conversation.lastMessage.timecreated * 1000), {
-        addSuffix: true,
-        locale: ptBR,
-      })
-    : '';
-
-  const lastMsgPreview = conversation.lastMessage?.text
-    ?.replace(/<[^>]*>/g, '')
-    .substring(0, 60) || 'Sem mensagens';
+  const preview = getConversationPreview(conversation);
+  const timestamp = formatConversationTime(conversation.lastMessage?.timecreated);
+  const hasUnread = conversation.unreadcount > 0;
 
   return (
     <button
       onClick={onClick}
       className={cn(
-        'w-full text-left p-3 rounded-lg transition-colors hover:bg-muted/50 overflow-hidden',
-        isSelected && 'bg-muted'
+        'w-full max-w-full overflow-hidden rounded-2xl border px-3 py-3 text-left transition-colors',
+        'hover:border-border hover:bg-muted/40',
+        isSelected && 'border-primary/30 bg-primary/5 shadow-sm',
+        hasUnread && !isSelected && 'border-primary/15 bg-primary/5',
       )}
     >
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary shrink-0">
+      <div className="flex min-w-0 items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
           {conversation.member.fullname.charAt(0)}
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-medium text-sm truncate">{conversation.member.fullname}</p>
-            {conversation.unreadcount > 0 && (
-              <Badge variant="default" className="text-[10px] h-5 px-1.5">
-                {conversation.unreadcount}
-              </Badge>
-            )}
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className={cn('truncate text-sm', hasUnread ? 'font-semibold text-foreground' : 'font-medium text-foreground')}>
+                {conversation.member.fullname}
+              </p>
+              <p className={cn('mt-1 line-clamp-2 text-xs', hasUnread ? 'text-foreground' : 'text-muted-foreground')}>
+                {preview}
+              </p>
+            </div>
+
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              {timestamp && <span className="text-[11px] text-muted-foreground">{timestamp}</span>}
+              {hasUnread && (
+                <Badge variant="default" className="h-5 min-w-5 justify-center px-1.5 text-[10px]">
+                  {conversation.unreadcount}
+                </Badge>
+              )}
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground truncate mt-0.5">{lastMsgPreview}</p>
-          {lastMsgTime && (
-            <p className="text-[10px] text-muted-foreground mt-0.5">{lastMsgTime}</p>
-          )}
         </div>
       </div>
     </button>
@@ -65,59 +81,73 @@ function ConversationItem({
 }
 
 export default function MessagesPage() {
-  const { conversations, isLoading, error, fetchConversations } = useChat();
+  const chat = useChat();
+  const {
+    conversations,
+    isLoadingConversations,
+    isRefreshingConversations,
+    conversationsError,
+    fetchConversations,
+  } = chat;
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<number | null>(null);
 
   useEffect(() => {
-    fetchConversations();
+    void fetchConversations();
   }, [fetchConversations]);
 
   useEffect(() => {
-    if (!selectedConversation && conversations.length > 0) {
-      setSelectedConversation(conversations[0]);
+    if (conversations.length === 0) {
+      setSelectedConversationId(null);
+      return;
     }
-  }, [conversations, selectedConversation]);
 
-  const filteredConversations = conversations.filter((c) =>
-    c.member.fullname.toLowerCase().includes(searchQuery.toLowerCase())
+    setSelectedConversationId((currentSelection) => {
+      if (currentSelection && conversations.some((conversation) => conversation.id === currentSelection)) {
+        return currentSelection;
+      }
+
+      return conversations[0].id;
+    });
+  }, [conversations]);
+
+  const selectedConversation = useMemo(
+    () => conversations.find((conversation) => conversation.id === selectedConversationId) || null,
+    [conversations, selectedConversationId],
   );
 
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredConversations = useMemo(() => {
+    if (!normalizedSearchQuery) return conversations;
+
+    return conversations.filter((conversation) => {
+      const preview = getConversationPreview(conversation).toLowerCase();
+      return (
+        conversation.member.fullname.toLowerCase().includes(normalizedSearchQuery)
+        || preview.includes(normalizedSearchQuery)
+      );
+    });
+  }, [conversations, normalizedSearchQuery]);
+
   return (
-    <div className="flex flex-col animate-fade-in h-[calc(100vh-6rem)]">
-      <div className="mb-4 shrink-0 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Mensagens</h1>
-          <p className="text-muted-foreground">
-            Converse com seus alunos via Moodle. Envios em massa e modelos agora ficam em Automações.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/automacoes?tab=envio-massa">
-              <Send className="h-4 w-4 mr-1.5" />
-              Envio em massa
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/automacoes?tab=modelos">
-              <FileText className="h-4 w-4 mr-1.5" />
-              Modelos
-            </Link>
-          </Button>
-        </div>
+    <div className="flex h-[calc(100vh-6rem)] flex-col gap-4 animate-fade-in">
+      <div className="shrink-0">
+        <h1 className="text-2xl font-bold tracking-tight">Mensagens</h1>
+        <p className="text-muted-foreground">
+          Conversas individuais via Moodle com cache local simples para reabrir contatos mais rapido.
+        </p>
       </div>
 
-      {error && (
-        <Card className="border-destructive/50 mb-4 shrink-0">
+      {conversationsError && (
+        <Card className="shrink-0 border-destructive/50">
           <CardContent className="pt-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
               <div>
                 <p className="text-sm font-medium text-destructive">Erro ao carregar conversas</p>
-                <p className="text-xs text-muted-foreground mt-1">{error}</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Verifique se as funções de messaging (<code>core_message_*</code>) estão habilitadas no seu serviço Moodle.
+                <p className="mt-1 text-xs text-muted-foreground">{conversationsError}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Verifique se as funcoes de messaging (<code>core_message_*</code>) estao habilitadas no Moodle.
                 </p>
               </div>
             </div>
@@ -125,41 +155,51 @@ export default function MessagesPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 min-h-0 border rounded-lg overflow-hidden h-full">
-        <div className="lg:col-span-1 flex flex-col border-r bg-card min-h-0 overflow-hidden">
-          <div className="p-3 border-b shrink-0">
+      <div className="grid h-full min-h-0 grid-cols-1 gap-0 overflow-hidden rounded-2xl border lg:grid-cols-[360px_minmax(0,1fr)]">
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden border-r bg-card">
+          <div className="shrink-0 border-b p-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="search"
                 placeholder="Buscar conversa..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(event) => setSearchQuery(event.target.value)}
                 className="pl-9"
               />
             </div>
+
+            <div className="mt-3 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>{conversations.length} {conversations.length === 1 ? 'conversa' : 'conversas'}</span>
+              {isRefreshingConversations && (
+                <span className="inline-flex items-center gap-2">
+                  <Spinner className="h-3.5 w-3.5" />
+                  Atualizando...
+                </span>
+              )}
+            </div>
           </div>
 
-          <ScrollArea className="flex-1 min-h-0">
-            {isLoading ? (
+          <ScrollArea className="flex-1 min-h-0 w-full" preventContentOverflow>
+            {isLoadingConversations ? (
               <div className="flex items-center justify-center py-12">
                 <Spinner className="h-6 w-6" />
               </div>
             ) : filteredConversations.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center px-4">
-                <MessageSquare className="h-10 w-10 text-muted-foreground/50 mb-3" />
+              <div className="flex flex-col items-center justify-center px-4 py-12 text-center">
+                <MessageSquare className="mb-3 h-10 w-10 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">
-                  {searchQuery ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa no Moodle'}
+                  {normalizedSearchQuery ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa no Moodle'}
                 </p>
               </div>
             ) : (
-              <div className="p-2 space-y-1">
-                {filteredConversations.map((conv) => (
+              <div className="w-full space-y-2 p-4">
+                {filteredConversations.map((conversation) => (
                   <ConversationItem
-                    key={conv.id}
-                    conversation={conv}
-                    isSelected={selectedConversation?.id === conv.id}
-                    onClick={() => setSelectedConversation(conv)}
+                    key={conversation.id}
+                    conversation={conversation}
+                    isSelected={selectedConversation?.id === conversation.id}
+                    onClick={() => setSelectedConversationId(conversation.id)}
                   />
                 ))}
               </div>
@@ -167,36 +207,50 @@ export default function MessagesPage() {
           </ScrollArea>
         </div>
 
-        <div className="lg:col-span-2 flex flex-col min-h-0 bg-card">
+        <div className="flex min-h-0 min-w-0 flex-col bg-card">
           {selectedConversation ? (
             <>
-              <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
                     {selectedConversation.member.fullname.charAt(0)}
                   </div>
-                  <span className="font-medium text-sm">{selectedConversation.member.fullname}</span>
+
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {selectedConversation.member.fullname}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {selectedConversation.unreadcount > 0
+                        ? `${selectedConversation.unreadcount} nova${selectedConversation.unreadcount > 1 ? 's' : ''}`
+                        : 'Conversa sincronizada sob demanda'}
+                    </p>
+                  </div>
                 </div>
+
                 {selectedConversation.studentId && (
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/alunos/${selectedConversation.studentId}`}>
-                      Ver perfil
-                    </Link>
-                  </Button>
+                  <Link
+                    to={`/alunos/${selectedConversation.studentId}`}
+                    className="shrink-0 text-sm font-medium text-primary transition-colors hover:text-primary/80"
+                  >
+                    Ver perfil
+                  </Link>
                 )}
               </div>
+
               <ChatWindow
+                chat={chat}
                 moodleUserId={selectedConversation.member.id}
                 studentName={selectedConversation.member.fullname}
-                className="flex-1 min-h-0 border-0 rounded-none shadow-none"
+                className="min-h-0 flex-1 rounded-none border-0 shadow-none"
                 hideHeader
               />
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-1 items-center justify-center">
               <div className="text-center">
-                <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
-                <p className="text-muted-foreground">Selecione uma conversa para começar</p>
+                <MessageSquare className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
+                <p className="text-muted-foreground">Selecione uma conversa para comecar</p>
               </div>
             </div>
           )}
