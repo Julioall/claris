@@ -42,7 +42,7 @@ jobs:
     timeout-minutes: 35
     environment: supabase
     env:
-      SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
+      SCHEDULED_MESSAGES_CRON_SECRET: claris-scheduled-messages-local-secret
 
     steps:
       - name: Checkout repository
