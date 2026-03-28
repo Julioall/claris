@@ -143,6 +143,23 @@ restart_evolution_if_present() {
   docker restart "${EVOLUTION_CONTAINER_NAME}" >/dev/null
 }
 
+restart_edge_runtime_if_present() {
+  edge_runtime_container="$(
+    docker ps --format '{{.Names}}' \
+      | grep '^supabase_edge_runtime_' \
+      | head -n 1 \
+      || true
+  )"
+
+  if [ -z "${edge_runtime_container}" ]; then
+    log "Skipping Edge Runtime restart: container not found."
+    return
+  fi
+
+  log "Restarting ${edge_runtime_container} so updated Edge Function secrets are loaded..."
+  docker restart "${edge_runtime_container}" >/dev/null
+}
+
 prepare_workdir_alias() {
   if [ "${WORKDIR}" = "/workspace" ]; then
     return
@@ -164,6 +181,10 @@ prepare_workdir_alias
 
 log "Using workdir: ${WORKDIR}"
 cd "${WORKDIR}"
+
+log "Preparing edge function secrets before startup..."
+set_function_secrets
+
 log "Starting Supabase local stack from ${WORKDIR}..."
 run_supabase start
 
@@ -181,6 +202,7 @@ sync_edge_database_types
 
 log "Configuring edge function secrets..."
 set_function_secrets
+restart_edge_runtime_if_present
 
 restart_evolution_if_present
 
