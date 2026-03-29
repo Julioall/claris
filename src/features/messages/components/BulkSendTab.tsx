@@ -117,6 +117,11 @@ const riskLevelLabels: Record<string, string> = {
   critico: "Critico",
   inativo: "Inativo",
 };
+const emailStatusLabels: Record<string, string> = {
+  todos: "Todos e-mails",
+  com_email: "Com e-mail",
+  sem_email: "Sem e-mail",
+};
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" });
 
@@ -146,6 +151,14 @@ function formatRiskLevel(value?: string | null) {
 function normalizeRiskLevel(value?: string | null) {
   if (!value) return "inativo";
   return value.toLowerCase();
+}
+
+function formatEnrollmentStatusLabel(value?: string | null) {
+  if (!value) return "Sem status";
+
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function formatGradeLabel(grade?: GradeLookupValue) {
@@ -237,6 +250,10 @@ export function BulkSendTab() {
   const [filterClass, setFilterClass] = useState<string>("todos");
   const [filterUC, setFilterUC] = useState<string>("todos");
   const [filterRiskStatus, setFilterRiskStatus] = useState<string>("todos");
+  const [filterEnrollmentStatus, setFilterEnrollmentStatus] =
+    useState<string>("todos");
+  const [filterEmailStatus, setFilterEmailStatus] =
+    useState<string>("todos");
   const [audiencePage, setAudiencePage] = useState(1);
   const deferredSearchQuery = useDeferredValue(
     searchQuery.trim().toLowerCase(),
@@ -325,6 +342,26 @@ export function BulkSendTab() {
     });
   }, [categorySources, filterSchool, filterCourse, filterClass]);
 
+  const enrollmentStatusOptions = useMemo(() => {
+    const statuses = new Set<string>();
+
+    students.forEach((student) => {
+      if (student.enrollment_status) {
+        statuses.add(student.enrollment_status.toLowerCase());
+      }
+
+      student.courses.forEach((course) => {
+        if (course.enrollment_status) {
+          statuses.add(course.enrollment_status.toLowerCase());
+        }
+      });
+    });
+
+    return Array.from(statuses).sort((left, right) =>
+      left.localeCompare(right, "pt-BR"),
+    );
+  }, [students]);
+
   useEffect(() => {
     if (
       filterSchool !== "todos" &&
@@ -403,6 +440,26 @@ export function BulkSendTab() {
         }
       }
 
+      if (filterEnrollmentStatus !== "todos") {
+        const normalizedStatus = filterEnrollmentStatus.toLowerCase();
+        const studentStatus = student.enrollment_status?.toLowerCase();
+        const hasMatchingCourseStatus = student.courses.some(
+          (course) =>
+            course.enrollment_status?.toLowerCase() === normalizedStatus,
+        );
+
+        if (studentStatus !== normalizedStatus && !hasMatchingCourseStatus) {
+          return false;
+        }
+      }
+
+      if (filterEmailStatus !== "todos") {
+        const hasEmail = Boolean(student.email?.trim());
+
+        if (filterEmailStatus === "com_email" && !hasEmail) return false;
+        if (filterEmailStatus === "sem_email" && hasEmail) return false;
+      }
+
       return true;
     });
   }, [
@@ -413,6 +470,8 @@ export function BulkSendTab() {
     filterClass,
     filterUC,
     filterRiskStatus,
+    filterEnrollmentStatus,
+    filterEmailStatus,
   ]);
 
   const selectedStudents = useMemo(
@@ -461,11 +520,6 @@ export function BulkSendTab() {
     selectedStudents.length > 0 &&
     messageContent.trim().length > 0 &&
     messageUnavailableVariables.length === 0;
-  const canLaunchCampaign =
-    canPreviewOrSend &&
-    (deliveryMode === "now" ||
-      deliveryMode === "routine" ||
-      scheduledAt.trim().length > 0);
   const hasActiveJobs = useMemo(
     () =>
       recentJobs.some(
@@ -503,9 +557,25 @@ export function BulkSendTab() {
     if (filterRiskStatus !== "todos") {
       badges.push(`Risco: ${formatRiskLevel(filterRiskStatus)}`);
     }
+    if (filterEnrollmentStatus !== "todos") {
+      badges.push(
+        `Matricula: ${formatEnrollmentStatusLabel(filterEnrollmentStatus)}`,
+      );
+    }
+    if (filterEmailStatus !== "todos") {
+      badges.push(`E-mail: ${emailStatusLabels[filterEmailStatus]}`);
+    }
 
     return badges;
-  }, [filterClass, filterCourse, filterRiskStatus, filterSchool, filterUC]);
+  }, [
+    filterClass,
+    filterCourse,
+    filterEmailStatus,
+    filterEnrollmentStatus,
+    filterRiskStatus,
+    filterSchool,
+    filterUC,
+  ]);
 
   useBackgroundActivityFlag({
     id: user?.id
@@ -537,7 +607,16 @@ export function BulkSendTab() {
 
   useEffect(() => {
     setAudiencePage(1);
-  }, [deferredSearchQuery, filterSchool, filterCourse, filterClass, filterUC, filterRiskStatus]);
+  }, [
+    deferredSearchQuery,
+    filterSchool,
+    filterCourse,
+    filterClass,
+    filterUC,
+    filterRiskStatus,
+    filterEnrollmentStatus,
+    filterEmailStatus,
+  ]);
 
   useEffect(() => {
     if (audiencePage > audienceTotalPages) {
@@ -676,11 +755,13 @@ export function BulkSendTab() {
     if (
       !user ||
       selectedStudents.length === 0 ||
-      !messageContent.trim() ||
-      !scheduledAt.trim()
+      !messageContent.trim()
     )
       return;
     if (!validateMessageContext(messageContent, "A mensagem")) return;
+
+    const resolvedScheduledAt =
+      scheduledAt.trim() || new Date(Date.now() + 60 * 60 * 1000).toISOString();
 
     setIsScheduling(true);
 
@@ -700,7 +781,7 @@ export function BulkSendTab() {
           scheduledTitle.trim() ||
           buildDefaultScheduledTitle(selectedStudents.length),
         message_content: messageContent,
-        scheduled_at: scheduledAt,
+        scheduled_at: resolvedScheduledAt,
         recipient_count: selectedStudents.length,
         notes: scheduledNotes.trim() || undefined,
         channel: "moodle",
@@ -828,6 +909,11 @@ export function BulkSendTab() {
         className: filterClass !== "todos" ? filterClass : undefined,
         uc: filterUC !== "todos" ? filterUC : undefined,
         riskStatus: filterRiskStatus !== "todos" ? filterRiskStatus : undefined,
+        enrollmentStatus:
+          filterEnrollmentStatus !== "todos"
+            ? filterEnrollmentStatus
+            : undefined,
+        emailStatus: filterEmailStatus !== "todos" ? filterEmailStatus : undefined,
       },
     });
 
@@ -836,6 +922,8 @@ export function BulkSendTab() {
   }, [
     filterClass,
     filterCourse,
+    filterEmailStatus,
+    filterEnrollmentStatus,
     filterRiskStatus,
     filterSchool,
     filterUC,
@@ -845,20 +933,6 @@ export function BulkSendTab() {
     selectedStudents,
     validateMessageContext,
   ]);
-
-  const handleLaunchCampaign = useCallback(async () => {
-    if (deliveryMode === "scheduled") {
-      await handleSchedule();
-      return;
-    }
-
-    if (deliveryMode === "routine") {
-      handleTransformToRoutine();
-      return;
-    }
-
-    await handleSend();
-  }, [deliveryMode, handleSchedule, handleSend, handleTransformToRoutine]);
 
   const handleStepChange = useCallback(
     (nextStep: CampaignStep) => {
@@ -938,7 +1012,7 @@ export function BulkSendTab() {
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <Select value={filterSchool} onValueChange={handleSchoolChange}>
             <SelectTrigger>
               <SelectValue placeholder="Escola" />
@@ -1001,6 +1075,36 @@ export function BulkSendTab() {
             </SelectTrigger>
             <SelectContent>
               {Object.entries(riskLevelLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filterEnrollmentStatus}
+            onValueChange={setFilterEnrollmentStatus}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Matricula" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas matriculas</SelectItem>
+              {enrollmentStatusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {formatEnrollmentStatusLabel(status)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterEmailStatus} onValueChange={setFilterEmailStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="E-mail" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(emailStatusLabels).map(([value, label]) => (
                 <SelectItem key={value} value={value}>
                   {label}
                 </SelectItem>
@@ -1339,64 +1443,6 @@ export function BulkSendTab() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-3">
-            <p className="text-sm font-semibold text-foreground">
-              Variaveis disponiveis agora
-            </p>
-
-            {availableVariableKeys.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {availableVariableKeys.map((key) => (
-                  <Badge key={key} variant="outline" className="gap-1">
-                    <Sparkles className="h-3 w-3 text-primary" />
-                    {getVariableLabel(key)}
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-                Ajuste o recorte da audiencia para liberar variaveis mais
-                especificas, principalmente quando precisar de UC, nota ou
-                pendencias.
-              </div>
-            )}
-          </div>
-
-          <div className="rounded-2xl border bg-muted/20 p-4">
-            <p className="text-sm font-semibold text-foreground">
-              Preview de referencia
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Usamos o primeiro destinatario selecionado para validar o tom e a
-              substituicao das variaveis.
-            </p>
-
-            {previewStudent ? (
-              <div className="mt-4 space-y-3">
-                <div>
-                  <p className="text-sm font-medium">
-                    {previewStudent.full_name}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {previewStudent.email || "Sem email"}
-                  </p>
-                </div>
-                <div className="rounded-2xl border bg-background p-3">
-                  <p className="line-clamp-6 whitespace-pre-wrap text-sm text-foreground">
-                    {previewMessage || messageContent || "Sem conteudo"}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
-                Selecione destinatarios na etapa anterior para gerar um preview
-                realista da mensagem.
-              </div>
-            )}
-          </div>
-        </div>
-
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
           <Button variant="outline" onClick={() => setCurrentStep("audience")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -1430,7 +1476,7 @@ export function BulkSendTab() {
       <CardHeader className="pb-4">
         <CardTitle className="text-base">Etapa 3: revisar o envio</CardTitle>
         <CardDescription className="mt-1">
-          Confira quem vai receber, veja o preview final e use o painel ao lado
+          Confira quem vai receber, veja o preview final e use os botoes abaixo
           para enviar agora, agendar ou transformar em rotina.
         </CardDescription>
       </CardHeader>
@@ -1577,311 +1623,61 @@ export function BulkSendTab() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Voltar para mensagem
           </Button>
+        </div>
 
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <Button
             variant="outline"
             onClick={handlePreview}
             disabled={!canPreviewOrSend}
           >
             <Eye className="mr-2 h-4 w-4" />
-            Abrir preview completo
+            Pre-visualizar campanha
           </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
 
-  const renderSidebarCard = () => (
-    <Card className="border-border/70 shadow-none">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">
-          {currentStep === "audience"
-            ? "Resumo da audiencia"
-            : currentStep === "message"
-              ? "Checklist da mensagem"
-              : "Entrega da campanha"}
-        </CardTitle>
-        <CardDescription className="mt-1">
-          {currentStep === "audience"
-            ? "Veja rapidamente o recorte atual e siga para a criacao da mensagem."
-            : currentStep === "message"
-              ? "Valide se o conteudo esta pronto antes de entrar na fase final."
-              : "Escolha se a campanha sera enviada agora, agendada ou convertida em rotina."}
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-2xl border bg-muted/20 p-3">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Etapa atual
-            </p>
-            <p className="mt-1 text-sm font-semibold">
-              {campaignSteps[currentStepIndex]?.title}
-            </p>
-          </div>
-          <div className="rounded-2xl border bg-muted/20 p-3">
-            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Selecionados
-            </p>
-            <p className="mt-1 text-sm font-semibold">
-              {selectedStudents.length}
-            </p>
-          </div>
-        </div>
-
-        {activeFilterBadges.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {activeFilterBadges.map((badge) => (
-              <Badge key={badge} variant="outline" className="text-[11px]">
-                {badge}
-              </Badge>
-            ))}
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <p className="text-sm font-semibold">Amostra da audiencia</p>
-          {selectedStudents.length > 0 ? (
-            <div className="space-y-2">
-              {selectedStudents.slice(0, 5).map((student) => (
-                <div
-                  key={student.id}
-                  className="flex items-center justify-between rounded-2xl border px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {student.full_name}
-                    </p>
-                    <p className="truncate text-[11px] text-muted-foreground">
-                      {student.email || "Sem email"}
-                    </p>
-                  </div>
-                  <Badge variant="outline">
-                    {formatRiskLevel(student.current_risk_level)}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
-              Selecione destinatarios para ativar a campanha.
-            </div>
-          )}
-        </div>
-
-        {currentStep === "audience" && (
           <Button
-            className="w-full"
-            onClick={() => handleStepChange("message")}
-            disabled={selectedStudents.length === 0}
+            onClick={() => {
+              setDeliveryMode("now");
+              void handleSend();
+            }}
+            disabled={!canPreviewOrSend || isSending || isScheduling}
           >
-            Ir para mensagem
-            <ArrowRight className="ml-2 h-4 w-4" />
+            {isSending && deliveryMode === "now" ? (
+              <Spinner className="mr-2 h-4 w-4" onAccent />
+            ) : (
+              <Send className="mr-2 h-4 w-4" />
+            )}
+            Enviar agora
           </Button>
-        )}
 
-        {currentStep === "message" && (
-          <>
-            <Separator />
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDeliveryMode("scheduled");
+              void handleSchedule();
+            }}
+            disabled={!canPreviewOrSend || isSending || isScheduling}
+          >
+            {isScheduling ? (
+              <Spinner className="mr-2 h-4 w-4" onAccent />
+            ) : (
+              <CalendarClock className="mr-2 h-4 w-4" />
+            )}
+            Agendar
+          </Button>
 
-            <div className="space-y-3">
-              <div className="rounded-2xl border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
-                {messageContent.trim()
-                  ? "A mensagem ja tem conteudo. Revise variaveis e siga para a etapa final."
-                  : "Escreva a mensagem antes de liberar a revisao da campanha."}
-              </div>
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handlePreview}
-                disabled={!canPreviewOrSend}
-              >
-                <Eye className="mr-2 h-4 w-4" />
-                Pre-visualizar mensagem
-              </Button>
-              <Button
-                className="w-full"
-                onClick={() => handleStepChange("review")}
-                disabled={!canPreviewOrSend}
-              >
-                Revisar campanha
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
-          </>
-        )}
-
-        {currentStep === "review" && (
-          <>
-            <Separator />
-
-            <div className="space-y-3">
-              <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDeliveryMode("now")}
-                  className={cn(
-                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
-                    deliveryMode === "now" && "border-primary bg-primary/5",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <Send className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Enviar agora</span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Disparo imediato com job monitorado.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDeliveryMode("scheduled")}
-                  className={cn(
-                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
-                    deliveryMode === "scheduled" &&
-                      "border-primary bg-primary/5",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <CalendarClock className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">Agendar</span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Congela audiencia e mensagem para entrega futura.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setDeliveryMode("routine")}
-                  className={cn(
-                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
-                    deliveryMode === "routine" && "border-primary bg-primary/5",
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <Workflow className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold">
-                      Transformar em rotina
-                    </span>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Envia a campanha para Automacoes como rascunho de base.
-                  </p>
-                </button>
-              </div>
-
-              {deliveryMode === "scheduled" && (
-                <div className="space-y-3 rounded-2xl border bg-muted/20 p-4">
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="campaign-schedule-title"
-                      className="text-sm font-medium"
-                    >
-                      Nome interno do agendamento
-                    </label>
-                    <Input
-                      id="campaign-schedule-title"
-                      value={scheduledTitle}
-                      onChange={(event) =>
-                        setScheduledTitle(event.target.value)
-                      }
-                      placeholder={buildDefaultScheduledTitle(
-                        selectedStudents.length,
-                      )}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="campaign-schedule-at"
-                      className="text-sm font-medium"
-                    >
-                      Data e horario
-                    </label>
-                    <Input
-                      id="campaign-schedule-at"
-                      type="datetime-local"
-                      value={scheduledAt}
-                      onChange={(event) => setScheduledAt(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label
-                      htmlFor="campaign-schedule-notes"
-                      className="text-sm font-medium"
-                    >
-                      Observacoes
-                    </label>
-                    <Input
-                      id="campaign-schedule-notes"
-                      value={scheduledNotes}
-                      onChange={(event) =>
-                        setScheduledNotes(event.target.value)
-                      }
-                      placeholder="Opcional"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {deliveryMode === "now" && hasActiveJobs && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
-                  Ja existe um envio em andamento ou na fila. Aguarde a
-                  conclusao antes de disparar outra campanha.
-                </div>
-              )}
-
-              {deliveryMode === "scheduled" && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
-                  {moodleSession
-                    ? "O agendamento salva o snapshot da audiencia e da mensagem personalizada."
-                    : "Sem sessao atual do Moodle, o snapshot sera salvo, mas a execucao futura depende de reautorizacao habilitada."}
-                </div>
-              )}
-
-              {deliveryMode === "routine" && (
-                <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
-                  A audiencia e a mensagem serao entregues ao modulo Automacoes
-                  como rascunho. O proximo passo la e definir gatilho, espera e
-                  condicoes.
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2">
-                <Button
-                  variant="outline"
-                  onClick={handlePreview}
-                  disabled={!canPreviewOrSend}
-                >
-                  <Eye className="mr-2 h-4 w-4" />
-                  Pre-visualizar campanha
-                </Button>
-                <Button
-                  onClick={handleLaunchCampaign}
-                  disabled={!canLaunchCampaign || isSending || isScheduling}
-                >
-                  {isSending || isScheduling ? (
-                    <Spinner className="mr-2 h-4 w-4" onAccent />
-                  ) : deliveryMode === "scheduled" ? (
-                    <Clock3 className="mr-2 h-4 w-4" />
-                  ) : deliveryMode === "routine" ? (
-                    <Workflow className="mr-2 h-4 w-4" />
-                  ) : (
-                    <Send className="mr-2 h-4 w-4" />
-                  )}
-                  {deliveryMode === "scheduled"
-                    ? `Agendar para ${selectedStudents.length} aluno${selectedStudents.length !== 1 ? "s" : ""}`
-                    : deliveryMode === "routine"
-                      ? "Transformar em rotina"
-                      : `Enviar agora para ${selectedStudents.length} aluno${selectedStudents.length !== 1 ? "s" : ""}`}
-                </Button>
-              </div>
-            </div>
-          </>
-        )}
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setDeliveryMode("routine");
+              handleTransformToRoutine();
+            }}
+            disabled={!canPreviewOrSend || isSending || isScheduling}
+          >
+            <Workflow className="mr-2 h-4 w-4" />
+            Transformar em rotina
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
@@ -2001,18 +1797,18 @@ export function BulkSendTab() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      {currentStep === "audience" ? (
         <div className="space-y-4">
-          {currentStep === "audience" && renderAudienceStep()}
-          {currentStep === "message" && renderMessageStep()}
-          {currentStep === "review" && renderReviewStep()}
-        </div>
-
-        <div className="space-y-4">
-          {renderSidebarCard()}
+          {renderAudienceStep()}
           {renderRecentJobsCard()}
         </div>
-      </div>
+      ) : (
+        <div className="space-y-4">
+          {currentStep === "message" && renderMessageStep()}
+          {currentStep === "review" && renderReviewStep()}
+          {renderRecentJobsCard()}
+        </div>
+      )}
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
         <DialogContent>

@@ -18,6 +18,8 @@ export interface CampaignRoutineDraft {
     className?: string;
     uc?: string;
     riskStatus?: string;
+    enrollmentStatus?: string;
+    emailStatus?: string;
   };
 }
 
