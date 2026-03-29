@@ -43,9 +43,12 @@ export const STEP_FUNCTION_MAP: Record<CourseScopedSyncEntity, string> = {
 };
 
 export const STEP_BATCH_CONFIG: Record<CourseScopedSyncEntity, { batchSize: number; timeoutMs: number }> = {
-  students: { batchSize: 10, timeoutMs: 22000 },
-  activities: { batchSize: 2, timeoutMs: 26000 },
-  grades: { batchSize: 2, timeoutMs: 26000 },
+  // students: 20 (was 5) — low risk, simple GET operations (~200-500ms per course)
+  students: { batchSize: 20, timeoutMs: 22000 },
+  // activities: 8 (was 2) — medium risk, per-course module fetching (~500-1000ms per course)
+  activities: { batchSize: 8, timeoutMs: 26000 },
+  // grades: 10 (was 2) — higher risk but mitigated by retry/backoff; per-student grades (~600-1000ms per student)
+  grades: { batchSize: 10, timeoutMs: 26000 },
 };
 
 export const BATCH_DELAY_MS = 120;
