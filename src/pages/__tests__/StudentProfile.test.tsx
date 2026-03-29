@@ -90,8 +90,8 @@ describe("StudentProfile page", () => {
   it("renders profile data", () => {
     renderPage();
 
-    expect(screen.getByText("Ana Silva")).toBeInTheDocument();
-    expect(screen.getByText(/motivos do risco/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Ana Silva" })).toBeInTheDocument();
+    expect(screen.getByText(/dados completos do aluno/i)).toBeInTheDocument();
     expect(
       screen.queryByRole("tab", {
         name: (name) => name.trim().toLowerCase() === "acoes",

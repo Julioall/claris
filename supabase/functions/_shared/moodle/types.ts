@@ -38,6 +38,10 @@ export interface MoodleEnrolledUser {
   lastname: string
   fullname: string
   email?: string
+  city?: string
+  phone1?: string
+  phone2?: string
+  customfields?: { shortname?: string; type?: string; name?: string; value?: string }[]
   profileimageurl?: string
   lastaccess?: number
   lastcourseaccess?: number
@@ -52,6 +56,14 @@ export interface MoodleEnrolledUser {
     name: string
     status: number
   }[]
+}
+
+export interface MoodleUserProfile {
+  id: number
+  city?: string
+  phone1?: string
+  phone2?: string
+  customfields?: { shortname?: string; type?: string; name?: string; value?: string }[]
 }
 
 export interface MoodleSiteInfo extends MoodleUser {

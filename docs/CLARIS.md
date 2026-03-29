@@ -4,6 +4,17 @@
 
 O **Claris** é uma aplicação web desenvolvida para tutores e monitores acompanharem alunos e cursos do Moodle, com todos os registros de acompanhamento sendo persistidos no Supabase.
 
+## Status do Produto
+
+O projeto **ainda esta em desenvolvimento** e nao deve ser tratado como produto com operacao consolidada em producao.
+
+Diretriz para evolucao tecnica e de produto:
+
+- evitar implementacoes baseadas na premissa de grande base ativa de usuarios;
+- evitar complexidade prematura por escala nao validada;
+- priorizar consistencia de dados, fluxo de sincronizacao e observabilidade;
+- explicitar premissas quando algum requisito depender de uso real em producao.
+
 ### Objetivo Principal
 
 Permitir que tutores e monitores:

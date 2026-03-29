@@ -13,6 +13,7 @@ export interface StudentOption {
   id: string;
   full_name: string;
   email?: string | null;
+  avatar_url?: string | null;
   moodle_user_id: string;
   current_risk_level?: string | null;
   last_access?: string | null;

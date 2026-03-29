@@ -2422,39 +2422,51 @@ export type Database = {
       students: {
         Row: {
           avatar_url: string | null
+          city: string | null
           created_at: string | null
           current_risk_level: Database["public"]["Enums"]["risk_level"] | null
           email: string | null
           full_name: string
           id: string
           last_access: string | null
+          mobile_phone: string | null
           moodle_user_id: string
+          phone: string | null
+          phone_number: string | null
           risk_reasons: string[] | null
           tags: string[] | null
           updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
+          city?: string | null
           created_at?: string | null
           current_risk_level?: Database["public"]["Enums"]["risk_level"] | null
           email?: string | null
           full_name: string
           id?: string
           last_access?: string | null
+          mobile_phone?: string | null
           moodle_user_id: string
+          phone?: string | null
+          phone_number?: string | null
           risk_reasons?: string[] | null
           tags?: string[] | null
           updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
+          city?: string | null
           created_at?: string | null
           current_risk_level?: Database["public"]["Enums"]["risk_level"] | null
           email?: string | null
           full_name?: string
           id?: string
           last_access?: string | null
+          mobile_phone?: string | null
           moodle_user_id?: string
+          phone?: string | null
+          phone_number?: string | null
           risk_reasons?: string[] | null
           tags?: string[] | null
           updated_at?: string | null
@@ -3220,7 +3232,10 @@ export type Database = {
           full_name: string
           id: string
           last_access: string
+          mobile_phone: string
           moodle_user_id: string
+          phone: string
+          phone_number: string
           risk_reasons: string[]
           tags: string[]
           total_count: number

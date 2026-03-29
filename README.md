@@ -2,6 +2,17 @@
 
 Fluxo local padrao com Docker Compose base para Supabase local e override de desenvolvimento para frontend + integracoes.
 
+## Status do projeto
+
+O Claris **ainda esta em desenvolvimento**.
+
+Para documentacao, planejamento e implementacao tecnica:
+
+- nao assumir operacao em producao com base ativa de usuarios;
+- nao priorizar otimizações guiadas por escala real de usuarios;
+- favorecer simplicidade, clareza e evolucao incremental de arquitetura;
+- registrar premissas e gaps quando uma decisao depender de validacao futura com usuarios reais.
+
 ## Variaveis locais
 
 O fluxo local nao depende de `.env`. Os valores de desenvolvimento ficam versionados no `docker-compose.yml` e no `docker-compose.dev.yml`.

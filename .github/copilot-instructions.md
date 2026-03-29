@@ -4,6 +4,16 @@
 
 **Claris** is a React + TypeScript web application for tutors and academic monitors to track students and courses from Moodle. All follow-up records, notes, pending tasks, and risk status are persisted in Supabase.
 
+## Product Maturity
+
+The project is still in active development and should not be treated as a production system with a consolidated active user base.
+
+When proposing or implementing changes:
+- Do not assume high production scale or large active-user traffic patterns.
+- Avoid premature complexity driven by hypothetical scale.
+- Prefer incremental, maintainable solutions aligned with current development-stage constraints.
+- Explicitly document assumptions when a decision depends on future real-user validation.
+
 The project is a full-stack educational management platform with:
 - **Frontend**: React 18 + TypeScript + Vite
 - **UI**: Tailwind CSS + shadcn/ui (Radix UI components)

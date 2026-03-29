@@ -5,6 +5,7 @@ import { ptBR } from 'date-fns/locale';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -50,9 +51,12 @@ function ConversationItem({
       )}
     >
       <div className="flex min-w-0 items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-          {conversation.member.fullname.charAt(0)}
-        </div>
+        <Avatar className="h-11 w-11 shrink-0">
+          <AvatarImage src={conversation.member.profileimageurl ?? undefined} alt={conversation.member.fullname} />
+          <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
+            {conversation.member.fullname.charAt(0)}
+          </AvatarFallback>
+        </Avatar>
 
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-3">
@@ -213,9 +217,12 @@ export default function MessagesPage() {
             <>
               <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3">
                 <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                    {selectedConversation.member.fullname.charAt(0)}
-                  </div>
+                    <Avatar className="h-10 w-10 shrink-0">
+                      <AvatarImage src={selectedConversation.member.profileimageurl ?? undefined} alt={selectedConversation.member.fullname} />
+                      <AvatarFallback className="bg-primary/10 text-sm font-semibold text-primary">
+                        {selectedConversation.member.fullname.charAt(0)}
+                      </AvatarFallback>
+                    </Avatar>
 
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-foreground">

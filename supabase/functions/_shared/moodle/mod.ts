@@ -12,6 +12,7 @@ export {
   resolveCourseCategoryName,
   getCourseEnrolledUsers,
   getCourseSuspendedUserIds,
+  getUserProfilesByIds,
 } from './client.ts'
 
 export type {
@@ -20,5 +21,6 @@ export type {
   MoodleCategory,
   MoodleUser,
   MoodleEnrolledUser,
+  MoodleUserProfile,
   MoodleSiteInfo,
 } from './types.ts'

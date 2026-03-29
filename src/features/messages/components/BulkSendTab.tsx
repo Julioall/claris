@@ -27,6 +27,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
@@ -1139,9 +1140,15 @@ export function BulkSendTab() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
-                              {student.full_name.charAt(0)}
-                            </div>
+                            <Avatar className="h-9 w-9 shrink-0">
+                              <AvatarImage
+                                src={student.avatar_url ?? undefined}
+                                alt={student.full_name}
+                              />
+                              <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                                {student.full_name.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
                             <div className="min-w-0">
                               <p className="truncate font-medium">
                                 {student.full_name}

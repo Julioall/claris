@@ -9,10 +9,145 @@ import {
   upsertStudents,
 } from '../_shared/domain/moodle-sync/repository.ts'
 import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
-import { getCourseEnrolledUsers, getCourseSuspendedUserIds } from '../_shared/moodle/mod.ts'
+import { getCourseEnrolledUsers, getCourseSuspendedUserIds, getUserProfilesByIds } from '../_shared/moodle/mod.ts'
 
 const STAFF_ROLE_SHORTNAMES = new Set(['manager', 'editingteacher', 'teacher', 'coursecreator'])
 const STUDENT_ROLE_SHORTNAMES = new Set(['student', 'aluno', 'estudante'])
+const MOBILE_CUSTOM_FIELD_KEYS = new Set([
+  'celular',
+  'telefonecelular',
+  'telefone_celular',
+  'mobile',
+  'mobilephone',
+  'mobile_phone',
+  'whatsapp',
+])
+const PHONE_CUSTOM_FIELD_KEYS = new Set([
+  'telefone',
+  'telefonefixo',
+  'telefone_fixo',
+  'phone',
+  'phone1',
+  'phone2',
+])
+const CITY_CUSTOM_FIELD_KEYS = new Set([
+  'cidade',
+  'municipio',
+  'city',
+  'town',
+])
+const INVALID_CITY_VALUES = new Set([
+  'brasileira',
+  'brasileiro',
+  'brasil',
+])
+
+function normalizeCustomFieldKey(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function normalizePhone(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+function normalizeOptionalText(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+function normalizeComparableText(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function isUsableCity(value: string | null): value is string {
+  if (!value) return false
+  const comparable = normalizeComparableText(value)
+  if (!comparable) return false
+  return !INVALID_CITY_VALUES.has(comparable)
+}
+
+function getCustomFieldValue(
+  customfields: { shortname?: string; type?: string; name?: string; value?: string }[] | undefined,
+  allowedKeys: Set<string>,
+): string | null {
+  if (!Array.isArray(customfields) || customfields.length === 0) return null
+
+  for (const field of customfields) {
+    const keyCandidates = [field.shortname, field.type, field.name]
+      .filter((key): key is string => typeof key === 'string' && key.trim().length > 0)
+      .map(normalizeCustomFieldKey)
+
+    if (!keyCandidates.some((key) => allowedKeys.has(key))) continue
+
+    const value = normalizePhone(field.value)
+    if (value) return value
+  }
+
+  return null
+}
+
+function resolveStudentCity(student: {
+  city?: string
+  customfields?: { shortname?: string; type?: string; name?: string; value?: string }[]
+}, fallbackProfile: {
+  city?: string
+  customfields?: { shortname?: string; type?: string; name?: string; value?: string }[]
+} | undefined): string | null {
+  const mergedCustomFields = [
+    ...(Array.isArray(student.customfields) ? student.customfields : []),
+    ...(Array.isArray(fallbackProfile?.customfields) ? fallbackProfile.customfields : []),
+  ]
+
+  const customCity = getCustomFieldValue(mergedCustomFields, CITY_CUSTOM_FIELD_KEYS)
+  if (isUsableCity(customCity)) return customCity
+
+  const primaryCity = normalizeOptionalText(student.city)
+  if (isUsableCity(primaryCity)) return primaryCity
+
+  const fallbackCity = normalizeOptionalText(fallbackProfile?.city)
+  if (isUsableCity(fallbackCity)) return fallbackCity
+
+  return null
+}
+
+function resolveStudentPhones(student: {
+  phone1?: string
+  phone2?: string
+  customfields?: { shortname?: string; type?: string; name?: string; value?: string }[]
+}): {
+  phone: string | null
+  phone_number: string | null
+  mobile_phone: string | null
+} {
+  const mobilePhoneFromMoodle = normalizePhone(student.phone2)
+  const phoneFromMoodle = normalizePhone(student.phone1)
+
+  const customMobilePhone = getCustomFieldValue(student.customfields, MOBILE_CUSTOM_FIELD_KEYS)
+  const customPhone = getCustomFieldValue(student.customfields, PHONE_CUSTOM_FIELD_KEYS)
+
+  const mobilePhone = mobilePhoneFromMoodle || customMobilePhone || customPhone || phoneFromMoodle || null
+  const phone = phoneFromMoodle || customPhone || customMobilePhone || mobilePhoneFromMoodle || null
+
+  return {
+    phone,
+    phone_number: mobilePhone || phone,
+    mobile_phone: mobilePhone,
+  }
+}
 
 function isSuspendedValue(value: unknown): boolean {
   if (value === true) return true
@@ -167,6 +302,12 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
     return jsonResponse({ success: true, students: [] })
   }
 
+  const studentIds = students
+    .map((student) => Number(student.id))
+    .filter((id): id is number => Number.isFinite(id) && id > 0)
+
+  const profilesById = await getUserProfilesByIds(moodleUrl, token, studentIds)
+
   const now = new Date().toISOString()
   let suspendedByStudentStatusCount = 0
   let suspendedByStudentFlagCount = 0
@@ -249,10 +390,26 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       hasRecentCourseAccess,
     })
 
+    const fallbackProfile = profilesById.get(Number(student.id))
+    const city = resolveStudentCity(student, fallbackProfile)
+    const phoneSource = {
+      phone1: student.phone1 ?? fallbackProfile?.phone1,
+      phone2: student.phone2 ?? fallbackProfile?.phone2,
+      customfields: Array.isArray(student.customfields) && student.customfields.length > 0
+        ? student.customfields
+        : fallbackProfile?.customfields,
+    }
+
+    const { phone, phone_number, mobile_phone } = resolveStudentPhones(phoneSource)
+
     return {
       moodle_user_id: String(student.id),
       full_name: student.fullname || `${student.firstname} ${student.lastname}`,
       email: student.email || null,
+      city,
+      phone,
+      phone_number,
+      mobile_phone,
       avatar_url: student.profileimageurl || null,
       last_access: student.lastaccess ? new Date(student.lastaccess * 1000).toISOString() : null,
       updated_at: now,

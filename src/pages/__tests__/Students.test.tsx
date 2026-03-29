@@ -36,23 +36,50 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("Students page", () => {
+  let studentsFixture: Array<{
+    id: string;
+    full_name: string;
+    email: string;
+    current_risk_level: string;
+    enrollment_status: string;
+    last_access: string;
+  }>;
+
   beforeEach(() => {
     vi.clearAllMocks();
 
-    useStudentsDataMock.mockReturnValue({
-      students: [
-        {
-          id: "s-1",
-          full_name: "Ana Silva",
-          email: "ana@example.com",
-          current_risk_level: "risco",
-          enrollment_status: "ativo",
-          last_access: "2026-02-20T00:00:00.000Z",
-        },
-      ],
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
+    studentsFixture = [
+      {
+        id: "s-1",
+        full_name: "Ana Silva",
+        email: "ana@example.com",
+        current_risk_level: "risco",
+        enrollment_status: "ativo",
+        last_access: "2026-02-20T00:00:00.000Z",
+      },
+    ];
+
+    useStudentsDataMock.mockImplementation((params?: { searchQuery?: string; statusFilter?: string }) => {
+      const normalizedSearch = (params?.searchQuery ?? "").trim().toLowerCase();
+      const statusFilter = params?.statusFilter ?? "all";
+
+      const filtered = studentsFixture.filter((student) => {
+        const matchesStatus = statusFilter === "all" || student.enrollment_status === statusFilter;
+        const matchesSearch =
+          normalizedSearch.length === 0 ||
+          student.full_name.toLowerCase().includes(normalizedSearch) ||
+          student.email.toLowerCase().includes(normalizedSearch);
+
+        return matchesStatus && matchesSearch;
+      });
+
+      return {
+        students: filtered,
+        totalCount: filtered.length,
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      };
     });
 
     useCoursesDataMock.mockReturnValue({
@@ -93,29 +120,25 @@ describe("Students page", () => {
 
   it("filters students by enrollment status", async () => {
     const user = userEvent.setup();
-    useStudentsDataMock.mockReturnValue({
-      students: [
-        {
-          id: "s-1",
-          full_name: "Ana Silva",
-          email: "ana@example.com",
-          current_risk_level: "risco",
-          enrollment_status: "ativo",
-          last_access: "2026-02-20T00:00:00.000Z",
-        },
-        {
-          id: "s-2",
-          full_name: "Bruno Souza",
-          email: "bruno@example.com",
-          current_risk_level: "normal",
-          enrollment_status: "suspenso",
-          last_access: "2026-02-18T00:00:00.000Z",
-        },
-      ],
-      isLoading: false,
-      error: null,
-      refetch: vi.fn(),
-    });
+    studentsFixture = [
+      {
+        id: "s-1",
+        full_name: "Ana Silva",
+        email: "ana@example.com",
+        current_risk_level: "risco",
+        enrollment_status: "ativo",
+        last_access: "2026-02-20T00:00:00.000Z",
+      },
+      {
+        id: "s-2",
+        full_name: "Bruno Souza",
+        email: "bruno@example.com",
+        current_risk_level: "normal",
+        enrollment_status: "suspenso",
+        last_access: "2026-02-18T00:00:00.000Z",
+      },
+    ];
+
     render(<Students />);
 
     await user.click(screen.getAllByRole("combobox")[1]);

@@ -57,6 +57,11 @@ describe("moodle client", () => {
 
     expect(result).toHaveLength(1);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("options%5B0%5D%5Bname%5D=onlyactive");
+    const fallbackUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
+    expect(fallbackUrl).toContain("core_enrol_get_enrolled_users");
+    expect(
+      fallbackUrl.includes("onlyactive=0") ||
+        fallbackUrl.includes("options%5B0%5D%5Bname%5D=onlyactive"),
+    ).toBe(true);
   });
 });

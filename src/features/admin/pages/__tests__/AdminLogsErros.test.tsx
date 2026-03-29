@@ -26,22 +26,36 @@ function renderWithClient(ui: React.ReactElement) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+function mockLogsQuery(logs: unknown[]) {
+  fromMock.mockImplementation(() => {
+    const query = {
+      data: logs,
+      error: null,
+      count: logs.length,
+      order: vi.fn(() => query),
+      range: vi.fn(() => query),
+      eq: vi.fn(() => query),
+      gte: vi.fn(() => query),
+      lte: vi.fn(() => query),
+      or: vi.fn(() => query),
+    };
+
+    return {
+      select: vi.fn(() => query),
+      update: vi.fn(() => ({
+        eq: vi.fn().mockResolvedValue({ error: null }),
+      })),
+    };
+  });
+}
+
 describe("AdminLogsErros page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("shows loading state then empty state when no logs", async () => {
-    const eqMock = vi.fn().mockResolvedValue({ data: [], error: null });
-    fromMock.mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        order: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            eq: eqMock,
-          }),
-        }),
-      }),
-    }));
+    mockLogsQuery([]);
 
     renderWithClient(<AdminLogsErros />);
 
@@ -66,15 +80,7 @@ describe("AdminLogsErros page", () => {
       },
     ];
 
-    fromMock.mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        order: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ data: fakeLogs, error: null }),
-          }),
-        }),
-      }),
-    }));
+    mockLogsQuery(fakeLogs);
 
     renderWithClient(<AdminLogsErros />);
 
@@ -87,15 +93,7 @@ describe("AdminLogsErros page", () => {
   });
 
   it("renders filter controls", async () => {
-    fromMock.mockImplementation(() => ({
-      select: vi.fn().mockReturnValue({
-        order: vi.fn().mockReturnValue({
-          limit: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        }),
-      }),
-    }));
+    mockLogsQuery([]);
 
     renderWithClient(<AdminLogsErros />);
 

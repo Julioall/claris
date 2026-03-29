@@ -10,6 +10,7 @@ export interface Student {
   moodle_user_id: string;
   full_name: string;
   email?: string;
+  city?: string;
   phone?: string;
   phone_number?: string;
   mobile_phone?: string;
@@ -28,6 +29,7 @@ export interface StudentRecord {
   moodle_user_id: string | number;
   full_name: string;
   email?: string | null;
+  city?: string | null;
   phone?: string | null;
   phone_number?: string | null;
   mobile_phone?: string | null;

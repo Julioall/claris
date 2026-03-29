@@ -30,6 +30,7 @@ interface StudentCourseRow {
     id: string;
     full_name: string;
     email?: string | null;
+    avatar_url?: string | null;
     moodle_user_id: string;
     current_risk_level?: string | null;
     last_access?: string | null;
@@ -123,7 +124,7 @@ async function listStudentCoursesByCourseIds(
       const { data, error } = await supabase
         .from("student_courses")
         .select(
-          "student_id, course_id, enrollment_status, last_access, students(id, full_name, email, moodle_user_id, current_risk_level, last_access)",
+          "student_id, course_id, enrollment_status, last_access, students(id, full_name, email, avatar_url, moodle_user_id, current_risk_level, last_access)",
         )
         .in("course_id", courseIdBatch);
 
@@ -272,6 +273,7 @@ export async function listBulkSendAudienceForUser(
         id: student.id,
         full_name: student.full_name,
         email: student.email,
+        avatar_url: student.avatar_url,
         moodle_user_id: student.moodle_user_id,
         current_risk_level: student.current_risk_level,
         last_access: student.last_access,

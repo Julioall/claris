@@ -1,7 +1,32 @@
-import type { MoodleTokenResponse, MoodleCourse, MoodleCategory, MoodleEnrolledUser, MoodleSiteInfo } from './types.ts'
+import type {
+  MoodleTokenResponse,
+  MoodleCourse,
+  MoodleCategory,
+  MoodleEnrolledUser,
+  MoodleSiteInfo,
+  MoodleUserProfile,
+} from './types.ts'
 
 const INVALID_PARAMETER_MESSAGE = 'valor invalido de parametro'
 const NUMERIC_CATEGORY_PATTERN = /^\d+$/
+const ENROLLED_USERS_OPTIONAL_FIELDS = [
+  'id',
+  'username',
+  'firstname',
+  'lastname',
+  'fullname',
+  'email',
+  'address',
+  'phone1',
+  'phone2',
+  'department',
+  'institution',
+  'idnumber',
+  'city',
+  'profileimageurl',
+  'lastaccess',
+  'lastcourseaccess',
+].join(',')
 
 function normalizeForComparison(value: string): string {
   return value
@@ -246,13 +271,35 @@ export async function getCourseEnrolledUsers(
   token: string,
   courseId: number,
 ): Promise<MoodleEnrolledUser[]> {
+  const optionsWithUserFields: Record<string, string | number> = {
+    'options[0][name]': 'onlyactive',
+    'options[0][value]': 0,
+    'options[1][name]': 'userfields',
+    'options[1][value]': ENROLLED_USERS_OPTIONAL_FIELDS,
+  }
+
+  const onlyActiveWithUserFields: Record<string, string | number> = {
+    onlyactive: 0,
+    'options[0][name]': 'userfields',
+    'options[0][value]': ENROLLED_USERS_OPTIONAL_FIELDS,
+  }
+
   try {
-    return await callGetEnrolledUsers(moodleUrl, token, courseId, { onlyactive: 0 }) as MoodleEnrolledUser[]
+    return await callGetEnrolledUsers(moodleUrl, token, courseId, optionsWithUserFields) as MoodleEnrolledUser[]
   } catch (error) {
     if (isInvalidParameterError(error)) {
       console.warn(
-        `Moodle for course ${courseId} does not accept onlyactive=0. Retrying with options[onlyactive]=0.`,
+        `Moodle for course ${courseId} rejected options format with userfields. Retrying with onlyactive=0 plus userfields.`,
       )
+
+      try {
+        return await callGetEnrolledUsers(moodleUrl, token, courseId, onlyActiveWithUserFields) as MoodleEnrolledUser[]
+      } catch {
+        console.warn(
+          `Moodle for course ${courseId} rejected mixed onlyactive/userfields. Retrying with onlyactive fallback variants.`,
+        )
+      }
+
       try {
         return await callGetEnrolledUsers(moodleUrl, token, courseId, {
           'options[0][name]': 'onlyactive',
@@ -319,4 +366,40 @@ export async function getCourseSuspendedUserIds(
     console.error(`Error fetching suspended users for course ${courseId}:`, error)
     return new Set<number>()
   }
+}
+
+export async function getUserProfilesByIds(
+  moodleUrl: string,
+  token: string,
+  userIds: number[],
+): Promise<Map<number, MoodleUserProfile>> {
+  const uniqueIds = Array.from(new Set(userIds.filter((id) => Number.isFinite(id) && id > 0)))
+  if (uniqueIds.length === 0) return new Map()
+
+  const BATCH_SIZE = 50
+  const profilesById = new Map<number, MoodleUserProfile>()
+
+  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
+    const batch = uniqueIds.slice(i, i + BATCH_SIZE)
+    const params: Record<string, string | number> = { field: 'id' }
+
+    for (let index = 0; index < batch.length; index += 1) {
+      params[`values[${index}]`] = String(batch[index])
+    }
+
+    try {
+      const response = await callMoodleApi(moodleUrl, token, 'core_user_get_users_by_field', params)
+      const users = Array.isArray(response) ? response as MoodleUserProfile[] : []
+
+      for (const user of users) {
+        if (typeof user?.id === 'number' && Number.isFinite(user.id)) {
+          profilesById.set(user.id, user)
+        }
+      }
+    } catch (error) {
+      console.error('[moodle] Failed to fetch user profiles by ids batch:', error)
+    }
+  }
+
+  return profilesById
 }

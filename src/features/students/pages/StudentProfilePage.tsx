@@ -8,6 +8,7 @@ import {
   GraduationCap,
   History,
   Phone,
+  MapPin,
   Mail,
   MessageSquare,
   User,
@@ -150,8 +151,16 @@ export default function StudentProfilePage() {
 
             <div className="space-y-1">
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
+                <MapPin className="h-4 w-4" />
+                Cidade
+              </p>
+              <p className="break-all text-sm font-medium">{student.city || 'Não informado'}</p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="flex items-center gap-2 text-sm text-muted-foreground">
                 <CalendarDays className="h-4 w-4" />
-                Último acesso (data completa)
+                Último acesso
               </p>
               <p className="text-sm font-medium">{formatDate(student.last_access)}</p>
             </div>
@@ -164,13 +173,6 @@ export default function StudentProfilePage() {
               <p className="text-sm font-medium">{formatDate(student.created_at)}</p>
             </div>
 
-            <div className="space-y-1">
-              <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                <CalendarDays className="h-4 w-4" />
-                Atualizado em
-              </p>
-              <p className="text-sm font-medium">{formatDate(student.updated_at)}</p>
-            </div>
           </div>
         </CardContent>
       </Card>
