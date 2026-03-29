@@ -46,7 +46,6 @@ function mapScheduledMessage(row: Tables<'scheduled_messages'>): ScheduledMessag
     id: row.id,
     title: row.title,
     message_content: row.message_content,
-    template_id: row.template_id,
     scheduled_at: row.scheduled_at,
     status: row.status,
     origin: row.origin,
@@ -55,7 +54,6 @@ function mapScheduledMessage(row: Tables<'scheduled_messages'>): ScheduledMessag
     failed_count: row.failed_count,
     notes: row.notes,
     created_at: row.created_at,
-    error_message: row.error_message,
     channel,
     whatsapp_instance_id: whatsappInstanceId,
     execution_context: executionContext,
@@ -215,7 +213,6 @@ export async function createScheduledMessage(userId: string, values: ScheduledMe
     user_id: userId,
     title: values.title.trim(),
     message_content: values.message_content.trim(),
-    template_id: values.template_id ?? null,
     scheduled_at: new Date(values.scheduled_at).toISOString(),
     recipient_count: values.recipient_count ?? null,
     notes: values.notes?.trim() || null,
@@ -233,7 +230,6 @@ export async function updateScheduledMessage(id: string, values: ScheduledMessag
   const payload: TablesUpdate<'scheduled_messages'> = {
     title: values.title.trim(),
     message_content: values.message_content.trim(),
-    template_id: values.template_id ?? null,
     scheduled_at: new Date(values.scheduled_at).toISOString(),
     recipient_count: values.recipient_count ?? null,
     notes: values.notes?.trim() || null,
@@ -253,33 +249,6 @@ export async function cancelScheduledMessage(id: string) {
   const { error } = await supabase
     .from('scheduled_messages')
     .update({ status: 'cancelled' })
-    .eq('id', id);
-
-  if (error) throw error;
-}
-
-export async function pauseScheduledMessage(id: string) {
-  const { error } = await supabase
-    .from('scheduled_messages')
-    .update({ status: 'paused' })
-    .eq('id', id);
-
-  if (error) throw error;
-}
-
-export async function startScheduledMessage(id: string) {
-  const { error } = await supabase
-    .from('scheduled_messages')
-    .update({ status: 'pending' })
-    .eq('id', id);
-
-  if (error) throw error;
-}
-
-export async function deleteScheduledMessage(id: string) {
-  const { error } = await supabase
-    .from('scheduled_messages')
-    .delete()
     .eq('id', id);
 
   if (error) throw error;
