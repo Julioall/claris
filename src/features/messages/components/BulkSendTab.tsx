@@ -8,8 +8,6 @@ import {
 import {
   ArrowLeft,
   ArrowRight,
-  SlidersHorizontal,
-  CalendarDays,
   ChevronLeft,
   ChevronRight,
   Send,
@@ -17,8 +15,7 @@ import {
   X,
   FileText,
   Eye,
-  EyeOff,
-  Pencil,
+  CheckCircle2,
   AlertCircle,
   CalendarClock,
   Clock3,
@@ -30,6 +27,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
@@ -39,6 +37,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
   Dialog,
@@ -56,10 +55,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   DynamicVariableInput,
   resolveVariables,
@@ -86,8 +88,10 @@ import {
   buildStudentCourseKey,
   listBulkSendAudienceForUser,
   listRecentBulkMessageJobsForUser,
+  startBulkMessageSend,
 } from "@/features/messages/api/bulk-messaging.repository";
 import { createScheduledMessage } from "@/features/automations/api/automations.repository";
+import { writeCampaignRoutineDraft } from "@/features/automations/lib/campaign-routine-draft";
 import { listMessageTemplateOptionsForUser } from "@/features/messages/api/message-templates.repository";
 import type {
   BulkMessageJobPreview,
@@ -185,71 +189,30 @@ function buildDefaultScheduledTitle(selectedCount: number) {
   return `Envio agendado para ${selectedCount} aluno${selectedCount !== 1 ? "s" : ""}`;
 }
 
-type CampaignScheduleMode =
-  | "specific_date"
-  | "daily"
-  | "weekly"
-  | "biweekly"
-  | "monthly";
-
-type WeekdayValue = "0" | "1" | "2" | "3" | "4" | "5" | "6";
+type DeliveryMode = "now" | "scheduled" | "routine";
 type CampaignStep = "audience" | "message" | "review";
 
-const WEEKDAY_OPTIONS: Array<{ value: WeekdayValue; label: string }> = [
-  { value: "0", label: "Domingo" },
-  { value: "1", label: "Segunda-feira" },
-  { value: "2", label: "Terca-feira" },
-  { value: "3", label: "Quarta-feira" },
-  { value: "4", label: "Quinta-feira" },
-  { value: "5", label: "Sexta-feira" },
-  { value: "6", label: "Sabado" },
+const campaignSteps: Array<{
+  id: CampaignStep;
+  title: string;
+  description: string;
+}> = [
+  {
+    id: "audience",
+    title: "Destinatarios",
+    description: "Escolha quem vai receber a campanha.",
+  },
+  {
+    id: "message",
+    title: "Mensagem",
+    description: "Monte o conteudo e personalize o envio.",
+  },
+  {
+    id: "review",
+    title: "Revisao",
+    description: "Valide o que sera enviado e decida a execucao.",
+  },
 ];
-
-function computeFirstScheduledAt(input: {
-  scheduleMode: CampaignScheduleMode;
-  scheduledAt: string;
-  routineStartDate: string;
-  routineTimeOfDay: string;
-  routineWeekday: WeekdayValue;
-  routineMonthlyDay: string;
-}) {
-  if (input.scheduleMode === "specific_date") {
-    return input.scheduledAt.trim();
-  }
-
-  if (!input.routineStartDate || !input.routineTimeOfDay) {
-    return "";
-  }
-
-  const base = new Date(`${input.routineStartDate}T${input.routineTimeOfDay}:00`);
-  if (Number.isNaN(base.getTime())) return "";
-
-  if (input.scheduleMode === "daily") {
-    return base.toISOString();
-  }
-
-  if (input.scheduleMode === "weekly" || input.scheduleMode === "biweekly") {
-    const weekday = Number(input.routineWeekday);
-    const candidate = new Date(base);
-    const delta = (weekday - candidate.getDay() + 7) % 7;
-    candidate.setDate(candidate.getDate() + delta);
-    return candidate.toISOString();
-  }
-
-  const requestedDay = Math.max(1, Math.min(31, Number(input.routineMonthlyDay || "1")));
-  const candidate = new Date(base);
-  candidate.setDate(1);
-  const maxDay = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate();
-  candidate.setDate(Math.min(requestedDay, maxDay));
-
-  if (candidate < base) {
-    candidate.setMonth(candidate.getMonth() + 1);
-    const nextMax = new Date(candidate.getFullYear(), candidate.getMonth() + 1, 0).getDate();
-    candidate.setDate(Math.min(requestedDay, nextMax));
-  }
-
-  return candidate.toISOString();
-}
 
 const AUDIENCE_PAGE_SIZE = 25;
 
@@ -270,21 +233,17 @@ export function BulkSendTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoadingStudents, setIsLoadingStudents] = useState(true);
   const [messageContent, setMessageContent] = useState("");
-  const [messageInlinePreviewOpen, setMessageInlinePreviewOpen] = useState(false);
   const [templates, setTemplates] = useState<MessageTemplateOption[]>([]);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [recentJobs, setRecentJobs] = useState<BulkMessageJobPreview[]>([]);
   const [currentStep, setCurrentStep] = useState<CampaignStep>("audience");
-  const [creationModalOpen, setCreationModalOpen] = useState(false);
-  const [scheduleMode, setScheduleMode] = useState<CampaignScheduleMode>("specific_date");
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("now");
   const [scheduledTitle, setScheduledTitle] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
   const [scheduledNotes, setScheduledNotes] = useState("");
-  const [routineStartDate, setRoutineStartDate] = useState("");
-  const [routineTimeOfDay, setRoutineTimeOfDay] = useState("");
-  const [routineWeekday, setRoutineWeekday] = useState<WeekdayValue>("1");
-  const [routineMonthlyDay, setRoutineMonthlyDay] = useState("1");
 
   const [filterSchool, setFilterSchool] = useState<string>("todos");
   const [filterCourse, setFilterCourse] = useState<string>("todos");
@@ -561,12 +520,25 @@ export function BulkSendTab() {
     selectedStudents.length > 0 &&
     messageContent.trim().length > 0 &&
     messageUnavailableVariables.length === 0;
+  const canLaunchCampaign =
+    canPreviewOrSend &&
+    (deliveryMode === "now" ||
+      deliveryMode === "routine" ||
+      scheduledAt.trim().length > 0);
   const hasActiveJobs = useMemo(
     () =>
       recentJobs.some(
         (job) => job.status === "pending" || job.status === "processing",
       ),
     [recentJobs],
+  );
+  const currentStepIndex = useMemo(
+    () => campaignSteps.findIndex((step) => step.id === currentStep),
+    [currentStep],
+  );
+  const stepProgress = useMemo(
+    () => ((currentStepIndex + 1) / campaignSteps.length) * 100,
+    [currentStepIndex],
   );
   const allFilteredSelected = useMemo(
     () =>
@@ -580,13 +552,49 @@ export function BulkSendTab() {
       filteredStudents.some((student) => selectedStudentIds.has(student.id)),
     [allFilteredSelected, filteredStudents, selectedStudentIds],
   );
+  const activeFilterBadges = useMemo(() => {
+    const badges: string[] = [];
+
+    if (filterSchool !== "todos") badges.push(`Escola: ${filterSchool}`);
+    if (filterCourse !== "todos") badges.push(`Curso: ${filterCourse}`);
+    if (filterClass !== "todos") badges.push(`Turma: ${filterClass}`);
+    if (filterUC !== "todos") badges.push(`UC: ${filterUC}`);
+    if (filterRiskStatus !== "todos") {
+      badges.push(`Risco: ${formatRiskLevel(filterRiskStatus)}`);
+    }
+    if (filterEnrollmentStatus !== "todos") {
+      badges.push(
+        `Matricula: ${formatEnrollmentStatusLabel(filterEnrollmentStatus)}`,
+      );
+    }
+    if (filterEmailStatus !== "todos") {
+      badges.push(`E-mail: ${emailStatusLabels[filterEmailStatus]}`);
+    }
+
+    return badges;
+  }, [
+    filterClass,
+    filterCourse,
+    filterEmailStatus,
+    filterEnrollmentStatus,
+    filterRiskStatus,
+    filterSchool,
+    filterUC,
+  ]);
+
   useBackgroundActivityFlag({
     id: user?.id
       ? `messages:bulk-send:request:${user.id}`
       : "messages:bulk-send:request",
-    active: Boolean(user?.id) && isScheduling,
-    label: "Criando campanha agendada",
-    description: "Congelando destinatarios e registrando configuracao de execucao.",
+    active: Boolean(user?.id) && (isSending || isScheduling),
+    label:
+      deliveryMode === "scheduled"
+        ? "Agendando campanha"
+        : "Preparando envio em massa",
+    description:
+      deliveryMode === "scheduled"
+        ? "Congelando destinatarios e configurando a entrega futura."
+        : "Enfileirando destinatarios e validando o disparo.",
     source: "messages",
   });
 
@@ -654,50 +662,15 @@ export function BulkSendTab() {
     setFilterUC("todos");
   };
 
-  const clearAllFilters = () => {
-    setFilterSchool("todos");
-    setFilterCourse("todos");
-    setFilterClass("todos");
-    setFilterUC("todos");
-    setFilterRiskStatus("todos");
-    setFilterEnrollmentStatus("todos");
-    setFilterEmailStatus("todos");
-    setSearchQuery("");
-  };
-
   const resetCampaignBuilder = useCallback(() => {
     setSelectedStudentIds(new Set());
-    setSearchQuery("");
-    setFilterSchool("todos");
-    setFilterCourse("todos");
-    setFilterClass("todos");
-    setFilterUC("todos");
-    setFilterRiskStatus("todos");
-    setFilterEnrollmentStatus("todos");
-    setFilterEmailStatus("todos");
-    setAudiencePage(1);
     setMessageContent("");
-    setMessageInlinePreviewOpen(false);
-    setScheduleMode("specific_date");
+    setDeliveryMode("now");
     setScheduledTitle("");
     setScheduledAt("");
     setScheduledNotes("");
-    setRoutineStartDate("");
-    setRoutineTimeOfDay("");
-    setRoutineWeekday("1");
-    setRoutineMonthlyDay("1");
     setCurrentStep("audience");
   }, []);
-
-  const handleCreationModalOpenChange = useCallback(
-    (open: boolean) => {
-      setCreationModalOpen(open);
-      if (!open) {
-        resetCampaignBuilder();
-      }
-    },
-    [resetCampaignBuilder],
-  );
 
   const validateMessageContext = useCallback(
     (content: string, sourceLabel: string) => {
@@ -778,28 +751,20 @@ export function BulkSendTab() {
     );
   }, [buildStudentVariableData, messageContent, previewStudent]);
 
+  const handlePreview = () => {
+    if (!validateMessageContext(messageContent, "A mensagem")) return;
+    setPreviewDialogOpen(true);
+  };
+
   const handleSchedule = useCallback(async () => {
     if (
       !user ||
       selectedStudents.length === 0 ||
-      !messageContent.trim()
+      !messageContent.trim() ||
+      !scheduledAt.trim()
     )
       return;
     if (!validateMessageContext(messageContent, "A mensagem")) return;
-
-    const resolvedScheduledAt = computeFirstScheduledAt({
-      scheduleMode,
-      scheduledAt,
-      routineStartDate,
-      routineTimeOfDay,
-      routineWeekday,
-      routineMonthlyDay,
-    });
-
-    if (!resolvedScheduledAt) {
-      toast.error("Configure corretamente data e horario da campanha.");
-      return;
-    }
 
     setIsScheduling(true);
 
@@ -819,40 +784,26 @@ export function BulkSendTab() {
           scheduledTitle.trim() ||
           buildDefaultScheduledTitle(selectedStudents.length),
         message_content: messageContent,
-        scheduled_at: resolvedScheduledAt,
+        scheduled_at: scheduledAt,
         recipient_count: selectedStudents.length,
         notes: scheduledNotes.trim() || undefined,
         channel: "moodle",
         execution_context: {
-          schema_version: 2,
+          schema_version: 1,
           mode: "bulk_message_snapshot",
           channel: "moodle",
-          created_via: "campaigns_bulk_send_tab",
-          automatic_execution_supported: true,
+          created_via: "bulk_send_tab",
+          automatic_execution_supported: false,
+          blocking_reason: moodleSession
+            ? "credential_snapshot_missing"
+            : "moodle_session_missing",
           moodle_url: moodleSession?.moodleUrl,
-          schedule: {
-            type: scheduleMode,
-            start_date:
-              scheduleMode === "specific_date" ? undefined : routineStartDate,
-            time:
-              scheduleMode === "specific_date" ? undefined : routineTimeOfDay,
-            weekday:
-              scheduleMode === "weekly" || scheduleMode === "biweekly"
-                ? Number(routineWeekday)
-                : undefined,
-            monthly_day:
-              scheduleMode === "monthly"
-                ? Number(routineMonthlyDay)
-                : undefined,
-          },
           recipient_snapshot: recipientSnapshot,
         },
       });
 
-      toast.success("Campanha criada com agendamento");
+      toast.success("Campanha agendada com snapshot de destinatarios");
       resetCampaignBuilder();
-      setCreationModalOpen(false);
-      navigate("/campanhas?tab=campanhas");
     } catch (error) {
       console.error(error);
       toast.error("Erro ao criar agendamento");
@@ -863,12 +814,6 @@ export function BulkSendTab() {
     buildStudentVariableData,
     messageContent,
     moodleSession,
-    navigate,
-    routineMonthlyDay,
-    routineStartDate,
-    routineTimeOfDay,
-    routineWeekday,
-    scheduleMode,
     scheduledAt,
     scheduledNotes,
     scheduledTitle,
@@ -877,6 +822,134 @@ export function BulkSendTab() {
     validateMessageContext,
     resetCampaignBuilder,
   ]);
+
+  const handleSend = useCallback(async () => {
+    if (
+      !user ||
+      !moodleSession ||
+      selectedStudents.length === 0 ||
+      !messageContent.trim()
+    )
+      return;
+    if (!validateMessageContext(messageContent, "A mensagem")) return;
+
+    if (hasActiveJobs) {
+      toast.error(
+        "Ja existe um envio em andamento ou na fila. Aguarde a finalizacao para evitar duplicidade.",
+      );
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      const result = await startBulkMessageSend({
+        userId: user.id,
+        messageContent,
+        moodleUrl: moodleSession.moodleUrl,
+        moodleToken: moodleSession.moodleToken,
+        recipients: selectedStudents.map((student) => ({
+          studentId: student.id,
+          moodleUserId: student.moodle_user_id,
+          studentName: student.full_name,
+          personalizedMessage: resolveVariables(
+            messageContent,
+            buildStudentVariableData(student),
+          ),
+        })),
+      });
+
+      if (result.kind === "duplicate") {
+        toast.error(
+          "Envio semelhante ja existe na fila/processamento. Evite duplicar o disparo.",
+        );
+        await fetchRecentJobs();
+        return;
+      }
+
+      toast.success(
+        `Envio em massa iniciado para ${selectedStudents.length} alunos`,
+      );
+      resetCampaignBuilder();
+      await fetchRecentJobs();
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao iniciar envio em massa");
+    } finally {
+      setIsSending(false);
+    }
+  }, [
+    buildStudentVariableData,
+    fetchRecentJobs,
+    hasActiveJobs,
+    messageContent,
+    moodleSession,
+    resetCampaignBuilder,
+    selectedStudents,
+    user,
+    validateMessageContext,
+  ]);
+
+  const handleTransformToRoutine = useCallback(() => {
+    if (!validateMessageContext(messageContent, "A mensagem")) return;
+    if (selectedStudents.length === 0 || !messageContent.trim()) return;
+
+    writeCampaignRoutineDraft({
+      channel: "moodle",
+      createdAt: new Date().toISOString(),
+      messageContent,
+      previewMessage: previewMessage || undefined,
+      recipientCount: selectedStudents.length,
+      recipientsPreview: selectedStudents.slice(0, 8).map((student) => ({
+        id: student.id,
+        name: student.full_name,
+        email: student.email,
+        riskLevel: student.current_risk_level,
+      })),
+      filters: {
+        school: filterSchool !== "todos" ? filterSchool : undefined,
+        course: filterCourse !== "todos" ? filterCourse : undefined,
+        className: filterClass !== "todos" ? filterClass : undefined,
+        uc: filterUC !== "todos" ? filterUC : undefined,
+        riskStatus: filterRiskStatus !== "todos" ? filterRiskStatus : undefined,
+        enrollmentStatus:
+          filterEnrollmentStatus !== "todos"
+            ? filterEnrollmentStatus
+            : undefined,
+        emailStatus: filterEmailStatus !== "todos" ? filterEmailStatus : undefined,
+      },
+    });
+
+    toast.success("Rascunho enviado para Campanhas");
+    navigate("/campanhas?tab=campanhas");
+  }, [
+    filterClass,
+    filterCourse,
+    filterEmailStatus,
+    filterEnrollmentStatus,
+    filterRiskStatus,
+    filterSchool,
+    filterUC,
+    messageContent,
+    navigate,
+    previewMessage,
+    selectedStudents,
+    validateMessageContext,
+  ]);
+
+  const handleLaunchCampaign = useCallback(async () => {
+    if (deliveryMode === "scheduled") {
+      await handleSchedule();
+      return;
+    }
+
+    if (deliveryMode === "routine") {
+      handleTransformToRoutine();
+      return;
+    }
+
+    await handleSend();
+  }, [deliveryMode, handleSchedule, handleSend, handleTransformToRoutine]);
 
   const handleStepChange = useCallback(
     (nextStep: CampaignStep) => {
@@ -930,13 +1003,132 @@ export function BulkSendTab() {
   };
 
   const renderAudienceStep = () => (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="outline">{filteredStudents.length} no recorte</Badge>
-        <Badge variant={selectedStudents.length > 0 ? "default" : "secondary"}>
-          {selectedStudents.length} selecionados
-        </Badge>
-      </div>
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className="text-base">
+              Etapa 1: selecionar destinatarios
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Comece pela audiencia. Use filtros, tabela e selecao em lote para
+              fechar o recorte antes de escrever a mensagem.
+            </CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline">
+              {filteredStudents.length} no recorte
+            </Badge>
+            <Badge
+              variant={selectedStudents.length > 0 ? "default" : "secondary"}
+            >
+              {selectedStudents.length} selecionados
+            </Badge>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+          <Select value={filterSchool} onValueChange={handleSchoolChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Escola" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas escolas</SelectItem>
+              {filterOptions.schools.map((school) => (
+                <SelectItem key={school} value={school}>
+                  {school}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterCourse} onValueChange={handleCourseChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Curso" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos cursos</SelectItem>
+              {filterOptions.courses.map((course) => (
+                <SelectItem key={course} value={course}>
+                  {course}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterClass} onValueChange={handleClassChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Turma" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas turmas</SelectItem>
+              {filterOptions.classes.map((className) => (
+                <SelectItem key={className} value={className}>
+                  {className}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterUC} onValueChange={setFilterUC}>
+            <SelectTrigger>
+              <SelectValue placeholder="UC" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas UCs</SelectItem>
+              {filterOptions.ucs.map((uc) => (
+                <SelectItem key={uc} value={uc}>
+                  {uc}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterRiskStatus} onValueChange={setFilterRiskStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status de risco" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(riskLevelLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={filterEnrollmentStatus}
+            onValueChange={setFilterEnrollmentStatus}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Matricula" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todas matriculas</SelectItem>
+              {enrollmentStatusOptions.map((status) => (
+                <SelectItem key={status} value={status}>
+                  {formatEnrollmentStatusLabel(status)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={filterEmailStatus} onValueChange={setFilterEmailStatus}>
+            <SelectTrigger>
+              <SelectValue placeholder="E-mail" />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(emailStatusLabels).map(([value, label]) => (
+                <SelectItem key={value} value={value}>
+                  {label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative flex-1">
@@ -950,144 +1142,46 @@ export function BulkSendTab() {
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  Filtros
-                  {(filterSchool !== "todos" ||
-                    filterCourse !== "todos" ||
-                    filterClass !== "todos" ||
-                    filterUC !== "todos" ||
-                    filterRiskStatus !== "todos" ||
-                    filterEnrollmentStatus !== "todos" ||
-                    filterEmailStatus !== "todos") && (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                      ativos
-                    </Badge>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-[320px] space-y-3">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Refinar audiencia
-                </p>
-
-                <Select value={filterSchool} onValueChange={handleSchoolChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Escola" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todas escolas</SelectItem>
-                    {filterOptions.schools.map((school) => (
-                      <SelectItem key={school} value={school}>
-                        {school}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterCourse} onValueChange={handleCourseChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Curso" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todos cursos</SelectItem>
-                    {filterOptions.courses.map((course) => (
-                      <SelectItem key={course} value={course}>
-                        {course}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterClass} onValueChange={handleClassChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Turma" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todas turmas</SelectItem>
-                    {filterOptions.classes.map((className) => (
-                      <SelectItem key={className} value={className}>
-                        {className}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterUC} onValueChange={setFilterUC}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="UC" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todos">Todas UCs</SelectItem>
-                    {filterOptions.ucs.map((uc) => (
-                      <SelectItem key={uc} value={uc}>
-                        {uc}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <Select
-                    value={filterRiskStatus}
-                    onValueChange={setFilterRiskStatus}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Risco" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(riskLevelLabels).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={filterEnrollmentStatus}
-                    onValueChange={setFilterEnrollmentStatus}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Matricula" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="todos">Todas matriculas</SelectItem>
-                      {enrollmentStatusOptions.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {formatEnrollmentStatusLabel(status)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Select
-                  value={filterEmailStatus}
-                  onValueChange={setFilterEmailStatus}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="E-mail" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(emailStatusLabels).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Button type="button" variant="ghost" size="sm" onClick={clearAllFilters}>
-                  Limpar filtros
-                </Button>
-              </PopoverContent>
-            </Popover>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={selectAll}>
+              Selecionar todos
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearAll}
+              disabled={selectedStudents.length === 0}
+            >
+              Limpar
+            </Button>
           </div>
         </div>
+
+        {selectedStudents.length > 0 && (
+          <div className="flex flex-wrap gap-2 rounded-2xl border bg-muted/20 p-3">
+            {selectedStudents.slice(0, 10).map((student) => (
+              <Badge
+                key={student.id}
+                variant="secondary"
+                className="gap-1 pr-1 text-[11px]"
+              >
+                {student.full_name}
+                <button
+                  type="button"
+                  onClick={() => toggleStudent(student.id)}
+                  className="rounded-full p-0.5 hover:bg-background/70 hover:text-destructive"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            ))}
+            {selectedStudents.length > 10 && (
+              <Badge variant="outline" className="text-[11px]">
+                +{selectedStudents.length - 10} mais
+              </Badge>
+            )}
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-2xl border">
           {isLoadingStudents ? (
@@ -1095,83 +1189,131 @@ export function BulkSendTab() {
               <Spinner className="h-5 w-5" />
             </div>
           ) : (
-            <div className="space-y-2 p-3">
-              <div className="flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    checked={
-                      allFilteredSelected
-                        ? true
-                        : someFilteredSelected
-                          ? "indeterminate"
-                          : false
-                    }
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        selectAll();
-                        return;
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/40">
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={
+                        allFilteredSelected
+                          ? true
+                          : someFilteredSelected
+                            ? "indeterminate"
+                            : false
                       }
+                      onCheckedChange={(checked) => {
+                        if (checked) {
+                          selectAll();
+                          return;
+                        }
 
-                      clearAll();
-                    }}
-                    aria-label="Selecionar todos os alunos filtrados"
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    Selecionar todos os alunos da pagina
-                  </p>
-                </div>
-                <Badge variant="outline" className="text-[10px]">
-                  {paginatedFilteredStudents.length} na pagina
-                </Badge>
-              </div>
+                        clearAll();
+                      }}
+                      aria-label="Selecionar todos os alunos filtrados"
+                    />
+                  </TableHead>
+                  <TableHead>Aluno</TableHead>
+                  <TableHead className="hidden md:table-cell">
+                    Contexto academico
+                  </TableHead>
+                  <TableHead>Risco</TableHead>
+                  <TableHead className="hidden lg:table-cell">Status</TableHead>
+                  <TableHead className="hidden xl:table-cell">
+                    Ultimo acesso
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
 
-              {filteredStudents.length === 0 ? (
-                <p className="py-10 text-center text-sm text-muted-foreground">
-                  Nenhum aluno corresponde aos filtros atuais.
-                </p>
-              ) : (
-                paginatedFilteredStudents.map((student) => {
-                  const isSelected = selectedStudentIds.has(student.id);
-
-                  return (
-                    <button
-                      key={student.id}
-                      type="button"
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
-                        isSelected
-                          ? "border-primary/40 bg-primary/5"
-                          : "hover:bg-muted/40",
-                      )}
-                      onClick={() => toggleStudent(student.id)}
+              <TableBody>
+                {filteredStudents.length === 0 ? (
+                  <TableRow>
+                    <TableCell
+                      colSpan={6}
+                      className="py-12 text-center text-sm text-muted-foreground"
                     >
-                      <Checkbox
-                        checked={isSelected}
-                        onCheckedChange={() => toggleStudent(student.id)}
-                        onClick={(event) => event.stopPropagation()}
-                        aria-label={`Selecionar ${student.full_name}`}
-                      />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-medium">
-                            {student.full_name}
-                          </p>
-                          <Badge variant="outline" className="text-[10px]">
+                      Nenhum aluno corresponde aos filtros atuais.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedFilteredStudents.map((student) => {
+                    const isSelected = selectedStudentIds.has(student.id);
+                    const courseNames = student.courses
+                      .slice(0, 2)
+                      .map((course) => course.course_name)
+                      .join(", ");
+
+                    return (
+                      <TableRow
+                        key={student.id}
+                        data-state={isSelected ? "selected" : undefined}
+                        className="cursor-pointer"
+                        onClick={() => toggleStudent(student.id)}
+                      >
+                        <TableCell
+                          className="w-12"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleStudent(student.id)}
+                            aria-label={`Selecionar ${student.full_name}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9 shrink-0">
+                              <AvatarImage
+                                src={student.avatar_url ?? undefined}
+                                alt={student.full_name}
+                              />
+                              <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
+                                {student.full_name.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">
+                                {student.full_name}
+                              </p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {student.email || "Sem email"}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          <div className="space-y-1">
+                            <p className="text-sm text-foreground">
+                              {courseNames || "Sem curso vinculado"}
+                            </p>
+                            {student.courses.length > 2 && (
+                              <p className="text-[11px] text-muted-foreground">
+                                +{student.courses.length - 2} outros cursos no
+                                perfil
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
                             {formatRiskLevel(student.current_risk_level)}
                           </Badge>
-                        </div>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {student.email || "Sem email"}
-                        </p>
-                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                          {student.courses[0]?.course_name || "Sem curso vinculado"}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })
-              )}
-            </div>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell">
+                          <span className="text-sm text-muted-foreground">
+                            {student.enrollment_status || "ativo"}
+                          </span>
+                        </TableCell>
+                        <TableCell className="hidden xl:table-cell">
+                          <span className="text-sm text-muted-foreground">
+                            {formatDateLabel(student.last_access)}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
           )}
         </div>
 
@@ -1216,74 +1358,88 @@ export function BulkSendTab() {
             </div>
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          Feche o recorte agora. A etapa seguinte usa essa audiencia para
-          liberar modelos, variaveis e preview.
-        </p>
-    </div>
+
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Feche o recorte agora. A etapa seguinte usa essa audiencia para
+            liberar modelos, variaveis e preview.
+          </p>
+          <Button
+            onClick={() => handleStepChange("message")}
+            disabled={selectedStudents.length === 0}
+          >
+            Avancar para mensagem
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 
   const renderMessageStep = () => (
-    <div className="space-y-5">
-      <div className="flex justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={() => {
-            fetchTemplates();
-            setTemplateDialogOpen(true);
-          }}
-        >
-          <FileText className="h-3.5 w-3.5" />
-          Usar modelo
-        </Button>
-      </div>
-
-      <div className="relative">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="absolute right-2 top-7 z-10 h-8 w-8"
-          onClick={() => {
-            if (!messageInlinePreviewOpen && !validateMessageContext(messageContent, "A mensagem")) {
-              return;
-            }
-            setMessageInlinePreviewOpen((current) => !current);
-          }}
-          disabled={!messageContent.trim()}
-          title={messageInlinePreviewOpen ? "Voltar para edicao" : "Pre-visualizar mensagem"}
-        >
-          {messageInlinePreviewOpen ? (
-            <Pencil className="h-4 w-4" />
-          ) : (
-            <Eye className="h-4 w-4" />
-          )}
-        </Button>
-
-        {messageInlinePreviewOpen ? (
-          <div className="space-y-2">
-            <p className="text-[11px] text-muted-foreground">
-              Pre-visualizacao da mensagem para o primeiro destinatario selecionado.
-            </p>
-            <div className="min-h-[20rem] rounded-md border bg-muted/20 p-3">
-              <div className="max-h-[20rem] overflow-auto whitespace-pre-wrap break-words text-sm text-foreground">
-                {previewMessage || messageContent}
-              </div>
-            </div>
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <CardTitle className="text-base">
+              Etapa 2: construir a mensagem
+            </CardTitle>
+            <CardDescription className="mt-1">
+              Escreva a mensagem, aplique modelos e valide o contexto dinamico
+              antes de seguir para a revisao.
+            </CardDescription>
           </div>
-        ) : (
-          <DynamicVariableInput
-            value={messageContent}
-            onChange={setMessageContent}
-            rows={14}
-            className="min-h-[20rem] resize-none"
-            availableVariableKeys={availableVariableKeys}
-            showInlinePreview={false}
-          />
-        )}
-      </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => {
+              fetchTemplates();
+              setTemplateDialogOpen(true);
+            }}
+          >
+            <FileText className="h-3.5 w-3.5" />
+            Usar modelo
+          </Button>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Destinatarios
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {selectedStudents.length}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Variaveis liberadas
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {availableVariableKeys.length}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Contexto UC
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {filterUC !== "todos" ? filterUC : "Amplo"}
+            </p>
+          </div>
+        </div>
+
+        <DynamicVariableInput
+          value={messageContent}
+          onChange={setMessageContent}
+          rows={14}
+          className="min-h-[20rem] resize-none"
+          availableVariableKeys={availableVariableKeys}
+          showInlinePreview={false}
+        />
 
         {messageUnavailableVariables.length > 0 && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
@@ -1304,210 +1460,687 @@ export function BulkSendTab() {
           </div>
         )}
 
-      <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-        <Button variant="outline" onClick={() => setCurrentStep("audience")}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar
-        </Button>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-3">
+            <p className="text-sm font-semibold text-foreground">
+              Variaveis disponiveis agora
+            </p>
 
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Button
-            onClick={() => handleStepChange("review")}
-            disabled={!canPreviewOrSend}
-          >
-            Agendar
-            <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
+            {availableVariableKeys.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {availableVariableKeys.map((key) => (
+                  <Badge key={key} variant="outline" className="gap-1">
+                    <Sparkles className="h-3 w-3 text-primary" />
+                    {getVariableLabel(key)}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                Ajuste o recorte da audiencia para liberar variaveis mais
+                especificas, principalmente quando precisar de UC, nota ou
+                pendencias.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              Preview de referencia
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Usamos o primeiro destinatario selecionado para validar o tom e a
+              substituicao das variaveis.
+            </p>
+
+            {previewStudent ? (
+              <div className="mt-4 space-y-3">
+                <div>
+                  <p className="text-sm font-medium">
+                    {previewStudent.full_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {previewStudent.email || "Sem email"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border bg-background p-3">
+                  <p className="line-clamp-6 whitespace-pre-wrap text-sm text-foreground">
+                    {previewMessage || messageContent || "Sem conteudo"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                Selecione destinatarios na etapa anterior para gerar um preview
+                realista da mensagem.
+              </div>
+            )}
+          </div>
         </div>
-      </div>
-    </div>
+
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <Button variant="outline" onClick={() => setCurrentStep("audience")}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar para destinatarios
+          </Button>
+
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={handlePreview}
+              disabled={!canPreviewOrSend}
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              Pre-visualizar
+            </Button>
+            <Button
+              onClick={() => handleStepChange("review")}
+              disabled={!canPreviewOrSend}
+            >
+              Revisar campanha
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 
   const renderReviewStep = () => (
-    <div className="space-y-5">
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">Etapa 3: revisar o envio</CardTitle>
+        <CardDescription className="mt-1">
+          Confira quem vai receber, veja o preview final e use o painel ao lado
+          para enviar agora, agendar ou transformar em rotina.
+        </CardDescription>
+      </CardHeader>
 
-        <div className="rounded-2xl border bg-muted/20 p-4 space-y-3">
-          <p className="text-sm font-semibold text-foreground">
-            Configuracao de agendamento
-          </p>
+      <CardContent className="space-y-5">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Canal
+            </p>
+            <p className="mt-1 text-sm font-semibold">Moodle</p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Destinatarios
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {selectedStudents.length}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Variaveis
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {availableVariableKeys.length}
+            </p>
+          </div>
+        </div>
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2 md:col-span-2">
-              <p className="text-xs text-muted-foreground">Tipo de programacao</p>
-              <Select
-                value={scheduleMode}
-                onValueChange={(value: CampaignScheduleMode) =>
-                  setScheduleMode(value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="specific_date">Data especifica</SelectItem>
-                  <SelectItem value="daily">Rotina diaria</SelectItem>
-                  <SelectItem value="weekly">Rotina semanal</SelectItem>
-                  <SelectItem value="biweekly">Rotina quinzenal</SelectItem>
-                  <SelectItem value="monthly">Rotina mensal</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        {selectedStudents.length > 0 && filterUC === "todos" && (
+          <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+            Selecione uma UC especifica se precisar liberar variaveis como
+            Unidade Curricular, Nota Media e Atividades Pendentes.
+          </div>
+        )}
 
-            {scheduleMode === "specific_date" ? (
-              <div className="space-y-2 md:col-span-2">
-                <p className="text-xs text-muted-foreground">Data e horario</p>
-                <Input
-                  type="datetime-local"
-                  value={scheduledAt}
-                  onChange={(event) => setScheduledAt(event.target.value)}
-                />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <p className="text-sm font-semibold text-foreground">
+              Preview da mensagem
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Exemplo real da mensagem que sera gerada para o primeiro
+              destinatario selecionado.
+            </p>
+
+            {previewStudent ? (
+              <div className="mt-4 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
+                    {previewStudent.full_name.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {previewStudent.full_name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {previewStudent.email || "Sem email"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border bg-background p-4">
+                  <p className="whitespace-pre-wrap text-sm text-foreground">
+                    {previewMessage || messageContent}
+                  </p>
+                </div>
               </div>
             ) : (
-              <>
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Data inicial</p>
-                  <Input
-                    type="date"
-                    value={routineStartDate}
-                    onChange={(event) => setRoutineStartDate(event.target.value)}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Horario</p>
-                  <Input
-                    type="time"
-                    value={routineTimeOfDay}
-                    onChange={(event) => setRoutineTimeOfDay(event.target.value)}
-                  />
-                </div>
-              </>
-            )}
-
-            {(scheduleMode === "weekly" || scheduleMode === "biweekly") && (
-              <div className="space-y-2 md:col-span-2">
-                <p className="text-xs text-muted-foreground">Dia da semana</p>
-                <Select
-                  value={routineWeekday}
-                  onValueChange={(value: WeekdayValue) =>
-                    setRoutineWeekday(value)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {WEEKDAY_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              <div className="mt-4 rounded-2xl border border-dashed px-4 py-8 text-sm text-muted-foreground">
+                Selecione ao menos um destinatario para montar o preview.
               </div>
             )}
+          </div>
 
-            {scheduleMode === "monthly" && (
-              <div className="space-y-2 md:col-span-2">
-                <p className="text-xs text-muted-foreground">Dia do mes</p>
-                <Input
-                  type="number"
-                  min={1}
-                  max={31}
-                  value={routineMonthlyDay}
-                  onChange={(event) => setRoutineMonthlyDay(event.target.value)}
-                />
+          <div className="rounded-2xl border bg-muted/20 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">
+                Quem vai receber
+              </p>
+              <Badge variant="outline">{selectedStudents.length} alunos</Badge>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {selectedStudents.length > 0 ? (
+                <>
+                  {selectedStudents.slice(0, 6).map((student) => (
+                    <div
+                      key={student.id}
+                      className="flex items-center justify-between rounded-2xl border bg-background px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium">
+                          {student.full_name}
+                        </p>
+                        <p className="truncate text-[11px] text-muted-foreground">
+                          {student.email || "Sem email"}
+                        </p>
+                      </div>
+                      <Badge variant="outline">
+                        {formatRiskLevel(student.current_risk_level)}
+                      </Badge>
+                    </div>
+                  ))}
+
+                  {selectedStudents.length > 6 && (
+                    <p className="text-[11px] text-muted-foreground">
+                      +{selectedStudents.length - 6} outros destinatarios entram
+                      neste envio.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="rounded-2xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                  Nenhum destinatario selecionado.
+                </div>
+              )}
+            </div>
+
+            {activeFilterBadges.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Filtros ativos
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {activeFilterBadges.map((badge) => (
+                    <Badge
+                      key={badge}
+                      variant="outline"
+                      className="text-[11px]"
+                    >
+                      {badge}
+                    </Badge>
+                  ))}
+                </div>
               </div>
             )}
-
-            <div className="space-y-2 md:col-span-2">
-              <p className="text-xs text-muted-foreground">Titulo do agendamento (opcional)</p>
-              <Input
-                value={scheduledTitle}
-                onChange={(event) => setScheduledTitle(event.target.value)}
-                placeholder="Ex: Lembrete semanal de atividades"
-              />
-            </div>
-
-            <div className="space-y-2 md:col-span-2">
-              <p className="text-xs text-muted-foreground">Observacoes (opcional)</p>
-              <Input
-                value={scheduledNotes}
-                onChange={(event) => setScheduledNotes(event.target.value)}
-                placeholder="Contexto da campanha"
-              />
-            </div>
           </div>
         </div>
 
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
           <Button variant="outline" onClick={() => setCurrentStep("message")}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Volta
+            Voltar para mensagem
           </Button>
 
-          <Button onClick={() => void handleSchedule()} disabled={!canPreviewOrSend || isScheduling}>
-            {isScheduling ? (
-              <Spinner className="mr-2 h-4 w-4" onAccent />
-            ) : (
-              <CalendarClock className="mr-2 h-4 w-4" />
-            )}
-            Criar campanha
+          <Button
+            variant="outline"
+            onClick={handlePreview}
+            disabled={!canPreviewOrSend}
+          >
+            <Eye className="mr-2 h-4 w-4" />
+            Abrir preview completo
           </Button>
         </div>
-    </div>
+      </CardContent>
+    </Card>
   );
+
+  const renderSidebarCard = () => (
+    <Card className="border-border/70 shadow-none">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-base">
+          {currentStep === "audience"
+            ? "Resumo da audiencia"
+            : currentStep === "message"
+              ? "Checklist da mensagem"
+              : "Entrega da campanha"}
+        </CardTitle>
+        <CardDescription className="mt-1">
+          {currentStep === "audience"
+            ? "Veja rapidamente o recorte atual e siga para a criacao da mensagem."
+            : currentStep === "message"
+              ? "Valide se o conteudo esta pronto antes de entrar na fase final."
+              : "Escolha se a campanha sera enviada agora, agendada ou convertida em rotina."}
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Etapa atual
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {campaignSteps[currentStepIndex]?.title}
+            </p>
+          </div>
+          <div className="rounded-2xl border bg-muted/20 p-3">
+            <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+              Selecionados
+            </p>
+            <p className="mt-1 text-sm font-semibold">
+              {selectedStudents.length}
+            </p>
+          </div>
+        </div>
+
+        {activeFilterBadges.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {activeFilterBadges.map((badge) => (
+              <Badge key={badge} variant="outline" className="text-[11px]">
+                {badge}
+              </Badge>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-2">
+          <p className="text-sm font-semibold">Amostra da audiencia</p>
+          {selectedStudents.length > 0 ? (
+            <div className="space-y-2">
+              {selectedStudents.slice(0, 5).map((student) => (
+                <div
+                  key={student.id}
+                  className="flex items-center justify-between rounded-2xl border px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {student.full_name}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground">
+                      {student.email || "Sem email"}
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    {formatRiskLevel(student.current_risk_level)}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed px-4 py-6 text-center text-xs text-muted-foreground">
+              Selecione destinatarios para ativar a campanha.
+            </div>
+          )}
+        </div>
+
+        {currentStep === "audience" && (
+          <Button
+            className="w-full"
+            onClick={() => handleStepChange("message")}
+            disabled={selectedStudents.length === 0}
+          >
+            Ir para mensagem
+            <ArrowRight className="ml-2 h-4 w-4" />
+          </Button>
+        )}
+
+        {currentStep === "message" && (
+          <>
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="rounded-2xl border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                {messageContent.trim()
+                  ? "A mensagem ja tem conteudo. Revise variaveis e siga para a etapa final."
+                  : "Escreva a mensagem antes de liberar a revisao da campanha."}
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handlePreview}
+                disabled={!canPreviewOrSend}
+              >
+                <Eye className="mr-2 h-4 w-4" />
+                Pre-visualizar mensagem
+              </Button>
+              <Button
+                className="w-full"
+                onClick={() => handleStepChange("review")}
+                disabled={!canPreviewOrSend}
+              >
+                Revisar campanha
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          </>
+        )}
+
+        {currentStep === "review" && (
+          <>
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="grid gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("now")}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
+                    deliveryMode === "now" && "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Send className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">Enviar agora</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Disparo imediato com job monitorado.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("scheduled")}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
+                    deliveryMode === "scheduled" &&
+                      "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <CalendarClock className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">Agendar</span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Congela audiencia e mensagem para entrega futura.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("routine")}
+                  className={cn(
+                    "rounded-2xl border px-4 py-3 text-left transition-colors hover:bg-muted/40",
+                    deliveryMode === "routine" && "border-primary bg-primary/5",
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <Workflow className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-semibold">
+                      Transformar em rotina
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Envia a campanha para Automacoes como rascunho de base.
+                  </p>
+                </button>
+              </div>
+
+              {deliveryMode === "scheduled" && (
+                <div className="space-y-3 rounded-2xl border bg-muted/20 p-4">
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="campaign-schedule-title"
+                      className="text-sm font-medium"
+                    >
+                      Nome interno do agendamento
+                    </label>
+                    <Input
+                      id="campaign-schedule-title"
+                      value={scheduledTitle}
+                      onChange={(event) =>
+                        setScheduledTitle(event.target.value)
+                      }
+                      placeholder={buildDefaultScheduledTitle(
+                        selectedStudents.length,
+                      )}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="campaign-schedule-at"
+                      className="text-sm font-medium"
+                    >
+                      Data e horario
+                    </label>
+                    <Input
+                      id="campaign-schedule-at"
+                      type="datetime-local"
+                      value={scheduledAt}
+                      onChange={(event) => setScheduledAt(event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label
+                      htmlFor="campaign-schedule-notes"
+                      className="text-sm font-medium"
+                    >
+                      Observacoes
+                    </label>
+                    <Input
+                      id="campaign-schedule-notes"
+                      value={scheduledNotes}
+                      onChange={(event) =>
+                        setScheduledNotes(event.target.value)
+                      }
+                      placeholder="Opcional"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {deliveryMode === "now" && hasActiveJobs && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                  Ja existe um envio em andamento ou na fila. Aguarde a
+                  conclusao antes de disparar outra campanha.
+                </div>
+              )}
+
+              {deliveryMode === "scheduled" && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-3 text-xs text-amber-800">
+                  {moodleSession
+                    ? "O agendamento salva o snapshot da audiencia e da mensagem personalizada."
+                    : "Sem sessao atual do Moodle, o snapshot sera salvo, mas a execucao futura depende de reautorizacao habilitada."}
+                </div>
+              )}
+
+              {deliveryMode === "routine" && (
+                <div className="rounded-2xl border border-border/70 bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
+                  A audiencia e a mensagem serao entregues ao modulo Automacoes
+                  como rascunho. O proximo passo la e definir gatilho, espera e
+                  condicoes.
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="outline"
+                  onClick={handlePreview}
+                  disabled={!canPreviewOrSend}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  Pre-visualizar campanha
+                </Button>
+                <Button
+                  onClick={handleLaunchCampaign}
+                  disabled={!canLaunchCampaign || isSending || isScheduling}
+                >
+                  {isSending || isScheduling ? (
+                    <Spinner className="mr-2 h-4 w-4" onAccent />
+                  ) : deliveryMode === "scheduled" ? (
+                    <Clock3 className="mr-2 h-4 w-4" />
+                  ) : deliveryMode === "routine" ? (
+                    <Workflow className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Send className="mr-2 h-4 w-4" />
+                  )}
+                  {deliveryMode === "scheduled"
+                    ? `Agendar para ${selectedStudents.length} aluno${selectedStudents.length !== 1 ? "s" : ""}`
+                    : deliveryMode === "routine"
+                      ? "Transformar em rotina"
+                      : `Enviar agora para ${selectedStudents.length} aluno${selectedStudents.length !== 1 ? "s" : ""}`}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+
+  const renderRecentJobsCard = () =>
+    recentJobs.length > 0 ? (
+      <Card className="border-border/70 shadow-none">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Execucoes recentes</CardTitle>
+          <CardDescription>
+            Acompanhe os ultimos disparos sem sair da tela.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {recentJobs.map((job) => (
+            <div key={job.id} className="space-y-2 rounded-2xl border p-3">
+              <div className="flex items-center justify-between gap-2">
+                {getStatusBadge(job.status)}
+                <span className="text-[11px] text-muted-foreground">
+                  {job.sent_count}/{job.total_recipients} enviados
+                </span>
+              </div>
+              <p className="line-clamp-2 text-xs text-foreground">
+                {job.message_content}
+              </p>
+              {job.status === "processing" && (
+                <Progress
+                  value={(job.sent_count / job.total_recipients) * 100}
+                  className="h-1.5"
+                />
+              )}
+              {job.failed_count > 0 && (
+                <span className="flex items-center gap-1 text-[11px] text-destructive">
+                  <AlertCircle className="h-3 w-3" />
+                  {job.failed_count} falhas
+                </span>
+              )}
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    ) : null;
 
   return (
     <div className="space-y-4">
       <Card className="border-border/70 shadow-none">
-        <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-foreground">Criacao de campanha</p>
-            <p className="text-xs text-muted-foreground">
-              Defina destinatarios, mensagem e data/agendamento/rotina no mesmo fluxo.
-            </p>
+        <CardContent className="space-y-4 p-5">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                Construtor da campanha
+              </p>
+              <div>
+                <p className="text-lg font-semibold text-foreground">
+                  Primeiro defina a audiencia, depois monte a mensagem e
+                  finalize a execucao.
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  O fluxo foi reorganizado para funcionar como um wizard de CRM:
+                  selecao, criacao e revisao.
+                </p>
+              </div>
+            </div>
+
+            <Badge variant="secondary" className="w-fit">
+              Canal Moodle
+            </Badge>
           </div>
-          <Button className="gap-2" onClick={() => setCreationModalOpen(true)}>
-            <CalendarDays className="h-4 w-4" />
-            Nova campanha
-          </Button>
+
+          <Progress value={stepProgress} className="h-2" />
+
+          <div className="grid gap-3 md:grid-cols-3">
+            {campaignSteps.map((step, index) => {
+              const isActive = currentStep === step.id;
+              const isCompleted = index < currentStepIndex;
+
+              return (
+                <button
+                  key={step.id}
+                  type="button"
+                  onClick={() => handleStepChange(step.id)}
+                  className={cn(
+                    "rounded-2xl border px-4 py-4 text-left transition-colors hover:bg-muted/40",
+                    isActive && "border-primary bg-primary/5",
+                    isCompleted && "border-primary/30",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={cn(
+                        "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+                        isActive || isCompleted
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-background text-muted-foreground",
+                      )}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        index + 1
+                      )}
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {step.title}
+                      </p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
-      <Dialog open={creationModalOpen} onOpenChange={handleCreationModalOpenChange}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Nova campanha</DialogTitle>
-            <DialogDescription>Destinatarios, mensagem e agendamento.</DialogDescription>
-          </DialogHeader>
+      {currentStep === "audience" ? (
+        <div className="space-y-4">
+          {renderSidebarCard()}
+          {renderAudienceStep()}
+          {renderRecentJobsCard()}
+        </div>
+      ) : (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {currentStep === "message" && renderMessageStep()}
+            {currentStep === "review" && renderReviewStep()}
+          </div>
 
-          <ScrollArea className="max-h-[70vh] pr-2" preventContentOverflow>
-            <div className="space-y-4 pb-1">
-              {currentStep === "audience" ? (
-                <div className="space-y-4">{renderAudienceStep()}</div>
-              ) : (
-                <div className="space-y-4">
-                  {currentStep === "message" && renderMessageStep()}
-                  {currentStep === "review" && renderReviewStep()}
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-
-          <DialogFooter>
-            {currentStep === "audience" ? (
-              <Button
-                onClick={() => handleStepChange("message")}
-                disabled={selectedStudents.length === 0}
-              >
-                Mensagem
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          <div className="space-y-4">
+            {renderSidebarCard()}
+            {renderRecentJobsCard()}
+          </div>
+        </div>
+      )}
 
       <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
         <DialogContent>
@@ -1568,6 +2201,50 @@ export function BulkSendTab() {
               </div>
             )}
           </ScrollArea>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={previewDialogOpen} onOpenChange={setPreviewDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Pre-visualizacao da Mensagem</DialogTitle>
+            <DialogDescription>
+              Confira como a mensagem personalizada sera enviada para o primeiro
+              destinatario selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          {previewStudent && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary">
+                  {previewStudent.full_name.charAt(0)}
+                </div>
+                <div>
+                  <p className="text-sm font-medium">
+                    {previewStudent.full_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Exemplo de como a mensagem sera enviada
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted p-4">
+                <p className="text-sm whitespace-pre-wrap">{previewMessage}</p>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Variaveis dependentes de UC ficam disponiveis somente quando uma
+                Unidade Curricular especifica esta selecionada.
+              </p>
+            </div>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPreviewDialogOpen(false)}
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

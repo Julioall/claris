@@ -33,7 +33,6 @@ export const PRIVATE_ROUTE_PERMISSIONS: Array<{ path: string; permission: AppPer
   { path: '/whatsapp', permission: APP_PERMISSIONS.WHATSAPP_VIEW },
   { path: '/campanhas', permission: APP_PERMISSIONS.MESSAGES_BULK_SEND },
   { path: '/claris', permission: APP_PERMISSIONS.CLARIS_VIEW },
-  { path: '/automacoes', permission: APP_PERMISSIONS.AUTOMATIONS_VIEW },
   { path: '/relatorios', permission: APP_PERMISSIONS.REPORTS_VIEW },
   { path: '/configuracoes', permission: APP_PERMISSIONS.SETTINGS_VIEW },
   { path: '/meus-servicos', permission: APP_PERMISSIONS.SERVICES_VIEW },
