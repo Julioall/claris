@@ -269,6 +269,17 @@ async function seedGenerateAutomatedTasksScenario(status, authUserId) {
     moodle_username: seed.username,
   })
 
+  const [tutorGroup] = await selectRows(status, 'app_groups', { slug: 'tutor' })
+  if (!tutorGroup?.id) {
+    fail('Grupo padrao "tutor" nao encontrado. Rode as migrations locais antes do smoke test.')
+  }
+
+  await upsertRows(status, 'user_group_memberships', 'user_id', {
+    user_id: authUserId,
+    group_id: tutorGroup.id,
+    assigned_by: authUserId,
+  })
+
   const [course] = await upsertRows(status, 'courses', 'moodle_source,moodle_course_id', {
     moodle_course_id: seed.courseMoodleId,
     moodle_source: 'goias',
