@@ -13,7 +13,23 @@ import {
   upsertMoodleReauthCredential,
 } from '../_shared/domain/moodle-reauth/repository.ts'
 import { encryptMoodleReauthPayload } from '../_shared/security/moodle-reauth-crypto.ts'
+import { resolveMoodleSourceFromUrl } from '../_shared/domain/moodle-sync/repository.ts'
 import type { MoodleTokenResponse } from '../_shared/moodle/mod.ts'
+
+const GOIAS_MOODLE_URL = 'https://ead.fieg.com.br'
+const NACIONAL_MOODLE_URL = 'https://ead.senai.br'
+
+function resolveSecondaryMoodleUrl(primaryUrl: string): string {
+  const source = resolveMoodleSourceFromUrl(primaryUrl)
+  return source === 'goias' ? NACIONAL_MOODLE_URL : GOIAS_MOODLE_URL
+}
+
+interface MoodleSourceSession {
+  token: string
+  userId: number
+  moodleUrl: string
+  moodleSource: string
+}
 
 interface LoginParams {
   backgroundReauthEnabled?: boolean
@@ -366,6 +382,40 @@ export async function login(params: LoginParams): Promise<Response> {
       enabled: resolvedBackgroundReauthEnabled,
     })
 
+    // Authenticate against the secondary Moodle source in the background
+    const primarySource = resolveMoodleSourceFromUrl(moodleUrl)
+    const secondaryUrl = resolveSecondaryMoodleUrl(moodleUrl)
+    let secondarySession: MoodleSourceSession | null = null
+
+    try {
+      const secondaryTokenResponse = await getMoodleToken(secondaryUrl, username, password, service)
+      if (secondaryTokenResponse.token && !secondaryTokenResponse.error) {
+        const secondarySiteInfo = await getSiteInfo(secondaryUrl, secondaryTokenResponse.token)
+        secondarySession = {
+          token: secondaryTokenResponse.token,
+          userId: secondarySiteInfo.userid,
+          moodleUrl: secondaryUrl,
+          moodleSource: resolveMoodleSourceFromUrl(secondaryUrl),
+        }
+      } else {
+        console.warn('[moodle-auth] Secondary Moodle auth failed (non-fatal):', secondaryTokenResponse.error)
+      }
+    } catch (secondaryError) {
+      console.warn('[moodle-auth] Secondary Moodle auth error (non-fatal):', secondaryError)
+    }
+
+    const primarySession: MoodleSourceSession = {
+      token: tokenResponse.token!,
+      userId: siteInfo.userid,
+      moodleUrl,
+      moodleSource: primarySource,
+    }
+
+    const moodleSessions: Record<string, MoodleSourceSession | null> = {
+      [primarySource]: primarySession,
+      [secondarySession?.moodleSource ?? (primarySource === 'goias' ? 'nacional' : 'goias')]: secondarySession,
+    }
+
     return jsonResponse({
       success: true,
       backgroundReauthError: backgroundReauth.error,
@@ -373,8 +423,10 @@ export async function login(params: LoginParams): Promise<Response> {
       user,
       moodleToken: tokenResponse.token,
       moodleUserId: siteInfo.userid,
+      moodleSessions,
       session: { access_token: session.access_token, refresh_token: session.refresh_token },
     })
+
   } catch (error) {
     console.error('Unexpected moodle-auth login flow error:', error)
     return jsonResponse(
@@ -441,6 +493,7 @@ export async function fallbackLogin(
         user: fallbackUser,
         moodleToken: null,
         moodleUserId: parseInt(fallbackUser.moodle_user_id, 10),
+        moodleSessions: { goias: null, nacional: null },
         offlineMode: true,
         session: {
           access_token: signInData.session.access_token,

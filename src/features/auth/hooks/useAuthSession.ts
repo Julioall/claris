@@ -6,13 +6,20 @@ import { toast } from '@/hooks/use-toast';
 import { resolveFunctionsInvokeErrorMessage } from '@/lib/moodle-errors';
 import { trackEvent } from '@/lib/tracking';
 
-import { isInvalidRefreshTokenError, type MoodleSession, type SessionContext } from '../domain/session';
+import {
+  isInvalidRefreshTokenError,
+  getPrimaryMoodleSession,
+  type MoodleSession,
+  type MoodleSessionMap,
+  type SessionContext,
+} from '../domain/session';
 import { authenticateMoodleUser } from '../infrastructure/moodle-api';
 import { clearStoredSession, loadStoredSession, saveStoredSession } from '../infrastructure/session-storage';
 
 export interface UseAuthSessionResult {
   user: User | null;
   moodleSession: MoodleSession | null;
+  moodleSessions: MoodleSessionMap | null;
   isLoading: boolean;
   lastSync: string | null;
   setLastSync: (value: string | null) => void;
@@ -32,18 +39,18 @@ export interface UseAuthSessionResult {
 
 export function useAuthSession(): UseAuthSessionResult {
   const [user, setUser] = useState<User | null>(null);
-  const [moodleSession, setMoodleSession] = useState<MoodleSession | null>(null);
+  const [moodleSessions, setMoodleSessions] = useState<MoodleSessionMap | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSyncState, setLastSyncState] = useState<string | null>(null);
 
-  const applyLocalSnapshot = useCallback((nextUser: User | null, nextSession: MoodleSession | null) => {
+  const applyLocalSnapshot = useCallback((nextUser: User | null, nextSessions: MoodleSessionMap | null) => {
     setUser(nextUser);
-    setMoodleSession(nextSession);
+    setMoodleSessions(nextSessions);
     setLastSyncState(nextUser?.last_sync || null);
   }, []);
 
-  const persistSnapshot = useCallback(async (nextUser: User | null, nextSession: MoodleSession | null) => {
-    await saveStoredSession(nextUser ? { user: nextUser, moodleSession: nextSession } : null);
+  const persistSnapshot = useCallback(async (nextUser: User | null, nextSessions: MoodleSessionMap | null) => {
+    await saveStoredSession(nextUser ? { user: nextUser, moodleSessions: nextSessions } : null);
   }, []);
 
   const resetAuthState = useCallback(() => {
@@ -54,7 +61,7 @@ export function useAuthSession(): UseAuthSessionResult {
   const hydrateFromStorage = useCallback(async () => {
     const stored = await loadStoredSession();
     if (!stored) return;
-    applyLocalSnapshot(stored.user, stored.moodleSession);
+    applyLocalSnapshot(stored.user, stored.moodleSessions ?? null);
   }, [applyLocalSnapshot]);
 
   useEffect(() => {
@@ -115,10 +122,10 @@ export function useAuthSession(): UseAuthSessionResult {
         last_sync: value || undefined,
       };
 
-      void persistSnapshot(nextUser, moodleSession);
+      void persistSnapshot(nextUser, moodleSessions);
       return nextUser;
     });
-  }, [moodleSession, persistSnapshot]);
+  }, [moodleSessions, persistSnapshot]);
 
   const login = useCallback(async (
     username: string,
@@ -162,15 +169,17 @@ export function useAuthSession(): UseAuthSessionResult {
         }
       }
 
-      applyLocalSnapshot(result.user, result.moodleSession);
-      await persistSnapshot(result.user, result.moodleSession);
+      applyLocalSnapshot(result.user, result.moodleSessions);
+      await persistSnapshot(result.user, result.moodleSessions);
 
+      const hasBothSources = Object.keys(result.moodleSessions).length >= 2;
+      const sourceNote = hasBothSources ? ' (Goiás + Nacional)' : '';
       const offlineNote = result.offlineMode ? ' (modo offline)' : '';
       toast({
         title: 'Login realizado com sucesso',
         description: result.backgroundReauthError
-          ? `Bem-vindo, ${result.user.full_name}!${offlineNote} A reautorizacao para jobs nao foi salva.`
-          : `Bem-vindo, ${result.user.full_name}!${offlineNote}`,
+          ? `Bem-vindo, ${result.user.full_name}!${sourceNote}${offlineNote} A reautorizacao para jobs nao foi salva.`
+          : `Bem-vindo, ${result.user.full_name}!${sourceNote}${offlineNote}`,
       });
 
       void trackEvent(result.user.id, 'login');
@@ -212,29 +221,30 @@ export function useAuthSession(): UseAuthSessionResult {
 
   const resolveSessionContext = useCallback(async (): Promise<SessionContext | null> => {
     let userToUse = user;
-    let sessionToUse = moodleSession;
+    let sessionsToUse = moodleSessions;
 
-    if (!userToUse || !sessionToUse) {
+    if (!userToUse || !sessionsToUse || Object.keys(sessionsToUse).length === 0) {
       const stored = await loadStoredSession();
       if (stored) {
         userToUse = stored.user;
-        sessionToUse = stored.moodleSession;
+        sessionsToUse = stored.moodleSessions ?? null;
       }
     }
 
-    if (!userToUse || !sessionToUse) {
+    if (!userToUse || !sessionsToUse || Object.keys(sessionsToUse).length === 0) {
       return null;
     }
 
     return {
       user: userToUse,
-      session: sessionToUse,
+      sessions: sessionsToUse,
     };
-  }, [moodleSession, user]);
+  }, [moodleSessions, user]);
 
   return {
     user,
-    moodleSession,
+    moodleSession: getPrimaryMoodleSession(moodleSessions),
+    moodleSessions,
     isLoading,
     lastSync: lastSyncState,
     setLastSync,

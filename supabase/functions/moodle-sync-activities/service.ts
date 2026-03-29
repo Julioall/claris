@@ -13,10 +13,10 @@ import { callMoodleApi } from '../_shared/moodle/mod.ts'
 const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
 const COMPLETION_FETCH_POOL_SIZE = 8
 
-export async function syncActivities(moodleUrl: string, token: string, courseId: number): Promise<Response> {
+export async function syncActivities(moodleUrl: string, token: string, courseId: number, moodleSource: string): Promise<Response> {
   const supabase = createServiceClient()
 
-  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
+  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId), moodleSource)
 
   if (!dbCourse) return errorResponse('Course not found in database', 404)
 

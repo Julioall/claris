@@ -4,6 +4,7 @@ import type { User } from '@/features/auth/types';
 import type { Course } from '@/features/courses/types';
 import type { Student } from '@/features/students/types';
 import type { MoodleSession } from '@/features/auth/domain/session';
+import { getPrimaryMoodleSession } from '@/features/auth/domain/session';
 import {
   authenticateMoodleUser,
   fetchMoodleCoursesFromSession,
@@ -47,7 +48,7 @@ export function useMoodleApi() {
       return {
         success: true,
         user: result.user,
-        session: result.moodleSession || undefined,
+        session: getPrimaryMoodleSession(result.moodleSessions) || undefined,
       };
     } catch (err) {
       console.error('Login error:', err);

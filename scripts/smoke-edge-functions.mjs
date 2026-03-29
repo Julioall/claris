@@ -280,8 +280,9 @@ async function seedGenerateAutomatedTasksScenario(status, authUserId) {
     assigned_by: authUserId,
   })
 
-  const [course] = await upsertRows(status, 'courses', 'moodle_course_id', {
+  const [course] = await upsertRows(status, 'courses', 'moodle_source,moodle_course_id', {
     moodle_course_id: seed.courseMoodleId,
+    moodle_source: 'goias',
     name: seed.courseName,
     short_name: seed.courseShortName,
   })
@@ -290,9 +291,10 @@ async function seedGenerateAutomatedTasksScenario(status, authUserId) {
     fail('Nao foi possivel seedar o curso de smoke.')
   }
 
-  const [student] = await upsertRows(status, 'students', 'moodle_user_id', {
+  const [student] = await upsertRows(status, 'students', 'moodle_source,moodle_user_id', {
     current_risk_level: 'risco',
     full_name: seed.studentFullName,
+    moodle_source: 'goias',
     moodle_user_id: seed.studentMoodleUserId,
   })
 

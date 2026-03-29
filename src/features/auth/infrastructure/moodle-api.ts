@@ -7,8 +7,7 @@ import {
 import type { User } from '@/features/auth/types';
 import type { Course } from '@/features/courses/types';
 
-import { isInvalidRefreshTokenError } from '../domain/session';
-import type { MoodleSession } from '../domain/session';
+import { isInvalidRefreshTokenError, type MoodleSource, type MoodleSession, type MoodleSessionMap } from '../domain/session';
 
 const DEFAULT_MOODLE_SERVICE = 'moodle_mobile_app';
 const SUPABASE_FUNCTIONS_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL as string}/functions/v1`;
@@ -24,7 +23,7 @@ export interface AuthenticateMoodleSuccess {
   backgroundReauthError?: string;
   backgroundReauthStored?: boolean;
   user: User;
-  moodleSession: MoodleSession | null;
+  moodleSessions: MoodleSessionMap;
   supabaseSession?: {
     access_token: string;
     refresh_token: string;
@@ -122,6 +121,7 @@ export async function authenticateMoodleUser(params: {
     user: User;
     moodleToken?: string;
     moodleUserId?: number;
+    moodleSessions?: Record<string, { token: string; userId: number; moodleUrl: string; moodleSource: string } | null>;
     offlineMode?: boolean;
     session?: {
       access_token: string;
@@ -136,18 +136,35 @@ export async function authenticateMoodleUser(params: {
     };
   }
 
+  // Build MoodleSessionMap from the new moodleSessions field, falling back to
+  // the legacy moodleToken/moodleUserId for older edge function responses.
+  const moodleSessions: MoodleSessionMap = {};
+  if (payload.moodleSessions) {
+    for (const [source, raw] of Object.entries(payload.moodleSessions)) {
+      if (raw?.token) {
+        moodleSessions[source as MoodleSource] = {
+          moodleToken: raw.token,
+          moodleUserId: raw.userId,
+          moodleUrl: raw.moodleUrl,
+          moodleSource: raw.moodleSource as MoodleSource,
+        };
+      }
+    }
+  } else if (payload.moodleToken) {
+    moodleSessions.goias = {
+      moodleToken: payload.moodleToken,
+      moodleUserId: payload.moodleUserId ?? 0,
+      moodleUrl: cleanUrl,
+      moodleSource: 'goias',
+    };
+  }
+
   return {
     success: true,
     backgroundReauthError: payload.backgroundReauthError,
     backgroundReauthStored: payload.backgroundReauthStored,
     user: payload.user,
-    moodleSession: payload.moodleToken
-      ? {
-          moodleToken: payload.moodleToken,
-          moodleUserId: payload.moodleUserId ?? 0,
-          moodleUrl: cleanUrl,
-        }
-      : null,
+    moodleSessions,
     supabaseSession: payload.session,
     offlineMode: Boolean(payload.offlineMode),
   };

@@ -15,6 +15,7 @@ import {
   type SyncPreferences,
 } from '@/features/courses/api';
 import type { Course } from '@/features/courses/types';
+import type { MoodleSource } from '@/features/auth/domain/session';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { isCourseEffectivelyActive, withEffectiveCourseDates } from '@/lib/course-dates';
@@ -82,6 +83,7 @@ export function CourseSelectorDialog({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [includeEmptyCourses, setIncludeEmptyCourses] = useState(false);
   const [includeFinished, setIncludeFinished] = useState(false);
+  const [sourceFilter, setSourceFilter] = useState<MoodleSource | null>(null);
   const [studentCounts, setStudentCounts] = useState<Map<string, number>>(new Map());
   const [openSchools, setOpenSchools] = useState<Set<string>>(new Set());
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -126,6 +128,13 @@ export function CourseSelectorDialog({
     load();
   }, [open, user]);
 
+  const availableSources = useMemo(() => {
+    const sources = new Set(
+      normalizedCourses.map(c => c.moodle_source).filter((s): s is MoodleSource => !!s),
+    );
+    return Array.from(sources);
+  }, [normalizedCourses]);
+
   const selectableCourses = useMemo(() => {
     return normalizedCourses.filter(course => {
       const count = studentCounts.get(course.id);
@@ -135,9 +144,11 @@ export function CourseSelectorDialog({
         return false;
       }
 
+      if (sourceFilter && course.moodle_source !== sourceFilter) return false;
+
       return Boolean(course.category);
     });
-  }, [normalizedCourses, includeEmptyCourses, studentCounts, countsLoaded]);
+  }, [normalizedCourses, includeEmptyCourses, studentCounts, countsLoaded, sourceFilter]);
 
   const groupedSchools = useMemo(() => {
     const schoolMap = new Map<string, Map<string, Course[]>>();
@@ -378,6 +389,30 @@ export function CourseSelectorDialog({
                   checked={includeFinished}
                   onCheckedChange={setIncludeFinished}
                 />
+              </div>
+            )}
+            {availableSources.length > 1 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Origem:</span>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSourceFilter(null)}
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${!sourceFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                  >
+                    Todas
+                  </button>
+                  {availableSources.map(source => (
+                    <button
+                      key={source}
+                      type="button"
+                      onClick={() => setSourceFilter(source === sourceFilter ? null : source)}
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-medium transition-colors ${sourceFilter === source ? (source === 'goias' ? 'bg-blue-600 text-white' : 'bg-green-600 text-white') : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                    >
+                      {source === 'goias' ? 'Goiás' : source === 'nacional' ? 'Nacional' : source}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>

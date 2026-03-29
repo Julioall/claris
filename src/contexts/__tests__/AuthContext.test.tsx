@@ -265,7 +265,7 @@ describe("AuthContext", () => {
       })
       .mockResolvedValueOnce({
         data: {
-          courses: [{ id: "c-1", moodle_course_id: "101", short_name: "Matematica" }],
+          courses: [{ id: "c-1", moodle_course_id: "101", moodle_source: "goias", short_name: "Matematica" }],
         },
         error: null,
       });
@@ -340,6 +340,7 @@ describe("AuthContext", () => {
         {
           id: "c-1",
           moodle_course_id: "101",
+          moodle_source: "goias",
           name: "Matematica",
           short_name: "MAT",
           created_at: "2026-01-01T00:00:00.000Z",
@@ -397,6 +398,7 @@ describe("AuthContext", () => {
                 {
                   id: "c-1",
                   moodle_course_id: "101",
+                  moodle_source: "goias",
                   name: "Matematica",
                   short_name: "MAT",
                   created_at: "2026-01-01T00:00:00.000Z",
@@ -461,6 +463,7 @@ describe("AuthContext", () => {
         {
           id: "c-1",
           moodle_course_id: "101",
+          moodle_source: "goias",
           name: "Matematica",
           short_name: "MAT",
           created_at: "2026-01-01T00:00:00.000Z",

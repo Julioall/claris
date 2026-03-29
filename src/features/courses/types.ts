@@ -1,8 +1,10 @@
 import type { Student } from '@/features/students/types';
+import type { MoodleSource } from '@/features/auth/domain/session';
 
 export interface Course {
   id: string;
   moodle_course_id: string;
+  moodle_source: MoodleSource;
   name: string;
   short_name?: string;
   category?: string;
