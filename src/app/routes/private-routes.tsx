@@ -1,10 +1,9 @@
-import { Route } from 'react-router-dom';
+import { Navigate, Route } from 'react-router-dom';
 
 import { AppLayout } from '@/components/layout/AppLayout';
 
 import {
   AgendaPage,
-  AutomationsPage,
   CampaignsPage,
   ClarisPage,
   CoursePanelPage,
@@ -46,7 +45,7 @@ export function renderPrivateRoutes() {
       <Route path="/whatsapp" element={<PermissionRoute permission={APP_PERMISSIONS.WHATSAPP_VIEW}><WhatsAppPage /></PermissionRoute>} />
       <Route path="/campanhas" element={<PermissionRoute permission={APP_PERMISSIONS.MESSAGES_BULK_SEND}><CampaignsPage /></PermissionRoute>} />
       <Route path="/claris" element={<PermissionRoute permission={APP_PERMISSIONS.CLARIS_VIEW}><ClarisPage /></PermissionRoute>} />
-      <Route path="/automacoes" element={<PermissionRoute permission={APP_PERMISSIONS.AUTOMATIONS_VIEW}><AutomationsPage /></PermissionRoute>} />
+      <Route path="/automacoes" element={<Navigate to="/campanhas?tab=campanhas" replace />} />
       <Route path="/relatorios" element={<PermissionRoute permission={APP_PERMISSIONS.REPORTS_VIEW}><ReportsPage /></PermissionRoute>} />
       <Route path="/configuracoes" element={<PermissionRoute permission={APP_PERMISSIONS.SETTINGS_VIEW}><SettingsPage /></PermissionRoute>} />
       <Route path="/meus-servicos" element={<PermissionRoute permission={APP_PERMISSIONS.SERVICES_VIEW}><MyServicesPage /></PermissionRoute>} />

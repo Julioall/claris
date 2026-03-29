@@ -15,7 +15,6 @@ import {
   Shield,
   Sparkles,
   Users,
-  Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
@@ -63,7 +62,6 @@ const mainNavItems: SidebarNavItem[] = [
   { title: 'Mensagens', url: '/mensagens', icon: MessageSquare, permission: APP_PERMISSIONS.MESSAGES_VIEW },
   { title: 'WhatsApp', url: '/whatsapp', icon: MessageCircle, permission: APP_PERMISSIONS.WHATSAPP_VIEW },
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone, permission: APP_PERMISSIONS.MESSAGES_BULK_SEND },
-  { title: 'Automacoes', url: '/automacoes', icon: Zap, permission: APP_PERMISSIONS.AUTOMATIONS_VIEW },
   { title: 'Meus Servicos', url: '/meus-servicos', icon: Plug, permission: APP_PERMISSIONS.SERVICES_VIEW },
   { title: 'Claris IA', url: '/claris', icon: Sparkles, permission: APP_PERMISSIONS.CLARIS_VIEW },
   { title: 'Relatorios', url: '/relatorios', icon: FileSpreadsheet, permission: APP_PERMISSIONS.REPORTS_VIEW },
