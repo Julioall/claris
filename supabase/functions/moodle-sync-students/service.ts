@@ -208,18 +208,46 @@ function isActiveValue(value: unknown): boolean {
   return false
 }
 
+function normalizeRoleShortname(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function isStudentRoleShortname(role: string): boolean {
+  if (STUDENT_ROLE_SHORTNAMES.has(role)) return true
+  return role.includes('student') || role.includes('aluno') || role.includes('estudante')
+}
+
+function isStaffRoleShortname(role: string): boolean {
+  if (STAFF_ROLE_SHORTNAMES.has(role)) return true
+  return (
+    role.includes('teacher') ||
+    role.includes('professor') ||
+    role.includes('docente') ||
+    role.includes('tutor') ||
+    role.includes('monitor') ||
+    role.includes('coordenador') ||
+    role.includes('manager') ||
+    role.includes('admin')
+  )
+}
+
 function isStudentLikeUser(user: { roles?: { shortname?: string }[] }): boolean {
   const roleShortnames = (user.roles || [])
-    .map((role) => String(role.shortname || '').toLowerCase())
+    .map((role) => normalizeRoleShortname(String(role.shortname || '')))
     .filter(Boolean)
 
   if (roleShortnames.length === 0) return true
 
-  if (roleShortnames.some((role) => STUDENT_ROLE_SHORTNAMES.has(role))) return true
+  if (roleShortnames.some((role) => isStudentRoleShortname(role))) return true
 
-  if (roleShortnames.every((role) => STAFF_ROLE_SHORTNAMES.has(role))) return false
+  if (roleShortnames.some((role) => isStaffRoleShortname(role))) return false
 
-  return true
+  // If user has explicit roles but none map to student, be conservative and exclude.
+  return false
 }
 
 function resolveEnrollmentStatus(args: {
