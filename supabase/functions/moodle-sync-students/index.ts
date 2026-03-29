@@ -1,6 +1,6 @@
 import { userHasCourseAccess, userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
-import { findCourseByMoodleCourseId } from '../_shared/domain/moodle-sync/repository.ts'
+import { findCourseByMoodleCourseId, resolveMoodleSourceFromUrl } from '../_shared/domain/moodle-sync/repository.ts'
 import { createHandler, errorResponse } from '../_shared/http/mod.ts'
 import { syncStudents } from './service.ts'
 import { parseMoodleSyncStudentsPayload } from './payload.ts'
@@ -16,7 +16,8 @@ Deno.serve(createHandler(async ({ body, user }) => {
     return errorResponse('Permission denied for Moodle student sync.', 403)
   }
 
-  const course = await findCourseByMoodleCourseId(supabase, String(body.courseId))
+  const moodleSource = resolveMoodleSourceFromUrl(body.moodleUrl)
+  const course = await findCourseByMoodleCourseId(supabase, String(body.courseId), moodleSource)
   if (!course) return errorResponse('Course not found in database', 404)
 
   const hasCourseAccess = await userHasCourseAccess(supabase, user.id, course.id)
@@ -24,5 +25,5 @@ Deno.serve(createHandler(async ({ body, user }) => {
     return errorResponse('Forbidden for this course.', 403)
   }
 
-  return await syncStudents(body.moodleUrl, body.token, body.courseId)
+  return await syncStudents(body.moodleUrl, body.token, body.courseId, moodleSource)
 }, { requireAuth: true, parseBody: parseMoodleSyncStudentsPayload }))

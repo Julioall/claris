@@ -1,6 +1,6 @@
 import { decryptSessionData, encryptSessionData } from '@/lib/session-crypto';
 
-import { AUTH_STORAGE_KEY, type StoredSession } from '../domain/session';
+import { AUTH_STORAGE_KEY, type StoredSession, type MoodleSessionMap } from '../domain/session';
 
 export async function loadStoredSession(): Promise<StoredSession | null> {
   try {
@@ -13,9 +13,17 @@ export async function loadStoredSession(): Promise<StoredSession | null> {
       return null;
     }
 
+    // Backward compat: migrate old single moodleSession to moodleSessions map
+    let moodleSessions: MoodleSessionMap | null = decoded.moodleSessions ?? null;
+    if (!moodleSessions && decoded.moodleSession) {
+      const oldSession = decoded.moodleSession;
+      const source = oldSession.moodleSource ?? 'goias';
+      moodleSessions = { [source]: { ...oldSession, moodleSource: source } } as MoodleSessionMap;
+    }
+
     return {
       user: decoded.user,
-      moodleSession: decoded.moodleSession ?? null,
+      moodleSessions,
     };
   } catch {
     console.error('Error loading session');

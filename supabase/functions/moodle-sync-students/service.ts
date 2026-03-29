@@ -258,10 +258,10 @@ function resolveEnrollmentStatus(args: {
   return 'ativo'
 }
 
-export async function syncStudents(moodleUrl: string, token: string, courseId: number): Promise<Response> {
+export async function syncStudents(moodleUrl: string, token: string, courseId: number, moodleSource: string): Promise<Response> {
   const supabase = createServiceClient()
 
-  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
+  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId), moodleSource)
 
   if (!dbCourse) return errorResponse('Course not found in database', 404)
 
@@ -403,6 +403,7 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
     const { phone, phone_number, mobile_phone } = resolveStudentPhones(phoneSource)
 
     return {
+      moodle_source: moodleSource,
       moodle_user_id: String(student.id),
       full_name: student.fullname || `${student.firstname} ${student.lastname}`,
       email: student.email || null,

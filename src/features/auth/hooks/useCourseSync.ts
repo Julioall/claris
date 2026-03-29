@@ -12,7 +12,8 @@ import {
 import { toast } from '@/hooks/use-toast';
 import { logError, trackEvent } from '@/lib/tracking';
 
-import type { SessionContext } from '../domain/session';
+import type { MoodleSession, SessionContext } from '../domain/session';
+import { getPrimaryMoodleSession } from '../domain/session';
 import {
   createInitialSyncProgress,
   INITIAL_SYNC_STEPS,
@@ -180,33 +181,41 @@ export function useCourseSync(params: {
     const context = await params.resolveSessionContext();
     if (!context) return { courses: [], handledError: false };
 
-    const result = await fetchMoodleCoursesFromSession(
-      context.session,
-      userIdOverride ?? context.session.moodleUserId,
-    );
+    const sessionEntries = Object.values(context.sessions).filter((s): s is MoodleSession => Boolean(s));
+    if (sessionEntries.length === 0) return { courses: [], handledError: false };
 
-    if (!result.handledError) {
-      return result;
+    const allCourses: Course[] = [];
+    let handledError = false;
+
+    for (const session of sessionEntries) {
+      const result = await fetchMoodleCoursesFromSession(
+        session,
+        userIdOverride ?? session.moodleUserId,
+      );
+
+      if (result.handledError) {
+        if (result.isMissingUser) {
+          await params.clearInvalidSession();
+          toast({
+            title: 'Sessao invalida',
+            description: 'Sua sessao local ficou desatualizada. Faca login novamente.',
+            variant: 'destructive',
+          });
+          return { courses: [], handledError: true };
+        }
+        toast({
+          title: 'Erro ao buscar cursos',
+          description: result.errorMessage || 'Nao foi possivel obter cursos do Moodle.',
+          variant: 'destructive',
+        });
+        handledError = true;
+        continue;
+      }
+
+      allCourses.push(...result.courses);
     }
 
-    if (result.isMissingUser) {
-      await params.clearInvalidSession();
-      toast({
-        title: 'Sessao invalida',
-        description: 'Sua sessao local ficou desatualizada. Faca login novamente.',
-        variant: 'destructive',
-      });
-
-      return { courses: [], handledError: true };
-    }
-
-    toast({
-      title: 'Erro ao buscar cursos',
-      description: result.errorMessage || 'Nao foi possivel obter cursos do Moodle.',
-      variant: 'destructive',
-    });
-
-    return { courses: [], handledError: true };
+    return { courses: allCourses, handledError: handledError && allCourses.length === 0 };
   }, [params]);
 
   const syncData = useCallback(async () => {
@@ -294,44 +303,59 @@ export function useCourseSync(params: {
       let riskUpdateResult: Awaited<ReturnType<typeof recalculateRiskForCourses>> | null = null;
       let edgeAccessToken: string | null = null;
 
+      const sessionEntries = Object.values(context.sessions).filter((s): s is MoodleSession => Boolean(s));
+      const primarySession = getPrimaryMoodleSession(context.sessions);
+
       try {
         edgeAccessToken = await resolveEdgeAccessToken();
 
-        await invokeMoodleFunctionWithTimeout({
-          functionName: 'moodle-sync-courses',
-          body: {
-            action: 'link_selected_courses',
-            userId: context.session.moodleUserId,
-            selectedCourseIds: courseIds,
-          },
-          timeoutMs: 30000,
-          accessTokenOverride: edgeAccessToken,
-        });
+        if (primarySession) {
+          await invokeMoodleFunctionWithTimeout({
+            functionName: 'moodle-sync-courses',
+            body: {
+              action: 'link_selected_courses',
+              userId: primarySession.moodleUserId,
+              selectedCourseIds: courseIds,
+            },
+            timeoutMs: 30000,
+            accessTokenOverride: edgeAccessToken,
+          });
+        }
 
-        updateStep('courses', { status: 'in_progress', count: 0, total: 1 });
-        const { data: coursesData, error: coursesError } = await invokeMoodleFunctionWithTimeout({
-          functionName: 'moodle-sync-courses',
-          body: {
-            moodleUrl: context.session.moodleUrl,
-            token: context.session.moodleToken,
-            userId: context.session.moodleUserId,
-          },
-          timeoutMs: 30000,
-          accessTokenOverride: edgeAccessToken,
-        });
+        updateStep('courses', { status: 'in_progress', count: 0, total: sessionEntries.length });
 
-        if (coursesError || coursesData?.error) {
+        const allSyncedCoursesAcrossSources: Course[] = [];
+        let courseSyncHadError = false;
+
+        for (const session of sessionEntries) {
+          const { data: coursesData, error: coursesError } = await invokeMoodleFunctionWithTimeout({
+            functionName: 'moodle-sync-courses',
+            body: {
+              moodleUrl: session.moodleUrl,
+              token: session.moodleToken,
+              userId: session.moodleUserId,
+            },
+            timeoutMs: 30000,
+            accessTokenOverride: edgeAccessToken,
+          });
+
+          if (coursesError || coursesData?.error) {
+            console.warn(`[useCourseSync] Course sync error for source ${session.moodleSource}:`, coursesError || coursesData?.error);
+            courseSyncHadError = true;
+          } else {
+            const sourceCourses = ((coursesData as { courses?: Course[] } | null)?.courses || []);
+            allSyncedCoursesAcrossSources.push(...sourceCourses);
+          }
+        }
+
+        if (courseSyncHadError && allSyncedCoursesAcrossSources.length === 0) {
           updateStep('courses', {
             status: 'error',
-            errorMessage:
-              (typeof coursesError?.message === 'string' ? coursesError.message : undefined) ||
-              (coursesData as { error?: string } | null)?.error ||
-              'Falha ao sincronizar cursos',
+            errorMessage: 'Falha ao sincronizar cursos',
           });
         } else {
-          const allSyncedCourses = ((coursesData as { courses?: Course[] } | null)?.courses || []);
-          setCourses(allSyncedCourses);
-          syncedCourses = allSyncedCourses.filter((course) => courseIds.includes(course.id));
+          setCourses(allSyncedCoursesAcrossSources);
+          syncedCourses = allSyncedCoursesAcrossSources.filter((course) => courseIds.includes(course.id));
           updateStep('courses', {
             status: 'completed',
             count: syncedCourses.length,
@@ -339,22 +363,36 @@ export function useCourseSync(params: {
           });
         }
 
+        // Run student sync per source
         updateStep('students', { status: 'in_progress', count: 0, total: syncedCourses.length });
-        const studentsResult = await runBatchedEntitySync({
-          entity: 'students',
-          selectedCourses: syncedCourses,
-          session: context.session,
-          accessToken: edgeAccessToken,
-          onProgress: (processedCourses) => {
-            updateStep('students', { count: processedCourses, total: syncedCourses.length });
-          },
-        });
+        let totalStudentErrorCount = 0;
+        let totalProcessedCourses = 0;
 
-        totalStudents = studentsResult.totalCount;
+        for (const session of sessionEntries) {
+          const sourceCoursesForSync = syncedCourses.filter(
+            (c) => c.moodle_source === session.moodleSource,
+          );
+          if (sourceCoursesForSync.length === 0) continue;
+
+          const studentsResult = await runBatchedEntitySync({
+            entity: 'students',
+            selectedCourses: sourceCoursesForSync,
+            session,
+            accessToken: edgeAccessToken,
+            onProgress: (processedCourses) => {
+              totalProcessedCourses += processedCourses;
+              updateStep('students', { count: totalProcessedCourses, total: syncedCourses.length });
+            },
+          });
+          totalStudents += studentsResult.totalCount;
+          totalStudentErrorCount += studentsResult.errorCount;
+        }
+
+        const studentsSucceeded = totalStudentErrorCount < syncedCourses.length;
         updateStep('students', {
-          status: studentsResult.succeeded ? 'completed' : 'error',
+          status: studentsSucceeded ? 'completed' : 'error',
           count: totalStudents,
-          errorMessage: studentsResult.errorCount > 0 ? `${studentsResult.errorCount} cursos com erro` : undefined,
+          errorMessage: totalStudentErrorCount > 0 ? `${totalStudentErrorCount} cursos com erro` : undefined,
         });
 
         if (courseIds.length > 0) {
@@ -456,22 +494,35 @@ export function useCourseSync(params: {
                   });
                 }
 
-                const result = await runBatchedEntitySync({
-                  entity,
-                  selectedCourses: syncedCourses,
-                  session: context.session,
-                  accessToken: edgeAccessToken || undefined,
-                  onProgress: (processedCourses) => {
-                    if (!itemId) return;
+                const result = { totalCount: 0, succeeded: true, errorCount: 0 };
+                let processedSoFar = 0;
 
-                    void updateBackgroundJobItem(itemId, {
-                      progress_current: processedCourses,
-                      progress_total: totalCourses,
-                    }).catch((progressError) => {
-                      console.error('[sync][background-jobs] failed to update deep sync progress:', progressError);
-                    });
-                  },
-                });
+                for (const session of sessionEntries) {
+                  const sourceCoursesForDeep = syncedCourses.filter(
+                    (c) => c.moodle_source === session.moodleSource,
+                  );
+                  if (sourceCoursesForDeep.length === 0) continue;
+
+                  const sourceResult = await runBatchedEntitySync({
+                    entity,
+                    selectedCourses: sourceCoursesForDeep,
+                    session,
+                    accessToken: edgeAccessToken || undefined,
+                    onProgress: (processedCourses) => {
+                      if (!itemId) return;
+                      processedSoFar += processedCourses;
+                      void updateBackgroundJobItem(itemId, {
+                        progress_current: processedSoFar,
+                        progress_total: totalCourses,
+                      }).catch((progressError) => {
+                        console.error('[sync][background-jobs] failed to update deep sync progress:', progressError);
+                      });
+                    },
+                  });
+                  result.totalCount += sourceResult.totalCount;
+                  result.errorCount += sourceResult.errorCount;
+                  if (!sourceResult.succeeded) result.succeeded = false;
+                }
 
                 const completedAt = new Date().toISOString();
                 const itemStatus = result.succeeded ? 'completed' : 'failed';
@@ -722,15 +773,23 @@ export function useCourseSync(params: {
       setIsSyncing(true);
       try {
         const accessToken = await resolveEdgeAccessToken();
+        const syncSessionEntries = Object.values(context.sessions).filter((s): s is MoodleSession => Boolean(s));
 
         for (const entity of entities) {
-          const result = await runBatchedEntitySync({
-            entity,
-            selectedCourses,
-            session: context.session,
-            accessToken,
-          });
-          summary[entity] = result.totalCount;
+          for (const session of syncSessionEntries) {
+            const sourceCoursesForEntity = selectedCourses.filter(
+              (c) => c.moodle_source === session.moodleSource,
+            );
+            if (sourceCoursesForEntity.length === 0) continue;
+
+            const result = await runBatchedEntitySync({
+              entity,
+              selectedCourses: sourceCoursesForEntity,
+              session,
+              accessToken,
+            });
+            summary[entity] += result.totalCount;
+          }
         }
 
         if (entities.includes('students')) {

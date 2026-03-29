@@ -75,10 +75,13 @@ describe('moodle-api', () => {
     expect(result).toMatchObject({
       success: true,
       user: { id: 'u-1' },
-      moodleSession: {
-        moodleUrl: 'https://moodle.local',
-        moodleToken: 'token-1',
-        moodleUserId: 10,
+      moodleSessions: {
+        goias: {
+          moodleUrl: 'https://moodle.local',
+          moodleToken: 'token-1',
+          moodleUserId: 10,
+          moodleSource: 'goias',
+        },
       },
       offlineMode: false,
     });

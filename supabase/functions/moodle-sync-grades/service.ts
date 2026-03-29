@@ -61,10 +61,10 @@ function hasGradebookWeight(item: Record<string, unknown>, itemGradeMax: number 
   return (itemGradeMax ?? 0) > 0
 }
 
-export async function syncGrades(moodleUrl: string, token: string, courseId: number): Promise<Response> {
+export async function syncGrades(moodleUrl: string, token: string, courseId: number, moodleSource: string): Promise<Response> {
   const supabase = createServiceClient()
 
-  const gradesCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
+  const gradesCourse = await findCourseByMoodleCourseId(supabase, String(courseId), moodleSource)
 
   if (!gradesCourse) return errorResponse('Course not found in database', 404)
 

@@ -17,6 +17,7 @@ interface CourseWithStats {
   name: string;
   short_name?: string;
   category?: string;
+  moodle_source?: string;
   start_date?: string;
   end_date?: string;
   effective_end_date?: string;
@@ -24,6 +25,16 @@ interface CourseWithStats {
   students_count: number;
   at_risk_count: number;
 }
+
+const MOODLE_SOURCE_LABELS: Record<string, string> = {
+  goias: 'Goiás',
+  nacional: 'Nacional',
+};
+
+const MOODLE_SOURCE_COLORS: Record<string, string> = {
+  goias: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
+  nacional: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+};
 
 interface CourseCardProps {
   course: CourseWithStats;
@@ -45,10 +56,15 @@ export function CourseCard({ course }: CourseCardProps) {
       <CardContent className="p-5">
         <div className="space-y-4">
           {/* Header */}
-          <div>
+          <div className="flex items-start justify-between gap-2">
             <h3 className="font-semibold leading-tight line-clamp-2">
               {course.name}
             </h3>
+            {course.moodle_source && (
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${MOODLE_SOURCE_COLORS[course.moodle_source] ?? 'bg-muted text-muted-foreground'}`}>
+                {MOODLE_SOURCE_LABELS[course.moodle_source] ?? course.moodle_source}
+              </span>
+            )}
           </div>
 
           {/* Stats */}

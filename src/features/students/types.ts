@@ -1,4 +1,5 @@
 import type { Course } from '@/features/courses/types';
+import type { MoodleSource } from '@/features/auth/domain/session';
 
 export const RISK_LEVEL_VALUES = ['normal', 'atencao', 'risco', 'critico', 'inativo'] as const;
 export type RiskLevel = (typeof RISK_LEVEL_VALUES)[number];
@@ -8,6 +9,7 @@ export type EnrollmentStatus = 'ativo' | 'suspenso' | 'concluido' | 'inativo';
 export interface Student {
   id: string;
   moodle_user_id: string;
+  moodle_source: MoodleSource;
   full_name: string;
   email?: string;
   city?: string;
@@ -27,6 +29,7 @@ export interface Student {
 export interface StudentRecord {
   id: string;
   moodle_user_id: string | number;
+  moodle_source?: MoodleSource;
   full_name: string;
   email?: string | null;
   city?: string | null;

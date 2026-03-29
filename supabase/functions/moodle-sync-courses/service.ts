@@ -3,6 +3,7 @@ import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   listCourseCategoriesByMoodleCourseIds,
   listLinkedCourseIds,
+  resolveMoodleSourceFromUrl,
   upsertCourses,
   upsertUserCourseLinks,
 } from '../_shared/domain/moodle-sync/repository.ts'
@@ -14,77 +15,10 @@ import {
 } from '../_shared/domain/users/repository.ts'
 import { getCategories, getSiteInfo, getUserCourses, resolveCourseCategoryName } from '../_shared/moodle/mod.ts'
 
-const GOIAS_MOODLE_URL = 'https://ead.fieg.com.br'
-const NACIONAL_MOODLE_URL = 'https://ead.senai.br'
-
 function normalizeEmail(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null
   const normalized = value.trim().toLowerCase()
   return normalized.length > 0 ? normalized : null
-}
-
-function normalizeUrl(value: string): string {
-  return value.trim().replace(/\/+$/, '').toLowerCase()
-}
-
-function buildUrlCandidates(inputUrl: string): string[] {
-  const normalizedInput = normalizeUrl(inputUrl)
-  const candidates = [normalizedInput]
-
-  if (normalizedInput === normalizeUrl(GOIAS_MOODLE_URL)) {
-    candidates.push(normalizeUrl(NACIONAL_MOODLE_URL))
-  } else if (normalizedInput === normalizeUrl(NACIONAL_MOODLE_URL)) {
-    candidates.push(normalizeUrl(GOIAS_MOODLE_URL))
-  }
-
-  return Array.from(new Set(candidates))
-}
-
-interface MoodleSyncSource {
-  url: string
-  siteInfo: Awaited<ReturnType<typeof getSiteInfo>>
-  courses: Awaited<ReturnType<typeof getUserCourses>>
-  categories: Awaited<ReturnType<typeof getCategories>>
-}
-
-async function resolveMoodleSyncSource(
-  token: string,
-  userId: number,
-  requestedMoodleUrl: string,
-): Promise<MoodleSyncSource> {
-  const candidates = buildUrlCandidates(requestedMoodleUrl)
-  let firstError: unknown = null
-
-  for (const candidateUrl of candidates) {
-    try {
-      const [siteInfo, courses, categories] = await Promise.all([
-        getSiteInfo(candidateUrl, token),
-        getUserCourses(candidateUrl, token, userId),
-        getCategories(candidateUrl, token),
-      ])
-
-      if (courses.length > 0) {
-        if (candidateUrl !== normalizeUrl(requestedMoodleUrl)) {
-          console.warn(
-            `[moodle-sync-courses] using fallback URL ${candidateUrl} after empty/failed result on ${requestedMoodleUrl}`,
-          )
-        }
-
-        return { url: candidateUrl, siteInfo, courses, categories }
-      }
-
-      if (!firstError) {
-        firstError = new Error(`No courses returned for ${candidateUrl}`)
-      }
-    } catch (error) {
-      console.warn(`[moodle-sync-courses] failed candidate URL ${candidateUrl}:`, error)
-      if (!firstError) {
-        firstError = error
-      }
-    }
-  }
-
-  throw firstError ?? new Error('Unable to fetch Moodle courses from available URLs')
 }
 
 export async function syncCourses(moodleUrl: string, token: string, userId: string): Promise<Response> {
@@ -95,51 +29,60 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
   if (!dbUser) return errorResponse('User not found in database', 404)
 
   const numericUserId = parseInt(userId, 10)
+  const source = resolveMoodleSourceFromUrl(moodleUrl)
 
-  let moodleSource: MoodleSyncSource
+  let siteInfo: Awaited<ReturnType<typeof getSiteInfo>>
+  let moodleCourses: Awaited<ReturnType<typeof getUserCourses>>
+  let categories: Awaited<ReturnType<typeof getCategories>>
+
   try {
-    moodleSource = await resolveMoodleSyncSource(token, numericUserId, moodleUrl)
-  } catch (sourceError) {
-    console.error('[moodle-sync-courses] Failed to fetch courses in primary/fallback URLs:', sourceError)
+    ;[siteInfo, moodleCourses, categories] = await Promise.all([
+      getSiteInfo(moodleUrl, token),
+      getUserCourses(moodleUrl, token, numericUserId),
+      getCategories(moodleUrl, token),
+    ])
+  } catch (fetchError) {
+    console.error('[moodle-sync-courses] Failed to fetch data from Moodle:', fetchError)
     return errorResponse('Failed to sync courses', 500)
   }
 
-  try {
-    const siteInfo = moodleSource.siteInfo
-    const now = new Date().toISOString()
-    const profileEmail = normalizeEmail(siteInfo.email)
+  // Only update tutor profile when syncing from the primary (goias) source
+  if (source === 'goias') {
+    try {
+      const now = new Date().toISOString()
+      const profileEmail = normalizeEmail(siteInfo.email)
 
-    await updateUserProfile(supabase, dbUser.id, {
-      moodle_username: siteInfo.username,
-      full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
-      email: profileEmail,
-      avatar_url: siteInfo.profileimageurl || null,
-      updated_at: now,
-    })
-
-    if (profileEmail) {
-      const updateAuthUserResult = await supabase.auth.admin.updateUserById(dbUser.id, {
+      await updateUserProfile(supabase, dbUser.id, {
+        moodle_username: siteInfo.username,
+        full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
         email: profileEmail,
-        email_confirm: true,
-        user_metadata: { moodle_user_id: String(siteInfo.userid) },
+        avatar_url: siteInfo.profileimageurl || null,
+        updated_at: now,
       })
 
-      if (updateAuthUserResult.error) {
-        console.warn('[moodle-sync-courses] Failed to sync auth email:', updateAuthUserResult.error)
+      if (profileEmail) {
+        const updateAuthUserResult = await supabase.auth.admin.updateUserById(dbUser.id, {
+          email: profileEmail,
+          email_confirm: true,
+          user_metadata: { moodle_user_id: String(siteInfo.userid) },
+        })
+
+        if (updateAuthUserResult.error) {
+          console.warn('[moodle-sync-courses] Failed to sync auth email:', updateAuthUserResult.error)
+        }
       }
+    } catch (profileSyncError) {
+      console.warn('[moodle-sync-courses] Failed to sync tutor profile metadata:', profileSyncError)
     }
-  } catch (profileSyncError) {
-    console.warn('[moodle-sync-courses] Failed to sync tutor profile metadata:', profileSyncError)
   }
 
-  const moodleCourses = moodleSource.courses
-  console.log(`Found ${moodleCourses.length} courses for user ${userId}`)
-
-  const categories = moodleSource.categories
+  console.log(`Found ${moodleCourses.length} courses for user ${userId} (source: ${source})`)
   console.log(`Found ${categories.length} categories`)
+
   const existingCourseCategories = await listCourseCategoriesByMoodleCourseIds(
     supabase,
     moodleCourses.map((course) => String(course.id)),
+    source,
   )
   const existingCategoryByMoodleCourseId = new Map(
     existingCourseCategories.map((course) => [course.moodle_course_id, course.category]),
@@ -161,6 +104,7 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
     }
 
     return {
+      moodle_source: source,
       moodle_course_id: moodleCourseId,
       name: course.fullname,
       short_name: course.shortname,

@@ -60,6 +60,7 @@ describe("useMoodleApi", () => {
         moodleToken: "abc",
         moodleUserId: 101,
         moodleUrl: "https://moodle.local",
+        moodleSource: "goias",
       },
     });
     expect(result.current.isLoading).toBe(false);
