@@ -2,7 +2,10 @@ import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   findCourseByMoodleCourseId,
+  listRecentlySyncedGradeStudentIds,
   listCourseEnrollmentsWithMoodleUserId,
+  type StudentActivityInsert,
+  type StudentCourseGradeInsert,
   upsertStudentActivities,
   upsertStudentCourseGrades,
 } from '../_shared/domain/moodle-sync/repository.ts'
@@ -13,6 +16,7 @@ import { parseNullableNumber, parseNullablePercentage } from '../_shared/validat
 // Pool size increased from 8 to 16 for better parallelization
 // Expected impact: ~50% reduction in total sync time for 100+ students
 const GRADE_FETCH_POOL_SIZE = 16
+const GRADE_SYNC_REUSE_WINDOW_MINUTES = 10
 
 function readOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -106,24 +110,64 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
 
   console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`)
 
-  const activityGradeRecords: Record<string, unknown>[] = []
-  const courseGradeRecords: Record<string, unknown>[] = []
+  const recentSyncCutoffIso = new Date(
+    Date.now() - (GRADE_SYNC_REUSE_WINDOW_MINUTES * 60 * 1000),
+  ).toISOString()
+
+  let recentlySyncedStudentIds = new Set<string>()
+  try {
+    recentlySyncedStudentIds = await listRecentlySyncedGradeStudentIds(
+      supabase,
+      gradesCourse.id,
+      recentSyncCutoffIso,
+    )
+  } catch (error) {
+    console.warn('[moodle-sync-grades] Unable to load recent sync window. Continuing without delta optimization:', error)
+  }
+
+  const studentsToFetch = enrolledStudents.filter(
+    (enrollment) => !recentlySyncedStudentIds.has(enrollment.student_id),
+  )
+
+  if (recentlySyncedStudentIds.size > 0) {
+    console.log(
+      `[moodle-sync-grades] Reusing recent grade sync for ${recentlySyncedStudentIds.size} students (window=${GRADE_SYNC_REUSE_WINDOW_MINUTES}min)`,
+    )
+  }
+
+  if (studentsToFetch.length === 0) {
+    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+    return jsonResponse({
+      success: true,
+      gradesCount: 0,
+      activityGradesCount: 0,
+      skippedStudents: enrolledStudents.length,
+    })
+  }
+
+  const activityGradeRecords: StudentActivityInsert[] = []
+  const courseGradeRecords: StudentCourseGradeInsert[] = []
   const now = new Date().toISOString()
 
-  for (let i = 0; i < enrolledStudents.length; i += GRADE_FETCH_POOL_SIZE) {
-    const batch = enrolledStudents.slice(i, i + GRADE_FETCH_POOL_SIZE)
+  type GradeBatchResult = {
+    courseGradeRecord: StudentCourseGradeInsert | null
+    activityRecords: StudentActivityInsert[]
+  }
+
+  for (let i = 0; i < studentsToFetch.length; i += GRADE_FETCH_POOL_SIZE) {
+    const batch = studentsToFetch.slice(i, i + GRADE_FETCH_POOL_SIZE)
 
     const settled = await Promise.allSettled(
-      batch.map(async (enrollment) => {
+      batch.map(async (enrollment): Promise<GradeBatchResult> => {
         const moodleUserId = parseInt(enrollment.moodle_user_id, 10)
 
         const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
           courseid: courseId,
           userid: moodleUserId,
-        })
+        }) as { usergrades?: Array<{ gradeitems?: Array<Record<string, unknown>> }> }
 
         if (!gradesData.usergrades?.[0]) {
-          return { courseGradeRecord: null, activityRecords: [] as Record<string, unknown>[] }
+          return { courseGradeRecord: null, activityRecords: [] }
         }
 
         const gradeItems = gradesData.usergrades[0].gradeitems || []
@@ -150,7 +194,7 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
           updated_at: now,
         }
 
-        const activityRecords: Record<string, unknown>[] = []
+        const activityRecords: StudentActivityInsert[] = []
 
         for (const item of gradeItems) {
           if (!item || item.itemtype === 'course' || item.itemtype === 'category') continue
@@ -167,10 +211,14 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             itemPercentage = parseNullablePercentage(item.percentageformatted)
           }
 
-          const gradedAtRaw = item.gradedategraded
-          const submittedAtRaw = item.gradedatesubmitted
-          const gradedAt = gradedAtRaw && gradedAtRaw > 0 ? new Date(gradedAtRaw * 1000).toISOString() : null
-          const submittedAt = submittedAtRaw && submittedAtRaw > 0 ? new Date(submittedAtRaw * 1000).toISOString() : null
+          const gradedAtTimestamp = parseNullableNumber(item.gradedategraded)
+          const submittedAtTimestamp = parseNullableNumber(item.gradedatesubmitted)
+          const gradedAt = gradedAtTimestamp && gradedAtTimestamp > 0
+            ? new Date(gradedAtTimestamp * 1000).toISOString()
+            : null
+          const submittedAt = submittedAtTimestamp && submittedAtTimestamp > 0
+            ? new Date(submittedAtTimestamp * 1000).toISOString()
+            : null
 
           let activityStatus = 'pending'
           if (itemGradeRaw !== null && gradedAt) {
@@ -183,8 +231,8 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
             student_id: enrollment.student_id,
             course_id: gradesCourse.id,
             moodle_activity_id: cmid,
-            activity_name: item.itemname || 'Atividade',
-            activity_type: item.itemmodule || null,
+            activity_name: readOptionalText(item.itemname) ?? 'Atividade',
+            activity_type: readOptionalText(item.itemmodule),
             grade: itemGradeRaw,
             grade_max: itemGradeMax,
             percentage: itemPercentage,
@@ -234,7 +282,12 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
 
   await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
 
-  return jsonResponse({ success: true, gradesCount, activityGradesCount })
+  return jsonResponse({
+    success: true,
+    gradesCount,
+    activityGradesCount,
+    skippedStudents: enrolledStudents.length - studentsToFetch.length,
+  })
 }
 
 async function refreshDashboardAggregatesForCourse(
@@ -257,7 +310,7 @@ export async function debugGrades(
   const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
     courseid: courseId,
     userid: userId,
-  })
+  }) as { usergrades?: Array<{ gradeitems?: Array<Record<string, unknown>> }> }
 
   return jsonResponse({
     success: true,

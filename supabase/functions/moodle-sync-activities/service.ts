@@ -3,6 +3,8 @@ import { createServiceClient } from '../_shared/db/mod.ts'
 import type { AppSupabaseClient } from '../_shared/db/mod.ts'
 import {
   findCourseByMoodleCourseId,
+  listExistingStudentActivityStatuses,
+  listRecentlySyncedActivityStudentIds,
   listStudentIdsByCourseId,
   listStudentsWithMoodleUserId,
   upsertStudentActivities,
@@ -13,6 +15,7 @@ import { callMoodleApi } from '../_shared/moodle/mod.ts'
 const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
 // Pool size increased from 8 to 16 for better parallelization
 const COMPLETION_FETCH_POOL_SIZE = 16
+const COMPLETION_REUSE_WINDOW_MINUTES = 10
 
 export async function syncActivities(moodleUrl: string, token: string, courseId: number): Promise<Response> {
   const supabase = createServiceClient()
@@ -297,8 +300,57 @@ async function fetchCompletionStatuses(
 
   if (!students?.length) return result
 
-  for (let i = 0; i < students.length; i += COMPLETION_FETCH_POOL_SIZE) {
-    const batch = students.slice(i, i + COMPLETION_FETCH_POOL_SIZE)
+  const recentCompletionCutoffIso = new Date(
+    Date.now() - (COMPLETION_REUSE_WINDOW_MINUTES * 60 * 1000),
+  ).toISOString()
+
+  let recentlySyncedStudentIds = new Set<string>()
+  try {
+    recentlySyncedStudentIds = await listRecentlySyncedActivityStudentIds(
+      supabase,
+      courseDbId,
+      recentCompletionCutoffIso,
+    )
+  } catch (error) {
+    console.warn('[moodle-sync-activities] Unable to load recent completion window. Continuing without delta optimization:', error)
+  }
+
+  const cachedStudentIds = students
+    .map((student) => student.id)
+    .filter((studentId) => recentlySyncedStudentIds.has(studentId))
+
+  if (cachedStudentIds.length > 0) {
+    try {
+      const cachedRows = await listExistingStudentActivityStatuses(supabase, courseDbId, cachedStudentIds)
+
+      for (const row of cachedRows) {
+        const existingMap = result.get(row.student_id) ?? new Map<string, { state: number; timecompleted: number | null }>()
+        const status = row.status ?? 'pending'
+        const state = status === 'complete_fail' ? 3 : status === 'completed' ? 1 : 0
+        const timecompleted = row.completed_at
+          ? Math.floor(new Date(row.completed_at).getTime() / 1000)
+          : null
+
+        existingMap.set(String(row.moodle_activity_id), { state, timecompleted })
+        result.set(row.student_id, existingMap)
+      }
+    } catch (error) {
+      console.warn('[moodle-sync-activities] Failed to load cached completion statuses:', error)
+    }
+  }
+
+  const studentsToFetch = students.filter(
+    (student) => !recentlySyncedStudentIds.has(student.id),
+  )
+
+  if (cachedStudentIds.length > 0) {
+    console.log(
+      `[moodle-sync-activities] Reusing cached completion for ${cachedStudentIds.length} students (window=${COMPLETION_REUSE_WINDOW_MINUTES}min)`,
+    )
+  }
+
+  for (let i = 0; i < studentsToFetch.length; i += COMPLETION_FETCH_POOL_SIZE) {
+    const batch = studentsToFetch.slice(i, i + COMPLETION_FETCH_POOL_SIZE)
 
     const settled = await Promise.allSettled(
       batch.map(async (student) => {

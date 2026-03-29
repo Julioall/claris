@@ -246,6 +246,55 @@ export async function upsertStudentCourseGrades(
   return total
 }
 
+export async function listRecentlySyncedGradeStudentIds(
+  supabase: AppSupabaseClient,
+  courseId: string,
+  sinceIso: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('student_course_grades')
+    .select('student_id')
+    .eq('course_id', courseId)
+    .gte('last_sync', sinceIso)
+
+  if (error) throw error
+
+  return new Set((data ?? []).map((row) => row.student_id))
+}
+
+export async function listRecentlySyncedActivityStudentIds(
+  supabase: AppSupabaseClient,
+  courseId: string,
+  sinceIso: string,
+): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('student_activities')
+    .select('student_id')
+    .eq('course_id', courseId)
+    .gte('updated_at', sinceIso)
+
+  if (error) throw error
+
+  return new Set((data ?? []).map((row) => row.student_id))
+}
+
+export async function listExistingStudentActivityStatuses(
+  supabase: AppSupabaseClient,
+  courseId: string,
+  studentIds: string[],
+): Promise<Array<Pick<Tables<'student_activities'>, 'student_id' | 'moodle_activity_id' | 'status' | 'completed_at'>>> {
+  if (studentIds.length === 0) return []
+
+  const { data, error } = await supabase
+    .from('student_activities')
+    .select('student_id, moodle_activity_id, status, completed_at')
+    .eq('course_id', courseId)
+    .in('student_id', studentIds)
+
+  if (error) throw error
+  return data ?? []
+}
+
 /**
  * Inserts sync snapshots for each student in the given course.
  * Uses ON CONFLICT DO NOTHING so that at most one snapshot is kept per
