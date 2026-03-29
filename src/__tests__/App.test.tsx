@@ -104,10 +104,6 @@ vi.mock("@/pages/NotFound", () => ({
   default: () => <div>NotFound Page</div>,
 }));
 
-vi.mock("@/features/automations/pages/AutomacoesPage", () => ({
-  default: () => <div>Automacoes Page</div>,
-}));
-
 vi.mock("@/features/services/pages/MyServicesPage", () => ({
   default: () => <div>MeusServicos Page</div>,
 }));
@@ -290,7 +286,7 @@ describe("App routing", () => {
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 
-  it("renders automacoes page for authenticated users", async () => {
+  it("redirects legacy automacoes route to campanhas", async () => {
     setPath("/automacoes");
     useAuthMock.mockReturnValue({
       isAuthenticated: true,
@@ -299,7 +295,7 @@ describe("App routing", () => {
 
     render(<App />);
 
-    expect(await screen.findByText("Automacoes Page")).toBeInTheDocument();
+    expect(await screen.findByText("Campaigns Page")).toBeInTheDocument();
     expect(screen.getByText("App Layout")).toBeInTheDocument();
   });
 });

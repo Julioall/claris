@@ -920,8 +920,8 @@ export function BulkSendTab() {
       },
     });
 
-    toast.success("Rascunho enviado para Automacoes");
-    navigate("/automacoes?tab=gatilhos");
+    toast.success("Rascunho enviado para Campanhas");
+    navigate("/campanhas?tab=campanhas");
   }, [
     filterClass,
     filterCourse,

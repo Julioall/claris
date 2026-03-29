@@ -15,7 +15,6 @@ export const CampaignsPage = lazy(() => import('@/features/campaigns/pages/Campa
 export const SettingsPage = lazy(() => import('@/features/settings/pages/SettingsPage'));
 export const ReportsPage = lazy(() => import('@/features/reports/pages/ReportsPage'));
 export const ClarisPage = lazy(() => import('@/features/claris/pages/ClarisPage'));
-export const AutomationsPage = lazy(() => import('@/features/automations/pages/AutomacoesPage'));
 export const MyServicesPage = lazy(() => import('@/features/services/pages/MyServicesPage'));
 export const NotFoundPage = lazy(() => import('@/pages/NotFound'));
 export const NoAccessPage = lazy(() => import('@/pages/NoAccess'));
