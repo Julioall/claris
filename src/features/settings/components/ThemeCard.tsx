@@ -18,6 +18,19 @@ const MODES = [
   { value: 'system', label: 'Sistema', icon: Monitor },
 ] as const;
 
+function resolvePreviewPrimary(
+  themeId: string,
+  resolvedTheme: string | undefined,
+  previewPrimary: string,
+  vars: { light: Record<string, string>; dark: Record<string, string> },
+): string {
+  if (themeId !== 'slate') return previewPrimary;
+
+  const isDark = resolvedTheme === 'dark';
+  const primaryValue = isDark ? vars.dark['--primary'] : vars.light['--primary'];
+  return primaryValue ? `hsl(${primaryValue})` : previewPrimary;
+}
+
 export function ThemeCard() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [colorTheme, setColorTheme] = useState(getStoredColorTheme);
@@ -86,10 +99,21 @@ export function ThemeCard() {
                     : 'border-border'
                 )}
               >
-                <span
-                  className="h-6 w-6 rounded-full shrink-0 border"
-                  style={{ background: ct.preview.primary, borderColor: ct.preview.primary }}
-                />
+                {(() => {
+                  const previewPrimary = resolvePreviewPrimary(
+                    ct.id,
+                    resolvedTheme,
+                    ct.preview.primary,
+                    ct.vars,
+                  );
+
+                  return (
+                    <span
+                      className="h-6 w-6 rounded-full shrink-0 border"
+                      style={{ background: previewPrimary, borderColor: previewPrimary }}
+                    />
+                  );
+                })()}
                 <span className="text-sm font-medium">{ct.label}</span>
                 {colorTheme === ct.id && (
                   <Check className="h-4 w-4 text-primary absolute top-2 right-2" />

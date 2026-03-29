@@ -114,7 +114,7 @@ export async function refreshDashboardCourseActivityAggregates(
   })
 
   studentCourses.forEach((studentCourse) => {
-    if (normalizeEnrollmentStatus(studentCourse.enrollment_status) === 'suspenso') {
+    if (normalizeEnrollmentStatus(studentCourse.enrollment_status) !== 'ativo') {
       return
     }
 

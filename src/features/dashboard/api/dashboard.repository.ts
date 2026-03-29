@@ -544,9 +544,9 @@ export const dashboardRepository = {
         .gte('due_date', todayStart)
         .lte('due_date', todayEnd)
         .neq('status', 'done'),
-      listStudentsAtRisk(studentIds),
+      activeStudentIds.length > 0 ? listStudentsAtRisk(activeStudentIds) : Promise.resolve([]),
       activeStudentIds.length > 0 ? countActiveNormalStudents(activeStudentIds) : Promise.resolve(0),
-      countNewAtRiskStudents(studentIds, weekStart.toISOString()),
+      activeStudentIds.length > 0 ? countNewAtRiskStudents(activeStudentIds, weekStart.toISOString()) : Promise.resolve(0),
       listActivityFeedItems(userId, studentIds, normalizedCourseFilter),
       listPendingAssignments(courseIds),
       listDashboardAggregates(courseIds),
@@ -569,7 +569,7 @@ export const dashboardRepository = {
       .filter((activity) => isStudentActivityWeightedInGradebook(activity))
       .filter((activity) => isStudentActivityPendingSubmission(activity));
     const pendingCorrectionActivities = (uncorrectedActivities as ReviewActivityRow[])
-      .filter((activity) => studentIdSet.has(activity.student_id))
+      .filter((activity) => activeStudentIdSet.has(activity.student_id))
       .filter((activity) => isStudentActivityWeightedInGradebook(activity))
       .filter((activity) => isStudentActivityPendingCorrection(activity));
     const aggregateRows = dashboardAggregates as DashboardCourseActivityAggregateRow[];

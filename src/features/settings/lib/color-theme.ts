@@ -158,6 +158,27 @@ export const COLOR_THEMES: ColorTheme[] = [
       },
     },
   },
+  {
+    id: 'cyan',
+    label: 'Ciano',
+    preview: { primary: 'hsl(190 90% 40%)', accent: 'hsl(190 70% 92%)', bg: 'hsl(0 0% 100%)' },
+    vars: {
+      light: {
+        '--primary': '190 90% 40%',
+        '--primary-foreground': '0 0% 100%',
+        '--ring': '190 90% 40%',
+        '--sidebar-primary': '190 90% 40%',
+        '--sidebar-ring': '190 90% 40%',
+      },
+      dark: {
+        '--primary': '190 85% 62%',
+        '--primary-foreground': '0 0% 5%',
+        '--ring': '190 85% 62%',
+        '--sidebar-primary': '190 85% 62%',
+        '--sidebar-ring': '190 85% 62%',
+      },
+    },
+  },
 ];
 
 export function getStoredColorTheme(): string {
