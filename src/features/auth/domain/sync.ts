@@ -43,7 +43,7 @@ export const STEP_FUNCTION_MAP: Record<CourseScopedSyncEntity, string> = {
 };
 
 export const STEP_BATCH_CONFIG: Record<CourseScopedSyncEntity, { batchSize: number; timeoutMs: number }> = {
-  students: { batchSize: 5, timeoutMs: 22000 },
+  students: { batchSize: 10, timeoutMs: 22000 },
   activities: { batchSize: 2, timeoutMs: 26000 },
   grades: { batchSize: 2, timeoutMs: 26000 },
 };
