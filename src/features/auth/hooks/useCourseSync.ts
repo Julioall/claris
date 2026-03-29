@@ -374,13 +374,16 @@ export function useCourseSync(params: {
           );
           if (sourceCoursesForSync.length === 0) continue;
 
+          let sourcePreviousProcessed = 0;
           const studentsResult = await runBatchedEntitySync({
             entity: 'students',
             selectedCourses: sourceCoursesForSync,
             session,
             accessToken: edgeAccessToken,
             onProgress: (processedCourses) => {
-              totalProcessedCourses += processedCourses;
+              const delta = processedCourses - sourcePreviousProcessed;
+              sourcePreviousProcessed = processedCourses;
+              totalProcessedCourses += delta;
               updateStep('students', { count: totalProcessedCourses, total: syncedCourses.length });
             },
           });
@@ -388,7 +391,7 @@ export function useCourseSync(params: {
           totalStudentErrorCount += studentsResult.errorCount;
         }
 
-        const studentsSucceeded = totalStudentErrorCount < syncedCourses.length;
+        const studentsSucceeded = totalStudentErrorCount === 0;
         updateStep('students', {
           status: studentsSucceeded ? 'completed' : 'error',
           count: totalStudents,
@@ -503,6 +506,7 @@ export function useCourseSync(params: {
                   );
                   if (sourceCoursesForDeep.length === 0) continue;
 
+                  let sourcePreviousProgress = 0;
                   const sourceResult = await runBatchedEntitySync({
                     entity,
                     selectedCourses: sourceCoursesForDeep,
@@ -510,7 +514,9 @@ export function useCourseSync(params: {
                     accessToken: edgeAccessToken || undefined,
                     onProgress: (processedCourses) => {
                       if (!itemId) return;
-                      processedSoFar += processedCourses;
+                      const delta = processedCourses - sourcePreviousProgress;
+                      sourcePreviousProgress = processedCourses;
+                      processedSoFar += delta;
                       void updateBackgroundJobItem(itemId, {
                         progress_current: processedSoFar,
                         progress_total: totalCourses,

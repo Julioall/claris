@@ -15,6 +15,7 @@ import {
   type SyncPreferences,
 } from '@/features/courses/api';
 import type { Course } from '@/features/courses/types';
+import type { MoodleSource } from '@/features/auth/domain/session';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { isCourseEffectivelyActive, withEffectiveCourseDates } from '@/lib/course-dates';
@@ -82,7 +83,7 @@ export function CourseSelectorDialog({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [includeEmptyCourses, setIncludeEmptyCourses] = useState(false);
   const [includeFinished, setIncludeFinished] = useState(false);
-  const [sourceFilter, setSourceFilter] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<MoodleSource | null>(null);
   const [studentCounts, setStudentCounts] = useState<Map<string, number>>(new Map());
   const [openSchools, setOpenSchools] = useState<Set<string>>(new Set());
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -128,8 +129,10 @@ export function CourseSelectorDialog({
   }, [open, user]);
 
   const availableSources = useMemo(() => {
-    const sources = new Set(normalizedCourses.map(c => c.moodle_source).filter(Boolean));
-    return Array.from(sources) as string[];
+    const sources = new Set(
+      normalizedCourses.map(c => c.moodle_source).filter((s): s is MoodleSource => !!s),
+    );
+    return Array.from(sources);
   }, [normalizedCourses]);
 
   const selectableCourses = useMemo(() => {
