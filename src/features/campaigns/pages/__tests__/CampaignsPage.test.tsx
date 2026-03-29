@@ -13,6 +13,12 @@ vi.mock("@/features/automations/components/BulkJobsTab", () => ({
   BulkJobsTab: () => <div data-testid="bulk-jobs-tab">Execucoes</div>,
 }));
 
+vi.mock("@/features/automations/components/ScheduledMessagesTab", () => ({
+  ScheduledMessagesTab: () => (
+    <div data-testid="scheduled-messages-tab">Agendamentos</div>
+  ),
+}));
+
 vi.mock("@/features/messages/components/MessageTemplatesTab", () => ({
   MessageTemplatesTab: () => (
     <div data-testid="message-templates-tab">Modelos</div>
@@ -41,7 +47,7 @@ describe("Campaigns page", () => {
     expect(
       screen.getByRole("tab", { name: /nova campanha/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /execucoes/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /^campanhas$/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /modelos/i })).toBeInTheDocument();
     expect(screen.getByTestId("bulk-send-tab")).toBeInTheDocument();
   });
@@ -56,13 +62,20 @@ describe("Campaigns page", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(screen.getByRole("tab", { name: /execucoes/i }));
+    await user.click(screen.getByRole("tab", { name: /^campanhas$/i }));
     expect(screen.getByTestId("bulk-jobs-tab")).toBeInTheDocument();
   });
 
-  it("treats legacy schedule links as the new campaign flow", () => {
+  it("maps schedule deep link to campanhas", () => {
     renderPage(["/campanhas?tab=agendamentos"]);
 
-    expect(screen.getByTestId("bulk-send-tab")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-jobs-tab")).toBeInTheDocument();
+    expect(screen.getByTestId("scheduled-messages-tab")).toBeInTheDocument();
+  });
+
+  it("maps legacy execution links to campanhas", () => {
+    renderPage(["/campanhas?tab=execucoes"]);
+
+    expect(screen.getByTestId("bulk-jobs-tab")).toBeInTheDocument();
   });
 });

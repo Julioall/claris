@@ -38,6 +38,7 @@ export interface ScheduledMessage {
   id: string;
   title: string;
   message_content: string;
+  template_id: string | null;
   scheduled_at: string;
   status: string;
   origin: string;
@@ -46,6 +47,7 @@ export interface ScheduledMessage {
   failed_count: number;
   notes: string | null;
   created_at: string;
+  error_message: string | null;
   channel: 'moodle' | 'whatsapp';
   whatsapp_instance_id?: string;
   execution_context: ScheduledMessageExecutionContext;
@@ -71,6 +73,7 @@ export interface ScheduledMessageFormValues {
   title: string;
   message_content: string;
   scheduled_at: string;
+  template_id?: string;
   recipient_count?: number;
   notes?: string;
   channel: 'moodle' | 'whatsapp';
@@ -93,6 +96,7 @@ export interface ScheduledMessageRecipientSnapshot {
   personalized_message?: string | null;
   student_id: string;
   student_name: string;
+  [key: string]: Json | undefined;
 }
 
 export interface ScheduledMessageExecutionContext {

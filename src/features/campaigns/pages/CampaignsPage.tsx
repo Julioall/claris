@@ -4,15 +4,18 @@ import { useSearchParams } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BulkJobsTab } from "@/features/automations/components/BulkJobsTab";
+import { ScheduledMessagesTab } from "@/features/automations/components/ScheduledMessagesTab";
 import { BulkSendTab } from "@/features/messages/components/BulkSendTab";
 import { MessageTemplatesTab } from "@/features/messages/components/MessageTemplatesTab";
 
-const campaignTabs = ["nova-campanha", "execucoes", "modelos"] as const;
+const campaignTabs = ["nova-campanha", "campanhas", "modelos"] as const;
 
 type CampaignTab = (typeof campaignTabs)[number];
 
 function getCampaignTab(value: string | null): CampaignTab {
-  if (value === "agendamentos") return "nova-campanha";
+  if (value === "execucoes") return "campanhas";
+  if (value === "executores") return "campanhas";
+  if (value === "agendamentos") return "campanhas";
   return campaignTabs.includes(value as CampaignTab)
     ? (value as CampaignTab)
     : "nova-campanha";
@@ -62,9 +65,9 @@ export default function CampaignsPage() {
             <Send className="h-3.5 w-3.5" />
             Nova campanha
           </TabsTrigger>
-          <TabsTrigger value="execucoes" className="gap-1.5">
+          <TabsTrigger value="campanhas" className="gap-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
-            Execucoes
+            Campanhas
           </TabsTrigger>
           <TabsTrigger value="modelos" className="gap-1.5">
             <FileText className="h-3.5 w-3.5" />
@@ -76,8 +79,11 @@ export default function CampaignsPage() {
           <BulkSendTab />
         </TabsContent>
 
-        <TabsContent value="execucoes" className="mt-4">
-          <BulkJobsTab />
+        <TabsContent value="campanhas" className="mt-4">
+          <div className="space-y-6">
+            <ScheduledMessagesTab allowCreate={false} allowEdit={false} />
+            <BulkJobsTab />
+          </div>
         </TabsContent>
 
         <TabsContent value="modelos" className="mt-4">
