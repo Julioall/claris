@@ -1679,7 +1679,6 @@ export type Database = {
           id: string
           last_sync: string | null
           moodle_course_id: string
-          moodle_source: string
           name: string
           short_name: string | null
           start_date: string | null
@@ -1692,7 +1691,6 @@ export type Database = {
           id?: string
           last_sync?: string | null
           moodle_course_id: string
-          moodle_source?: string
           name: string
           short_name?: string | null
           start_date?: string | null
@@ -1705,7 +1703,6 @@ export type Database = {
           id?: string
           last_sync?: string | null
           moodle_course_id?: string
-          moodle_source?: string
           name?: string
           short_name?: string | null
           start_date?: string | null
@@ -2433,7 +2430,6 @@ export type Database = {
           id: string
           last_access: string | null
           mobile_phone: string | null
-          moodle_source: string
           moodle_user_id: string
           phone: string | null
           phone_number: string | null
@@ -2451,7 +2447,6 @@ export type Database = {
           id?: string
           last_access?: string | null
           mobile_phone?: string | null
-          moodle_source?: string
           moodle_user_id: string
           phone?: string | null
           phone_number?: string | null
@@ -2469,7 +2464,6 @@ export type Database = {
           id?: string
           last_access?: string | null
           mobile_phone?: string | null
-          moodle_source?: string
           moodle_user_id?: string
           phone?: string | null
           phone_number?: string | null

@@ -38,39 +38,7 @@ function normalizeUrl(value: string): string {
   return value.trim().replace(/\/+$/, '').toLowerCase()
 }
 
-interface MoodleSyncSource {
-  url: string
-  siteInfo: Awaited<ReturnType<typeof getSiteInfo>>
-  courses: Awaited<ReturnType<typeof getUserCourses>>
-  categories: Awaited<ReturnType<typeof getCategories>>
-}
-
-async function resolveMoodleSyncSource(
-  token: string,
-  userId: number,
-  requestedMoodleUrl: string,
-): Promise<MoodleSyncSource> {
-  const enforcedUrl = normalizeUrl(PRIMARY_MOODLE_URL)
-  const requestedUrl = normalizeUrl(requestedMoodleUrl)
-
-  if (requestedUrl !== enforcedUrl) {
-    console.warn(`[moodle-sync-courses] ignoring requested Moodle URL ${requestedUrl}, enforcing ${enforcedUrl}`)
-  }
-
-  const [siteInfo, courses, categories] = await Promise.all([
-    getSiteInfo(enforcedUrl, token),
-    getUserCourses(enforcedUrl, token, userId),
-    getCategories(enforcedUrl, token),
-  ])
-
-  if (courses.length === 0) {
-    throw new Error(`No courses returned for ${enforcedUrl}`)
-  }
-
-  return { url: enforcedUrl, siteInfo, courses, categories }
-}
-
-export async function syncCourses(moodleUrl: string, token: string, userId: string): Promise<Response> {
+export async function syncCourses(_moodleUrl: string, token: string, userId: string): Promise<Response> {
   const supabase = createServiceClient()
 
   const dbUser = await findUserByMoodleUserId(supabase, userId)
@@ -78,17 +46,26 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
   if (!dbUser) return errorResponse('User not found in database', 404)
 
   const numericUserId = parseInt(userId, 10)
+  const moodleBaseUrl = normalizeUrl(PRIMARY_MOODLE_URL)
 
-  let moodleSource: MoodleSyncSource
+  let siteInfo: Awaited<ReturnType<typeof getSiteInfo>>
+  let moodleCourses: Awaited<ReturnType<typeof getUserCourses>>
+  let categories: Awaited<ReturnType<typeof getCategories>>
   try {
-    moodleSource = await resolveMoodleSyncSource(token, numericUserId, moodleUrl)
+    ;[siteInfo, moodleCourses, categories] = await Promise.all([
+      getSiteInfo(moodleBaseUrl, token),
+      getUserCourses(moodleBaseUrl, token, numericUserId),
+      getCategories(moodleBaseUrl, token),
+    ])
+    if (moodleCourses.length === 0) {
+      throw new Error(`No courses returned for ${moodleBaseUrl}`)
+    }
   } catch (sourceError) {
     console.error('[moodle-sync-courses] Failed to fetch courses from Moodle:', sourceError)
     return errorResponse('Failed to sync courses', 500)
   }
 
   try {
-    const siteInfo = moodleSource.siteInfo
     const now = new Date().toISOString()
     const profileEmail = normalizeEmail(siteInfo.email)
 
@@ -119,10 +96,7 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
     console.warn('[moodle-sync-courses] Failed to sync tutor profile metadata:', profileSyncError)
   }
 
-  const moodleCourses = moodleSource.courses
   console.log(`Found ${moodleCourses.length} courses for user ${userId}`)
-
-  const categories = moodleSource.categories
   console.log(`Found ${categories.length} categories`)
   const existingCourseCategories = await listCourseCategoriesByMoodleCourseIds(
     supabase,
