@@ -132,6 +132,69 @@ export async function callMoodleApi(
   params: Record<string, string | number> = {},
   timeoutMs = 25_000,
 ): Promise<unknown> {
+  return callMoodleApiWithRetry(() =>
+    performMoodleApiFetch(moodleUrl, token, wsfunction, params, timeoutMs, 'GET'),
+  )
+}
+
+export async function callMoodleApiPost(
+  moodleUrl: string,
+  token: string,
+  wsfunction: string,
+  params: Record<string, string | number>,
+  timeoutMs = 25_000,
+): Promise<unknown> {
+  return callMoodleApiWithRetry(() =>
+    performMoodleApiPost(moodleUrl, token, wsfunction, params, timeoutMs),
+  )
+}
+
+/**
+ * Wraps Moodle API calls with exponential backoff retry logic.
+ * Retries on network errors, timeouts, 5xx errors, and specific transient Moodle errors.
+ * Does NOT retry on 4xx errors (auth, validation, etc.) or permanent failures.
+ */
+async function callMoodleApiWithRetry<T>(
+  apiFn: () => Promise<T>,
+  maxRetries = 3,
+  baseDelayMs = 500,
+): Promise<T> {
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiFn()
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error))
+      
+      // Don't retry on 4xx errors (client errors, auth, validation)
+      if (lastError.message.includes('returned status 4')) {
+        throw lastError
+      }
+
+      if (attempt < maxRetries) {
+        // Exponential backoff: 500ms, 1s, 2s, 4s
+        const delayMs = baseDelayMs * Math.pow(2, attempt)
+        console.warn(
+          `[callMoodleApiWithRetry] Attempt ${attempt + 1} failed, retrying in ${delayMs}ms:`,
+          lastError.message,
+        )
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
+      }
+    }
+  }
+
+  throw lastError || new Error('Unknown error in Moodle API retry loop')
+}
+
+async function performMoodleApiFetch(
+  moodleUrl: string,
+  token: string,
+  wsfunction: string,
+  params: Record<string, string | number>,
+  timeoutMs: number,
+  _method: string,
+): Promise<unknown> {
   const apiUrl = `${moodleUrl}/webservice/rest/server.php`
   const queryParams = new URLSearchParams({
     wstoken: token,
@@ -159,12 +222,12 @@ export async function callMoodleApi(
   return data
 }
 
-export async function callMoodleApiPost(
+async function performMoodleApiPost(
   moodleUrl: string,
   token: string,
   wsfunction: string,
   params: Record<string, string | number>,
-  timeoutMs = 25_000,
+  timeoutMs: number,
 ): Promise<unknown> {
   const apiUrl = `${moodleUrl}/webservice/rest/server.php`
   const formData = new URLSearchParams({

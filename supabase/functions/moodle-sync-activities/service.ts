@@ -11,7 +11,8 @@ import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dash
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 
 const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
-const COMPLETION_FETCH_POOL_SIZE = 8
+// Pool size increased from 8 to 16 for better parallelization
+const COMPLETION_FETCH_POOL_SIZE = 16
 
 export async function syncActivities(moodleUrl: string, token: string, courseId: number): Promise<Response> {
   const supabase = createServiceClient()

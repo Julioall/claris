@@ -23,6 +23,17 @@ function normalizeEmail(value: string | null | undefined): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
+/**
+ * Validates email format using a simple regex.
+ * Returns true if email looks valid (has @ and domain).
+ */
+function isValidEmail(email: string | null): email is string {
+  if (!email) return false
+  // Simple validation: must have @ and at least one char before/after
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return emailRegex.test(email)
+}
+
 function normalizeUrl(value: string): string {
   return value.trim().replace(/\/+$/, '').toLowerCase()
 }
@@ -117,7 +128,7 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
       updated_at: now,
     })
 
-    if (profileEmail) {
+    if (profileEmail && isValidEmail(profileEmail)) {
       const updateAuthUserResult = await supabase.auth.admin.updateUserById(dbUser.id, {
         email: profileEmail,
         email_confirm: true,
@@ -127,6 +138,10 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
       if (updateAuthUserResult.error) {
         console.warn('[moodle-sync-courses] Failed to sync auth email:', updateAuthUserResult.error)
       }
+    } else if (profileEmail) {
+      console.warn(
+        `[moodle-sync-courses] Email from Moodle failed validation: "${profileEmail}". Skipping auth update.`,
+      )
     }
   } catch (profileSyncError) {
     console.warn('[moodle-sync-courses] Failed to sync tutor profile metadata:', profileSyncError)

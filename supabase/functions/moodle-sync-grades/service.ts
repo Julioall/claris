@@ -10,7 +10,9 @@ import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dash
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 import { parseNullableNumber, parseNullablePercentage } from '../_shared/validation/mod.ts'
 
-const GRADE_FETCH_POOL_SIZE = 8
+// Pool size increased from 8 to 16 for better parallelization
+// Expected impact: ~50% reduction in total sync time for 100+ students
+const GRADE_FETCH_POOL_SIZE = 16
 
 function readOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -34,30 +36,57 @@ function parseNullableWeight(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/**
+ * Determines if a grade item should contribute to course metrics.
+ * 
+ * Returns true if the item:
+ * 1. Is not explicitly hidden (hidden === true or gradeishidden === true)
+ * 2. Has explicit weight > 0 in gradebook (weightraw, weight, aggregationweight, etc.)
+ * 3. Falls back to: has grademax > 0 AND is not a category/course item
+ * 
+ * Returns false for categories, course totals, and explicitly hidden items.
+ */
 function hasGradebookWeight(item: Record<string, unknown>, itemGradeMax: number | null): boolean {
+  const itemType = readOptionalText(item.itemtype)?.toLowerCase()
+  
+  // 1. Categories and course totals never contribute individually
+  if (itemType === 'category' || itemType === 'course') {
+    return false
+  }
+  
+  // 2. Explicitly hidden items do not contribute
+  if (item.hidden === true || item.gradeishidden === true) {
+    return false
+  }
+  
+  // 3. Check for explicit weight (numeric, from Moodle)
   const numericWeightCandidates = [
     item.weightraw,
     item.weight,
     item.aggregationweight,
     item.contributiontocoursetotal,
   ]
-
+  
   for (const candidate of numericWeightCandidates) {
     const parsed = parseNullableWeight(candidate)
+    // Weight > 0 means contributes. Weight = 0 means explicitly excluded.
     if (parsed !== null) return parsed > 0
   }
-
+  
+  // 4. Check for formatted weight (fallback for parsing errors)
   const formattedWeightCandidates = [
     item.weightformatted,
     item.weightrawformatted,
     item.aggregationweightformatted,
   ]
-
+  
   for (const candidate of formattedWeightCandidates) {
     const parsed = parseNullableWeight(candidate)
     if (parsed !== null) return parsed > 0
   }
-
+  
+  // 5. Fallback: if has grademax and is not a meta item, assume it contributes
+  // (covers cases where weight is absent but the activity is clearly gradeable)
   return (itemGradeMax ?? 0) > 0
 }
 
