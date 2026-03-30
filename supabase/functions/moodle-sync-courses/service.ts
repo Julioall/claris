@@ -15,8 +15,7 @@ import {
 } from '../_shared/domain/users/repository.ts'
 import { getCategories, getSiteInfo, getUserCourses, resolveCourseCategoryName } from '../_shared/moodle/mod.ts'
 
-const GOIAS_MOODLE_URL = 'https://ead.fieg.com.br'
-const NACIONAL_MOODLE_URL = 'https://ead.senai.br'
+const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
 
 function normalizeEmail(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null
@@ -39,19 +38,6 @@ function normalizeUrl(value: string): string {
   return value.trim().replace(/\/+$/, '').toLowerCase()
 }
 
-function buildUrlCandidates(inputUrl: string): string[] {
-  const normalizedInput = normalizeUrl(inputUrl)
-  const candidates = [normalizedInput]
-
-  if (normalizedInput === normalizeUrl(GOIAS_MOODLE_URL)) {
-    candidates.push(normalizeUrl(NACIONAL_MOODLE_URL))
-  } else if (normalizedInput === normalizeUrl(NACIONAL_MOODLE_URL)) {
-    candidates.push(normalizeUrl(GOIAS_MOODLE_URL))
-  }
-
-  return Array.from(new Set(candidates))
-}
-
 interface MoodleSyncSource {
   url: string
   siteInfo: Awaited<ReturnType<typeof getSiteInfo>>
@@ -64,39 +50,24 @@ async function resolveMoodleSyncSource(
   userId: number,
   requestedMoodleUrl: string,
 ): Promise<MoodleSyncSource> {
-  const candidates = buildUrlCandidates(requestedMoodleUrl)
-  let firstError: unknown = null
+  const enforcedUrl = normalizeUrl(PRIMARY_MOODLE_URL)
+  const requestedUrl = normalizeUrl(requestedMoodleUrl)
 
-  for (const candidateUrl of candidates) {
-    try {
-      const [siteInfo, courses, categories] = await Promise.all([
-        getSiteInfo(candidateUrl, token),
-        getUserCourses(candidateUrl, token, userId),
-        getCategories(candidateUrl, token),
-      ])
-
-      if (courses.length > 0) {
-        if (candidateUrl !== normalizeUrl(requestedMoodleUrl)) {
-          console.warn(
-            `[moodle-sync-courses] using fallback URL ${candidateUrl} after empty/failed result on ${requestedMoodleUrl}`,
-          )
-        }
-
-        return { url: candidateUrl, siteInfo, courses, categories }
-      }
-
-      if (!firstError) {
-        firstError = new Error(`No courses returned for ${candidateUrl}`)
-      }
-    } catch (error) {
-      console.warn(`[moodle-sync-courses] failed candidate URL ${candidateUrl}:`, error)
-      if (!firstError) {
-        firstError = error
-      }
-    }
+  if (requestedUrl !== enforcedUrl) {
+    console.warn(`[moodle-sync-courses] ignoring requested Moodle URL ${requestedUrl}, enforcing ${enforcedUrl}`)
   }
 
-  throw firstError ?? new Error('Unable to fetch Moodle courses from available URLs')
+  const [siteInfo, courses, categories] = await Promise.all([
+    getSiteInfo(enforcedUrl, token),
+    getUserCourses(enforcedUrl, token, userId),
+    getCategories(enforcedUrl, token),
+  ])
+
+  if (courses.length === 0) {
+    throw new Error(`No courses returned for ${enforcedUrl}`)
+  }
+
+  return { url: enforcedUrl, siteInfo, courses, categories }
 }
 
 export async function syncCourses(moodleUrl: string, token: string, userId: string): Promise<Response> {
@@ -112,7 +83,7 @@ export async function syncCourses(moodleUrl: string, token: string, userId: stri
   try {
     moodleSource = await resolveMoodleSyncSource(token, numericUserId, moodleUrl)
   } catch (sourceError) {
-    console.error('[moodle-sync-courses] Failed to fetch courses in primary/fallback URLs:', sourceError)
+    console.error('[moodle-sync-courses] Failed to fetch courses from Moodle:', sourceError)
     return errorResponse('Failed to sync courses', 500)
   }
 

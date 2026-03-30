@@ -58,8 +58,8 @@ export function parseGlobalAppSettings(value: unknown): GlobalAppSettings {
 
   return {
     singletonId: String(raw.singleton_id ?? GLOBAL_APP_SETTINGS_ID),
-    moodleConnectionUrl: String(raw.moodle_connection_url ?? DEFAULT_MOODLE_URL),
-    moodleConnectionService: String(raw.moodle_connection_service ?? DEFAULT_MOODLE_SERVICE),
+    moodleConnectionUrl: DEFAULT_MOODLE_URL,
+    moodleConnectionService: DEFAULT_MOODLE_SERVICE,
     riskThresholdDays: normalizeRiskThresholdDays({
       atencao: Number(rawRiskThreshold.atencao ?? DEFAULT_GLOBAL_APP_SETTINGS.riskThresholdDays.atencao),
       risco: Number(rawRiskThreshold.risco ?? DEFAULT_GLOBAL_APP_SETTINGS.riskThresholdDays.risco),
