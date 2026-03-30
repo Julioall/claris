@@ -1,7 +1,7 @@
 {
   "name": "claris",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "branch-protection:edge-smoke": "node scripts/require-edge-smoke-check.mjs status",
