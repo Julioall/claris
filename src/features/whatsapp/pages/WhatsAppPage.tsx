@@ -3,7 +3,6 @@ import {
   AlertCircle,
   ArrowLeft,
   MessageCircle,
-  MessageSquare,
   Phone,
   WifiOff,
 } from 'lucide-react';
@@ -154,12 +153,6 @@ export default function WhatsAppPage() {
               Conecte sua instancia da Evolution para comecar a conversar por aqui.
             </p>
           </div>
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/mensagens">
-              <MessageSquare className="mr-1.5 h-4 w-4" />
-              Mensagens Moodle
-            </Link>
-          </Button>
         </div>
 
         <Card className="border-dashed">

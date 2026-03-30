@@ -44,10 +44,7 @@ describe("Campaigns page", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: /campanhas/i }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: /nova campanha/i }),
-    ).toBeInTheDocument();
-      expect(screen.getByRole("tab", { name: /^campanhas$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^campanhas$/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /modelos/i })).toBeInTheDocument();
     expect(screen.getByTestId("bulk-send-tab")).toBeInTheDocument();
   });
@@ -62,7 +59,17 @@ describe("Campaigns page", () => {
     const user = userEvent.setup();
     renderPage();
 
+    await user.click(screen.getByRole("tab", { name: /modelos/i }));
+    expect(screen.getByTestId("message-templates-tab")).toBeInTheDocument();
+
     await user.click(screen.getByRole("tab", { name: /^campanhas$/i }));
+    expect(screen.getByTestId("bulk-jobs-tab")).toBeInTheDocument();
+  });
+
+  it("maps legacy nova-campanha links to campanhas", () => {
+    renderPage(["/campanhas?tab=nova-campanha"]);
+
+    expect(screen.getByTestId("bulk-send-tab")).toBeInTheDocument();
     expect(screen.getByTestId("bulk-jobs-tab")).toBeInTheDocument();
   });
 
