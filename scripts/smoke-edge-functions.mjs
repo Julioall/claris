@@ -301,6 +301,18 @@ async function seedGenerateAutomatedTasksScenario(status, authUserId) {
     student_id: student.id,
   })
 
+  const [tutorGroup] = await selectRows(status, 'app_groups', { slug: 'tutor' })
+
+  if (!tutorGroup?.id) {
+    fail('Nao foi possivel encontrar o grupo tutor para seedar permissoes de smoke.')
+  }
+
+  await upsertRows(status, 'user_group_memberships', 'user_id', {
+    assigned_by: null,
+    group_id: tutorGroup.id,
+    user_id: authUserId,
+  })
+
   return { courseId: course.id, studentId: student.id }
 }
 
