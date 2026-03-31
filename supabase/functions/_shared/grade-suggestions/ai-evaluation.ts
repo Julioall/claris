@@ -25,6 +25,60 @@ interface UploadedFileReference {
   id: string
 }
 
+interface InlineImageInput {
+  type: 'input_image'
+  image_url: string
+}
+
+const CONTEXT_STUFFING_SUPPORTED_EXTENSIONS = new Set([
+  'art', 'bat', 'brf', 'c', 'cls', 'css', 'csv', 'diff', 'doc', 'docx', 'dot', 'eml', 'es', 'h', 'hs', 'htm',
+  'html', 'hwp', 'hwpx', 'ics', 'ifb', 'java', 'js', 'json', 'keynote', 'ksh', 'ltx', 'mail', 'markdown', 'md',
+  'mht', 'mhtml', 'mjs', 'nws', 'odt', 'pages', 'patch', 'pdf', 'pl', 'pm', 'pot', 'ppa', 'pps', 'ppt', 'pptx',
+  'pwz', 'py', 'rst', 'rtf', 'scala', 'sh', 'shtml', 'srt', 'sty', 'svg', 'svgz', 'tex', 'text', 'txt', 'vcf',
+  'vtt', 'wiz', 'xla', 'xlb', 'xlc', 'xlm', 'xls', 'xlsx', 'xlt', 'xlw', 'xml', 'yaml', 'yml',
+])
+
+const MAX_INLINE_IMAGE_BYTES = 4 * 1024 * 1024
+
+function getLowercaseExtension(fileName: string): string {
+  const trimmed = fileName.trim().toLowerCase()
+  const dotIndex = trimmed.lastIndexOf('.')
+
+  if (dotIndex < 0 || dotIndex === trimmed.length - 1) {
+    return ''
+  }
+
+  return trimmed.slice(dotIndex + 1)
+}
+
+function canUploadAsInputFile(fileName: string): boolean {
+  const extension = getLowercaseExtension(fileName)
+  return extension ? CONTEXT_STUFFING_SUPPORTED_EXTENSIONS.has(extension) : false
+}
+
+function isImageMimeType(mimeType: string): boolean {
+  return mimeType.toLowerCase().startsWith('image/')
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte)
+  }
+
+  return btoa(binary)
+}
+
+function toInlineImageInput(file: { mimeType: string; bytes: Uint8Array }): InlineImageInput {
+  const normalizedMime = file.mimeType.trim() || 'application/octet-stream'
+  const base64 = bytesToBase64(file.bytes)
+
+  return {
+    type: 'input_image',
+    image_url: `data:${normalizedMime};base64,${base64}`,
+  }
+}
+
 function extractJsonCandidate(value: string): string {
   const trimmed = value.trim()
   if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
@@ -232,7 +286,11 @@ async function uploadFileForResponse(params: {
   signal: AbortSignal
 }): Promise<UploadedFileReference> {
   const form = new FormData()
-  const blob = new Blob([params.bytes], { type: params.mimeType })
+  const arrayBuffer = params.bytes.buffer.slice(
+    params.bytes.byteOffset,
+    params.bytes.byteOffset + params.bytes.byteLength,
+  ) as ArrayBuffer
+  const blob = new Blob([arrayBuffer], { type: params.mimeType })
 
   form.append('purpose', 'user_data')
   form.append('file', blob, params.fileName)
@@ -285,34 +343,61 @@ export async function executeAiEvaluation(
   request: AiEvaluationRequest,
 ): Promise<AiEvaluationExecutionResult> {
   const attachedFiles = request.studentSubmission.extractedFiles.filter((file) => file.fileBytes)
-  const hasAttachedFiles = attachedFiles.length > 0
-
-  const prompt = buildGradeSuggestionPrompt(request, {
-    customInstructions: config.customInstructions,
-    hasVisionImages: hasAttachedFiles,
-  })
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs)
   const uploadedFiles: UploadedFileReference[] = []
+  const inlineImages: InlineImageInput[] = []
+  const conversionNotes: string[] = []
 
   try {
-    if (hasAttachedFiles) {
+    if (attachedFiles.length > 0) {
       for (const file of attachedFiles) {
         const bytes = file.fileBytes
         if (!bytes) continue
 
-        const uploaded = await uploadFileForResponse({
-          baseUrl: config.baseUrl,
-          apiKey: config.apiKey,
-          fileName: file.name,
+        if (canUploadAsInputFile(file.name)) {
+          const uploaded = await uploadFileForResponse({
+            baseUrl: config.baseUrl,
+            apiKey: config.apiKey,
+            fileName: file.name,
+            mimeType: file.mimeType,
+            bytes,
+            signal: controller.signal,
+          })
+          uploadedFiles.push(uploaded)
+          continue
+        }
+
+        if (!config.visionEnabled || !isImageMimeType(file.mimeType)) {
+          conversionNotes.push(
+            `Arquivo "${file.name}" (${file.mimeType}) convertido para contexto textual resumido porque o formato nao e suportado em anexo binario pela API.`,
+          )
+          continue
+        }
+
+        if (bytes.byteLength > MAX_INLINE_IMAGE_BYTES) {
+          console.warn(
+            `[grade-suggestions] Ignorando imagem acima do limite inline (${MAX_INLINE_IMAGE_BYTES} bytes): ${file.name}`,
+          )
+          conversionNotes.push(
+            `Imagem "${file.name}" nao foi anexada por exceder o limite de ${MAX_INLINE_IMAGE_BYTES} bytes para analise visual inline.`,
+          )
+          continue
+        }
+
+        inlineImages.push(toInlineImageInput({
           mimeType: file.mimeType,
           bytes,
-          signal: controller.signal,
-        })
-        uploadedFiles.push(uploaded)
+        }))
       }
     }
+
+    const hasAttachedFiles = uploadedFiles.length > 0 || inlineImages.length > 0
+    const prompt = buildGradeSuggestionPrompt(request, {
+      customInstructions: config.customInstructions,
+      hasVisionImages: hasAttachedFiles,
+    })
 
     const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/responses`, {
       method: 'POST',
@@ -340,10 +425,20 @@ export async function executeAiEvaluation(
                 type: 'input_text',
                 text: prompt.userPrompt,
               },
+              ...(conversionNotes.length > 0
+                ? [{
+                    type: 'input_text' as const,
+                    text: [
+                      'Arquivos com fallback de conversao:',
+                      ...conversionNotes.map((note, index) => `${index + 1}. ${note}`),
+                    ].join('\n'),
+                  }]
+                : []),
               ...uploadedFiles.map((file) => ({
                 type: 'input_file' as const,
                 file_id: file.id,
               })),
+              ...inlineImages,
             ],
           },
         ],
