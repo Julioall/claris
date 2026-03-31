@@ -35,20 +35,18 @@ export function buildGradeSuggestionPrompt(
   options: { customInstructions?: string; hasVisionImages?: boolean } = {},
 ): PromptTemplateResult {
   const studentName = extractFirstName(request.studentName)
+  const nonEvaluativeActivity = request.maxGrade === null
 
-  // Quando vision não está ativo, arquivos puramente visuais (sem texto extraído) não devem ser
-  // incluídos no payload da IA: eles têm texto vazio e o flag requer_analise_visual=true faz a IA
-  // aplicar a regra de "depende de análise visual" mesmo quando há conteúdo textual suficiente.
+  // Quando arquivos são anexados ao request da IA, incluímos todos no payload para manter o
+  // contexto textual consistente com os metadados enviados junto aos anexos.
   const filesForPrompt = options.hasVisionImages
     ? request.studentSubmission.extractedFiles
     : request.studentSubmission.extractedFiles.filter(
         (file) => !file.requiresVisualAnalysis || file.extractedText.trim().length > 0,
       )
 
-  const visualDependencyForPrompt = filesForPrompt.some((file) => file.requiresVisualAnalysis)
-
   const promptPayload = {
-    nota_maxima: request.maxGrade,
+    nota_maxima: nonEvaluativeActivity ? null : request.maxGrade,
     aluno: studentName,
     atividade: {
       nome: request.activityContext.assign.name,
@@ -71,8 +69,6 @@ export function buildGradeSuggestionPrompt(
         requer_analise_visual: file.requiresVisualAnalysis,
       })),
       confianca: request.studentSubmission.confidence,
-      requer_revisao_manual: request.studentSubmission.requiresManualReview,
-      dependencia_visual: visualDependencyForPrompt,
       avisos: request.studentSubmission.warnings,
     },
   }
@@ -99,8 +95,11 @@ export function buildGradeSuggestionPrompt(
     '5. Nao inclua nota, pontuacao, percentual, fracao numerica ou qualquer valor de nota dentro do campo "feedback". A nota deve aparecer somente em "nota_recomendada".',
     '6. Retorne somente JSON valido.',
     '7. Nao assine o feedback com nome de professor, tutor, monitor ou qualquer despedida final identificando autoria.',
+    ...(nonEvaluativeActivity
+      ? ['8. Esta atividade e nao avaliativa (sem nota maxima). Sempre retorne "nota_recomendada": null, mesmo quando "valida" for true.']
+      : []),
     ...(options.hasVisionImages
-      ? ['8. Imagens da submissao do aluno foram anexadas a esta mensagem. Analise o conteudo visual diretamente para subsidiar a avaliacao.']
+      ? ['9. Imagens da submissao do aluno foram anexadas a esta mensagem. Analise o conteudo visual diretamente para subsidiar a avaliacao.']
       : []),
   ].join('\n')
 

@@ -148,7 +148,7 @@ function appendFeedbackSignature(feedback: string, signature?: string): string {
 
 export function parseAiEvaluationResponse(
   rawContent: string,
-  maxGrade: number,
+  maxGrade: number | null,
   studentName?: string,
   feedbackSignature?: string,
 ): AiEvaluationResponse {
@@ -173,7 +173,9 @@ export function parseAiEvaluationResponse(
   const rawGrade = parsed.nota_recomendada ?? parsed.notaRecomendada
   let normalizedGrade: number | null = null
 
-  if (rawGrade === null || rawGrade === undefined || rawGrade === '') {
+  if (maxGrade === null) {
+    normalizedGrade = null
+  } else if (rawGrade === null || rawGrade === undefined || rawGrade === '') {
     normalizedGrade = null
   } else {
     const numericGrade = Number(rawGrade)
@@ -282,16 +284,12 @@ export async function executeAiEvaluation(
   config: AiClientConfig,
   request: AiEvaluationRequest,
 ): Promise<AiEvaluationExecutionResult> {
-  const visionFiles = config.visionEnabled
-    ? request.studentSubmission.extractedFiles.filter(
-        (file) => file.requiresVisualAnalysis && file.fileBytes,
-      )
-    : []
-  const hasVisionFiles = visionFiles.length > 0
+  const attachedFiles = request.studentSubmission.extractedFiles.filter((file) => file.fileBytes)
+  const hasAttachedFiles = attachedFiles.length > 0
 
   const prompt = buildGradeSuggestionPrompt(request, {
     customInstructions: config.customInstructions,
-    hasVisionImages: hasVisionFiles,
+    hasVisionImages: hasAttachedFiles,
   })
 
   const controller = new AbortController()
@@ -299,8 +297,8 @@ export async function executeAiEvaluation(
   const uploadedFiles: UploadedFileReference[] = []
 
   try {
-    if (hasVisionFiles) {
-      for (const file of visionFiles) {
+    if (hasAttachedFiles) {
+      for (const file of attachedFiles) {
         const bytes = file.fileBytes
         if (!bytes) continue
 
@@ -325,7 +323,7 @@ export async function executeAiEvaluation(
       body: JSON.stringify({
         model: config.model,
         temperature: 0.1,
-        max_output_tokens: hasVisionFiles ? 1200 : 800,
+        max_output_tokens: hasAttachedFiles ? 1200 : 800,
         input: [
           {
             role: 'system',

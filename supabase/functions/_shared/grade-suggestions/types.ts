@@ -58,7 +58,7 @@ export interface ActivityEvaluationContext {
   primaryDescription: string
   supplementaryMaterials: SupplementaryMaterial[]
   relatedResources: RelatedResourceCandidate[]
-  maxGrade: number
+  maxGrade: number | null
 }
 
 export interface NormalizedSubmission {
@@ -66,18 +66,14 @@ export interface NormalizedSubmission {
   studentId: string
   typedText: string
   extractedFiles: ExtractedFile[]
-  requiresManualReview: boolean
   confidence: SuggestionConfidence
   warnings: string[]
-  warningCodes: string[]
-  visualDependency: boolean
-  totalExtractedTextLength: number
   status: 'submitted' | 'draft' | 'missing'
   attemptNumber: number | null
 }
 
 export interface AiEvaluationRequest {
-  maxGrade: number
+  maxGrade: number | null
   activityContext: ActivityEvaluationContext
   studentSubmission: NormalizedSubmission
   studentName?: string

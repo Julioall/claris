@@ -1,6 +1,5 @@
 import { callMoodleApi } from '../moodle/mod.ts'
-import { extractTextFromFileBuffer } from './file-text-extraction.ts'
-import { isFileTypeEnabled, withTemporaryMoodleFile } from './file-support.ts'
+import { withTemporaryMoodleFile } from './file-support.ts'
 import { collapseWhitespace, stripHtmlToText } from './text.ts'
 import type { GradeSuggestionRuntimeConfig } from './config.ts'
 import type { SubmissionNormalizationResult } from './orchestrator.ts'
@@ -16,12 +15,7 @@ interface NormalizeSubmissionParams {
 }
 
 interface SubmissionReviewState {
-  requiresManualReview: boolean
   confidence: SuggestionConfidence
-  warnings: string[]
-  warningCodes: string[]
-  visualDependency: boolean
-  totalExtractedTextLength: number
 }
 
 function extractSubmissionTexts(submission: Record<string, unknown>): string[] {
@@ -86,42 +80,13 @@ function extractSubmissionFiles(submission: Record<string, unknown>): MoodleFile
 export function deriveSubmissionReviewState(params: {
   typedText: string
   extractedFiles: ExtractedFile[]
-  config: Pick<GradeSuggestionRuntimeConfig, 'minVisualTextChars' | 'minSubmissionTextChars' | 'visionEnabled'>
 }): SubmissionReviewState {
   const typedTextLength = params.typedText.trim().length
   const totalFileTextLength = params.extractedFiles.reduce((sum, file) => sum + file.textLength, 0)
   const totalExtractedTextLength = typedTextLength + totalFileTextLength
-  const visualDependency = params.extractedFiles.some((file) => file.requiresVisualAnalysis)
-  const onlyLowSignalFiles =
-    params.extractedFiles.length > 0 &&
-    params.extractedFiles.every((file) => file.extractionQuality === 'none' || file.extractionQuality === 'low')
-
-  const hasVisionImages = Boolean(params.config.visionEnabled) &&
-    params.extractedFiles.some((file) => file.requiresVisualAnalysis && file.fileBytes)
-
-  const warnings: string[] = []
-  const warningCodes: string[] = []
-
-  let requiresManualReview = false
-  if (visualDependency && totalExtractedTextLength < params.config.minVisualTextChars && !hasVisionImages) {
-    requiresManualReview = true
-    warnings.push('A submissão depende de análise visual e não possui texto suficiente para correção automática.')
-    warningCodes.push('visual_dependency')
-  } else if (
-    params.extractedFiles.length > 0 &&
-    totalExtractedTextLength < params.config.minSubmissionTextChars &&
-    onlyLowSignalFiles &&
-    !hasVisionImages
-  ) {
-    requiresManualReview = true
-    warnings.push('A extração dos arquivos da submissão não forneceu texto suficiente para correção confiável.')
-    warningCodes.push('insufficient_text')
-  }
 
   let confidence: SuggestionConfidence = 'low'
-  if (requiresManualReview) {
-    confidence = 'low'
-  } else if (
+  if (
     typedTextLength >= 800 ||
     params.extractedFiles.some((file) => file.extractionQuality === 'high') ||
     totalExtractedTextLength >= 1500
@@ -136,12 +101,7 @@ export function deriveSubmissionReviewState(params: {
   }
 
   return {
-    requiresManualReview,
     confidence,
-    warnings,
-    warningCodes,
-    visualDependency,
-    totalExtractedTextLength,
   }
 }
 
@@ -153,31 +113,22 @@ async function extractSubmissionFile(params: {
   const fileName = params.file.filename?.trim() || 'arquivo'
   const mimeType = params.file.mimetype?.trim() || 'application/octet-stream'
 
-  if (!isFileTypeEnabled(fileName, mimeType, params.config.supportedTypes)) {
-    return {
-      name: fileName,
-      mimeType,
-      extractedText: '',
-      extractionQuality: 'none',
-      requiresVisualAnalysis: false,
-      textLength: 0,
-      sourceUrl: params.file.fileurl ?? null,
-      warning: 'Tipo de arquivo fora da lista configurada para análise automática.',
-    }
-  }
-
   return await withTemporaryMoodleFile({
     file: params.file,
     token: params.token,
     maxFileBytes: params.config.maxFileBytes,
     onDownloaded: async ({ bytes, mimeType: downloadedMimeType }) => {
-      return await extractTextFromFileBuffer({
-        fileName,
+      return {
+        name: fileName,
         mimeType: downloadedMimeType,
-        bytes,
-        maxTextLength: params.config.maxStoredTextLength,
+        extractedText: '',
+        extractionQuality: 'none',
+        requiresVisualAnalysis: true,
+        textLength: 0,
         sourceUrl: params.file.fileurl ?? null,
-      })
+        warning: null,
+        fileBytes: bytes,
+      }
     },
   })
 }
@@ -204,12 +155,8 @@ export async function normalizeStudentSubmission(
       studentId: params.studentId,
       typedText: '',
       extractedFiles: [],
-      requiresManualReview: false,
       confidence: 'low',
       warnings: ['Nenhuma submissão foi localizada no Moodle para este aluno.'],
-      warningCodes: ['missing_submission'],
-      visualDependency: false,
-      totalExtractedTextLength: 0,
       status: 'missing',
       attemptNumber: null,
     }
@@ -226,7 +173,6 @@ export async function normalizeStudentSubmission(
   const typedText = collapseWhitespace(extractSubmissionTexts(submission).join('\n\n'))
   const extractedFiles: ExtractedFile[] = []
   const warnings: string[] = []
-  const warningCodes: string[] = []
 
   for (const file of extractSubmissionFiles(submission)) {
     try {
@@ -243,18 +189,12 @@ export async function normalizeStudentSubmission(
       }
     } catch (error) {
       warnings.push(error instanceof Error ? error.message : 'Falha ao processar arquivo da submissão.')
-      warningCodes.push('file_processing_failed')
     }
   }
 
   const reviewState = deriveSubmissionReviewState({
     typedText,
     extractedFiles,
-    config: {
-      minVisualTextChars: params.config.minVisualTextChars,
-      minSubmissionTextChars: params.config.minSubmissionTextChars,
-      visionEnabled: params.config.visionEnabled,
-    },
   })
 
   const submissionResult: NormalizedSubmission = {
@@ -264,12 +204,8 @@ export async function normalizeStudentSubmission(
     studentId: params.studentId,
     typedText,
     extractedFiles,
-    requiresManualReview: reviewState.requiresManualReview,
     confidence: reviewState.confidence,
-    warnings: [...reviewState.warnings, ...warnings],
-    warningCodes: [...reviewState.warningCodes, ...warningCodes],
-    visualDependency: reviewState.visualDependency,
-    totalExtractedTextLength: reviewState.totalExtractedTextLength,
+    warnings,
     status: submission.status === 'draft' ? 'draft' : 'submitted',
     attemptNumber: typeof submission.attemptnumber === 'number' ? submission.attemptnumber : null,
   }
@@ -301,9 +237,7 @@ export async function normalizeStudentSubmission(
       submission_status: submissionResult.status,
       typed_text_length: typedText.length,
       file_count: extractedFiles.length,
-      warning_codes: submissionResult.warningCodes,
       confidence: submissionResult.confidence,
-      requires_manual_review: submissionResult.requiresManualReview,
     },
   }
 }

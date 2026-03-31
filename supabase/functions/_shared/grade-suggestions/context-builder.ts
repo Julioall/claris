@@ -273,10 +273,10 @@ export async function buildActivityEvaluationContext(
     }
   }
 
-  const maxGrade = Number(assign.grade ?? params.fallbackMaxGrade ?? 0)
-  if (!Number.isFinite(maxGrade) || maxGrade <= 0) {
-    throw new Error('A atividade não possui nota máxima válida para correção automática.')
-  }
+  const rawMaxGrade = Number(assign.grade ?? params.fallbackMaxGrade ?? Number.NaN)
+  const maxGrade = Number.isFinite(rawMaxGrade) && rawMaxGrade > 0
+    ? rawMaxGrade
+    : null
 
   return {
     context: {

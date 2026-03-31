@@ -12,7 +12,7 @@ import type {
   NormalizedSubmission,
 } from "../../../../supabase/functions/_shared/grade-suggestions/types.ts";
 
-function buildContext(): ActivityEvaluationContext {
+function buildContext(overrides: Partial<ActivityEvaluationContext> = {}): ActivityEvaluationContext {
   return {
     activityId: "cm-77",
     courseId: "course-1",
@@ -26,6 +26,7 @@ function buildContext(): ActivityEvaluationContext {
     supplementaryMaterials: [],
     relatedResources: [],
     maxGrade: 10,
+    ...overrides,
   };
 }
 
@@ -49,12 +50,8 @@ function buildSubmission(overrides: Partial<NormalizedSubmission> = {}): Normali
     studentId: "student-1",
     typedText: "Resposta objetiva do aluno com os passos executados.",
     extractedFiles: [buildExtractedFile()],
-    requiresManualReview: false,
     confidence: "medium",
     warnings: [],
-    warningCodes: [],
-    visualDependency: false,
-    totalExtractedTextLength: 78,
     status: "submitted",
     attemptNumber: 0,
     ...overrides,
@@ -146,7 +143,6 @@ describe("grade suggestion orchestrator", () => {
           submissionId: null,
           typedText: "",
           extractedFiles: [],
-          totalExtractedTextLength: 0,
           status: "missing",
           warnings: ["Nenhuma submissao foi localizada no Moodle para este aluno."],
         }),
@@ -351,9 +347,6 @@ describe("grade suggestion orchestrator", () => {
               fileBytes: new Uint8Array([1, 2, 3]),
             }),
           ],
-          requiresManualReview: false,
-          visualDependency: true,
-          totalExtractedTextLength: 0,
         }),
         sourcesUsed: buildSources(),
         submissionSummary: { submission_found: true },
@@ -365,5 +358,47 @@ describe("grade suggestion orchestrator", () => {
     expect(evaluate).toHaveBeenCalled();
     expect(output.result.status).toBe("success");
     expect(output.result.suggestedGrade).toBe(8.5);
+  });
+
+  it("retorna sucesso com nota nula quando a atividade e nao avaliativa", async () => {
+    const evaluate = vi.fn().mockResolvedValue({
+      evaluation: {
+        valida: true,
+        feedback: "Resposta bem estruturada e com boa argumentacao.",
+        notaRecomendada: null,
+        confidence: "high",
+      },
+      rawResponse: { id: "chatcmpl-2" },
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      promptPayload: { nota_maxima: null },
+    });
+
+    const output = await generateGradeSuggestion({
+      userId: "user-1",
+      studentId: "student-1",
+      courseId: "course-1",
+      studentActivityId: "activity-1",
+      moodleActivityId: "77",
+    }, {
+      createDraftAudit: vi.fn().mockResolvedValue("audit-no-grade"),
+      finalizeAudit: vi.fn().mockResolvedValue(undefined),
+      buildContext: vi.fn().mockResolvedValue({
+        context: buildContext({ maxGrade: null }),
+        sourcesUsed: buildSources(),
+        contextSummary: {},
+        moodleAssignId: 55,
+      }),
+      normalizeSubmission: vi.fn().mockResolvedValue({
+        submission: buildSubmission(),
+        sourcesUsed: buildSources(),
+        submissionSummary: { submission_found: true },
+      }),
+      evaluate,
+    });
+
+    expect(output.result.status).toBe("success");
+    expect(output.result.suggestedGrade).toBeNull();
+    expect(evaluate).toHaveBeenCalled();
   });
 });

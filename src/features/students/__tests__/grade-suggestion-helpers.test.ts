@@ -30,12 +30,8 @@ function buildSubmission(overrides: Partial<NormalizedSubmission> = {}): Normali
     studentId: "student-1",
     typedText: "Resposta do aluno sobre monitoramento e inventario de maquinas.",
     extractedFiles: [],
-    requiresManualReview: false,
     confidence: "medium",
     warnings: [],
-    warningCodes: [],
-    visualDependency: false,
-    totalExtractedTextLength: 64,
     status: "submitted",
     attemptNumber: 0,
     ...overrides,
@@ -103,7 +99,7 @@ describe("grade suggestion helpers", () => {
     expect(results[0].reason).toEqual(expect.arrayContaining(["same_section", "similar_name", "keyword_match"]));
   });
 
-  it("marca revisao manual quando a submissao depende de analise visual sem texto suficiente", () => {
+  it("calcula confianca baixa para submissao com arquivo visual sem texto", () => {
     const reviewState = deriveSubmissionReviewState({
       typedText: "",
       extractedFiles: [
@@ -116,19 +112,12 @@ describe("grade suggestion helpers", () => {
           textLength: 0,
         }),
       ],
-      config: {
-        minVisualTextChars: 80,
-        minSubmissionTextChars: 40,
-        visionEnabled: false,
-      },
     });
 
-    expect(reviewState.requiresManualReview).toBe(true);
-    expect(reviewState.warningCodes).toContain("visual_dependency");
     expect(reviewState.confidence).toBe("low");
   });
 
-  it("nao marca revisao manual quando visao esta habilitada e imagem possui bytes", () => {
+  it("calcula confianca baixa quando arquivo contem bytes sem texto", () => {
     const reviewState = deriveSubmissionReviewState({
       typedText: "",
       extractedFiles: [
@@ -142,18 +131,12 @@ describe("grade suggestion helpers", () => {
           fileBytes: new Uint8Array([1, 2, 3]),
         }),
       ],
-      config: {
-        minVisualTextChars: 80,
-        minSubmissionTextChars: 40,
-        visionEnabled: true,
-      },
     });
 
-    expect(reviewState.requiresManualReview).toBe(false);
-    expect(reviewState.warningCodes).not.toContain("visual_dependency");
+    expect(reviewState.confidence).toBe("low");
   });
 
-  it("marca revisao manual quando os arquivos nao produzem texto suficiente", () => {
+  it("calcula confianca baixa quando arquivos nao produzem texto suficiente", () => {
     const reviewState = deriveSubmissionReviewState({
       typedText: "",
       extractedFiles: [
@@ -166,15 +149,9 @@ describe("grade suggestion helpers", () => {
           textLength: 12,
         }),
       ],
-      config: {
-        minVisualTextChars: 80,
-        minSubmissionTextChars: 40,
-        visionEnabled: false,
-      },
     });
 
-    expect(reviewState.requiresManualReview).toBe(true);
-    expect(reviewState.warningCodes).toContain("insufficient_text");
+    expect(reviewState.confidence).toBe("low");
   });
 
   it("monta o payload da IA com nota maxima, contexto e submissao normalizada", () => {
@@ -201,7 +178,6 @@ describe("grade suggestion helpers", () => {
       },
       resposta_aluno: {
         confianca: "medium",
-        requer_revisao_manual: false,
       },
     });
     expect(prompt.userPrompt).toContain('"materiais_complementares"');
@@ -270,6 +246,17 @@ describe("grade suggestion helpers", () => {
     expect(prompt.systemPrompt).not.toContain('Imagens da submissao');
   });
 
+  it("indica no prompt quando a atividade e nao avaliativa", () => {
+    const prompt = buildGradeSuggestionPrompt({
+      maxGrade: null,
+      activityContext: buildContext({ maxGrade: null }),
+      studentSubmission: buildSubmission(),
+    });
+
+    expect(prompt.promptPayload).toMatchObject({ nota_maxima: null });
+    expect(prompt.systemPrompt).toContain('atividade e nao avaliativa');
+  });
+
   it("faz parsing robusto da resposta JSON retornada pela IA", () => {
     const parsed = parseAiEvaluationResponse(
       '```json\n{"valida":true,"feedback":"Boa resposta, mas faltou detalhar o inventario.","nota_recomendada":12.3,"confidence":"high"}\n```',
@@ -293,5 +280,14 @@ describe("grade suggestion helpers", () => {
     expect(parsed.feedback).toBe("O aluno apresenta conteudo relevante e coerente.");
     expect(parsed.feedback.toLowerCase()).not.toContain("nota");
     expect(parsed.feedback).not.toContain("4,5/5");
+  });
+
+  it("ignora nota retornada pela IA quando a atividade nao possui nota maxima", () => {
+    const parsed = parseAiEvaluationResponse(
+      '{"valida":true,"feedback":"Bom trabalho!","nota_recomendada":9.1}',
+      null,
+    );
+
+    expect(parsed.notaRecomendada).toBeNull();
   });
 });

@@ -175,43 +175,9 @@ export async function generateGradeSuggestion(
       return { auditId, result }
     }
 
-    const hasVisionImages = Boolean(deps.visionEnabled) &&
-      normalizedSubmission.submission.extractedFiles.some(
-        (file) => file.requiresVisualAnalysis && file.fileBytes,
-      )
-
-    if (normalizedSubmission.submission.requiresManualReview && !hasVisionImages) {
-      const result: GradeSuggestionResult = {
-        status: 'manual_review_required',
-        suggestedGrade: null,
-        suggestedFeedback: 'A resposta nao pode ser avaliada automaticamente pois depende de analise visual.',
-        confidence: 'low',
-        sourcesUsed: combinedSources,
-        warnings: normalizedSubmission.submission.warnings,
-        evaluationStatus: 'revisao_manual_necessaria',
-        reason: 'visual_dependency',
-      }
-
-      await deps.finalizeAudit(auditId, {
-        status: 'manual_review_required',
-        confidence: result.confidence,
-        suggestedGrade: result.suggestedGrade,
-        suggestedFeedback: result.suggestedFeedback,
-        maxGrade: contextBuild.context.maxGrade,
-        moodleAssignId: contextBuild.moodleAssignId,
-        warnings: result.warnings,
-        sourcesUsed: result.sourcesUsed,
-        contextSummary: contextBuild.contextSummary,
-        submissionSummary: normalizedSubmission.submissionSummary,
-      })
-
-      return { auditId, result }
-    }
-
     const submissionHasContent =
       normalizedSubmission.submission.typedText.trim().length > 0 ||
-      normalizedSubmission.submission.extractedFiles.some((file) => file.textLength > 0) ||
-      hasVisionImages
+      normalizedSubmission.submission.extractedFiles.length > 0
 
     if (!submissionHasContent) {
       const result = buildNoContentResult(
@@ -241,13 +207,20 @@ export async function generateGradeSuggestion(
       submission: normalizedSubmission.submission,
     })
 
+    const nonEvaluativeActivity =
+      contextBuild.context.maxGrade === null ||
+      !Number.isFinite(contextBuild.context.maxGrade) ||
+      contextBuild.context.maxGrade <= 0
+
     const result: GradeSuggestionResult = {
-      status: evaluation.evaluation.notaRecomendada === null
-        ? 'manual_review_required'
-        : evaluation.evaluation.valida
-          ? 'success'
-          : 'invalid',
-      suggestedGrade: evaluation.evaluation.notaRecomendada,
+      status: nonEvaluativeActivity
+        ? (evaluation.evaluation.valida ? 'success' : 'invalid')
+        : evaluation.evaluation.notaRecomendada === null
+          ? 'manual_review_required'
+          : evaluation.evaluation.valida
+            ? 'success'
+            : 'invalid',
+      suggestedGrade: nonEvaluativeActivity ? null : evaluation.evaluation.notaRecomendada,
       suggestedFeedback: evaluation.evaluation.feedback,
       confidence: resolveConfidence(
         normalizedSubmission.submission.confidence,
