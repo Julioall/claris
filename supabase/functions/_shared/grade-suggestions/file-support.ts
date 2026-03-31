@@ -64,16 +64,32 @@ export function buildMoodleFileDownloadCandidates(fileUrl: string, token: string
   return Array.from(new Set(candidates))
 }
 
-async function downloadMoodleFile(fileUrl: string, token: string): Promise<Response> {
+async function downloadMoodleFile(fileUrl: string, token: string, timeoutMs = 30_000): Promise<Response> {
   const failures: string[] = []
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
-  for (const candidateUrl of buildMoodleFileDownloadCandidates(fileUrl, token)) {
-    const response = await fetch(candidateUrl)
-    if (response.ok) {
-      return response
+  try {
+    for (const candidateUrl of buildMoodleFileDownloadCandidates(fileUrl, token)) {
+      let response: Response
+      try {
+        response = await fetch(candidateUrl, { signal: controller.signal })
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') {
+          throw new Error('Download do arquivo do Moodle excedeu o tempo limite.')
+        }
+        failures.push(error instanceof Error ? error.message : 'download_failed')
+        continue
+      }
+
+      if (response.ok) {
+        return response
+      }
+
+      failures.push(`HTTP ${response.status}`)
     }
-
-    failures.push(`HTTP ${response.status}`)
+  } finally {
+    clearTimeout(timeoutId)
   }
 
   const failureLabel = failures.length > 0 ? failures.join(' / ') : 'download_failed'

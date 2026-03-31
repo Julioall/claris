@@ -36,6 +36,17 @@ export function buildGradeSuggestionPrompt(
 ): PromptTemplateResult {
   const studentName = extractFirstName(request.studentName)
 
+  // Quando vision não está ativo, arquivos puramente visuais (sem texto extraído) não devem ser
+  // incluídos no payload da IA: eles têm texto vazio e o flag requer_analise_visual=true faz a IA
+  // aplicar a regra de "depende de análise visual" mesmo quando há conteúdo textual suficiente.
+  const filesForPrompt = options.hasVisionImages
+    ? request.studentSubmission.extractedFiles
+    : request.studentSubmission.extractedFiles.filter(
+        (file) => !file.requiresVisualAnalysis || file.extractedText.trim().length > 0,
+      )
+
+  const visualDependencyForPrompt = filesForPrompt.some((file) => file.requiresVisualAnalysis)
+
   const promptPayload = {
     nota_maxima: request.maxGrade,
     aluno: studentName,
@@ -52,7 +63,7 @@ export function buildGradeSuggestionPrompt(
     },
     resposta_aluno: {
       texto_digitado: truncateText(request.studentSubmission.typedText, SUBMISSION_TEXT_LIMIT),
-      arquivos: request.studentSubmission.extractedFiles.map((file) => ({
+      arquivos: filesForPrompt.map((file) => ({
         nome: file.name,
         mime_type: file.mimeType,
         texto_extraido: truncateText(file.extractedText, SUBMISSION_TEXT_LIMIT),
@@ -61,7 +72,7 @@ export function buildGradeSuggestionPrompt(
       })),
       confianca: request.studentSubmission.confidence,
       requer_revisao_manual: request.studentSubmission.requiresManualReview,
-      dependencia_visual: request.studentSubmission.visualDependency,
+      dependencia_visual: visualDependencyForPrompt,
       avisos: request.studentSubmission.warnings,
     },
   }

@@ -176,6 +176,18 @@ function delay(ms: number) {
   })
 }
 
+function withItemTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('A avaliacao do aluno excedeu o tempo limite individual por item.')),
+        timeoutMs,
+      )
+    ),
+  ])
+}
+
 function isJobStalled(updatedAt: string | null | undefined, now = Date.now()) {
   if (!updatedAt) {
     return false
@@ -674,7 +686,8 @@ async function processActivitySuggestionJob(params: {
       }
 
       try {
-        const output = await runSuggestionGeneration({
+        const ITEM_TIMEOUT_MS = config.timeoutMs + 60_000
+        const output = await withItemTimeout(runSuggestionGeneration({
           supabase,
           payload: { moodleUrl: params.moodleUrl, token: params.token },
           userId: params.userId,
@@ -689,7 +702,7 @@ async function processActivitySuggestionJob(params: {
           getContext,
           studentName: student.full_name ?? undefined,
           tutorName: tutorName ?? undefined,
-        })
+        }), ITEM_TIMEOUT_MS)
 
         if (output.result.status === 'error') {
           await recordAiGradingJobErrorLog({
