@@ -322,7 +322,6 @@ export async function executeAiEvaluation(
       },
       body: JSON.stringify({
         model: config.model,
-        temperature: 0.1,
         max_output_tokens: hasAttachedFiles ? 1200 : 800,
         input: [
           {

@@ -76,6 +76,7 @@ describe("AdminConfiguracoes page", () => {
     expect(screen.getByRole("heading", { name: /limiares de risco/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar limiares de risco/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^claris ia$/i })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /^provider$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /claris ia - correcao de atividade/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /testar conexao/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar claris ia/i })).toBeInTheDocument();
@@ -151,7 +152,8 @@ describe("AdminConfiguracoes page", () => {
     const user = userEvent.setup();
     render(<AdminConfiguracoes />);
 
-    await user.type(screen.getByLabelText(/^modelo$/i), "gpt-4o-mini");
+    await user.click(screen.getByRole("combobox", { name: /^modelo$/i }));
+    await user.click(screen.getByRole("option", { name: /gpt-4o mini/i }));
     await user.type(screen.getByLabelText(/chave api/i), "sk-test");
 
     await user.click(screen.getByRole("button", { name: /testar conexao/i }));
@@ -175,11 +177,22 @@ describe("AdminConfiguracoes page", () => {
     );
   });
 
+  it("shows recommended badge for the default suggested model", async () => {
+    const user = userEvent.setup();
+    render(<AdminConfiguracoes />);
+
+    await user.click(screen.getByRole("combobox", { name: /^modelo$/i }));
+    await user.click(screen.getByRole("option", { name: /gpt-5 mini/i }));
+
+    expect(await screen.findByText(/recomendado/i)).toBeInTheDocument();
+  });
+
   it("saves claris custom instructions together with connection settings", async () => {
     const user = userEvent.setup();
     render(<AdminConfiguracoes />);
 
-    await user.type(screen.getByLabelText(/^modelo$/i), "gpt-4o-mini");
+    await user.click(screen.getByRole("combobox", { name: /^modelo$/i }));
+    await user.click(screen.getByRole("option", { name: /gpt-4o mini/i }));
     await user.type(screen.getByLabelText(/chave api/i), "sk-test");
     await user.type(
       screen.getByLabelText(/^prompt de instrucoes personalizadas$/i),

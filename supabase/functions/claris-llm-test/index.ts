@@ -24,6 +24,11 @@ const asTrimmedString = (value: unknown): string =>
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
 
+const supportsTemperature = (model: string): boolean => {
+  const normalizedModel = model.trim().toLowerCase()
+  return !normalizedModel.startsWith('gpt-5') && !normalizedModel.startsWith('o')
+}
+
 async function readStoredSettings(userId: string): Promise<SettingsJson> {
   const supabase = createServiceClient()
   const { data, error } = await supabase
@@ -70,23 +75,28 @@ Deno.serve(createHandler(async ({ body, user }) => {
   const start = Date.now()
 
   try {
+    const requestBody: Record<string, unknown> = {
+      model,
+      max_tokens: 12,
+      messages: [
+        {
+          role: 'user',
+          content: 'Reply only with: ok',
+        },
+      ],
+    }
+
+    if (supportsTemperature(model)) {
+      requestBody.temperature = 0
+    }
+
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        max_tokens: 12,
-        messages: [
-          {
-            role: 'user',
-            content: 'Reply only with: ok',
-          },
-        ],
-      }),
+      body: JSON.stringify(requestBody),
       signal: controller.signal,
     })
 

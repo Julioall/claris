@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bot, HelpCircle, Sparkles } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { MoodleIcon } from '@/components/ui/MoodleIcon';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
@@ -26,6 +28,9 @@ import {
 import {
   CLARIS_CONFIGURED_STORAGE_KEY,
   DEFAULT_CLARIS_LLM_SETTINGS,
+  CLARIS_LLM_PROVIDER_OPTIONS,
+  CLARIS_LLM_MODEL_PRESETS,
+  findClarisModelPresetBySettings,
   isClarisSettingsConfigured,
   normalizeBaseUrl,
   type ClarisLlmSettings,
@@ -36,7 +41,7 @@ import {
 } from '@/lib/global-app-settings';
 
 type RiskLevelThreshold = 'atencao' | 'risco' | 'critico';
-type ClarisField = 'provider' | 'model' | 'baseUrl' | 'apiKey' | 'customInstructions';
+type ClarisField = 'model' | 'baseUrl' | 'apiKey' | 'customInstructions';
 type AiGradingField =
   | 'timeoutMs'
   | 'maxFileBytes'
@@ -84,6 +89,8 @@ const AI_GRADING_WEIGHT_FIELDS: Array<{
   },
 ];
 
+const CUSTOM_MODEL_PRESET_ID = '__custom__';
+
 function parseCsvInput(value: string): string[] {
   return value
     .split(',')
@@ -108,9 +115,14 @@ export default function AdminConfiguracoes() {
   const [hasStoredClarisApiKey, setHasStoredClarisApiKey] = useState(false);
   const [isSavingClaris, setIsSavingClaris] = useState(false);
   const [isTestingClaris, setIsTestingClaris] = useState(false);
+  const [selectedClarisModelPreset, setSelectedClarisModelPreset] = useState<string>(CUSTOM_MODEL_PRESET_ID);
   const storedClarisApiKeyRef = useRef('');
   const [aiGradingSettings, setAiGradingSettings] = useState<AiGradingSettings>(DEFAULT_AI_GRADING_SETTINGS);
   const [isSavingAiGrading, setIsSavingAiGrading] = useState(false);
+  const clarisModelPresetsForProvider = CLARIS_LLM_MODEL_PRESETS.filter((preset) => (
+    preset.provider.toLowerCase() === clarisSettings.provider.trim().toLowerCase()
+  ));
+  const selectedClarisPreset = CLARIS_LLM_MODEL_PRESETS.find((preset) => preset.id === selectedClarisModelPreset);
 
   useEffect(() => {
     const load = async () => {
@@ -123,6 +135,8 @@ export default function AdminConfiguracoes() {
         storedClarisApiKeyRef.current = data.clarisSettings.apiKey;
         setHasStoredClarisApiKey(data.clarisSettings.apiKey.trim().length > 0);
         setClarisSettings({ ...data.clarisSettings, apiKey: '' });
+        const matchedPreset = findClarisModelPresetBySettings(data.clarisSettings);
+        setSelectedClarisModelPreset(matchedPreset?.id ?? CUSTOM_MODEL_PRESET_ID);
         setAiGradingSettings(data.aiGradingSettings);
         localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(data.clarisSettings.configured));
       } catch {
@@ -131,6 +145,7 @@ export default function AdminConfiguracoes() {
         storedClarisApiKeyRef.current = '';
         setHasStoredClarisApiKey(false);
         setClarisSettings(DEFAULT_CLARIS_LLM_SETTINGS);
+        setSelectedClarisModelPreset(CUSTOM_MODEL_PRESET_ID);
         setAiGradingSettings(DEFAULT_GLOBAL_APP_SETTINGS.aiGradingSettings);
         localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, 'false');
       } finally {
@@ -148,6 +163,52 @@ export default function AdminConfiguracoes() {
 
   const updateClarisField = (field: ClarisField, value: string) => {
     setClarisSettings(prev => ({ ...prev, [field]: value }));
+  };
+
+  const updateClarisProvider = (provider: string) => {
+    const normalizedProvider = provider.trim().toLowerCase();
+    const presetsForProvider = CLARIS_LLM_MODEL_PRESETS.filter((preset) => (
+      preset.provider.toLowerCase() === normalizedProvider
+    ));
+
+    if (presetsForProvider.length === 0) {
+      setSelectedClarisModelPreset(CUSTOM_MODEL_PRESET_ID);
+      setClarisSettings((prev) => ({ ...prev, provider }));
+      return;
+    }
+
+    const matchedPreset = presetsForProvider.find((preset) => (
+      preset.model.toLowerCase() === clarisSettings.model.trim().toLowerCase()
+      && normalizeBaseUrl(preset.baseUrl).toLowerCase() === normalizeBaseUrl(clarisSettings.baseUrl).toLowerCase()
+    ));
+    const targetPreset = matchedPreset ?? presetsForProvider[0];
+
+    setSelectedClarisModelPreset(targetPreset.id);
+    setClarisSettings((prev) => ({
+      ...prev,
+      provider,
+      model: targetPreset.model,
+      baseUrl: targetPreset.baseUrl,
+    }));
+  };
+
+  const updateClarisModelPreset = (presetId: string) => {
+    setSelectedClarisModelPreset(presetId);
+    if (presetId === CUSTOM_MODEL_PRESET_ID) {
+      return;
+    }
+
+    const selectedPreset = CLARIS_LLM_MODEL_PRESETS.find((preset) => preset.id === presetId);
+    if (!selectedPreset) {
+      return;
+    }
+
+    setClarisSettings((prev) => ({
+      ...prev,
+      provider: selectedPreset.provider,
+      model: selectedPreset.model,
+      baseUrl: selectedPreset.baseUrl,
+    }));
   };
 
   const updateAiGradingField = (field: AiGradingField, value: string) => {
@@ -381,23 +442,58 @@ export default function AdminConfiguracoes() {
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="claris-provider">Provider</Label>
-              <Input
-                id="claris-provider"
+              <Select
                 value={clarisSettings.provider}
-                onChange={(e) => updateClarisField('provider', e.target.value)}
-                placeholder="openai"
+                onValueChange={updateClarisProvider}
                 disabled={isSavingClaris}
-              />
+              >
+                <SelectTrigger id="claris-provider" aria-label="Provider">
+                  <SelectValue placeholder="Selecione um provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLARIS_LLM_PROVIDER_OPTIONS.map((provider) => (
+                    <SelectItem key={provider.value} value={provider.value}>
+                      {provider.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="claris-model">Modelo</Label>
-              <Input
-                id="claris-model"
-                value={clarisSettings.model}
-                onChange={(e) => updateClarisField('model', e.target.value)}
-                placeholder="gpt-4o-mini"
+              <Select
+                value={selectedClarisModelPreset}
+                onValueChange={updateClarisModelPreset}
                 disabled={isSavingClaris}
-              />
+              >
+                <SelectTrigger id="claris-model" aria-label="Modelo">
+                  <SelectValue placeholder="Selecione um modelo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {clarisModelPresetsForProvider.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={CUSTOM_MODEL_PRESET_ID}>Customizado</SelectItem>
+                </SelectContent>
+              </Select>
+              {selectedClarisModelPreset === CUSTOM_MODEL_PRESET_ID && (
+                <Input
+                  value={clarisSettings.model}
+                  onChange={(e) => updateClarisField('model', e.target.value)}
+                  placeholder="gpt-5-mini"
+                  disabled={isSavingClaris}
+                />
+              )}
+              {selectedClarisModelPreset !== CUSTOM_MODEL_PRESET_ID && (
+                <div className="space-y-1">
+                  {selectedClarisPreset?.recommended && <Badge variant="secondary">Recomendado</Badge>}
+                  <p className="text-xs text-muted-foreground">
+                    {selectedClarisPreset?.notes}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <div className="space-y-2">

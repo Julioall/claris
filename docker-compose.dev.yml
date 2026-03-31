@@ -12,7 +12,7 @@ services:
     environment:
       VITE_SUPABASE_PROJECT_ID: local
       VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
-      VITE_SUPABASE_URL: http://127.0.0.1:54321
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://127.0.0.1:54321}
     volumes:
       - ./src:/app/src:delegated
       - ./public:/app/public:delegated

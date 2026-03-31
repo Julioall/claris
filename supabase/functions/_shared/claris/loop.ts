@@ -66,6 +66,11 @@ export type ClarisRichBlock = ClarisDataTableBlock | ClarisStatCardsBlock
 /** Maximum number of tool-call iterations to prevent infinite loops. */
 const MAX_ITERATIONS = 15
 
+const supportsTemperature = (model: string): boolean => {
+  const normalizedModel = model.trim().toLowerCase()
+  return !normalizedModel.startsWith('gpt-5') && !normalizedModel.startsWith('o')
+}
+
 // ---------------------------------------------------------------------------
 // Rich block helpers
 
@@ -355,20 +360,25 @@ export async function runClarisLoop(
   try {
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       const requestMessages = buildRequestMessagesForModel(history)
+      const requestBody: Record<string, unknown> = {
+        model: settings.model,
+        max_tokens: 4000,
+        tools,
+        tool_choice: 'auto',
+        messages: requestMessages,
+      }
+
+      if (supportsTemperature(settings.model)) {
+        requestBody.temperature = 0.3
+      }
+
       const response = await fetch(`${settings.baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${settings.apiKey}`,
         },
-        body: JSON.stringify({
-          model: settings.model,
-          temperature: 0.3,
-          max_tokens: 4000,
-          tools,
-          tool_choice: 'auto',
-          messages: requestMessages,
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       })
 
