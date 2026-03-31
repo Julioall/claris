@@ -22,7 +22,9 @@ export default function SchoolsPage() {
     toggleAttendanceMultiple,
   } = useAllCoursesData();
 
-  const filteredCourses = courses.filter((course) =>
+  const syncedCourses = courses.filter((course) => course.is_following);
+
+  const filteredCourses = syncedCourses.filter((course) =>
     course.name.toLowerCase().includes(searchQuery.toLowerCase())
     || course.short_name?.toLowerCase().includes(searchQuery.toLowerCase())
     || course.category?.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -42,7 +44,7 @@ export default function SchoolsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Escolas</h1>
           <p className="text-muted-foreground">
-            Catálogo completo com {courses.length} cursos disponíveis
+            Listando {syncedCourses.length} cursos sincronizados
           </p>
         </div>
 

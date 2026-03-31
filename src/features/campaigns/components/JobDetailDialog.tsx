@@ -18,9 +18,9 @@ import { Progress } from '@/components/ui/progress';
 import {
   getBulkJobDetail,
   listBulkJobRecipients,
-} from '@/features/automations/api/automations.repository';
-import { automationsKeys } from '@/features/automations/query-keys';
-import type { BulkJobDetail, BulkJobRecipient } from '@/features/automations/types';
+} from '@/features/campaigns/api/campaigns.repository';
+import { campaignKeys } from '@/features/campaigns/query-keys';
+import type { BulkJobDetail, BulkJobRecipient } from '@/features/campaigns/types';
 
 function RecipientStatusBadge({ status }: { status: string }) {
   const map: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: ReactNode }> = {
@@ -45,13 +45,13 @@ interface JobDetailDialogProps {
 
 export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
   const { data: job, isLoading: jobLoading } = useQuery({
-    queryKey: automationsKeys.bulkJobDetail(jobId),
+    queryKey: campaignKeys.bulkJobDetail(jobId),
     queryFn: () => getBulkJobDetail(jobId!),
     enabled: !!jobId,
   });
 
   const { data: recipients = [], isLoading: recipientsLoading } = useQuery({
-    queryKey: automationsKeys.bulkJobRecipients(jobId),
+    queryKey: campaignKeys.bulkJobRecipients(jobId),
     queryFn: () => listBulkJobRecipients(jobId!),
     enabled: !!jobId,
     refetchInterval: job?.status === 'processing' ? 3000 : false,

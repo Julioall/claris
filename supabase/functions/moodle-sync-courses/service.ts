@@ -3,7 +3,6 @@ import { createServiceClient } from '../_shared/db/mod.ts'
 import {
   listCourseCategoriesByMoodleCourseIds,
   listLinkedCourseIds,
-  removeUserCourseLinks,
   upsertCourses,
   upsertUserCourseLinks,
 } from '../_shared/domain/moodle-sync/repository.ts'
@@ -102,6 +101,7 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
     supabase,
     moodleCourses.map((course) => String(course.id)),
   )
+
   const existingCategoryByMoodleCourseId = new Map(
     existingCourseCategories.map((course) => [course.moodle_course_id, course.category]),
   )
@@ -162,7 +162,6 @@ export async function linkSelectedCourses(userId: string, selectedCourseIds: str
 
   const existingLinks = await listLinkedCourseIds(supabase, linkUser.id)
   const existingCourseIds = new Set<string>(existingLinks)
-  const selectedCourseIdSet = new Set<string>(selectedCourseIds)
 
   // Add newly selected
   const toAdd = selectedCourseIds.filter((id) => !existingCourseIds.has(id))
@@ -174,17 +173,8 @@ export async function linkSelectedCourses(userId: string, selectedCourseIds: str
     }
   }
 
-  // Remove courses no longer selected so school/catalog views reflect exact selection.
-  const toRemove = existingLinks.filter((courseId) => !selectedCourseIdSet.has(courseId))
-  if (toRemove.length > 0) {
-    const BATCH = 100
-    for (let i = 0; i < toRemove.length; i += BATCH) {
-      await removeUserCourseLinks(supabase, linkUser.id, toRemove.slice(i, i + BATCH))
-    }
-  }
-
   await touchUserLastSync(supabase, linkUser.id, new Date().toISOString())
 
-  console.log(`Updated selected courses for user ${linkUser.id}: added=${toAdd.length}, removed=${toRemove.length}`)
-  return jsonResponse({ success: true, added: toAdd.length, removed: toRemove.length })
+  console.log(`Linked ${toAdd.length} courses for user ${linkUser.id}`)
+  return jsonResponse({ success: true, added: toAdd.length, removed: 0 })
 }

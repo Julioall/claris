@@ -330,8 +330,8 @@ export function useCourseSync(params: {
           });
         } else {
           const allSyncedCourses = ((coursesData as { courses?: Course[] } | null)?.courses || []);
-          setCourses(allSyncedCourses);
           syncedCourses = allSyncedCourses.filter((course) => courseIds.includes(course.id));
+          setCourses(allSyncedCourses);
           updateStep('courses', {
             status: 'completed',
             count: syncedCourses.length,

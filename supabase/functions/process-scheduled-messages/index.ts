@@ -43,7 +43,17 @@ interface ScheduledMessageExecutionContext {
   mode?: string
   moodle_url?: string
   recipient_snapshot?: ScheduledMessageRecipientSnapshot[]
+  schedule?: ScheduleMetadata
   whatsapp_instance_id?: string | null
+}
+
+interface ScheduleMetadata {
+  end_date?: string
+  monthly_day?: number
+  start_date?: string
+  time?: string
+  type?: string
+  weekday?: number
 }
 
 interface ScheduledMessageRecipientSnapshot {
@@ -113,6 +123,84 @@ function readString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
 }
 
+function readScheduleMetadata(raw: unknown): ScheduleMetadata | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const record = raw as Record<string, unknown>
+  const type = readString(record.type)
+  if (!type) return undefined
+
+  return {
+    type,
+    end_date: readString(record.end_date),
+    monthly_day: typeof record.monthly_day === 'number' ? record.monthly_day : undefined,
+    start_date: readString(record.start_date),
+    time: readString(record.time),
+    weekday: typeof record.weekday === 'number' ? record.weekday : undefined,
+  }
+}
+
+function isRecurringSchedule(schedule: ScheduleMetadata | undefined): boolean {
+  if (!schedule) return false
+  return schedule.type === 'daily'
+    || schedule.type === 'weekly'
+    || schedule.type === 'biweekly'
+    || schedule.type === 'monthly'
+}
+
+function computeNextScheduledAt(
+  currentScheduledAt: string,
+  schedule: ScheduleMetadata,
+): string | null {
+  const current = new Date(currentScheduledAt)
+  if (Number.isNaN(current.getTime())) return null
+
+  let next: Date
+
+  switch (schedule.type) {
+    case 'daily':
+      next = new Date(current)
+      next.setDate(next.getDate() + 1)
+      break
+
+    case 'weekly':
+      next = new Date(current)
+      next.setDate(next.getDate() + 7)
+      break
+
+    case 'biweekly':
+      next = new Date(current)
+      next.setDate(next.getDate() + 14)
+      break
+
+    case 'monthly': {
+      next = new Date(current)
+      const requestedDay = schedule.monthly_day ?? current.getDate()
+      next.setMonth(next.getMonth() + 1)
+      next.setDate(1)
+      const maxDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate()
+      next.setDate(Math.min(requestedDay, maxDay))
+
+      if (schedule.time) {
+        const [hours, minutes] = schedule.time.split(':').map(Number)
+        if (Number.isFinite(hours)) next.setHours(hours)
+        if (Number.isFinite(minutes)) next.setMinutes(minutes)
+      }
+      break
+    }
+    default:
+      return null
+  }
+
+  if (schedule.end_date) {
+    const endDate = new Date(schedule.end_date + 'T23:59:59')
+    if (!Number.isNaN(endDate.getTime()) && next > endDate) {
+      return null
+    }
+  }
+
+  return next.toISOString()
+}
+
 function readExecutionContext(message: ScheduledMessageRow): ScheduledMessageExecutionContext {
   const executionContext = asRecord(message.execution_context)
   const filterContext = asRecord(message.filter_context)
@@ -150,6 +238,7 @@ function readExecutionContext(message: ScheduledMessageRow): ScheduledMessageExe
     mode: readString(executionContext.mode),
     moodle_url: readString(executionContext.moodle_url),
     recipient_snapshot: recipientSnapshot,
+    schedule: readScheduleMetadata(executionContext.schedule),
     whatsapp_instance_id: readString(executionContext.whatsapp_instance_id) ?? null,
   }
 }
@@ -400,17 +489,100 @@ async function finalizeScheduledMessageSuccess(
     timestamp: string
   },
 ): Promise<void> {
-  const scheduledStatus = input.status === 'completed' ? 'sent' : 'failed'
-  const errorMessage = input.status === 'failed'
-    ? 'Nenhuma mensagem foi enviada com sucesso durante a execucao agendada.'
-    : null
+  if (input.status === 'failed') {
+    const { error } = await supabase
+      .from('scheduled_messages')
+      .update({
+        status: 'failed',
+        completed_at: input.timestamp,
+        error_message: 'Nenhuma mensagem foi enviada com sucesso durante a execucao agendada.',
+        executed_bulk_job_id: input.bulkJobId,
+        failed_count: input.failedCount,
+        sent_count: input.sentCount,
+        result_context: {
+          completed_at: input.timestamp,
+          executed_bulk_job_id: input.bulkJobId,
+          failed_count: input.failedCount,
+          outcome: 'failed',
+          sent_count: input.sentCount,
+        },
+      })
+      .eq('id', message.id)
 
+    if (error) throw error
+
+    await appendBackgroundJobEvent(supabase, {
+      userId: message.user_id,
+      jobId: message.id,
+      eventType: 'job_completed',
+      level: 'error',
+      message: `Execucao agendada falhou para todos os ${input.failedCount} destinatarios.`,
+      metadata: {
+        executed_bulk_job_id: input.bulkJobId,
+        failed_count: input.failedCount,
+        sent_count: input.sentCount,
+      },
+    })
+    return
+  }
+
+  const executionContext = readExecutionContext(message)
+  const schedule = executionContext.schedule
+  const recurring = isRecurringSchedule(schedule)
+
+  if (recurring && schedule) {
+    const nextScheduledAt = computeNextScheduledAt(message.scheduled_at, schedule)
+
+    if (nextScheduledAt) {
+      const { error } = await supabase
+        .from('scheduled_messages')
+        .update({
+          status: 'pending',
+          scheduled_at: nextScheduledAt,
+          completed_at: null,
+          error_message: null,
+          executed_bulk_job_id: input.bulkJobId,
+          failed_count: 0,
+          sent_count: 0,
+          result_context: {
+            last_execution_at: input.timestamp,
+            last_bulk_job_id: input.bulkJobId,
+            last_sent_count: input.sentCount,
+            last_failed_count: input.failedCount,
+            outcome: 'rescheduled',
+            next_scheduled_at: nextScheduledAt,
+          },
+        })
+        .eq('id', message.id)
+
+      if (error) throw error
+
+      await appendBackgroundJobEvent(supabase, {
+        userId: message.user_id,
+        jobId: message.id,
+        eventType: 'job_rescheduled',
+        level: 'info',
+        message: `Rotina executada com ${input.sentCount} sucesso(s) e ${input.failedCount} falha(s). Proxima execucao: ${nextScheduledAt}.`,
+        metadata: {
+          executed_bulk_job_id: input.bulkJobId,
+          failed_count: input.failedCount,
+          next_scheduled_at: nextScheduledAt,
+          sent_count: input.sentCount,
+        },
+      })
+      return
+    }
+
+    // end_date reached — fall through to completion
+  }
+
+  // One-shot (specific_date) or routine past end_date → completed
   const { error } = await supabase
     .from('scheduled_messages')
     .update({
-      status: scheduledStatus,
+      status: 'completed',
       completed_at: input.timestamp,
-      error_message: errorMessage,
+      error_message: null,
       executed_bulk_job_id: input.bulkJobId,
       failed_count: input.failedCount,
       sent_count: input.sentCount,
@@ -418,7 +590,7 @@ async function finalizeScheduledMessageSuccess(
         completed_at: input.timestamp,
         executed_bulk_job_id: input.bulkJobId,
         failed_count: input.failedCount,
-        outcome: scheduledStatus,
+        outcome: 'completed',
         sent_count: input.sentCount,
       },
     })
@@ -430,11 +602,10 @@ async function finalizeScheduledMessageSuccess(
     userId: message.user_id,
     jobId: message.id,
     eventType: 'job_completed',
-    level: input.status === 'failed' ? 'error' : 'info',
-    message:
-      input.status === 'failed'
-        ? `Execucao agendada falhou para todos os ${input.failedCount} destinatarios.`
-        : `Execucao agendada concluiu com ${input.sentCount} sucesso(s) e ${input.failedCount} falha(s).`,
+    level: 'info',
+    message: recurring
+      ? `Rotina concluida (data final atingida) com ${input.sentCount} sucesso(s) e ${input.failedCount} falha(s).`
+      : `Campanha concluida com ${input.sentCount} sucesso(s) e ${input.failedCount} falha(s).`,
     metadata: {
       executed_bulk_job_id: input.bulkJobId,
       failed_count: input.failedCount,
