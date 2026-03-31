@@ -97,7 +97,7 @@ export function deriveSubmissionReviewState(params: {
     params.extractedFiles.every((file) => file.extractionQuality === 'none' || file.extractionQuality === 'low')
 
   const hasVisionImages = Boolean(params.config.visionEnabled) &&
-    params.extractedFiles.some((file) => file.requiresVisualAnalysis && file.imageBase64)
+    params.extractedFiles.some((file) => file.requiresVisualAnalysis && file.fileBytes)
 
   const warnings: string[] = []
   const warningCodes: string[] = []

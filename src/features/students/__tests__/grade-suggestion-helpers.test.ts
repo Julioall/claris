@@ -128,7 +128,7 @@ describe("grade suggestion helpers", () => {
     expect(reviewState.confidence).toBe("low");
   });
 
-  it("nao marca revisao manual quando visao esta habilitada e imagem possui base64", () => {
+  it("nao marca revisao manual quando visao esta habilitada e imagem possui bytes", () => {
     const reviewState = deriveSubmissionReviewState({
       typedText: "",
       extractedFiles: [
@@ -139,7 +139,7 @@ describe("grade suggestion helpers", () => {
           extractionQuality: "none",
           requiresVisualAnalysis: true,
           textLength: 0,
-          imageBase64: "aW1hZ2VkYXRh",
+          fileBytes: new Uint8Array([1, 2, 3]),
         }),
       ],
       config: {
@@ -210,21 +210,19 @@ describe("grade suggestion helpers", () => {
     expect(prompt.systemPrompt).toContain('Escreva o feedback como se fosse um professor real');
   });
 
-  it("inclui nome do aluno e do professor no payload quando fornecidos", () => {
+  it("inclui apenas o primeiro nome do aluno no payload quando fornecido", () => {
     const prompt = buildGradeSuggestionPrompt({
       maxGrade: 10,
       activityContext: buildContext(),
       studentSubmission: buildSubmission(),
       studentName: "Ana Souza",
-      tutorName: "Prof. Carlos",
     });
 
     expect(prompt.promptPayload).toMatchObject({
-      aluno: "Ana Souza",
-      professor: "Prof. Carlos",
+      aluno: "Ana",
     });
-    expect(prompt.userPrompt).toContain('"aluno": "Ana Souza"');
-    expect(prompt.userPrompt).toContain('"professor": "Prof. Carlos"');
+    expect(prompt.userPrompt).toContain('"aluno": "Ana"');
+    expect(prompt.userPrompt).not.toContain('"professor"');
   });
 
   it("usa fallback 'o aluno' quando studentName nao e fornecido", () => {

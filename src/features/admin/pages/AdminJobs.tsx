@@ -123,6 +123,17 @@ function canShowActions(job: AdminBackgroundJobRow) {
 function JobDetails({ details }: { details: AdminBackgroundJobDetails }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <Card className="border-dashed lg:col-span-2">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm">Contexto do Job</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <pre className="max-h-48 overflow-auto rounded bg-background p-3 text-xs">
+            {JSON.stringify(details.job.metadata ?? {}, null, 2)}
+          </pre>
+        </CardContent>
+      </Card>
+
       <Card className="border-dashed">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm">Itens do Job</CardTitle>
@@ -146,6 +157,11 @@ function JobDetails({ details }: { details: AdminBackgroundJobDetails }) {
                 </div>
                 {item.error_message ? (
                   <p className="mt-2 text-xs text-destructive">{item.error_message}</p>
+                ) : null}
+                {item.metadata && Object.keys(item.metadata as Record<string, unknown>).length > 0 ? (
+                  <pre className="mt-2 max-h-32 overflow-auto rounded bg-background p-2 text-xs">
+                    {JSON.stringify(item.metadata, null, 2)}
+                  </pre>
                 ) : null}
               </div>
             ))
@@ -174,6 +190,11 @@ function JobDetails({ details }: { details: AdminBackgroundJobDetails }) {
                     {event.level}
                   </Badge>
                 </div>
+                {event.metadata && Object.keys(event.metadata as Record<string, unknown>).length > 0 ? (
+                  <pre className="mt-2 max-h-32 overflow-auto rounded bg-background p-2 text-xs">
+                    {JSON.stringify(event.metadata, null, 2)}
+                  </pre>
+                ) : null}
               </div>
             ))
           )}

@@ -83,7 +83,8 @@ describe("Campaigns page", () => {
     renderPage(["/campanhas?tab=nova-campanha"]);
 
     expect(screen.getByTestId("bulk-send-tab")).toBeInTheDocument();
-    expect(screen.getByTestId("bulk-jobs-tab")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-jobs-stats")).toBeInTheDocument();
+    expect(screen.getByTestId("bulk-jobs-list")).toBeInTheDocument();
   });
 
   it("maps schedule deep link to campanhas", () => {

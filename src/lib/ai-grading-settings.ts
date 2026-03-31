@@ -18,6 +18,7 @@ export interface AiGradingSettings {
   minSubmissionTextChars: number;
   maxStoredTextLength: number;
   customInstructions: string;
+  feedbackSignature: string;
   visionEnabled: boolean;
 }
 
@@ -64,6 +65,7 @@ export const DEFAULT_AI_GRADING_SETTINGS: AiGradingSettings = {
   minSubmissionTextChars: 40,
   maxStoredTextLength: 12000,
   customInstructions: DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS,
+  feedbackSignature: "",
   visionEnabled: false,
 };
 
@@ -123,6 +125,7 @@ export function parseAiGradingSettings(value: unknown): AiGradingSettings {
   const raw = asObject(value);
   const rawWeights = asObject(raw.associationWeights);
   const hasStoredCustomInstructions = Object.prototype.hasOwnProperty.call(raw, "customInstructions");
+  const hasStoredFeedbackSignature = Object.prototype.hasOwnProperty.call(raw, "feedbackSignature");
 
   return {
     enabled: typeof raw.enabled === "boolean" ? raw.enabled : DEFAULT_AI_GRADING_SETTINGS.enabled,
@@ -144,6 +147,9 @@ export function parseAiGradingSettings(value: unknown): AiGradingSettings {
     customInstructions: hasStoredCustomInstructions
       ? (typeof raw.customInstructions === "string" ? raw.customInstructions.trim() : "")
       : DEFAULT_AI_GRADING_SETTINGS.customInstructions,
+    feedbackSignature: hasStoredFeedbackSignature
+      ? (typeof raw.feedbackSignature === "string" ? raw.feedbackSignature.trim() : "")
+      : DEFAULT_AI_GRADING_SETTINGS.feedbackSignature,
     visionEnabled: typeof raw.visionEnabled === "boolean" ? raw.visionEnabled : DEFAULT_AI_GRADING_SETTINGS.visionEnabled,
   };
 }

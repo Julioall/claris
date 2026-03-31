@@ -1,5 +1,7 @@
 import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import {
+  cancelGradeSuggestionJob,
+  cancelPendingGradeSuggestionJobItems,
   claimGradeSuggestionJobItem,
   completeGradeSuggestionJob,
   completeGradeSuggestionJobItem,
@@ -12,6 +14,8 @@ import {
   listPendingGradeSuggestionJobItems,
   loadGradeSuggestionJobItem,
   markGradeSuggestionJobProcessing,
+  markGradeSuggestionJobPending,
+  requeueStaleGradeSuggestionJobItems,
   updateGradeSuggestionJobProgress,
 } from '../_shared/domain/grade-suggestion-jobs/repository.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
@@ -46,6 +50,7 @@ type SettingsJson = {
 
 const BATCH_JOB_ITEMS_PER_RUN = 2
 const BATCH_JOB_DELAY_MS = 250
+const BATCH_JOB_STALE_AFTER_MS = 5 * 60 * 1000
 
 const asObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value)
@@ -120,6 +125,38 @@ function buildControlledErrorSuggestionResult(message: string) {
   }
 }
 
+async function recordAiGradingJobErrorLog(params: {
+  supabase: ReturnType<typeof createServiceClient>
+  userId: string
+  message: string
+  severity?: 'warning' | 'error' | 'critical'
+  payload?: Record<string, unknown>
+  context?: Record<string, unknown>
+}) {
+  try {
+    const { error } = await params.supabase
+      .from('app_error_logs')
+      .insert({
+        user_id: params.userId,
+        severity: params.severity ?? 'error',
+        category: 'ai',
+        message: params.message,
+        payload: params.payload ?? {},
+        context: {
+          source: 'moodle-grade-suggestions',
+          ...params.context,
+        },
+        resolved: false,
+      })
+
+    if (error) {
+      console.error('[moodle-grade-suggestions] Failed to write app_error_logs entry', error)
+    }
+  } catch (error) {
+    console.error('[moodle-grade-suggestions] Failed to write app_error_logs entry', error)
+  }
+}
+
 function queueBackgroundTask(task: Promise<unknown>) {
   const runtime = globalThis as typeof globalThis & {
     EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void }
@@ -137,6 +174,68 @@ function delay(ms: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, ms)
   })
+}
+
+function isJobStalled(updatedAt: string | null | undefined, now = Date.now()) {
+  if (!updatedAt) {
+    return false
+  }
+
+  const updatedAtMs = new Date(updatedAt).getTime()
+  if (!Number.isFinite(updatedAtMs)) {
+    return false
+  }
+
+  return now - updatedAtMs >= BATCH_JOB_STALE_AFTER_MS
+}
+
+async function recoverStalledActivitySuggestionJob(params: {
+  supabase: ReturnType<typeof createServiceClient>
+  jobId: string
+  userId: string
+}): Promise<boolean> {
+  const job = await findGradeSuggestionJobForUser(params.supabase, params.jobId, params.userId)
+  if (!job || job.status !== 'processing' || !isJobStalled(job.updated_at)) {
+    return false
+  }
+
+  const staleBefore = new Date(Date.now() - BATCH_JOB_STALE_AFTER_MS).toISOString()
+  const recoveredItems = await requeueStaleGradeSuggestionJobItems(params.supabase, job.id, staleBefore)
+
+  if (recoveredItems === 0 && job.processed_items >= job.total_items) {
+    return false
+  }
+
+  await markGradeSuggestionJobPending(params.supabase, job.id)
+  await updateGradeSuggestionJobProgress(params.supabase, job.id)
+  return true
+}
+
+async function cancelActivitySuggestionJob(params: {
+  supabase: ReturnType<typeof createServiceClient>
+  jobId: string
+  userId: string
+}): Promise<boolean> {
+  const job = await findGradeSuggestionJobForUser(params.supabase, params.jobId, params.userId)
+  if (!job || ['completed', 'failed', 'cancelled'].includes(job.status)) {
+    return false
+  }
+
+  const completedAt = new Date().toISOString()
+  const cancelMessage = 'Cancelamento solicitado pelo usuario. Itens pendentes foram interrompidos.'
+
+  await cancelPendingGradeSuggestionJobItems(params.supabase, job.id, completedAt, cancelMessage)
+  const progress = await updateGradeSuggestionJobProgress(params.supabase, job.id)
+  await cancelGradeSuggestionJob(params.supabase, job.id, {
+    completedAt,
+    errorMessage: cancelMessage,
+    processedItems: progress.processedItems,
+    successCount: progress.successCount,
+    errorCount: progress.errorCount,
+    totalItems: progress.totalItems,
+  })
+
+  return true
 }
 
 function scheduleActivitySuggestionJobRun(params: {
@@ -275,6 +374,7 @@ async function runSuggestionGeneration(params: {
         apiKey: params.config.apiKey,
         timeoutMs: params.config.timeoutMs,
         customInstructions: params.config.customInstructions,
+        feedbackSignature: params.config.feedbackSignature,
         visionEnabled: params.config.visionEnabled,
       }, {
         maxGrade: context.maxGrade,
@@ -339,6 +439,12 @@ function buildJobMessage(input: {
       : 'Nao foi possivel iniciar o job de correcao em lote.'
   }
 
+  if (input.status === 'cancelled') {
+    return input.processedItems > 0
+      ? `Job cancelado apos processar ${input.processedItems} de ${input.totalItems} entregas.`
+      : 'Job cancelado antes de concluir o processamento.'
+  }
+
   return `Processadas ${input.processedItems} de ${input.totalItems} entregas.`
 }
 
@@ -355,7 +461,7 @@ async function loadActivitySuggestionJobResponse(
   const items = await listGradeSuggestionJobItems(supabase, jobId)
 
   return {
-    success: job.status !== 'failed' || job.success_count > 0,
+    success: !['failed', 'cancelled'].includes(job.status) || job.success_count > 0,
     jobId: job.id,
     status: job.status,
     activityName: job.activity_name,
@@ -405,8 +511,28 @@ async function processActivitySuggestionJob(params: {
       return
     }
 
+    if (job.status === 'cancelled') {
+      return
+    }
+
     const course = await findCourseForUser(supabase, params.userId, job.course_id)
     if (!course) {
+      await recordAiGradingJobErrorLog({
+        supabase,
+        userId: params.userId,
+        message: 'Falha ao processar job de correcao IA: curso nao encontrado ou sem acesso.',
+        severity: 'error',
+        payload: {
+          jobId: job.id,
+          courseId: job.course_id,
+          moodleActivityId: job.moodle_activity_id,
+          activityName: job.activity_name,
+        },
+        context: {
+          stage: 'job_bootstrap',
+        },
+      })
+
       await failGradeSuggestionJob(
         supabase,
         job.id,
@@ -418,6 +544,22 @@ async function processActivitySuggestionJob(params: {
 
     const config = resolveGradeSuggestionRuntimeConfig(storedSettings, storedSettings.aiGradingSettings)
     if (!config.enabled) {
+      await recordAiGradingJobErrorLog({
+        supabase,
+        userId: params.userId,
+        message: 'Falha ao processar job de correcao IA: analise automatica desabilitada.',
+        severity: 'warning',
+        payload: {
+          jobId: job.id,
+          courseId: job.course_id,
+          moodleActivityId: job.moodle_activity_id,
+          activityName: job.activity_name,
+        },
+        context: {
+          stage: 'job_config_validation',
+        },
+      })
+
       await failGradeSuggestionJob(
         supabase,
         job.id,
@@ -428,6 +570,22 @@ async function processActivitySuggestionJob(params: {
     }
 
     if (!config.llmConfigured) {
+      await recordAiGradingJobErrorLog({
+        supabase,
+        userId: params.userId,
+        message: 'Falha ao processar job de correcao IA: configuracao global da Claris IA ausente.',
+        severity: 'error',
+        payload: {
+          jobId: job.id,
+          courseId: job.course_id,
+          moodleActivityId: job.moodle_activity_id,
+          activityName: job.activity_name,
+        },
+        context: {
+          stage: 'job_config_validation',
+        },
+      })
+
       await failGradeSuggestionJob(
         supabase,
         job.id,
@@ -464,6 +622,11 @@ async function processActivitySuggestionJob(params: {
     })
 
     for (const pendingItem of pendingItems) {
+      const latestJob = await findGradeSuggestionJobForUser(supabase, job.id, params.userId)
+      if (!latestJob || latestJob.status === 'cancelled') {
+        break
+      }
+
       const claimed = await claimGradeSuggestionJobItem(supabase, pendingItem.id, new Date().toISOString())
       if (!claimed) {
         continue
@@ -482,6 +645,24 @@ async function processActivitySuggestionJob(params: {
         const errorResult = buildControlledErrorSuggestionResult(
           'O aluno nao possui um identificador Moodle valido para esta operacao.',
         )
+
+        await recordAiGradingJobErrorLog({
+          supabase,
+          userId: params.userId,
+          message: 'Falha ao gerar sugestao de correcao IA: aluno sem identificador Moodle valido.',
+          severity: 'error',
+          payload: {
+            jobId: job.id,
+            itemId: item.id,
+            studentId: item.student_id,
+            studentActivityId: item.student_activity_id,
+            studentName: item.student_name,
+            moodleActivityId: item.moodle_activity_id,
+          },
+          context: {
+            stage: 'item_validation',
+          },
+        })
 
         await failGradeSuggestionJobItem(supabase, {
           completedAt,
@@ -511,6 +692,29 @@ async function processActivitySuggestionJob(params: {
         })
 
         if (output.result.status === 'error') {
+          await recordAiGradingJobErrorLog({
+            supabase,
+            userId: params.userId,
+            message: output.result.warnings[0] ?? 'Falha ao gerar sugestao com IA.',
+            severity: 'error',
+            payload: {
+              jobId: job.id,
+              itemId: item.id,
+              auditId: output.auditId,
+              studentId: item.student_id,
+              studentActivityId: item.student_activity_id,
+              studentName: item.student_name,
+              moodleActivityId: item.moodle_activity_id,
+              resultStatus: output.result.status,
+              evaluationStatus: output.result.evaluationStatus,
+              reason: output.result.reason,
+              warnings: output.result.warnings,
+            },
+            context: {
+              stage: 'item_generation_result',
+            },
+          })
+
           await failGradeSuggestionJobItem(supabase, {
             auditId: output.auditId,
             completedAt,
@@ -532,6 +736,24 @@ async function processActivitySuggestionJob(params: {
           error instanceof Error ? error.message : 'Falha inesperada ao gerar sugestao com IA.',
         )
 
+        await recordAiGradingJobErrorLog({
+          supabase,
+          userId: params.userId,
+          message: errorResult.warnings[0],
+          severity: 'critical',
+          payload: {
+            jobId: job.id,
+            itemId: item.id,
+            studentId: item.student_id,
+            studentActivityId: item.student_activity_id,
+            studentName: item.student_name,
+            moodleActivityId: item.moodle_activity_id,
+          },
+          context: {
+            stage: 'item_generation_exception',
+          },
+        })
+
         await failGradeSuggestionJobItem(supabase, {
           completedAt,
           errorMessage: errorResult.warnings[0],
@@ -542,6 +764,19 @@ async function processActivitySuggestionJob(params: {
     }
 
     const progress = await updateGradeSuggestionJobProgress(supabase, job.id)
+    const latestJob = await findGradeSuggestionJobForUser(supabase, job.id, params.userId)
+
+    if (latestJob?.status === 'cancelled') {
+      await completeGradeSuggestionJob(supabase, job.id, {
+        completedAt: latestJob.completed_at ?? new Date().toISOString(),
+        errorCount: progress.errorCount,
+        processedItems: progress.processedItems,
+        status: 'cancelled',
+        successCount: progress.successCount,
+        totalItems: progress.totalItems,
+      })
+      return
+    }
 
     if (progress.pendingCount === 0) {
       const finalStatus = progress.errorCount > 0 && progress.successCount === 0 ? 'failed' : 'completed'
@@ -558,6 +793,19 @@ async function processActivitySuggestionJob(params: {
 
     scheduleActivitySuggestionJobRun(params)
   } catch (error) {
+    await recordAiGradingJobErrorLog({
+      supabase,
+      userId: params.userId,
+      message: error instanceof Error ? error.message : 'Falha inesperada ao processar job de correcao em lote.',
+      severity: 'critical',
+      payload: {
+        jobId: params.jobId,
+      },
+      context: {
+        stage: 'job_processing_exception',
+      },
+    })
+
     await failGradeSuggestionJob(
       supabase,
       params.jobId,
@@ -697,21 +945,34 @@ export async function handleGradeSuggestionRequest(
     })
 
     if (existingJob) {
+      if (existingJob.status === 'processing') {
+        await recoverStalledActivitySuggestionJob({
+          supabase,
+          jobId: existingJob.id,
+          userId,
+        })
+      }
+
+      const refreshedExistingJob = await findGradeSuggestionJobForUser(supabase, existingJob.id, userId)
+      if (!refreshedExistingJob) {
+        return jsonResponse(buildBatchErrorResult('Job de correcao em lote nao encontrado.'), 404)
+      }
+
       const shouldResumeExistingJob =
-        existingJob.status === 'pending' ||
-        (existingJob.status === 'failed' && existingJob.processed_items < existingJob.total_items)
+        refreshedExistingJob.status === 'pending' ||
+        (refreshedExistingJob.status === 'failed' && refreshedExistingJob.processed_items < refreshedExistingJob.total_items)
 
       if (shouldResumeExistingJob) {
-        await markGradeSuggestionJobProcessing(supabase, existingJob.id, new Date().toISOString())
+        await markGradeSuggestionJobProcessing(supabase, refreshedExistingJob.id, new Date().toISOString())
         scheduleActivitySuggestionJobRun({
-          jobId: existingJob.id,
+          jobId: refreshedExistingJob.id,
           moodleUrl: payload.moodleUrl,
           token: payload.token,
           userId,
         })
       }
 
-      const response = await loadActivitySuggestionJobResponse(supabase, existingJob.id, userId)
+      const response = await loadActivitySuggestionJobResponse(supabase, refreshedExistingJob.id, userId)
       return jsonResponse(response ?? buildBatchErrorResult('Job de correcao em lote nao encontrado.'), 200)
     }
 
@@ -756,6 +1017,12 @@ export async function handleGradeSuggestionRequest(
   }
 
   if (payload.action === 'get_activity_suggestion_job') {
+    await recoverStalledActivitySuggestionJob({
+      supabase,
+      jobId: payload.jobId,
+      userId,
+    })
+
     const response = await loadActivitySuggestionJobResponse(supabase, payload.jobId, userId)
 
     if (!response) {
@@ -766,10 +1033,21 @@ export async function handleGradeSuggestionRequest(
   }
 
   if (payload.action === 'resume_activity_suggestion_job') {
+    await recoverStalledActivitySuggestionJob({
+      supabase,
+      jobId: payload.jobId,
+      userId,
+    })
+
     const job = await findGradeSuggestionJobForUser(supabase, payload.jobId, userId)
 
     if (!job) {
       return jsonResponse({ success: false, message: 'Job de correcao em lote nao encontrado.' }, 404)
+    }
+
+    if (job.status === 'cancelled') {
+      const response = await loadActivitySuggestionJobResponse(supabase, job.id, userId)
+      return jsonResponse(response ?? { success: false, jobId: job.id, status: 'cancelled' }, 200)
     }
 
     if (job.status === 'completed') {
@@ -798,6 +1076,26 @@ export async function handleGradeSuggestionRequest(
 
     const response = await loadActivitySuggestionJobResponse(supabase, job.id, userId)
     return jsonResponse(response ?? { success: true, jobId: job.id, status: 'processing' }, 202)
+  }
+
+  if (payload.action === 'cancel_activity_suggestion_job') {
+    const cancelled = await cancelActivitySuggestionJob({
+      supabase,
+      jobId: payload.jobId,
+      userId,
+    })
+
+    if (!cancelled) {
+      const response = await loadActivitySuggestionJobResponse(supabase, payload.jobId, userId)
+      if (!response) {
+        return jsonResponse({ success: false, message: 'Job de correcao em lote nao encontrado.' }, 404)
+      }
+
+      return jsonResponse(response, 200)
+    }
+
+    const response = await loadActivitySuggestionJobResponse(supabase, payload.jobId, userId)
+    return jsonResponse(response ?? { success: true, jobId: payload.jobId, status: 'cancelled' }, 200)
   }
 
   const storedAudit = await loadGradeSuggestionAuditForUser(supabase, payload.auditId, userId)

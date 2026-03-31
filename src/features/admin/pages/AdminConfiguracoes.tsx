@@ -453,10 +453,10 @@ export default function AdminConfiguracoes() {
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Sparkles className="h-5 w-5" />
-            Correcao com IA
+            Claris IA - Correcao de atividade
           </CardTitle>
           <CardDescription>
-            Ajuste o comportamento da sugestao de notas. A conexao com o modelo reutiliza a configuracao da Claris IA acima.
+            Personalize o prompt e a assinatura aplicada ao final de cada feedback. A conexao com o modelo reutiliza a configuracao da Claris IA acima.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -595,6 +595,24 @@ export default function AdminConfiguracoes() {
             />
             <p className="text-xs text-muted-foreground">
               O JSON de resposta da correcao permanece fixo internamente. Use este campo apenas para orientar estilo, tom e nivel de detalhamento do feedback.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="ai-grading-feedback-signature">Assinatura ao final do feedback (opcional)</Label>
+            <Textarea
+              id="ai-grading-feedback-signature"
+              rows={3}
+              value={aiGradingSettings.feedbackSignature}
+              onChange={(e) => setAiGradingSettings((prev) => ({
+                ...prev,
+                feedbackSignature: e.target.value,
+              }))}
+              placeholder="Ex.:\nTutor Julio"
+              disabled={isLoadingSettings || isSavingAiGrading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Se preenchida, esta assinatura sera adicionada automaticamente ao final de cada feedback. Por padrao, permanece vazia.
             </p>
           </div>
 

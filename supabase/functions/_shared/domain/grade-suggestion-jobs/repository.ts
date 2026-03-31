@@ -4,6 +4,7 @@ import type {
   Json,
   Tables,
   TablesInsert,
+  TablesUpdate,
 } from '../../db/mod.ts'
 import {
   appendBackgroundJobEvent,
@@ -15,8 +16,8 @@ import {
 
 export type GradeSuggestionJob = Tables<'ai_grade_suggestion_jobs'>
 export type GradeSuggestionJobItem = Tables<'ai_grade_suggestion_job_items'>
-export type GradeSuggestionJobStatus = Enums<'ai_grade_suggestion_job_status'>
-export type GradeSuggestionJobItemStatus = Enums<'ai_grade_suggestion_job_item_status'>
+export type GradeSuggestionJobStatus = Enums<'ai_grade_suggestion_job_status'> | 'cancelled'
+export type GradeSuggestionJobItemStatus = Enums<'ai_grade_suggestion_job_item_status'> | 'cancelled'
 
 async function syncBackgroundJob(task: () => Promise<void>) {
   try {
@@ -366,6 +367,128 @@ export async function markGradeSuggestionJobPending(
   })
 }
 
+export async function requeueStaleGradeSuggestionJobItems(
+  supabase: AppSupabaseClient,
+  jobId: string,
+  staleBefore: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('ai_grade_suggestion_job_items')
+    .update({
+      completed_at: null,
+      error_message: null,
+      started_at: null,
+      status: 'pending' as TablesUpdate<'ai_grade_suggestion_job_items'>['status'],
+    })
+    .eq('job_id', jobId)
+    .eq('status', 'processing')
+    .lt('updated_at', staleBefore)
+    .select('id')
+
+  if (error) throw error
+
+  const staleItems = data ?? []
+
+  await syncBackgroundJob(async () => {
+    for (const row of staleItems) {
+      await updateBackgroundJobItem(supabase, row.id, {
+        completed_at: null,
+        error_message: null,
+        started_at: null,
+        status: 'pending',
+      })
+    }
+  })
+
+  return staleItems.length
+}
+
+export async function cancelGradeSuggestionJob(
+  supabase: AppSupabaseClient,
+  jobId: string,
+  input: {
+    completedAt: string
+    errorMessage: string
+    processedItems: number
+    successCount: number
+    errorCount: number
+    totalItems: number
+  },
+): Promise<void> {
+  const { error } = await supabase
+    .from('ai_grade_suggestion_jobs')
+    .update({
+      completed_at: input.completedAt,
+      error_message: input.errorMessage,
+      processed_items: input.processedItems,
+      success_count: input.successCount,
+      error_count: input.errorCount,
+      total_items: input.totalItems,
+      status: 'cancelled' as TablesUpdate<'ai_grade_suggestion_jobs'>['status'],
+    })
+    .eq('id', jobId)
+
+  if (error) throw error
+
+  await syncBackgroundJob(async () => {
+    const job = await findGradeSuggestionJobById(supabase, jobId)
+    if (!job) return
+
+    await updateBackgroundJob(supabase, jobId, {
+      completed_at: input.completedAt,
+      error_message: input.errorMessage,
+      processed_items: input.processedItems,
+      success_count: input.successCount,
+      error_count: input.errorCount,
+      total_items: input.totalItems,
+      status: 'cancelled',
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: job.user_id,
+      jobId,
+      eventType: 'job_cancelled',
+      level: 'warning',
+      message: input.errorMessage,
+    })
+  })
+}
+
+export async function cancelPendingGradeSuggestionJobItems(
+  supabase: AppSupabaseClient,
+  jobId: string,
+  completedAt: string,
+  errorMessage: string,
+): Promise<number> {
+  const { data, error } = await supabase
+    .from('ai_grade_suggestion_job_items')
+    .update({
+      completed_at: completedAt,
+      error_message: errorMessage,
+      status: 'cancelled' as TablesUpdate<'ai_grade_suggestion_job_items'>['status'],
+    })
+    .eq('job_id', jobId)
+    .eq('status', 'pending')
+    .select('id')
+
+  if (error) throw error
+
+  const cancelledItems = data ?? []
+
+  await syncBackgroundJob(async () => {
+    for (const row of cancelledItems) {
+      await updateBackgroundJobItem(supabase, row.id, {
+        completed_at: completedAt,
+        error_message: errorMessage,
+        progress_current: 1,
+        progress_total: 1,
+        status: 'cancelled',
+      })
+    }
+  })
+
+  return cancelledItems.length
+}
+
 export async function updateGradeSuggestionJobProgress(
   supabase: AppSupabaseClient,
   jobId: string,
@@ -387,8 +510,9 @@ export async function updateGradeSuggestionJobProgress(
   const totalItems = rows.length
   const successCount = rows.filter((row) => row.status === 'completed').length
   const errorCount = rows.filter((row) => row.status === 'failed').length
+  const cancelledCount = rows.filter((row) => row.status === ('cancelled' as GradeSuggestionJobItemStatus)).length
   const pendingCount = rows.filter((row) => row.status === 'pending').length
-  const processedItems = successCount + errorCount
+  const processedItems = successCount + errorCount + cancelledCount
 
   const { error: updateError } = await supabase
     .from('ai_grade_suggestion_jobs')

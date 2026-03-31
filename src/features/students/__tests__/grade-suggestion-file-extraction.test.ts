@@ -60,7 +60,7 @@ describe("file text extraction", () => {
     expect(extracted.extractionQuality).toBe("low");
   });
 
-  it("codifica imagem PNG em base64 e marca como analise visual", async () => {
+  it("preserva bytes da imagem PNG e marca como analise visual", async () => {
     const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
     const extracted = await extractTextFromFileBuffer({
@@ -71,21 +71,22 @@ describe("file text extraction", () => {
 
     expect(extracted.requiresVisualAnalysis).toBe(true);
     expect(extracted.extractedText).toBe("");
-    expect(extracted.imageBase64).toBeDefined();
-    expect(typeof extracted.imageBase64).toBe("string");
-    expect(extracted.imageBase64!.length).toBeGreaterThan(0);
+    expect(extracted.fileBytes).toBeDefined();
+    expect(extracted.fileBytes).toEqual(pngBytes);
     expect(extracted.warning).toBeNull();
   });
 
-  it("nao codifica BMP em base64 por nao ser suportado por modelos de visao", async () => {
+  it("preserva bytes de BMP para analise visual", async () => {
+    const bmpBytes = new Uint8Array([0x42, 0x4d, 0x00, 0x00]);
+
     const extracted = await extractTextFromFileBuffer({
       fileName: "imagem.bmp",
       mimeType: "image/bmp",
-      bytes: new Uint8Array([0x42, 0x4d, 0x00, 0x00]),
+      bytes: bmpBytes,
     });
 
     expect(extracted.requiresVisualAnalysis).toBe(true);
-    expect(extracted.imageBase64).toBeUndefined();
-    expect(extracted.warning).toBeTruthy();
+    expect(extracted.fileBytes).toEqual(bmpBytes);
+    expect(extracted.warning).toBeNull();
   });
 });

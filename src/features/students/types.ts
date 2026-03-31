@@ -88,8 +88,8 @@ export interface ActivityStudentGradeSuggestionItem {
   result: StudentGradeSuggestionResult;
 }
 
-export type ActivityGradeSuggestionJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
-export type ActivityGradeSuggestionJobItemStatus = 'pending' | 'processing' | 'completed' | 'failed';
+export type ActivityGradeSuggestionJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+export type ActivityGradeSuggestionJobItemStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export interface ActivityGradeSuggestionJobItem {
   id: string;

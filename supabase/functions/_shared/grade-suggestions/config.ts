@@ -18,6 +18,7 @@ export interface GradeSuggestionRuntimeConfig {
   minSubmissionTextChars: number
   maxStoredTextLength: number
   customInstructions: string
+  feedbackSignature: string
   visionEnabled: boolean
 }
 
@@ -41,6 +42,7 @@ interface StoredAiGradingSettings {
   minSubmissionTextChars?: unknown
   maxStoredTextLength?: unknown
   customInstructions?: unknown
+  feedbackSignature?: unknown
   visionEnabled?: unknown
 }
 
@@ -184,6 +186,9 @@ export function resolveGradeSuggestionRuntimeConfig(
       storedAiGradingSettings.customInstructions,
       hasStoredCustomInstructions,
     ),
+    feedbackSignature: typeof storedAiGradingSettings.feedbackSignature === 'string'
+      ? storedAiGradingSettings.feedbackSignature.trim()
+      : '',
     visionEnabled: readBoolean(storedAiGradingSettings.visionEnabled, false),
   }
 }

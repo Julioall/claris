@@ -10,6 +10,7 @@ const ACTIONS = [
   'generate_activity_suggestions',
   'get_activity_suggestion_job',
   'resume_activity_suggestion_job',
+  'cancel_activity_suggestion_job',
   'approve_suggestion',
 ] as const
 
@@ -51,11 +52,17 @@ export interface ResumeActivityGradeSuggestionJobPayload {
   token: string
 }
 
+export interface CancelActivityGradeSuggestionJobPayload {
+  action: 'cancel_activity_suggestion_job'
+  jobId: string
+}
+
 export type MoodleGradeSuggestionPayload =
   | GenerateGradeSuggestionPayload
   | GenerateActivityGradeSuggestionsPayload
   | GetActivityGradeSuggestionJobPayload
   | ResumeActivityGradeSuggestionJobPayload
+  | CancelActivityGradeSuggestionJobPayload
   | ApproveGradeSuggestionPayload
 
 function readRequiredAction(body: Record<string, unknown>) {
@@ -94,6 +101,13 @@ export function parseMoodleGradeSuggestionPayload(rawBody: unknown): MoodleGrade
   }
 
   if (action === 'get_activity_suggestion_job') {
+    return {
+      action,
+      jobId: readRequiredString(body, 'jobId', 200),
+    }
+  }
+
+  if (action === 'cancel_activity_suggestion_job') {
     return {
       action,
       jobId: readRequiredString(body, 'jobId', 200),

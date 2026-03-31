@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import {
   approveStudentGradeSuggestion,
+  cancelActivityGradeSuggestionJob,
   findLatestRelevantActivityGradeSuggestionJob,
   generateActivityGradeSuggestions,
   getActivityGradeSuggestionJob,
@@ -103,6 +104,8 @@ export function AssignmentSuggestionPanel({
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResumingJob, setIsResumingJob] = useState(false);
+  const [isApprovingAll, setIsApprovingAll] = useState(false);
+  const [isCancellingJob, setIsCancellingJob] = useState(false);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobState, setJobState] = useState<AssignmentSuggestionJobState | null>(null);
@@ -260,6 +263,38 @@ export function AssignmentSuggestionPanel({
     }
   }, [applyJobResponse, moodleSession]);
 
+  const cancelJob = useCallback(async (jobId: string) => {
+    setIsCancellingJob(true);
+
+    try {
+      const { data, error } = await cancelActivityGradeSuggestionJob({ jobId });
+
+      if (error) {
+        throw new Error(error.message || 'Nao foi possivel cancelar o job de correcao em lote.');
+      }
+
+      if (!data?.jobId) {
+        throw new Error(data?.message || 'O cancelamento nao retornou um job valido.');
+      }
+
+      applyJobResponse(data);
+      toast({
+        title: 'Job cancelado',
+        description: data.message || 'As entregas pendentes foram interrompidas.',
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nao foi possivel cancelar o job de correcao em lote.';
+      setBatchError(message);
+      toast({
+        variant: 'destructive',
+        title: 'Falha ao cancelar job',
+        description: message,
+      });
+    } finally {
+      setIsCancellingJob(false);
+    }
+  }, [applyJobResponse, toast]);
+
   const handleGenerateSuggestions = async () => {
     if (!moodleSession || !activity.moodle_activity_id) {
       setBatchError('A sessao Moodle nao esta disponivel para gerar as sugestoes.');
@@ -372,7 +407,11 @@ export function AssignmentSuggestionPanel({
 
     void refreshJob();
 
-    if (jobState?.status === 'completed' || (jobState?.status === 'failed' && jobState.processedItems >= jobState.totalItems)) {
+    if (
+      jobState?.status === 'completed' ||
+      jobState?.status === 'cancelled' ||
+      (jobState?.status === 'failed' && jobState.processedItems >= jobState.totalItems)
+    ) {
       return () => {
         cancelled = true;
       };
@@ -394,7 +433,6 @@ export function AssignmentSuggestionPanel({
     }
 
     const shouldResume =
-      jobState.processedItems > 0 &&
       jobState.processedItems < jobState.totalItems &&
       (jobState.status === 'pending' || jobState.status === 'failed');
 
@@ -418,10 +456,42 @@ export function AssignmentSuggestionPanel({
     }));
   };
 
-  const handleApprove = async (submission: StudentActivity) => {
+  const approveEligibleSubmissionIds = useMemo(() => {
+    return submissions
+      .filter((submission) => {
+        const submissionStatus = getSubmissionStatus(submission);
+        if (submissionStatus === 'corrigido' || closedSuggestionIds[submission.id]) {
+          return false;
+        }
+
+        const row = rows[submission.id];
+        if (!row?.auditId || row.isApproving || row.result.status === 'error') {
+          return false;
+        }
+
+        const parsedGrade = parseEditedGrade(row.editedGrade);
+        return (
+          parsedGrade !== null &&
+          Number.isFinite(parsedGrade) &&
+          row.editedFeedback.trim().length > 0
+        );
+      })
+      .map((submission) => submission.id);
+  }, [closedSuggestionIds, rows, submissions]);
+
+  const canApproveAll = Boolean(
+    moodleSession &&
+    !isApprovingAll &&
+    approveEligibleSubmissionIds.length > 0,
+  );
+
+  const approveSubmission = async (
+    submission: StudentActivity,
+    options?: { toastOnSuccess?: boolean; toastOnError?: boolean; triggerRefresh?: boolean },
+  ): Promise<{ success: boolean; message?: string }> => {
     const row = rows[submission.id];
     if (!row?.auditId || !moodleSession) {
-      return;
+      return { success: false, message: 'A sessao Moodle nao esta disponivel para aprovacao.' };
     }
 
     const parsedGrade = parseEditedGrade(row.editedGrade);
@@ -434,7 +504,7 @@ export function AssignmentSuggestionPanel({
     );
 
     if (!canApprove) {
-      return;
+      return { success: false, message: 'A sugestao ainda nao possui dados validos para aprovacao.' };
     }
 
     updateRow(submission.id, (current) => ({
@@ -478,12 +548,18 @@ export function AssignmentSuggestionPanel({
         return nextRows;
       });
 
-      toast({
-        title: 'Nota lancada',
-        description: `${studentsById.get(submission.student_id)?.full_name || 'Aluno'} atualizado no Moodle.`,
-      });
+      if (options?.toastOnSuccess !== false) {
+        toast({
+          title: 'Nota lancada',
+          description: `${studentsById.get(submission.student_id)?.full_name || 'Aluno'} atualizado no Moodle.`,
+        });
+      }
 
-      await onApproved?.();
+      if (options?.triggerRefresh !== false) {
+        await onApproved?.();
+      }
+
+      return { success: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Falha ao aprovar a sugestao.';
 
@@ -493,11 +569,70 @@ export function AssignmentSuggestionPanel({
         requestError: message,
       }));
 
-      toast({
-        variant: 'destructive',
-        title: 'Falha ao lancar nota',
-        description: message,
-      });
+      if (options?.toastOnError !== false) {
+        toast({
+          variant: 'destructive',
+          title: 'Falha ao lancar nota',
+          description: message,
+        });
+      }
+
+      return { success: false, message };
+    }
+  };
+
+  const handleApprove = async (submission: StudentActivity) => {
+    await approveSubmission(submission);
+  };
+
+  const handleApproveAll = async () => {
+    if (!moodleSession || approveEligibleSubmissionIds.length === 0 || isApprovingAll) {
+      return;
+    }
+
+    setIsApprovingAll(true);
+
+    let successCount = 0;
+    let failureCount = 0;
+
+    try {
+      for (const submissionId of approveEligibleSubmissionIds) {
+        const submission = submissions.find((item) => item.id === submissionId);
+        if (!submission) {
+          continue;
+        }
+
+        const approval = await approveSubmission(submission, {
+          toastOnSuccess: false,
+          toastOnError: false,
+          triggerRefresh: false,
+        });
+
+        if (approval.success) {
+          successCount += 1;
+        } else {
+          failureCount += 1;
+        }
+      }
+
+      if (successCount > 0) {
+        await onApproved?.();
+      }
+
+      if (failureCount === 0) {
+        toast({
+          title: 'Aprovacao em lote concluida',
+          description: `${successCount} sugestoes foram aprovadas e lancadas no Moodle.`,
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Aprovacao em lote parcial',
+          description: `${successCount} aprovadas e ${failureCount} com falha. Verifique os avisos em cada aluno.`,
+        });
+      }
+    } finally {
+      setIsApprovingAll(false);
     }
   };
 
@@ -508,13 +643,37 @@ export function AssignmentSuggestionPanel({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-2">
+        {activeJobId && hasActiveBatchJob ? (
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            onClick={() => void cancelJob(activeJobId)}
+            disabled={isCancellingJob}
+          >
+            {isCancellingJob ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Cancelar
+          </Button>
+        ) : null}
+        {isExpanded && hasSuggestions ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => void handleApproveAll()}
+            disabled={!canApproveAll}
+          >
+            {isApprovingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            Aceitar Tudo
+          </Button>
+        ) : null}
         {pendingCorrectionSubmissions.length > 0 ? (
           <Button
             type="button"
             variant="outline"
             size="sm"
             onClick={() => void handleGenerateSuggestions()}
-            disabled={!moodleSession || !activity.moodle_activity_id || isGenerating || isResumingJob}
+            disabled={!moodleSession || !activity.moodle_activity_id || isGenerating || isResumingJob || isApprovingAll || isCancellingJob}
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Corrigir
@@ -549,6 +708,8 @@ export function AssignmentSuggestionPanel({
                       ? 'Processando'
                       : jobState.status === 'pending'
                         ? 'Na fila'
+                        : jobState.status === 'cancelled'
+                          ? 'Cancelado'
                         : jobState.status === 'completed'
                           ? 'Concluido'
                           : 'Falhou'}
@@ -664,7 +825,7 @@ export function AssignmentSuggestionPanel({
                             size="sm"
                             className="h-8"
                             onClick={() => void handleApprove(submission)}
-                            disabled={!canApprove}
+                            disabled={!canApprove || isApprovingAll}
                           >
                             {row.isApproving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                             Lancar nota
@@ -692,11 +853,13 @@ export function AssignmentSuggestionPanel({
                           </div>
                         )}
                       </div>
-                    ) : jobItem && (jobItem.status === 'pending' || jobItem.status === 'processing') ? (
+                    ) : jobItem && (jobItem.status === 'pending' || jobItem.status === 'processing' || jobItem.status === 'cancelled') ? (
                       <div className="mt-3 border-l border-border/60 pl-3 text-xs text-muted-foreground">
                         {jobItem.status === 'processing'
                           ? 'Gerando sugestao para esta entrega...'
-                          : 'Entrega na fila de correcao em lote.'}
+                          : jobItem.status === 'cancelled'
+                            ? 'Processamento cancelado para esta entrega.'
+                            : 'Entrega na fila de correcao em lote.'}
                       </div>
                     ) : null}
                   </div>

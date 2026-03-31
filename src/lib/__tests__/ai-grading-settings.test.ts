@@ -58,6 +58,7 @@ describe("ai grading settings", () => {
       minSubmissionTextChars: 75,
       maxStoredTextLength: 16000,
       customInstructions: DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS,
+      feedbackSignature: "",
     });
   });
 
@@ -75,5 +76,13 @@ describe("ai grading settings", () => {
     });
 
     expect(parsed.customInstructions).toBe("");
+  });
+
+  it("preserves an explicitly cleared feedback signature field", () => {
+    const parsed = parseAiGradingSettings({
+      feedbackSignature: "   ",
+    });
+
+    expect(parsed.feedbackSignature).toBe("");
   });
 });

@@ -9,6 +9,7 @@ export interface AiClientConfig {
   apiKey: string
   timeoutMs: number
   customInstructions?: string
+  feedbackSignature?: string
   visionEnabled?: boolean
 }
 
@@ -18,6 +19,10 @@ export interface AiEvaluationExecutionResult {
   provider: string
   model: string
   promptPayload: Record<string, unknown>
+}
+
+interface UploadedFileReference {
+  id: string
 }
 
 function extractJsonCandidate(value: string): string {
@@ -52,6 +57,22 @@ function stripGradeMentions(value: string): string {
     .replace(/\b\d+(?:[.,]\d+)?\s*\/\s*\d+(?:[.,]\d+)?\b/g, '')
 }
 
+function stripClosingSignature(value: string): string {
+  let normalized = value.trim()
+
+  const trailingPatterns = [
+    /\n+\s*(?:atenciosamente|abracos?|abs\.?|obrigado(?:a)?|cordialmente)\b[\s\S]*$/i,
+    /(?:\s|^)(?:-|:)??\s*(?:tutor|professor|monitor)\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'-]*(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'-]*)*\s*$/i,
+    /\n+\s*(?:tutor|professor|monitor)\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'-]*(?:\s+[A-ZÀ-Ý][A-Za-zÀ-ÿ'-]*)*\s*$/i,
+  ]
+
+  for (const pattern of trailingPatterns) {
+    normalized = normalized.replace(pattern, '').trim()
+  }
+
+  return normalized
+}
+
 function normalizeFeedbackText(value: string): string {
   let normalized = value
     .replace(/\r\n/g, '\n')
@@ -59,6 +80,7 @@ function normalizeFeedbackText(value: string): string {
     .trim()
 
   normalized = stripGradeMentions(normalized)
+  normalized = stripClosingSignature(normalized)
 
   normalized = normalized
     .split('\n')
@@ -75,7 +97,61 @@ function normalizeFeedbackText(value: string): string {
   return truncateText(normalized, 2000)
 }
 
-export function parseAiEvaluationResponse(rawContent: string, maxGrade: number): AiEvaluationResponse {
+function extractFirstName(value: string | undefined): string | null {
+  const normalized = value?.trim() || ''
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.split(/\s+/)[0] || null
+}
+
+function lowercaseLeadingLetter(value: string): string {
+  return value.replace(/^([A-ZÀ-Ý])/, (match) => match.toLowerCase())
+}
+
+function ensureFeedbackStartsWithStudentName(feedback: string, studentName?: string): string {
+  const firstName = extractFirstName(studentName)
+  if (!firstName) {
+    return feedback
+  }
+
+  const escapedName = firstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const alreadyStartsWithName = new RegExp(`^${escapedName}(?:\\b|\\s*[,!:.-])`, 'i').test(feedback)
+  if (alreadyStartsWithName) {
+    return feedback
+  }
+
+  return `${firstName}, ${lowercaseLeadingLetter(feedback)}`
+}
+
+function normalizeSignature(signature: string | undefined): string {
+  return (signature ?? '')
+    .replace(/\r\n/g, '\n')
+    .trim()
+}
+
+function appendFeedbackSignature(feedback: string, signature?: string): string {
+  const normalizedSignature = normalizeSignature(signature)
+  if (!normalizedSignature) {
+    return feedback
+  }
+
+  const escapedSignature = normalizedSignature.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const hasSignatureAtEnd = new RegExp(`(?:\\n{1,2}|\\s*)${escapedSignature}$`, 'i').test(feedback)
+  if (hasSignatureAtEnd) {
+    return feedback
+  }
+
+  return `${feedback}\n\n${normalizedSignature}`
+}
+
+export function parseAiEvaluationResponse(
+  rawContent: string,
+  maxGrade: number,
+  studentName?: string,
+  feedbackSignature?: string,
+): AiEvaluationResponse {
   const candidate = extractJsonCandidate(rawContent)
   let parsed: Record<string, unknown>
 
@@ -108,56 +184,139 @@ export function parseAiEvaluationResponse(rawContent: string, maxGrade: number):
     normalizedGrade = Number(Math.max(0, Math.min(maxGrade, numericGrade)).toFixed(2))
   }
 
+  const feedbackWithName = parsed.valida
+    ? ensureFeedbackStartsWithStudentName(normalizedFeedback, studentName)
+    : normalizedFeedback
+
   return {
     valida: Boolean(parsed.valida),
-    feedback: normalizedFeedback,
+    feedback: appendFeedbackSignature(feedbackWithName, feedbackSignature),
     notaRecomendada: normalizedGrade,
     reason: typeof parsed.reason === 'string' ? truncateText(parsed.reason.trim(), 500) : undefined,
     confidence: normalizeConfidence(parsed.confidence),
   }
 }
 
+function extractResponsesApiText(rawResponse: Record<string, unknown>): string {
+  if (typeof rawResponse.output_text === 'string' && rawResponse.output_text.trim()) {
+    return rawResponse.output_text
+  }
+
+  const outputs = Array.isArray(rawResponse.output) ? rawResponse.output : []
+
+  for (const output of outputs) {
+    if (!output || typeof output !== 'object') continue
+
+    const content = Array.isArray((output as { content?: unknown[] }).content)
+      ? (output as { content: Array<Record<string, unknown>> }).content
+      : []
+
+    for (const item of content) {
+      if (item.type === 'output_text' && typeof item.text === 'string' && item.text.trim()) {
+        return item.text
+      }
+    }
+  }
+
+  return ''
+}
+
+async function uploadFileForResponse(params: {
+  baseUrl: string
+  apiKey: string
+  fileName: string
+  mimeType: string
+  bytes: Uint8Array
+  signal: AbortSignal
+}): Promise<UploadedFileReference> {
+  const form = new FormData()
+  const blob = new Blob([params.bytes], { type: params.mimeType })
+
+  form.append('purpose', 'user_data')
+  form.append('file', blob, params.fileName)
+
+  const response = await fetch(`${params.baseUrl.replace(/\/+$/, '')}/files`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+    },
+    body: form,
+    signal: params.signal,
+  })
+
+  let rawResponse: Record<string, unknown> = {}
+  try {
+    rawResponse = await response.json() as Record<string, unknown>
+  } catch {
+    rawResponse = {}
+  }
+
+  if (!response.ok || typeof rawResponse.id !== 'string' || !rawResponse.id.trim()) {
+    const message =
+      (rawResponse.error && typeof rawResponse.error === 'object' && 'message' in rawResponse.error
+        ? String((rawResponse.error as { message?: unknown }).message ?? '')
+        : '') ||
+      (typeof rawResponse.message === 'string' ? rawResponse.message : '') ||
+      `File upload returned status ${response.status}`
+
+    throw new Error(message)
+  }
+
+  return { id: rawResponse.id }
+}
+
+async function deleteUploadedFile(params: {
+  baseUrl: string
+  apiKey: string
+  fileId: string
+}): Promise<void> {
+  await fetch(`${params.baseUrl.replace(/\/+$/, '')}/files/${encodeURIComponent(params.fileId)}`, {
+    method: 'DELETE',
+    headers: {
+      Authorization: `Bearer ${params.apiKey}`,
+    },
+  }).catch(() => undefined)
+}
+
 export async function executeAiEvaluation(
   config: AiClientConfig,
   request: AiEvaluationRequest,
 ): Promise<AiEvaluationExecutionResult> {
-  const visionImages = config.visionEnabled
+  const visionFiles = config.visionEnabled
     ? request.studentSubmission.extractedFiles.filter(
-        (file) => file.requiresVisualAnalysis && file.imageBase64,
+        (file) => file.requiresVisualAnalysis && file.fileBytes,
       )
     : []
-  const hasVisionImages = visionImages.length > 0
+  const hasVisionFiles = visionFiles.length > 0
 
   const prompt = buildGradeSuggestionPrompt(request, {
     customInstructions: config.customInstructions,
-    hasVisionImages,
+    hasVisionImages: hasVisionFiles,
   })
-
-  type UserMessageContent =
-    | { role: 'user'; content: string }
-    | { role: 'user'; content: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'high' } }> }
-
-  const userMessage: UserMessageContent = hasVisionImages
-    ? {
-        role: 'user',
-        content: [
-          { type: 'text', text: prompt.userPrompt },
-          ...visionImages.map((file) => ({
-            type: 'image_url' as const,
-            image_url: {
-              url: `data:${file.mimeType};base64,${file.imageBase64}`,
-              detail: 'high' as const,
-            },
-          })),
-        ],
-      }
-    : { role: 'user', content: prompt.userPrompt }
 
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs)
+  const uploadedFiles: UploadedFileReference[] = []
 
   try {
-    const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
+    if (hasVisionFiles) {
+      for (const file of visionFiles) {
+        const bytes = file.fileBytes
+        if (!bytes) continue
+
+        const uploaded = await uploadFileForResponse({
+          baseUrl: config.baseUrl,
+          apiKey: config.apiKey,
+          fileName: file.name,
+          mimeType: file.mimeType,
+          bytes,
+          signal: controller.signal,
+        })
+        uploadedFiles.push(uploaded)
+      }
+    }
+
+    const response = await fetch(`${config.baseUrl.replace(/\/+$/, '')}/responses`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -166,10 +325,30 @@ export async function executeAiEvaluation(
       body: JSON.stringify({
         model: config.model,
         temperature: 0.1,
-        max_tokens: hasVisionImages ? 1200 : 800,
-        messages: [
-          { role: 'system', content: prompt.systemPrompt },
-          userMessage,
+        max_output_tokens: hasVisionFiles ? 1200 : 800,
+        input: [
+          {
+            role: 'system',
+            content: [
+              {
+                type: 'input_text',
+                text: prompt.systemPrompt,
+              },
+            ],
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: prompt.userPrompt,
+              },
+              ...uploadedFiles.map((file) => ({
+                type: 'input_file' as const,
+                file_id: file.id,
+              })),
+            ],
+          },
         ],
       }),
       signal: controller.signal,
@@ -193,18 +372,19 @@ export async function executeAiEvaluation(
       throw new Error(message)
     }
 
-    const choices = Array.isArray(rawResponse.choices) ? rawResponse.choices : []
-    const firstChoice = choices[0] as { message?: { content?: unknown } } | undefined
-    const content = typeof firstChoice?.message?.content === 'string'
-      ? firstChoice.message.content
-      : ''
+    const content = extractResponsesApiText(rawResponse)
 
     if (!content.trim()) {
       throw new Error('A IA retornou uma resposta vazia.')
     }
 
     return {
-      evaluation: parseAiEvaluationResponse(content, request.maxGrade),
+      evaluation: parseAiEvaluationResponse(
+        content,
+        request.maxGrade,
+        request.studentName,
+        config.feedbackSignature,
+      ),
       rawResponse,
       provider: config.provider,
       model: config.model,
@@ -217,6 +397,14 @@ export async function executeAiEvaluation(
 
     throw error
   } finally {
+    for (const uploaded of uploadedFiles) {
+      await deleteUploadedFile({
+        baseUrl: config.baseUrl,
+        apiKey: config.apiKey,
+        fileId: uploaded.id,
+      })
+    }
+
     clearTimeout(timeoutId)
   }
 }

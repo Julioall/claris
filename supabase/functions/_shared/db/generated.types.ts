@@ -3273,11 +3273,13 @@ export type Database = {
         | "processing"
         | "completed"
         | "failed"
+        | "cancelled"
       ai_grade_suggestion_job_status:
         | "pending"
         | "processing"
         | "completed"
         | "failed"
+        | "cancelled"
       background_job_item_status:
         | "pending"
         | "processing"
@@ -3446,12 +3448,14 @@ export const Constants = {
         "processing",
         "completed",
         "failed",
+        "cancelled",
       ],
       ai_grade_suggestion_job_status: [
         "pending",
         "processing",
         "completed",
         "failed",
+        "cancelled",
       ],
       background_job_item_status: [
         "pending",

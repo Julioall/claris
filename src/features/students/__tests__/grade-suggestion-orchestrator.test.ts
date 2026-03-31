@@ -318,7 +318,7 @@ describe("grade suggestion orchestrator", () => {
     }));
   });
 
-  it("avalia com IA quando visao esta habilitada e submissao contem imagem com base64", async () => {
+  it("avalia com IA quando visao esta habilitada e submissao contem imagem com bytes", async () => {
     const evaluate = vi.fn().mockResolvedValue(buildEvaluation());
     const finalizeAudit = vi.fn().mockResolvedValue(undefined);
 
@@ -348,7 +348,7 @@ describe("grade suggestion orchestrator", () => {
               extractionQuality: "none",
               requiresVisualAnalysis: true,
               textLength: 0,
-              imageBase64: "aW1hZ2VkYXRh",
+              fileBytes: new Uint8Array([1, 2, 3]),
             }),
           ],
           requiresManualReview: false,

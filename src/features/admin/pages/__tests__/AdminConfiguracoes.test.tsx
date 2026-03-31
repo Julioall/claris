@@ -75,11 +75,12 @@ describe("AdminConfiguracoes page", () => {
     expect(screen.getByText("moodle_mobile_app")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /limiares de risco/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar limiares de risco/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /claris ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^claris ia$/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /claris ia - correcao de atividade/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /testar conexao/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar claris ia/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/^prompt de instrucoes personalizadas$/i)).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /correcao com ia/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /claris ia - correcao de atividade/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar correcao com ia/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/^prompt de instrucoes personalizadas do feedback$/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /limpeza operacional do banco/i })).toBeInTheDocument();

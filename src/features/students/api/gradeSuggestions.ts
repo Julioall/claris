@@ -176,6 +176,22 @@ export async function resumeActivityGradeSuggestionJob(params: {
   };
 }
 
+export async function cancelActivityGradeSuggestionJob(params: {
+  jobId: string;
+}) {
+  return await invokeMoodleFunctionWithTimeout({
+    functionName: 'moodle-grade-suggestions',
+    timeoutMs: 15000,
+    body: {
+      action: 'cancel_activity_suggestion_job',
+      jobId: params.jobId,
+    },
+  }) as {
+    data: ActivityGradeSuggestionResponse | null;
+    error: { message: string } | null;
+  };
+}
+
 export async function approveStudentGradeSuggestion(params: {
   session: MoodleSession;
   auditId: string;

@@ -23,7 +23,7 @@ export interface ExtractedFile {
   textLength: number
   sourceUrl?: string | null
   warning?: string | null
-  imageBase64?: string
+  fileBytes?: Uint8Array
 }
 
 export interface SupplementaryMaterial {

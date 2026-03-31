@@ -177,7 +177,7 @@ export async function generateGradeSuggestion(
 
     const hasVisionImages = Boolean(deps.visionEnabled) &&
       normalizedSubmission.submission.extractedFiles.some(
-        (file) => file.requiresVisualAnalysis && file.imageBase64,
+        (file) => file.requiresVisualAnalysis && file.fileBytes,
       )
 
     if (normalizedSubmission.submission.requiresManualReview && !hasVisionImages) {

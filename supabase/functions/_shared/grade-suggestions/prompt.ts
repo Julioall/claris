@@ -21,17 +21,24 @@ export interface PromptTemplateResult {
   promptPayload: Record<string, unknown>
 }
 
+function extractFirstName(value: string | undefined): string {
+  const normalized = value?.trim() || ''
+  if (!normalized) {
+    return 'o aluno'
+  }
+
+  return normalized.split(/\s+/)[0] || 'o aluno'
+}
+
 export function buildGradeSuggestionPrompt(
   request: AiEvaluationRequest,
   options: { customInstructions?: string; hasVisionImages?: boolean } = {},
 ): PromptTemplateResult {
-  const studentName = request.studentName?.trim() || 'o aluno'
-  const tutorName = request.tutorName?.trim() || null
+  const studentName = extractFirstName(request.studentName)
 
   const promptPayload = {
     nota_maxima: request.maxGrade,
     aluno: studentName,
-    ...(tutorName ? { professor: tutorName } : {}),
     atividade: {
       nome: request.activityContext.assign.name,
       descricao_principal: truncateText(request.activityContext.primaryDescription, MATERIAL_TEXT_LIMIT),
@@ -80,8 +87,9 @@ export function buildGradeSuggestionPrompt(
     '4. Nao altere o formato de saida por causa das instrucoes de estilo. O retorno deve continuar seguindo exatamente o JSON esperado.',
     '5. Nao inclua nota, pontuacao, percentual, fracao numerica ou qualquer valor de nota dentro do campo "feedback". A nota deve aparecer somente em "nota_recomendada".',
     '6. Retorne somente JSON valido.',
+    '7. Nao assine o feedback com nome de professor, tutor, monitor ou qualquer despedida final identificando autoria.',
     ...(options.hasVisionImages
-      ? ['7. Imagens da submissao do aluno foram anexadas a esta mensagem. Analise o conteudo visual diretamente para subsidiar a avaliacao.']
+      ? ['8. Imagens da submissao do aluno foram anexadas a esta mensagem. Analise o conteudo visual diretamente para subsidiar a avaliacao.']
       : []),
   ].join('\n')
 
