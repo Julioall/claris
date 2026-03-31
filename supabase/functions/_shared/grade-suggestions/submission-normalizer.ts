@@ -86,7 +86,7 @@ function extractSubmissionFiles(submission: Record<string, unknown>): MoodleFile
 export function deriveSubmissionReviewState(params: {
   typedText: string
   extractedFiles: ExtractedFile[]
-  config: Pick<GradeSuggestionRuntimeConfig, 'minVisualTextChars' | 'minSubmissionTextChars'>
+  config: Pick<GradeSuggestionRuntimeConfig, 'minVisualTextChars' | 'minSubmissionTextChars' | 'visionEnabled'>
 }): SubmissionReviewState {
   const typedTextLength = params.typedText.trim().length
   const totalFileTextLength = params.extractedFiles.reduce((sum, file) => sum + file.textLength, 0)
@@ -96,18 +96,22 @@ export function deriveSubmissionReviewState(params: {
     params.extractedFiles.length > 0 &&
     params.extractedFiles.every((file) => file.extractionQuality === 'none' || file.extractionQuality === 'low')
 
+  const hasVisionImages = Boolean(params.config.visionEnabled) &&
+    params.extractedFiles.some((file) => file.requiresVisualAnalysis && file.imageBase64)
+
   const warnings: string[] = []
   const warningCodes: string[] = []
 
   let requiresManualReview = false
-  if (visualDependency && totalExtractedTextLength < params.config.minVisualTextChars) {
+  if (visualDependency && totalExtractedTextLength < params.config.minVisualTextChars && !hasVisionImages) {
     requiresManualReview = true
     warnings.push('A submissão depende de análise visual e não possui texto suficiente para correção automática.')
     warningCodes.push('visual_dependency')
   } else if (
     params.extractedFiles.length > 0 &&
     totalExtractedTextLength < params.config.minSubmissionTextChars &&
-    onlyLowSignalFiles
+    onlyLowSignalFiles &&
+    !hasVisionImages
   ) {
     requiresManualReview = true
     warnings.push('A extração dos arquivos da submissão não forneceu texto suficiente para correção confiável.')
@@ -249,6 +253,7 @@ export async function normalizeStudentSubmission(
     config: {
       minVisualTextChars: params.config.minVisualTextChars,
       minSubmissionTextChars: params.config.minSubmissionTextChars,
+      visionEnabled: params.config.visionEnabled,
     },
   })
 

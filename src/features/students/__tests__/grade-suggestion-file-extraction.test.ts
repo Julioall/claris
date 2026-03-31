@@ -59,4 +59,33 @@ describe("file text extraction", () => {
     expect(extracted.extractedText).toContain("Inventario concluido Hostname: LAB-01");
     expect(extracted.extractionQuality).toBe("low");
   });
+
+  it("codifica imagem PNG em base64 e marca como analise visual", async () => {
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+    const extracted = await extractTextFromFileBuffer({
+      fileName: "diagrama.png",
+      mimeType: "image/png",
+      bytes: pngBytes,
+    });
+
+    expect(extracted.requiresVisualAnalysis).toBe(true);
+    expect(extracted.extractedText).toBe("");
+    expect(extracted.imageBase64).toBeDefined();
+    expect(typeof extracted.imageBase64).toBe("string");
+    expect(extracted.imageBase64!.length).toBeGreaterThan(0);
+    expect(extracted.warning).toBeNull();
+  });
+
+  it("nao codifica BMP em base64 por nao ser suportado por modelos de visao", async () => {
+    const extracted = await extractTextFromFileBuffer({
+      fileName: "imagem.bmp",
+      mimeType: "image/bmp",
+      bytes: new Uint8Array([0x42, 0x4d, 0x00, 0x00]),
+    });
+
+    expect(extracted.requiresVisualAnalysis).toBe(true);
+    expect(extracted.imageBase64).toBeUndefined();
+    expect(extracted.warning).toBeTruthy();
+  });
 });

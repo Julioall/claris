@@ -23,6 +23,7 @@ export interface ExtractedFile {
   textLength: number
   sourceUrl?: string | null
   warning?: string | null
+  imageBase64?: string
 }
 
 export interface SupplementaryMaterial {
@@ -79,6 +80,8 @@ export interface AiEvaluationRequest {
   maxGrade: number
   activityContext: ActivityEvaluationContext
   studentSubmission: NormalizedSubmission
+  studentName?: string
+  tutorName?: string
 }
 
 export interface AiEvaluationResponse {

@@ -30,6 +30,7 @@ export interface GenerateSuggestionDependencies {
     context: ActivityEvaluationContext
     submission: NormalizedSubmission
   }): Promise<AiEvaluationExecutionResult>
+  visionEnabled?: boolean
 }
 
 export interface GenerateSuggestionOutput {
@@ -174,7 +175,12 @@ export async function generateGradeSuggestion(
       return { auditId, result }
     }
 
-    if (normalizedSubmission.submission.requiresManualReview) {
+    const hasVisionImages = Boolean(deps.visionEnabled) &&
+      normalizedSubmission.submission.extractedFiles.some(
+        (file) => file.requiresVisualAnalysis && file.imageBase64,
+      )
+
+    if (normalizedSubmission.submission.requiresManualReview && !hasVisionImages) {
       const result: GradeSuggestionResult = {
         status: 'manual_review_required',
         suggestedGrade: null,
@@ -204,7 +210,8 @@ export async function generateGradeSuggestion(
 
     const submissionHasContent =
       normalizedSubmission.submission.typedText.trim().length > 0 ||
-      normalizedSubmission.submission.extractedFiles.some((file) => file.textLength > 0)
+      normalizedSubmission.submission.extractedFiles.some((file) => file.textLength > 0) ||
+      hasVisionImages
 
     if (!submissionHasContent) {
       const result = buildNoContentResult(

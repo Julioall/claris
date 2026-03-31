@@ -18,14 +18,21 @@ export interface AiGradingSettings {
   minSubmissionTextChars: number;
   maxStoredTextLength: number;
   customInstructions: string;
+  visionEnabled: boolean;
 }
 
 const LEGACY_DEFAULT_SUPPORTED_TYPES = ["docx", "pdf", "txt", "html", "csv", "xlsx", "pptx", "png", "jpg", "jpeg"];
 const CURRENT_DEFAULT_SUPPORTED_TYPES = [...LEGACY_DEFAULT_SUPPORTED_TYPES, "md", "htm", "gif", "bmp", "webp", "svg"];
 export const DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS = [
-  "Adote um tom impessoal, tecnico e construtivo.",
-  "Nao se dirija diretamente ao aluno nem use segunda pessoa.",
-  'Prefira formulacoes como "A resposta apresenta", "observa-se", "recomenda-se" e "e importante".',
+  "Escreva o feedback como se fosse um professor real, com linguagem natural, acolhedora e proxima.",
+  "Comece mencionando o nome do aluno diretamente.",
+  "Estruture o feedback em tres partes dentro de um unico paragrafo corrido:",
+  "  1. Abertura humanizada: comentario positivo genuino sobre a entrega, valorizando esforco, organizacao, participacao ou compreensao demonstrada.",
+  "  2. Pontos positivos e melhorias de forma construtiva: destaque os acertos e apresente pontos de melhoria sem tom punitivo, explicando o que faltou e como melhorar. Evite frases vagas como 'faltou aprofundamento' sem indicar onde ou como.",
+  "  3. Encerramento motivador: incentive a evolucao do aluno e demonstre confianca no progresso dele.",
+  "Nao use linguagem robotica como: 'Observa-se', 'Identifica-se', 'A resposta apresenta'.",
+  "Nao use listas, topicos ou multiplos paragrafos. Escreva tudo em um unico paragrafo corrido.",
+  "Transmita que o professor realmente leu a atividade.",
 ].join("\n");
 
 export const DEFAULT_AI_GRADING_SETTINGS: AiGradingSettings = {
@@ -57,6 +64,7 @@ export const DEFAULT_AI_GRADING_SETTINGS: AiGradingSettings = {
   minSubmissionTextChars: 40,
   maxStoredTextLength: 12000,
   customInstructions: DEFAULT_AI_GRADING_CUSTOM_INSTRUCTIONS,
+  visionEnabled: false,
 };
 
 const asObject = (value: unknown): Record<string, unknown> =>
@@ -136,5 +144,6 @@ export function parseAiGradingSettings(value: unknown): AiGradingSettings {
     customInstructions: hasStoredCustomInstructions
       ? (typeof raw.customInstructions === "string" ? raw.customInstructions.trim() : "")
       : DEFAULT_AI_GRADING_SETTINGS.customInstructions,
+    visionEnabled: typeof raw.visionEnabled === "boolean" ? raw.visionEnabled : DEFAULT_AI_GRADING_SETTINGS.visionEnabled,
   };
 }

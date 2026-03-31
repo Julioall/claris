@@ -3,11 +3,16 @@ import type { AiEvaluationRequest } from './types.ts'
 
 const MATERIAL_TEXT_LIMIT = 2500
 const SUBMISSION_TEXT_LIMIT = 3500
-const FEEDBACK_LINE_LIMIT = 10
 export const DEFAULT_GRADE_SUGGESTION_CUSTOM_INSTRUCTIONS = [
-  'Adote um tom impessoal, tecnico e construtivo.',
-  'Nao se dirija diretamente ao aluno nem use segunda pessoa.',
-  'Prefira formulacoes como "A resposta apresenta", "observa-se", "recomenda-se" e "e importante".',
+  'Escreva o feedback como se fosse um professor real, com linguagem natural, acolhedora e proxima.',
+  'Comece mencionando o nome do aluno diretamente.',
+  'Estruture o feedback em tres partes dentro de um unico paragrafo corrido:',
+  '  1. Abertura humanizada: comentario positivo genuino sobre a entrega, valorizando esforco, organizacao, participacao ou compreensao demonstrada.',
+  '  2. Pontos positivos e melhorias de forma construtiva: destaque os acertos e apresente pontos de melhoria sem tom punitivo, explicando o que faltou e como melhorar. Evite frases vagas como "faltou aprofundamento" sem indicar onde ou como.',
+  '  3. Encerramento motivador: incentive a evolucao do aluno e demonstre confianca no progresso dele.',
+  'Nao use linguagem robotica como: "Observa-se", "Identifica-se", "A resposta apresenta".',
+  'Nao use listas, topicos ou multiplos paragrafos. Escreva tudo em um unico paragrafo corrido.',
+  'Transmita que o professor realmente leu a atividade.',
 ].join('\n')
 
 export interface PromptTemplateResult {
@@ -18,10 +23,15 @@ export interface PromptTemplateResult {
 
 export function buildGradeSuggestionPrompt(
   request: AiEvaluationRequest,
-  options: { customInstructions?: string } = {},
+  options: { customInstructions?: string; hasVisionImages?: boolean } = {},
 ): PromptTemplateResult {
+  const studentName = request.studentName?.trim() || 'o aluno'
+  const tutorName = request.tutorName?.trim() || null
+
   const promptPayload = {
     nota_maxima: request.maxGrade,
+    aluno: studentName,
+    ...(tutorName ? { professor: tutorName } : {}),
     atividade: {
       nome: request.activityContext.assign.name,
       descricao_principal: truncateText(request.activityContext.primaryDescription, MATERIAL_TEXT_LIMIT),
@@ -54,22 +64,25 @@ export function buildGradeSuggestionPrompt(
     : options.customInstructions.trim()
 
   const systemPrompt = [
-    'Voce e um avaliador educacional especializado em atividades tecnicas do curso de informatica, com analise objetiva, coerente e construtiva.',
-    'Avalie a resposta com base no contexto completo da atividade.',
+    'Voce e um professor avaliando a entrega de um aluno em uma atividade do curso.',
+    'Avalie a resposta com base no contexto completo da atividade e gere um feedback personalizado.',
     'Considere que o enunciado pode estar distribuido entre a descricao principal e materiais complementares da mesma secao do curso.',
     ...(customInstructions
       ? [
-          'Instrucoes personalizadas do administrador: aplique-as apenas se nao entrarem em conflito com as regras fixas de resposta.',
+          'Instrucoes de estilo (aplique-as na geracao do feedback, sem alterar o formato de saida JSON):',
           customInstructions,
         ]
       : []),
-    'Regras:',
+    'Regras obrigatorias de resposta:',
     '1. Se a resposta nao atender ao que foi solicitado, retorne {"valida": false, "feedback": "...", "nota_recomendada": 0}.',
-    '2. Se a resposta depender de analise visual e nao houver texto suficiente, retorne {"valida": false, "feedback": "A resposta nao pode ser avaliada automaticamente pois depende de analise visual.", "nota_recomendada": null}.',
-    `3. Se a resposta for valida, gere feedback em no maximo ${FEEDBACK_LINE_LIMIT} linhas, com pontos fortes e melhorias, sem ultrapassar a nota maxima.`,
-    '4. Nao altere o formato de saida por causa das instrucoes personalizadas. O retorno deve continuar seguindo exatamente o JSON esperado.',
+    '2. Se a resposta depender de analise visual e nao houver texto suficiente, retorne {"valida": false, "feedback": "A atividade nao pode ser avaliada automaticamente pois depende de analise visual.", "nota_recomendada": null}.',
+    '3. Se a resposta for valida, gere o feedback seguindo as instrucoes de estilo acima.',
+    '4. Nao altere o formato de saida por causa das instrucoes de estilo. O retorno deve continuar seguindo exatamente o JSON esperado.',
     '5. Nao inclua nota, pontuacao, percentual, fracao numerica ou qualquer valor de nota dentro do campo "feedback". A nota deve aparecer somente em "nota_recomendada".',
     '6. Retorne somente JSON valido.',
+    ...(options.hasVisionImages
+      ? ['7. Imagens da submissao do aluno foram anexadas a esta mensagem. Analise o conteudo visual diretamente para subsidiar a avaliacao.']
+      : []),
   ].join('\n')
 
   return {

@@ -18,6 +18,7 @@ export interface GradeSuggestionRuntimeConfig {
   minSubmissionTextChars: number
   maxStoredTextLength: number
   customInstructions: string
+  visionEnabled: boolean
 }
 
 interface StoredLlmSettings {
@@ -40,6 +41,7 @@ interface StoredAiGradingSettings {
   minSubmissionTextChars?: unknown
   maxStoredTextLength?: unknown
   customInstructions?: unknown
+  visionEnabled?: unknown
 }
 
 const DEFAULT_PROVIDER = 'openai'
@@ -182,5 +184,6 @@ export function resolveGradeSuggestionRuntimeConfig(
       storedAiGradingSettings.customInstructions,
       hasStoredCustomInstructions,
     ),
+    visionEnabled: readBoolean(storedAiGradingSettings.visionEnabled, false),
   }
 }

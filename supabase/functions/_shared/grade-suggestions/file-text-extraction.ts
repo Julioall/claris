@@ -4,10 +4,20 @@ import type { ExtractedFile } from './types.ts'
 
 const DEFAULT_TEXT_LIMIT = 12000
 const VISUAL_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg'])
+const VISION_ENCODABLE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
 const DIRECT_TEXT_EXTENSIONS = new Set(['txt', 'csv', 'md'])
 
 function bytesToString(bytes: Uint8Array, encoding: string): string {
   return new TextDecoder(encoding, { fatal: false }).decode(bytes)
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 8192
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, Math.min(i + chunkSize, bytes.length)))
+  }
+  return btoa(binary)
 }
 
 function decodeBestEffortText(bytes: Uint8Array): string {
@@ -219,6 +229,7 @@ function buildResult(params: {
   warning?: string | null
   sourceUrl?: string | null
   maxTextLength?: number
+  imageBase64?: string
 }): ExtractedFile {
   const normalizedText = truncateText(collapseWhitespace(params.text), params.maxTextLength ?? DEFAULT_TEXT_LIMIT)
 
@@ -231,6 +242,7 @@ function buildResult(params: {
     textLength: normalizedText.length,
     sourceUrl: params.sourceUrl ?? null,
     warning: params.warning ?? null,
+    imageBase64: params.imageBase64,
   }
 }
 
@@ -245,12 +257,14 @@ export async function extractTextFromFileBuffer(input: {
   const extension = detectExtension(input.fileName, mimeType)
 
   if (VISUAL_EXTENSIONS.has(extension) || mimeType.startsWith('image/')) {
+    const imageBase64 = VISION_ENCODABLE_EXTENSIONS.has(extension) ? uint8ToBase64(input.bytes) : undefined
     return buildResult({
       fileName: input.fileName,
       mimeType,
       text: '',
       requiresVisualAnalysis: true,
-      warning: 'Arquivo depende de análise visual.',
+      imageBase64,
+      warning: imageBase64 ? null : 'Arquivo depende de análise visual.',
       sourceUrl: input.sourceUrl,
       maxTextLength: input.maxTextLength,
     })

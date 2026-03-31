@@ -9,6 +9,7 @@ export interface AiClientConfig {
   apiKey: string
   timeoutMs: number
   customInstructions?: string
+  visionEnabled?: boolean
 }
 
 export interface AiEvaluationExecutionResult {
@@ -120,9 +121,38 @@ export async function executeAiEvaluation(
   config: AiClientConfig,
   request: AiEvaluationRequest,
 ): Promise<AiEvaluationExecutionResult> {
+  const visionImages = config.visionEnabled
+    ? request.studentSubmission.extractedFiles.filter(
+        (file) => file.requiresVisualAnalysis && file.imageBase64,
+      )
+    : []
+  const hasVisionImages = visionImages.length > 0
+
   const prompt = buildGradeSuggestionPrompt(request, {
     customInstructions: config.customInstructions,
+    hasVisionImages,
   })
+
+  type UserMessageContent =
+    | { role: 'user'; content: string }
+    | { role: 'user'; content: Array<{ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string; detail: 'high' } }> }
+
+  const userMessage: UserMessageContent = hasVisionImages
+    ? {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt.userPrompt },
+          ...visionImages.map((file) => ({
+            type: 'image_url' as const,
+            image_url: {
+              url: `data:${file.mimeType};base64,${file.imageBase64}`,
+              detail: 'high' as const,
+            },
+          })),
+        ],
+      }
+    : { role: 'user', content: prompt.userPrompt }
+
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), config.timeoutMs)
 
@@ -136,10 +166,10 @@ export async function executeAiEvaluation(
       body: JSON.stringify({
         model: config.model,
         temperature: 0.1,
-        max_tokens: 800,
+        max_tokens: hasVisionImages ? 1200 : 800,
         messages: [
           { role: 'system', content: prompt.systemPrompt },
-          { role: 'user', content: prompt.userPrompt },
+          userMessage,
         ],
       }),
       signal: controller.signal,
