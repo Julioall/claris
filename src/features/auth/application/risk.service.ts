@@ -2,11 +2,39 @@ import { supabase } from '@/integrations/supabase/client';
 
 import type { RiskUpdateResult } from '../domain/sync';
 
+const DEADLOCK_ERROR_CODE = '40P01';
+const DEADLOCK_RETRY_LIMIT = 2;
+const DEADLOCK_RETRY_DELAY_MS = 150;
+
 function isMissingRpcError(error: { code?: string | null; message?: string | null } | null): boolean {
   return Boolean(error) && (
     error?.code === 'PGRST202' ||
     error?.message?.toLowerCase().includes('could not find the function') === true
   );
+}
+
+function isDeadlockError(error: { code?: string | null; message?: string | null } | null): boolean {
+  return Boolean(error) && (
+    error?.code === DEADLOCK_ERROR_CODE ||
+    error?.message?.toLowerCase().includes('deadlock detected') === true
+  );
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+async function runRpcWithDeadlockRetry<T>(operation: () => Promise<{ data: T | null; error: { code?: string | null; message?: string | null } | null }>) {
+  for (let attempt = 0; attempt <= DEADLOCK_RETRY_LIMIT; attempt += 1) {
+    const result = await operation();
+    if (!isDeadlockError(result.error) || attempt === DEADLOCK_RETRY_LIMIT) {
+      return result;
+    }
+
+    await delay(DEADLOCK_RETRY_DELAY_MS * (attempt + 1));
+  }
+
+  return await operation();
 }
 
 export async function recalculateRiskForCourses(selectedCourseIds: string[]): Promise<RiskUpdateResult> {
@@ -15,9 +43,9 @@ export async function recalculateRiskForCourses(selectedCourseIds: string[]): Pr
       return { failedCount: 0, updatedCount: 0, missingRpc: false };
     }
 
-    const firstCourse = await supabase.rpc('update_course_students_risk', {
+    const firstCourse = await runRpcWithDeadlockRetry(() => supabase.rpc('update_course_students_risk', {
       p_course_id: selectedCourseIds[0],
-    });
+    }));
 
     if (isMissingRpcError(firstCourse.error)) {
       return { failedCount: 0, updatedCount: 0, missingRpc: true };
@@ -35,11 +63,12 @@ export async function recalculateRiskForCourses(selectedCourseIds: string[]): Pr
       };
     }
 
-    const results = await Promise.all(
-      selectedCourseIds.slice(1).map((courseId) =>
-        supabase.rpc('update_course_students_risk', { p_course_id: courseId }),
-      ),
-    );
+    const results = [];
+    for (const courseId of selectedCourseIds.slice(1)) {
+      results.push(await runRpcWithDeadlockRetry(() => supabase.rpc('update_course_students_risk', {
+        p_course_id: courseId,
+      })));
+    }
 
     const errors = results
       .map((result) => result.error)
@@ -71,9 +100,9 @@ export async function recalculateRiskForCourses(selectedCourseIds: string[]): Pr
       return { failedCount: 0, updatedCount: 0, missingRpc: false };
     }
 
-    const firstStudent = await supabase.rpc('update_student_risk', {
+    const firstStudent = await runRpcWithDeadlockRetry(() => supabase.rpc('update_student_risk', {
       p_student_id: uniqueStudentIds[0],
-    });
+    }));
 
     if (isMissingRpcError(firstStudent.error)) {
       return { failedCount: 0, updatedCount: 0, missingRpc: true };
@@ -87,11 +116,12 @@ export async function recalculateRiskForCourses(selectedCourseIds: string[]): Pr
       return { failedCount: 0, updatedCount: 1, missingRpc: false };
     }
 
-    const results = await Promise.all(
-      uniqueStudentIds.slice(1).map((studentId) =>
-        supabase.rpc('update_student_risk', { p_student_id: studentId }),
-      ),
-    );
+    const results = [];
+    for (const studentId of uniqueStudentIds.slice(1)) {
+      results.push(await runRpcWithDeadlockRetry(() => supabase.rpc('update_student_risk', {
+        p_student_id: studentId,
+      })));
+    }
 
     const errors = results
       .map((result) => result.error)

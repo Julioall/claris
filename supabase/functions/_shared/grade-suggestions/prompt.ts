@@ -89,7 +89,9 @@ export function buildGradeSuggestionPrompt(
       : []),
     'Regras obrigatorias de resposta:',
     '1. Se a resposta nao atender ao que foi solicitado, retorne {"valida": false, "feedback": "...", "nota_recomendada": 0}.',
-    '2. Se a resposta depender de analise visual e nao houver texto suficiente, retorne {"valida": false, "feedback": "A atividade nao pode ser avaliada automaticamente pois depende de analise visual.", "nota_recomendada": null}.',
+    ...(options.hasVisionImages
+      ? ['2. Existem anexos da submissao disponiveis nesta avaliacao. Analise os anexos diretamente e nao retorne feedback generico dizendo que depende de analise visual.']
+      : ['2. Se nao houver conteudo suficiente para avaliar (sem texto relevante e sem anexos analisaveis), retorne {"valida": false, "feedback": "A submissao nao possui conteudo suficiente para avaliacao.", "nota_recomendada": 0}.']),
     '3. Se a resposta for valida, gere o feedback seguindo as instrucoes de estilo acima.',
     '4. Nao altere o formato de saida por causa das instrucoes de estilo. O retorno deve continuar seguindo exatamente o JSON esperado.',
     '5. Nao inclua nota, pontuacao, percentual, fracao numerica ou qualquer valor de nota dentro do campo "feedback". A nota deve aparecer somente em "nota_recomendada".',
