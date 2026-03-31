@@ -87,7 +87,7 @@ import {
   listBulkSendAudienceForUser,
   listRecentBulkMessageJobsForUser,
 } from "@/features/messages/api/bulk-messaging.repository";
-import { createScheduledMessage } from "@/features/automations/api/automations.repository";
+import { createScheduledMessage } from "@/features/campaigns/api/campaigns.repository";
 import { listMessageTemplateOptionsForUser } from "@/features/messages/api/message-templates.repository";
 import type {
   BulkMessageJobPreview,
@@ -253,7 +253,11 @@ function computeFirstScheduledAt(input: {
 
 const AUDIENCE_PAGE_SIZE = 25;
 
-export function BulkSendTab() {
+interface BulkSendTabProps {
+  compactTrigger?: boolean;
+}
+
+export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
   const moodleSession = useMoodleSession();
@@ -285,6 +289,7 @@ export function BulkSendTab() {
   const [routineTimeOfDay, setRoutineTimeOfDay] = useState("");
   const [routineWeekday, setRoutineWeekday] = useState<WeekdayValue>("1");
   const [routineMonthlyDay, setRoutineMonthlyDay] = useState("1");
+  const [routineEndDate, setRoutineEndDate] = useState("");
 
   const [filterSchool, setFilterSchool] = useState<string>("todos");
   const [filterCourse, setFilterCourse] = useState<string>("todos");
@@ -686,6 +691,7 @@ export function BulkSendTab() {
     setRoutineTimeOfDay("");
     setRoutineWeekday("1");
     setRoutineMonthlyDay("1");
+    setRoutineEndDate("");
     setCurrentStep("audience");
   }, []);
 
@@ -844,6 +850,10 @@ export function BulkSendTab() {
               scheduleMode === "monthly"
                 ? Number(routineMonthlyDay)
                 : undefined,
+            end_date:
+              scheduleMode !== "specific_date" && routineEndDate
+                ? routineEndDate
+                : undefined,
           },
           recipient_snapshot: recipientSnapshot,
         },
@@ -864,6 +874,7 @@ export function BulkSendTab() {
     messageContent,
     moodleSession,
     navigate,
+    routineEndDate,
     routineMonthlyDay,
     routineStartDate,
     routineTimeOfDay,
@@ -929,46 +940,38 @@ export function BulkSendTab() {
     return <Badge variant={m.variant}>{m.label}</Badge>;
   };
 
-  const renderAudienceStep = () => (
-    <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="outline">{filteredStudents.length} no recorte</Badge>
-        <Badge variant={selectedStudents.length > 0 ? "default" : "secondary"}>
-          {selectedStudents.length} selecionados
-        </Badge>
-      </div>
+  const hasActiveFilters =
+    filterSchool !== "todos" ||
+    filterCourse !== "todos" ||
+    filterClass !== "todos" ||
+    filterUC !== "todos" ||
+    filterRiskStatus !== "todos" ||
+    filterEnrollmentStatus !== "todos" ||
+    filterEmailStatus !== "todos";
 
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+  const renderAudienceStep = () => (
+    <div className="space-y-3 p-1">
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Buscar aluno por nome ou email..."
+              placeholder="Buscar aluno..."
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              className="pl-9"
+              className="h-8 pl-8 text-sm"
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <SlidersHorizontal className="h-3.5 w-3.5" />
-                  Filtros
-                  {(filterSchool !== "todos" ||
-                    filterCourse !== "todos" ||
-                    filterClass !== "todos" ||
-                    filterUC !== "todos" ||
-                    filterRiskStatus !== "todos" ||
-                    filterEnrollmentStatus !== "todos" ||
-                    filterEmailStatus !== "todos") && (
-                    <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
-                      ativos
-                    </Badge>
-                  )}
-                </Button>
-              </PopoverTrigger>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" className="relative h-8 w-8 shrink-0">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                {hasActiveFilters && (
+                  <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary" />
+                )}
+              </Button>
+            </PopoverTrigger>
               <PopoverContent align="end" className="w-[320px] space-y-3">
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Refinar audiencia
@@ -1086,17 +1089,16 @@ export function BulkSendTab() {
                 </Button>
               </PopoverContent>
             </Popover>
-          </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border">
+        <div className="overflow-hidden rounded-lg border">
           {isLoadingStudents ? (
-            <div className="flex items-center justify-center py-16">
+            <div className="flex items-center justify-center py-12">
               <Spinner className="h-5 w-5" />
             </div>
           ) : (
-            <div className="space-y-2 p-3">
-              <div className="flex items-center justify-between rounded-xl bg-muted/40 px-3 py-2">
+            <div>
+              <div className="flex items-center justify-between bg-muted/40 px-3 py-1.5">
                 <div className="flex items-center gap-2">
                   <Checkbox
                     checked={
@@ -1116,17 +1118,18 @@ export function BulkSendTab() {
                     }}
                     aria-label="Selecionar todos os alunos filtrados"
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Selecionar todos os alunos da pagina
+                  <p className="text-[11px] text-muted-foreground">
+                    Todos da pagina
                   </p>
                 </div>
-                <Badge variant="outline" className="text-[10px]">
-                  {paginatedFilteredStudents.length} na pagina
-                </Badge>
+                <span className="text-[11px] text-muted-foreground">
+                  {filteredStudents.length} encontrados · {selectedStudents.length} selecionados
+                </span>
               </div>
 
+              <ScrollArea className="h-56">
               {filteredStudents.length === 0 ? (
-                <p className="py-10 text-center text-sm text-muted-foreground">
+                <p className="py-8 text-center text-sm text-muted-foreground">
                   Nenhum aluno corresponde aos filtros atuais.
                 </p>
               ) : (
@@ -1138,9 +1141,9 @@ export function BulkSendTab() {
                       key={student.id}
                       type="button"
                       className={cn(
-                        "flex w-full items-start gap-3 rounded-xl border px-3 py-2 text-left transition-colors",
+                        "flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors",
                         isSelected
-                          ? "border-primary/40 bg-primary/5"
+                          ? "bg-primary/5"
                           : "hover:bg-muted/40",
                       )}
                       onClick={() => toggleStudent(student.id)}
@@ -1149,60 +1152,53 @@ export function BulkSendTab() {
                         checked={isSelected}
                         onCheckedChange={() => toggleStudent(student.id)}
                         onClick={(event) => event.stopPropagation()}
+                        className="shrink-0"
                         aria-label={`Selecionar ${student.full_name}`}
                       />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-medium">
-                            {student.full_name}
-                          </p>
-                          <Badge variant="outline" className="text-[10px]">
-                            {formatRiskLevel(student.current_risk_level)}
-                          </Badge>
-                        </div>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {student.email || "Sem email"}
-                        </p>
-                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                          {student.courses[0]?.course_name || "Sem curso vinculado"}
-                        </p>
-                      </div>
+                      <span className="min-w-0 flex-1 truncate text-sm">
+                        {student.full_name}
+                      </span>
+                      <Badge variant="outline" className="shrink-0 text-[10px]">
+                        {formatRiskLevel(student.current_risk_level)}
+                      </Badge>
                     </button>
                   );
                 })
               )}
+              </ScrollArea>
             </div>
           )}
         </div>
 
         {filteredStudents.length > 0 && (
-          <div className="flex flex-col gap-3 rounded-2xl border border-dashed px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs text-muted-foreground">
-              Exibindo {(audiencePage - 1) * AUDIENCE_PAGE_SIZE + 1}-
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] text-muted-foreground">
+              {(audiencePage - 1) * AUDIENCE_PAGE_SIZE + 1}-
               {(audiencePage - 1) * AUDIENCE_PAGE_SIZE +
                 paginatedFilteredStudents.length}{" "}
-              de {filteredStudents.length} destinatarios
+              de {filteredStudents.length}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
                 onClick={() =>
                   setAudiencePage((current) => Math.max(1, current - 1))
                 }
                 disabled={audiencePage === 1}
               >
-                <ChevronLeft className="mr-1 h-4 w-4" />
-                Anterior
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-xs text-muted-foreground">
-                Pagina {audiencePage} de {audienceTotalPages}
+              <span className="text-[11px] text-muted-foreground">
+                {audiencePage}/{audienceTotalPages}
               </span>
               <Button
                 type="button"
-                variant="outline"
-                size="sm"
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
                 onClick={() =>
                   setAudiencePage((current) =>
                     Math.min(audienceTotalPages, current + 1),
@@ -1210,21 +1206,16 @@ export function BulkSendTab() {
                 }
                 disabled={audiencePage >= audienceTotalPages}
               >
-                Proxima
-                <ChevronRight className="ml-1 h-4 w-4" />
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          Feche o recorte agora. A etapa seguinte usa essa audiencia para
-          liberar modelos, variaveis e preview.
-        </p>
     </div>
   );
 
   const renderMessageStep = () => (
-    <div className="space-y-5">
+    <div className="space-y-5 p-1">
       <div className="flex justify-end">
         <Button
           variant="outline"
@@ -1267,8 +1258,8 @@ export function BulkSendTab() {
             <p className="text-[11px] text-muted-foreground">
               Pre-visualizacao da mensagem para o primeiro destinatario selecionado.
             </p>
-            <div className="min-h-[20rem] rounded-md border bg-muted/20 p-3">
-              <div className="max-h-[20rem] overflow-auto whitespace-pre-wrap break-words text-sm text-foreground">
+            <div className="min-h-[14rem] rounded-md border bg-muted/20 p-3">
+              <div className="max-h-[14rem] overflow-auto whitespace-pre-wrap break-words text-sm text-foreground">
                 {previewMessage || messageContent}
               </div>
             </div>
@@ -1277,8 +1268,8 @@ export function BulkSendTab() {
           <DynamicVariableInput
             value={messageContent}
             onChange={setMessageContent}
-            rows={14}
-            className="min-h-[20rem] resize-none"
+            rows={10}
+            className="min-h-[14rem] resize-none"
             availableVariableKeys={availableVariableKeys}
             showInlinePreview={false}
           />
@@ -1381,6 +1372,20 @@ export function BulkSendTab() {
                     onChange={(event) => setRoutineTimeOfDay(event.target.value)}
                   />
                 </div>
+
+                <div className="space-y-2 md:col-span-2">
+                  <p className="text-xs text-muted-foreground">Data final (opcional)</p>
+                  <Input
+                    type="date"
+                    value={routineEndDate}
+                    min={routineStartDate || undefined}
+                    onChange={(event) => setRoutineEndDate(event.target.value)}
+                    placeholder="Sem data final"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Quando definida, a rotina sera concluida automaticamente apos essa data.
+                  </p>
+                </div>
               </>
             )}
 
@@ -1460,29 +1465,38 @@ export function BulkSendTab() {
 
   return (
     <div className="space-y-4">
-      <Card className="border-border/70 shadow-none">
-        <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="space-y-1">
-            <p className="text-sm font-semibold text-foreground">Criacao de campanha</p>
-            <p className="text-xs text-muted-foreground">
-              Defina destinatarios, mensagem e data/agendamento/rotina no mesmo fluxo.
-            </p>
-          </div>
+      {compactTrigger ? (
+        <div className="flex justify-end">
           <Button className="gap-2" onClick={() => setCreationModalOpen(true)}>
             <CalendarDays className="h-4 w-4" />
             Nova campanha
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      ) : (
+        <Card className="border-border/70 shadow-none">
+          <CardContent className="flex flex-col gap-4 p-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-foreground">Criacao de campanha</p>
+              <p className="text-xs text-muted-foreground">
+                Defina destinatarios, mensagem e data/agendamento/rotina no mesmo fluxo.
+              </p>
+            </div>
+            <Button className="gap-2" onClick={() => setCreationModalOpen(true)}>
+              <CalendarDays className="h-4 w-4" />
+              Nova campanha
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={creationModalOpen} onOpenChange={handleCreationModalOpenChange}>
-        <DialogContent>
+        <DialogContent className="flex h-[560px] max-h-[85vh] w-full flex-col sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Nova campanha</DialogTitle>
             <DialogDescription>Destinatarios, mensagem e agendamento.</DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[70vh] pr-2" preventContentOverflow>
+          <ScrollArea className="min-h-0 flex-1 pr-2" preventContentOverflow>
             <div className="space-y-4 pb-1">
               {currentStep === "audience" ? (
                 <div className="space-y-4">{renderAudienceStep()}</div>

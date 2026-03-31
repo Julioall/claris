@@ -71,7 +71,8 @@ describe("AdminConfiguracoes page", () => {
     });
 
     expect(screen.getByRole("heading", { name: /conexao moodle/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /salvar conexao moodle/i })).toBeInTheDocument();
+    expect(screen.getByText("https://ead.fieg.com.br")).toBeInTheDocument();
+    expect(screen.getByText("moodle_mobile_app")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /limiares de risco/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar limiares de risco/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /claris ia/i })).toBeInTheDocument();

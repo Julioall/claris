@@ -14,7 +14,6 @@ import {
   fetchAdminSettings,
   saveAiGradingSettings,
   saveClarisConnectionSettings,
-  saveMoodleConnectionSettings,
   saveRiskThresholdSettings,
   testClarisLLM,
 } from '../api/settings';
@@ -33,8 +32,6 @@ import {
 } from '@/lib/claris-settings';
 import {
   DEFAULT_GLOBAL_APP_SETTINGS,
-  DEFAULT_MOODLE_SERVICE,
-  DEFAULT_MOODLE_URL,
   normalizeRiskThresholdDays,
 } from '@/lib/global-app-settings';
 
@@ -112,9 +109,6 @@ export default function AdminConfiguracoes() {
   const [isSavingClaris, setIsSavingClaris] = useState(false);
   const [isTestingClaris, setIsTestingClaris] = useState(false);
   const storedClarisApiKeyRef = useRef('');
-  const [moodleConnectionUrl, setMoodleConnectionUrl] = useState(DEFAULT_MOODLE_URL);
-  const [moodleConnectionService, setMoodleConnectionService] = useState(DEFAULT_MOODLE_SERVICE);
-  const [isSavingMoodle, setIsSavingMoodle] = useState(false);
   const [aiGradingSettings, setAiGradingSettings] = useState<AiGradingSettings>(DEFAULT_AI_GRADING_SETTINGS);
   const [isSavingAiGrading, setIsSavingAiGrading] = useState(false);
 
@@ -129,8 +123,6 @@ export default function AdminConfiguracoes() {
         storedClarisApiKeyRef.current = data.clarisSettings.apiKey;
         setHasStoredClarisApiKey(data.clarisSettings.apiKey.trim().length > 0);
         setClarisSettings({ ...data.clarisSettings, apiKey: '' });
-        setMoodleConnectionUrl(data.moodleConnectionUrl || DEFAULT_MOODLE_URL);
-        setMoodleConnectionService(data.moodleConnectionService || DEFAULT_MOODLE_SERVICE);
         setAiGradingSettings(data.aiGradingSettings);
         localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(data.clarisSettings.configured));
       } catch {
@@ -139,8 +131,6 @@ export default function AdminConfiguracoes() {
         storedClarisApiKeyRef.current = '';
         setHasStoredClarisApiKey(false);
         setClarisSettings(DEFAULT_CLARIS_LLM_SETTINGS);
-        setMoodleConnectionUrl(DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionUrl);
-        setMoodleConnectionService(DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionService);
         setAiGradingSettings(DEFAULT_GLOBAL_APP_SETTINGS.aiGradingSettings);
         localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, 'false');
       } finally {
@@ -206,23 +196,6 @@ export default function AdminConfiguracoes() {
       toast({ title: 'Erro ao salvar', description: 'Nao foi possivel salvar os parametros de risco.', variant: 'destructive' });
     } finally {
       setIsSavingRisk(false);
-    }
-  };
-
-  const saveMoodleSettings = async () => {
-    const urlToSave = moodleConnectionUrl.trim() || DEFAULT_MOODLE_URL;
-    const serviceToSave = moodleConnectionService.trim() || DEFAULT_MOODLE_SERVICE;
-    setIsSavingMoodle(true);
-    try {
-      const { error } = await saveMoodleConnectionSettings(urlToSave, serviceToSave);
-      if (error) throw error;
-      setMoodleConnectionUrl(urlToSave);
-      setMoodleConnectionService(serviceToSave);
-      toast({ title: 'Conexao Moodle salva', description: 'URL e servico atualizados com sucesso.' });
-    } catch {
-      toast({ title: 'Erro ao salvar Moodle', description: 'Nao foi possivel salvar a conexao do Moodle.', variant: 'destructive' });
-    } finally {
-      setIsSavingMoodle(false);
     }
   };
 
@@ -341,32 +314,22 @@ export default function AdminConfiguracoes() {
           <CardDescription>URL e servico do Moodle para autenticacao de todos os usuarios</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="moodle-url">URL do Moodle</Label>
-            <Input
-              id="moodle-url"
-              type="url"
-              value={moodleConnectionUrl}
-              onChange={(e) => setMoodleConnectionUrl(e.target.value)}
-              placeholder="https://moodle.exemplo.com"
-              disabled={isLoadingSettings}
-            />
-            <p className="text-xs text-muted-foreground">A URL precisa estar acessivel pelo Supabase.</p>
+          <p className="text-sm text-muted-foreground">
+            A conexao com o Moodle esta fixa para o dominio institucional. Edicao via painel foi desabilitada.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-md border p-3">
+              <Label className="text-xs text-muted-foreground">URL do Moodle</Label>
+              <p className="font-mono text-sm break-words">{DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionUrl}</p>
+            </div>
+            <div className="rounded-md border p-3">
+              <Label className="text-xs text-muted-foreground">Nome do Servico Web</Label>
+              <p className="font-mono text-sm">{DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionService}</p>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="moodle-service">Nome do Servico Web</Label>
-            <Input
-              id="moodle-service"
-              type="text"
-              value={moodleConnectionService}
-              onChange={(e) => setMoodleConnectionService(e.target.value)}
-              placeholder="moodle_mobile_app"
-              disabled={isLoadingSettings}
-            />
-          </div>
-          <Button onClick={saveMoodleSettings} variant="outline" className="w-full" disabled={isLoadingSettings || isSavingMoodle}>
-            {isSavingMoodle ? 'Salvando...' : 'Salvar conexao Moodle'}
-          </Button>
+          <p className="text-xs text-muted-foreground">
+            Para alterar este valor, atualize a configuracao fixa da aplicacao.
+          </p>
         </CardContent>
       </Card>
 

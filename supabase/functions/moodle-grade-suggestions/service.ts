@@ -23,6 +23,7 @@ import {
   findCourseForUser,
   findStudentActivityForSuggestion,
   findStudentForCourse,
+  findUserFullName,
   insertGradeSuggestionAuditDraft,
   listStudentActivitiesForSuggestion,
   loadGradeSuggestionAuditForUser,
@@ -207,6 +208,8 @@ async function runSuggestionGeneration(params: {
   studentMoodleUserId: number
   config: ReturnType<typeof resolveGradeSuggestionRuntimeConfig>
   getContext: ReturnType<typeof createContextLoader>
+  studentName?: string
+  tutorName?: string
 }) {
   const finalizeAudit = createAuditFinalizer(params.supabase, params.config.maxStoredTextLength)
 
@@ -272,12 +275,16 @@ async function runSuggestionGeneration(params: {
         apiKey: params.config.apiKey,
         timeoutMs: params.config.timeoutMs,
         customInstructions: params.config.customInstructions,
+        visionEnabled: params.config.visionEnabled,
       }, {
         maxGrade: context.maxGrade,
         activityContext: context,
         studentSubmission: submission,
+        studentName: params.studentName,
+        tutorName: params.tutorName,
       })
     },
+    visionEnabled: params.config.visionEnabled,
   })
 }
 
@@ -388,9 +395,10 @@ async function processActivitySuggestionJob(params: {
   await markGradeSuggestionJobProcessing(supabase, params.jobId, startedAt)
 
   try {
-    const [job, storedSettings] = await Promise.all([
+    const [job, storedSettings, tutorName] = await Promise.all([
       findGradeSuggestionJobForUser(supabase, params.jobId, params.userId),
       readStoredLlmSettings(),
+      findUserFullName(supabase, params.userId),
     ])
 
     if (!job) {
@@ -498,6 +506,8 @@ async function processActivitySuggestionJob(params: {
           studentMoodleUserId,
           config,
           getContext,
+          studentName: student.full_name ?? undefined,
+          tutorName: tutorName ?? undefined,
         })
 
         if (output.result.status === 'error') {
@@ -571,11 +581,12 @@ export async function handleGradeSuggestionRequest(
       moodleActivityId: payload.moodleActivityId,
     })
 
-    const [course, student, activity, storedSettings] = await Promise.all([
+    const [course, student, activity, storedSettings, tutorName] = await Promise.all([
       findCourseForUser(supabase, userId, payload.courseId),
       findStudentForCourse(supabase, payload.studentId, payload.courseId),
       findStudentActivityForSuggestion(supabase, payload.studentId, payload.courseId, payload.moodleActivityId),
       readStoredLlmSettings(),
+      findUserFullName(supabase, userId),
     ])
 
     if (!course) {
@@ -627,6 +638,8 @@ export async function handleGradeSuggestionRequest(
       studentMoodleUserId,
       config,
       getContext,
+      studentName: student.full_name ?? undefined,
+      tutorName: tutorName ?? undefined,
     })
 
     console.log('[moodle-grade-suggestions] Suggestion finished', {

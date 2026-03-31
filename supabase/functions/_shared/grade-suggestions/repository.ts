@@ -156,6 +156,20 @@ function sanitizeAuditJson(value: unknown, maxTextLength: number): unknown {
   return value
 }
 
+export async function findUserFullName(
+  supabase: AppSupabaseClient,
+  userId: string,
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('users')
+    .select('full_name')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (error) return null
+  return (data as { full_name?: string } | null)?.full_name ?? null
+}
+
 export async function insertGradeSuggestionAuditDraft(
   supabase: AppSupabaseClient,
   input: TablesInsert<'ai_grade_suggestion_history'>,

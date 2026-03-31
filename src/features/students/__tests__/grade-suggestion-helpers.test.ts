@@ -119,12 +119,38 @@ describe("grade suggestion helpers", () => {
       config: {
         minVisualTextChars: 80,
         minSubmissionTextChars: 40,
+        visionEnabled: false,
       },
     });
 
     expect(reviewState.requiresManualReview).toBe(true);
     expect(reviewState.warningCodes).toContain("visual_dependency");
     expect(reviewState.confidence).toBe("low");
+  });
+
+  it("nao marca revisao manual quando visao esta habilitada e imagem possui base64", () => {
+    const reviewState = deriveSubmissionReviewState({
+      typedText: "",
+      extractedFiles: [
+        buildExtractedFile({
+          name: "mapa-conceitual.png",
+          mimeType: "image/png",
+          extractedText: "",
+          extractionQuality: "none",
+          requiresVisualAnalysis: true,
+          textLength: 0,
+          imageBase64: "aW1hZ2VkYXRh",
+        }),
+      ],
+      config: {
+        minVisualTextChars: 80,
+        minSubmissionTextChars: 40,
+        visionEnabled: true,
+      },
+    });
+
+    expect(reviewState.requiresManualReview).toBe(false);
+    expect(reviewState.warningCodes).not.toContain("visual_dependency");
   });
 
   it("marca revisao manual quando os arquivos nao produzem texto suficiente", () => {
@@ -143,6 +169,7 @@ describe("grade suggestion helpers", () => {
       config: {
         minVisualTextChars: 80,
         minSubmissionTextChars: 40,
+        visionEnabled: false,
       },
     });
 
@@ -179,8 +206,36 @@ describe("grade suggestion helpers", () => {
     });
     expect(prompt.userPrompt).toContain('"materiais_complementares"');
     expect(prompt.userPrompt).toContain('"arquivos"');
-    expect(prompt.systemPrompt).toContain('Nao inclua nota');
-    expect(prompt.systemPrompt).toContain('Adote um tom impessoal, tecnico e construtivo.');
+    expect(prompt.systemPrompt).toContain('nota_recomendada');
+    expect(prompt.systemPrompt).toContain('Escreva o feedback como se fosse um professor real');
+  });
+
+  it("inclui nome do aluno e do professor no payload quando fornecidos", () => {
+    const prompt = buildGradeSuggestionPrompt({
+      maxGrade: 10,
+      activityContext: buildContext(),
+      studentSubmission: buildSubmission(),
+      studentName: "Ana Souza",
+      tutorName: "Prof. Carlos",
+    });
+
+    expect(prompt.promptPayload).toMatchObject({
+      aluno: "Ana Souza",
+      professor: "Prof. Carlos",
+    });
+    expect(prompt.userPrompt).toContain('"aluno": "Ana Souza"');
+    expect(prompt.userPrompt).toContain('"professor": "Prof. Carlos"');
+  });
+
+  it("usa fallback 'o aluno' quando studentName nao e fornecido", () => {
+    const prompt = buildGradeSuggestionPrompt({
+      maxGrade: 10,
+      activityContext: buildContext(),
+      studentSubmission: buildSubmission(),
+    });
+
+    expect(prompt.promptPayload).toMatchObject({ aluno: "o aluno" });
+    expect((prompt.promptPayload as Record<string, unknown>).professor).toBeUndefined();
   });
 
   it("inclui instrucoes personalizadas sem expor o contrato fixo de resposta", () => {
@@ -192,9 +247,29 @@ describe("grade suggestion helpers", () => {
       customInstructions: "Use linguagem mais acolhedora e destaque melhorias ao final.",
     });
 
-    expect(prompt.systemPrompt).toContain('Instrucoes personalizadas do administrador');
+    expect(prompt.systemPrompt).toContain('Instrucoes de estilo');
     expect(prompt.systemPrompt).toContain('Use linguagem mais acolhedora');
     expect(prompt.systemPrompt).toContain('JSON esperado');
+  });
+
+  it("inclui instrucao sobre imagens no system prompt quando hasVisionImages e verdadeiro", () => {
+    const prompt = buildGradeSuggestionPrompt({
+      maxGrade: 10,
+      activityContext: buildContext(),
+      studentSubmission: buildSubmission(),
+    }, { hasVisionImages: true });
+
+    expect(prompt.systemPrompt).toContain('Imagens da submissao do aluno foram anexadas');
+  });
+
+  it("nao inclui instrucao sobre imagens no system prompt por padrao", () => {
+    const prompt = buildGradeSuggestionPrompt({
+      maxGrade: 10,
+      activityContext: buildContext(),
+      studentSubmission: buildSubmission(),
+    });
+
+    expect(prompt.systemPrompt).not.toContain('Imagens da submissao');
   });
 
   it("faz parsing robusto da resposta JSON retornada pela IA", () => {

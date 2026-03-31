@@ -1,4 +1,4 @@
-export const automationsKeys = {
+export const campaignKeys = {
   bulkJobs: (filters?: { status?: string; search?: string; page?: number }) =>
     ['automations', 'bulk-jobs', filters?.status ?? 'all', filters?.search ?? '', filters?.page ?? 1] as const,
   bulkJobDetail: (jobId?: string | null) => ['automations', 'bulk-job-detail', jobId ?? 'none'] as const,

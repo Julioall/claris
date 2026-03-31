@@ -317,4 +317,53 @@ describe("grade suggestion orchestrator", () => {
       model: "gpt-5.4-mini",
     }));
   });
+
+  it("avalia com IA quando visao esta habilitada e submissao contem imagem com base64", async () => {
+    const evaluate = vi.fn().mockResolvedValue(buildEvaluation());
+    const finalizeAudit = vi.fn().mockResolvedValue(undefined);
+
+    const output = await generateGradeSuggestion({
+      userId: "user-1",
+      studentId: "student-1",
+      courseId: "course-1",
+      studentActivityId: "activity-1",
+      moodleActivityId: "77",
+    }, {
+      createDraftAudit: vi.fn().mockResolvedValue("audit-vision-1"),
+      finalizeAudit,
+      buildContext: vi.fn().mockResolvedValue({
+        context: buildContext(),
+        sourcesUsed: buildSources(),
+        contextSummary: {},
+        moodleAssignId: 55,
+      }),
+      normalizeSubmission: vi.fn().mockResolvedValue({
+        submission: buildSubmission({
+          typedText: "",
+          extractedFiles: [
+            buildExtractedFile({
+              name: "diagrama.png",
+              mimeType: "image/png",
+              extractedText: "",
+              extractionQuality: "none",
+              requiresVisualAnalysis: true,
+              textLength: 0,
+              imageBase64: "aW1hZ2VkYXRh",
+            }),
+          ],
+          requiresManualReview: false,
+          visualDependency: true,
+          totalExtractedTextLength: 0,
+        }),
+        sourcesUsed: buildSources(),
+        submissionSummary: { submission_found: true },
+      }),
+      evaluate,
+      visionEnabled: true,
+    });
+
+    expect(evaluate).toHaveBeenCalled();
+    expect(output.result.status).toBe("success");
+    expect(output.result.suggestedGrade).toBe(8.5);
+  });
 });

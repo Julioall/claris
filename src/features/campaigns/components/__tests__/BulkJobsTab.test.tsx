@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { BulkJobsTab } from '@/features/automations/components/BulkJobsTab';
+import { BulkJobsTab } from '@/features/campaigns/components/BulkJobsTab';
 import { createTestQueryClient } from '@/test/query-client';
 import { QueryClientProvider } from '@tanstack/react-query';
 
@@ -15,11 +15,11 @@ vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock('@/features/automations/api/automations.repository', () => ({
+vi.mock('@/features/campaigns/api/campaigns.repository', () => ({
   listBulkJobs: listBulkJobsMock,
 }));
 
-vi.mock('@/features/automations/components/JobDetailDialog', () => ({
+vi.mock('@/features/campaigns/components/JobDetailDialog', () => ({
   JobDetailDialog: ({ jobId }: { jobId: string | null }) => (
     <div data-testid="job-detail-dialog">{jobId ?? 'closed'}</div>
   ),
@@ -89,7 +89,7 @@ describe('BulkJobsTab', () => {
     });
   });
 
-  it('loads jobs through the automations repository and filters by search', async () => {
+  it('loads jobs through the campaigns repository and filters by search', async () => {
     const user = userEvent.setup();
 
     renderTab();

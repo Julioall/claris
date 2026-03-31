@@ -402,6 +402,14 @@ describe("AuthContext", () => {
                   created_at: "2026-01-01T00:00:00.000Z",
                   updated_at: "2026-01-01T00:00:00.000Z",
                 },
+                {
+                  id: "c-2",
+                  moodle_course_id: "102",
+                  name: "Fisica",
+                  short_name: "FIS",
+                  created_at: "2026-01-01T00:00:00.000Z",
+                  updated_at: "2026-01-01T00:00:00.000Z",
+                },
               ],
             }),
             {
@@ -466,6 +474,14 @@ describe("AuthContext", () => {
           created_at: "2026-01-01T00:00:00.000Z",
           updated_at: "2026-01-01T00:00:00.000Z",
         },
+        {
+          id: "c-2",
+          moodle_course_id: "102",
+          name: "Fisica",
+          short_name: "FIS",
+          created_at: "2026-01-01T00:00:00.000Z",
+          updated_at: "2026-01-01T00:00:00.000Z",
+        },
       ]);
     });
 
@@ -476,6 +492,8 @@ describe("AuthContext", () => {
     await waitFor(() => {
       expect(authRef?.syncProgress.isComplete).toBe(true);
     });
+
+    expect(authRef?.courses.map((course) => course.id)).toEqual(["c-1", "c-2"]);
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/moodle-sync-courses$/),

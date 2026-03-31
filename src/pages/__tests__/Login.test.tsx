@@ -94,7 +94,7 @@ describe("Login page", () => {
     expect(navigateMock).toHaveBeenCalledWith("/");
   });
 
-  it("uses globally configured Moodle connection values", async () => {
+  it("ignores overridden Moodle connection values and uses the fixed default", async () => {
     maybeSingleMock.mockResolvedValue({
       data: {
         singleton_id: "global",
@@ -117,8 +117,8 @@ describe("Login page", () => {
       expect(loginMock).toHaveBeenCalledWith(
         "julio",
         "123456",
-        "https://moodle.global.test",
-        "custom_mobile_service",
+        "https://ead.fieg.com.br",
+        "moodle_mobile_app",
       );
     });
   });

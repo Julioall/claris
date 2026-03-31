@@ -3,8 +3,8 @@ import { BarChart3, FileText, Megaphone } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BulkJobsTab } from "@/features/automations/components/BulkJobsTab";
-import { ScheduledMessagesTab } from "@/features/automations/components/ScheduledMessagesTab";
+import { BulkJobsTab } from "@/features/campaigns/components/BulkJobsTab";
+import { ScheduledMessagesTab } from "@/features/campaigns/components/ScheduledMessagesTab";
 import { BulkSendTab } from "@/features/messages/components/BulkSendTab";
 import { MessageTemplatesTab } from "@/features/messages/components/MessageTemplatesTab";
 
@@ -33,7 +33,13 @@ export default function CampaignsPage() {
     if (tabFromUrl !== activeTab) {
       setActiveTab(tabFromUrl);
     }
-  }, [activeTab, searchParams]);
+
+    if (searchParams.get("tab") !== tabFromUrl) {
+      const nextSearchParams = new URLSearchParams(searchParams);
+      nextSearchParams.set("tab", tabFromUrl);
+      setSearchParams(nextSearchParams, { replace: true });
+    }
+  }, [activeTab, searchParams, setSearchParams]);
 
   const handleTabChange = (value: string) => {
     const nextTab = getCampaignTab(value);
@@ -74,9 +80,10 @@ export default function CampaignsPage() {
 
         <TabsContent value="campanhas" className="mt-4">
           <div className="space-y-6">
-            <BulkSendTab />
-            <ScheduledMessagesTab allowCreate={false} allowEdit={false} />
-            <BulkJobsTab />
+            <BulkSendTab compactTrigger />
+            <BulkJobsTab mode="stats" />
+            <ScheduledMessagesTab />
+            <BulkJobsTab mode="list" title="Historico de campanhas realizadas" />
           </div>
         </TabsContent>
 

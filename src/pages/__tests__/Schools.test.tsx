@@ -39,12 +39,14 @@ describe("Schools page", () => {
           name: "Fisica",
           short_name: "FIS",
           category: "Exatas",
+          is_following: true,
         },
         {
           id: "c-2",
           name: "Historia",
           short_name: "HIS",
           category: "Humanas",
+          is_following: true,
         },
       ],
       isLoading: false,
@@ -76,7 +78,7 @@ describe("Schools page", () => {
   it("renders school hierarchy and total count", () => {
     render(<Schools />);
 
-    expect(screen.getByText(/cursos dispon/i)).toBeInTheDocument();
+    expect(screen.getByText(/cursos sincronizados/i)).toBeInTheDocument();
     expect(screen.getByTestId("school-hierarchy")).toHaveTextContent("cursos:2");
     expect(screen.getByTestId("school-hierarchy")).toHaveTextContent("editable:no");
   });
