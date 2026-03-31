@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { SUPABASE_URL } from '@/integrations/supabase/url';
 import {
   normalizeMoodleUrl,
   resolveFunctionsInvokeErrorMessage,
@@ -11,7 +12,7 @@ import { isInvalidRefreshTokenError } from '../domain/session';
 import type { MoodleSession } from '../domain/session';
 
 const DEFAULT_MOODLE_SERVICE = 'moodle_mobile_app';
-const SUPABASE_FUNCTIONS_BASE_URL = `${import.meta.env.VITE_SUPABASE_URL as string}/functions/v1`;
+const SUPABASE_FUNCTIONS_BASE_URL = `${SUPABASE_URL}/functions/v1`;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 export interface ParsedFunctionError {

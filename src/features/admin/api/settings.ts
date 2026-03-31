@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import type { AiGradingSettings } from '@/lib/ai-grading-settings';
 import {
   fetchGlobalAppSettings,
@@ -9,6 +10,26 @@ import type { ClarisLlmSettings } from '@/lib/claris-settings';
 
 type ClarisConnectionInput = Pick<ClarisLlmSettings, 'provider' | 'model' | 'baseUrl'> & {
   apiKey?: string;
+};
+
+const parseFunctionErrorMessage = async (error: unknown): Promise<string | null> => {
+  if (!(error instanceof FunctionsHttpError)) {
+    return null;
+  }
+
+  try {
+    const payload = await error.context.json() as { error?: unknown; message?: unknown };
+    if (typeof payload.error === 'string' && payload.error.trim().length > 0) {
+      return payload.error.trim();
+    }
+    if (typeof payload.message === 'string' && payload.message.trim().length > 0) {
+      return payload.message.trim();
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 };
 
 export async function fetchAdminSettings() {
@@ -57,7 +78,7 @@ export async function saveAiGradingSettings(settings: AiGradingSettings) {
 }
 
 export async function testClarisLLM(input: ClarisConnectionInput) {
-  return supabase.functions.invoke('claris-llm-test', {
+  const result = await supabase.functions.invoke('claris-llm-test', {
     body: {
       provider: input.provider,
       model: input.model,
@@ -65,4 +86,16 @@ export async function testClarisLLM(input: ClarisConnectionInput) {
       apiKey: input.apiKey,
     },
   });
+
+  if (result.error) {
+    const message = await parseFunctionErrorMessage(result.error);
+    if (message) {
+      return {
+        ...result,
+        error: new Error(message),
+      };
+    }
+  }
+
+  return result;
 }

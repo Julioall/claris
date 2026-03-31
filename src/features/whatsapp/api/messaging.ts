@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { SUPABASE_URL } from '@/integrations/supabase/url';
 
 async function extractFunctionErrorMessage(error: unknown): Promise<string | null> {
   if (!error || typeof error !== 'object') return null;
@@ -72,7 +73,7 @@ export async function callWhatsAppMessagingWithProgress(
   onProgress?: (progress: number) => void,
 ) {
   const headers = await buildFunctionHeaders();
-  const endpoint = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-messaging`;
+  const endpoint = `${SUPABASE_URL}/functions/v1/whatsapp-messaging`;
   const payload = JSON.stringify({ action, ...params });
 
   return new Promise<Record<string, unknown>>((resolve, reject) => {

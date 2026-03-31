@@ -38,6 +38,30 @@ export const CLARIS_LLM_PROVIDER_OPTIONS: ClarisLlmProviderOption[] = [
 
 export const CLARIS_LLM_MODEL_PRESETS: ClarisLlmModelPreset[] = [
   {
+    id: 'gpt-5.4-nano',
+    label: 'GPT-5.4 Nano',
+    provider: 'openai',
+    model: 'gpt-5.4-nano',
+    baseUrl: 'https://api.openai.com/v1',
+    notes: 'Mais rapido e economico da linha 5.4 para tarefas de baixa complexidade.',
+  },
+  {
+    id: 'gpt-5.4-mini',
+    label: 'GPT-5.4 Mini',
+    provider: 'openai',
+    model: 'gpt-5.4-mini',
+    baseUrl: 'https://api.openai.com/v1',
+    notes: 'Opcao equilibrada da linha 5.4 para uso geral com boa latencia.',
+  },
+  {
+    id: 'gpt-5.4',
+    label: 'GPT-5.4',
+    provider: 'openai',
+    model: 'gpt-5.4',
+    baseUrl: 'https://api.openai.com/v1',
+    notes: 'Maior qualidade da linha 5.4 para cenarios de raciocinio e analise detalhada.',
+  },
+  {
     id: 'gpt-5-nano',
     label: 'GPT-5 Nano',
     provider: 'openai',

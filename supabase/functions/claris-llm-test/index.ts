@@ -29,6 +29,54 @@ const supportsTemperature = (model: string): boolean => {
   return !normalizedModel.startsWith('gpt-5') && !normalizedModel.startsWith('o')
 }
 
+const prefersResponsesApi = (model: string): boolean => {
+  const normalizedModel = model.trim().toLowerCase()
+  return normalizedModel.startsWith('gpt-5') || normalizedModel.startsWith('o')
+}
+
+const extractErrorMessage = (payload: Record<string, unknown> | null, status: number): string => {
+  if (!payload) return `LLM provider returned status ${status}`
+
+  const errorValue = payload.error
+  if (typeof errorValue === 'string' && errorValue.trim().length > 0) {
+    return errorValue.trim()
+  }
+
+  if (errorValue && typeof errorValue === 'object' && !Array.isArray(errorValue)) {
+    const errorObject = errorValue as Record<string, unknown>
+    const nestedMessage = asTrimmedString(errorObject.message)
+    if (nestedMessage) return nestedMessage
+  }
+
+  const topLevelMessage = asTrimmedString(payload.message)
+  if (topLevelMessage) return topLevelMessage
+
+  return `LLM provider returned status ${status}`
+}
+
+const parseResponsesOutputText = (payload: Record<string, unknown> | null): string => {
+  if (!payload) return ''
+
+  const directOutputText = asTrimmedString(payload.output_text)
+  if (directOutputText) return directOutputText
+
+  const output = Array.isArray(payload.output) ? payload.output : []
+  for (const outputItem of output) {
+    if (!outputItem || typeof outputItem !== 'object' || Array.isArray(outputItem)) continue
+    const content = Array.isArray((outputItem as Record<string, unknown>).content)
+      ? (outputItem as Record<string, unknown>).content as unknown[]
+      : []
+
+    for (const contentItem of content) {
+      if (!contentItem || typeof contentItem !== 'object' || Array.isArray(contentItem)) continue
+      const text = asTrimmedString((contentItem as Record<string, unknown>).text)
+      if (text) return text
+    }
+  }
+
+  return ''
+}
+
 async function readStoredSettings(userId: string): Promise<SettingsJson> {
   const supabase = createServiceClient()
   const { data, error } = await supabase
@@ -75,22 +123,40 @@ Deno.serve(createHandler(async ({ body, user }) => {
   const start = Date.now()
 
   try {
-    const requestBody: Record<string, unknown> = {
-      model,
-      max_tokens: 12,
-      messages: [
-        {
-          role: 'user',
-          content: 'Reply only with: ok',
-        },
-      ],
-    }
+    const useResponsesApi = prefersResponsesApi(model)
+    const requestBody: Record<string, unknown> = useResponsesApi
+      ? {
+          model,
+          max_output_tokens: 32,
+          input: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_text',
+                  text: 'Reply only with: ok',
+                },
+              ],
+            },
+          ],
+        }
+      : {
+          model,
+          max_tokens: 12,
+          messages: [
+            {
+              role: 'user',
+              content: 'Reply only with: ok',
+            },
+          ],
+        }
 
-    if (supportsTemperature(model)) {
+    if (!useResponsesApi && supportsTemperature(model)) {
       requestBody.temperature = 0
     }
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    const endpoint = useResponsesApi ? '/responses' : '/chat/completions'
+    const response = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -110,14 +176,18 @@ Deno.serve(createHandler(async ({ body, user }) => {
     }
 
     if (!response.ok) {
-      const errorMessage = asTrimmedString(payload?.error) || asTrimmedString(payload?.message) || `LLM provider returned status ${response.status}`
+      const errorMessage = extractErrorMessage(payload, response.status)
       return errorResponse(`LLM connection test failed: ${errorMessage}`, 400)
     }
 
-    const choices = Array.isArray(payload?.choices) ? payload?.choices : []
-    const firstChoice = choices.length > 0 ? asObject(choices[0]) : {}
-    const message = asObject(firstChoice.message)
-    const answer = asTrimmedString(message.content)
+    const answer = useResponsesApi
+      ? parseResponsesOutputText(payload)
+      : (() => {
+          const choices = Array.isArray(payload?.choices) ? payload?.choices : []
+          const firstChoice = choices.length > 0 ? asObject(choices[0]) : {}
+          const message = asObject(firstChoice.message)
+          return asTrimmedString(message.content)
+        })()
 
     return jsonResponse({
       success: true,

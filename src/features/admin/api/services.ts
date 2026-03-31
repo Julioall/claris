@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { SUPABASE_URL } from '@/integrations/supabase/url';
 
 async function getAccessToken() {
   const {
@@ -23,7 +24,7 @@ export async function listSharedServiceInstances() {
 export async function callAdminInstanceManager(action: string, params: Record<string, unknown> = {}) {
   const accessToken = await getAccessToken();
   const response = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-instance-manager`,
+    `${SUPABASE_URL}/functions/v1/whatsapp-instance-manager`,
     {
       method: 'POST',
       headers: {
