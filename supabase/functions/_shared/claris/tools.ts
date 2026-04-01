@@ -80,16 +80,20 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
     function: {
       name: 'get_student_details',
       description:
-        'Retorna perfil completo de um aluno: dados básicos, nível de risco, tarefas pendentes e notas por curso. Use quando o usuário perguntar sobre um aluno específico pelo nome.',
+        'Retorna perfil completo de um aluno: dados básicos, nível de risco, tarefas pendentes e notas por curso. Informe student_id (preferível) ou student_name — ao menos um dos dois é obrigatório. Use quando o usuário perguntar sobre um aluno específico.',
       parameters: {
         type: 'object',
         properties: {
+          student_id: {
+            type: 'string',
+            description: 'ID interno do aluno (preferível ao nome para evitar ambiguidade).',
+          },
           student_name: {
             type: 'string',
-            description: 'Nome ou parte do nome do aluno.',
+            description: 'Nome ou parte do nome do aluno. Use quando não tiver student_id.',
           },
         },
-        required: ['student_name'],
+        required: [],
       },
     },
   },
@@ -560,7 +564,7 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
     function: {
       name: 'list_tasks',
       description:
-        'Lista as tarefas criadas pelo tutor/monitor, com filtros opcionais. Use quando o usuário pedir para ver suas tarefas, pendências ou checklist de trabalho.',
+        'Lista as tarefas criadas pelo tutor/monitor, com filtros opcionais. Use quando o usuário pedir para ver suas tarefas, pendências, checklist de trabalho ou tarefas de um aluno/curso específico.',
       parameters: {
         type: 'object',
         properties: {
@@ -578,6 +582,14 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
             type: 'string',
             enum: ['student', 'course', 'uc', 'class', 'custom'],
             description: 'Filtrar por tipo de entidade vinculada.',
+          },
+          entity_id: {
+            type: 'string',
+            description: 'Filtrar por ID da entidade (ex.: student_id) para ver tarefas vinculadas a um aluno ou curso específico.',
+          },
+          tag: {
+            type: 'string',
+            description: 'Filtrar por tag (busca parcial). Ex.: "recuperacao", "risco".',
           },
           limit: {
             type: 'integer',
@@ -1111,6 +1123,116 @@ export const CLARIS_TOOLS: ToolDefinition[] = [
           },
         },
         required: ['type', 'title', 'body'],
+      },
+    },
+  },
+  // -------------------------------------------------------------------------
+  // Course and student listing tools
+  // -------------------------------------------------------------------------
+  {
+    type: 'function',
+    function: {
+      name: 'list_courses',
+      description:
+        'Lista os cursos acessíveis ao tutor/monitor com contagem de alunos e distribuição de risco. Use quando o usuário perguntar quais são seus cursos, turmas ou quiser selecionar um curso para filtrar alunos ou enviar mensagens.',
+      parameters: {
+        type: 'object',
+        properties: {
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de cursos. Padrão: 20. Máximo: 100.',
+            minimum: 1,
+            maximum: 100,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'list_students',
+      description:
+        'Lista alunos acessíveis ao tutor/monitor com filtros flexíveis por nome, curso, nível de risco e status de matrícula. Use quando o usuário pedir uma lista de alunos, quiser pesquisar um aluno pelo nome, ou listar alunos de um curso específico.',
+      parameters: {
+        type: 'object',
+        properties: {
+          name_query: {
+            type: 'string',
+            description: 'Filtrar por nome (busca parcial). Opcional.',
+          },
+          course_name_query: {
+            type: 'string',
+            description: 'Filtrar pelo nome do curso. Opcional.',
+          },
+          risk_level: {
+            type: 'string',
+            enum: ['normal', 'atencao', 'risco', 'critico', 'inativo'],
+            description: 'Filtrar por nível de risco específico. Opcional.',
+          },
+          enrollment_status: {
+            type: 'string',
+            enum: ['ativo', 'concluido', 'suspenso', 'inativo'],
+            description: 'Filtrar por status de matrícula. Opcional.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de alunos. Padrão: 15. Máximo: 50.',
+            minimum: 1,
+            maximum: 50,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  // -------------------------------------------------------------------------
+  // Message job status tool
+  // -------------------------------------------------------------------------
+  {
+    type: 'function',
+    function: {
+      name: 'list_message_jobs',
+      description:
+        'Lista os jobs de envio de mensagem (lote ou individual) criados pelo tutor/monitor, com status e contagem de envios. Use quando o usuário quiser verificar o andamento de um disparo, checar se uma mensagem foi enviada ou consultar o histórico de envios.',
+      parameters: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['pending', 'processing', 'completed', 'failed', 'cancelled'],
+            description: 'Filtrar por status do job. Sem filtro retorna todos os recentes.',
+          },
+          limit: {
+            type: 'integer',
+            description: 'Número máximo de jobs retornados. Padrão: 10. Máximo: 30.',
+            minimum: 1,
+            maximum: 30,
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  // -------------------------------------------------------------------------
+  // Task deletion tool
+  // -------------------------------------------------------------------------
+  {
+    type: 'function',
+    function: {
+      name: 'delete_task',
+      description:
+        'Remove uma tarefa permanentemente. Use SOMENTE com confirmação explícita do usuário. Para marcar como concluída, prefira change_task_status com status "done".',
+      parameters: {
+        type: 'object',
+        properties: {
+          task_id: {
+            type: 'string',
+            description: 'ID da tarefa a ser removida.',
+          },
+        },
+        required: ['task_id'],
       },
     },
   },
