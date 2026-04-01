@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Calendar, Filter } from 'lucide-react';
 
 import { Spinner } from '@/components/ui/spinner';
@@ -12,6 +12,7 @@ import {
 import { ClarisSuggestions } from '@/features/claris/components/ClarisSuggestions';
 import { useCoursesData } from '@/features/courses/hooks/useCoursesData';
 import type { WeeklySummary } from '@/features/dashboard/types';
+import { getCourseLifecycleStatus } from '@/lib/course-dates';
 
 import { ActivityFeed } from '../components/ActivityFeed';
 import { ActivitiesToReview } from '../components/ActivitiesToReview';
@@ -44,6 +45,10 @@ export default function DashboardPage() {
   } = useDashboardData(selectedWeek, selectedCourse);
 
   const { courses, isLoading: coursesLoading } = useCoursesData();
+  const ongoingCourses = useMemo(
+    () => courses.filter((course) => getCourseLifecycleStatus(course) === 'em_andamento'),
+    [courses],
+  );
 
   if (isLoading || coursesLoading) {
     return (
@@ -84,7 +89,7 @@ export default function DashboardPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os cursos</SelectItem>
-              {courses.map((course) => (
+              {ongoingCourses.map((course) => (
                 <SelectItem key={course.id} value={course.id}>
                   {course.short_name || course.name}
                 </SelectItem>

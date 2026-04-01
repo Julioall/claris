@@ -6,7 +6,8 @@ import {
   isStudentActivityPendingSubmission,
   isStudentActivityWeightedInGradebook,
 } from '@/lib/student-activity-status';
-import { listAccessibleCourseIds } from '@/lib/course-access';
+import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
+import { listFollowedCourseIds } from '@/lib/course-access';
 import type { RiskLevel, Student } from '@/features/students/types';
 
 import type {
@@ -87,6 +88,14 @@ type DashboardCourseActivityAggregateRow = {
 type StudentCourseRow = {
   student_id: string;
   enrollment_status: string | null;
+};
+
+type DashboardCourseDatesRow = {
+  id: string;
+  category?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  effective_end_date?: string | null;
 };
 
 interface DashboardDataQueryInput {
@@ -170,6 +179,28 @@ async function fetchAllDashboardStudentCourses(courseIds: string[]) {
   );
 
   return results.flat();
+}
+
+async function listOngoingCourseIds(courseIds: string[]) {
+  if (courseIds.length === 0) return [];
+
+  const courseRows = await Promise.all(
+    chunkValues(courseIds).map(async (courseIdBatch) => {
+      const { data, error } = await supabase
+        .from('courses')
+        .select('id, category, start_date, end_date, effective_end_date')
+        .in('id', courseIdBatch);
+
+      if (error) throw error;
+      return (data ?? []) as DashboardCourseDatesRow[];
+    }),
+  );
+
+  const normalizedCourses = withEffectiveCourseDates(courseRows.flat());
+
+  return normalizedCourses
+    .filter((course) => getCourseLifecycleStatus(course) === 'em_andamento')
+    .map((course) => course.id);
 }
 
 async function listStudentsAtRisk(studentIds: string[]) {
@@ -469,11 +500,13 @@ export const dashboardRepository = {
       ? startOfWeek(now, { weekStartsOn: 1 })
       : startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
 
-    const userCourseIds = await listAccessibleCourseIds(userId, 'tutor');
+    const followedCourseIds = await listFollowedCourseIds(userId, 'tutor');
+    const ongoingCourseIds = await listOngoingCourseIds(followedCourseIds);
+    const ongoingCourseIdSet = new Set(ongoingCourseIds);
 
     const courseIds = normalizedCourseFilter
-      ? [normalizedCourseFilter]
-      : userCourseIds;
+      ? (ongoingCourseIdSet.has(normalizedCourseFilter) ? [normalizedCourseFilter] : [])
+      : ongoingCourseIds;
 
     if (courseIds.length === 0) {
       return {
