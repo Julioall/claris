@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { Calendar, Filter } from 'lucide-react';
+import { Calendar, Filter, RefreshCw } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import {
   Select,
@@ -42,13 +43,24 @@ export default function DashboardPage() {
     activitiesToReview,
     activityFeed,
     isLoading,
+    refetch,
   } = useDashboardData(selectedWeek, selectedCourse);
 
-  const { courses, isLoading: coursesLoading } = useCoursesData();
+  const { courses, isLoading: coursesLoading, refetch: refetchCourses } = useCoursesData();
   const ongoingCourses = useMemo(
     () => courses.filter((course) => getCourseLifecycleStatus(course) === 'em_andamento'),
     [courses],
   );
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchCourses()]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   if (isLoading || coursesLoading) {
     return (
@@ -71,6 +83,18 @@ export default function DashboardPage() {
 
         {/* Filters */}
         <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              void handleManualRefresh();
+            }}
+            disabled={isRefreshing}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            Atualizar
+          </Button>
+
           <Select value={selectedWeek} onValueChange={(value) => setSelectedWeek(value as 'current' | 'last')}>
             <SelectTrigger className="w-[160px]">
               <Calendar className="mr-2 h-4 w-4" />
