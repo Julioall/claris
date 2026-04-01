@@ -188,7 +188,7 @@ async function listOngoingCourseIds(courseIds: string[]) {
     chunkValues(courseIds).map(async (courseIdBatch) => {
       const { data, error } = await supabase
         .from('courses')
-        .select('id, category, start_date, end_date, effective_end_date')
+        .select('id, category, start_date, end_date')
         .in('id', courseIdBatch);
 
       if (error) throw error;
