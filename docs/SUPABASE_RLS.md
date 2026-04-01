@@ -1,5 +1,7 @@
 # Supabase RLS Canônico
 
+Atualizado em `2026-04-01`.
+
 Este documento resume o estado RLS efetivo do schema atual.
 
 Ele existe para evitar que a leitura de segurança dependa de reconstruir toda a trilha histórica das migrations a cada revisão. A fonte de verdade continua sendo a pasta `supabase/migrations`, mas este arquivo registra a postura final esperada por domínio.
@@ -185,15 +187,15 @@ Tabelas:
 - `scheduled_messages`
 - `user_moodle_reauth_credentials`
 
-Regra canÃ´nica:
+Regra canônica:
 
 - `background_jobs`: leitura por owner ou application admin; insert/update pelo owner ou pelo admin operacional.
 - `background_job_items`: leitura por owner ou application admin; insert/update pelo owner do job ou pelo admin.
 - `background_job_events`: leitura por owner ou application admin; insert pelo owner do job ou pelo admin.
-- `scheduled_messages`: continua user-owned, mas application admin pode fazer `SELECT` e `UPDATE` para operaÃ§Ãµes administrativas de cancelamento e reenfileiramento.
+- `scheduled_messages`: continua user-owned, mas application admin pode fazer `SELECT` e `UPDATE` para operações administrativas de cancelamento e reenfileiramento.
 - `user_moodle_reauth_credentials`: leitura apenas pelo owner ou application admin; escritas ficam concentradas nas Edge Functions com `service_role`.
 
-Migrations de referÃªncia:
+Migrations de referência:
 
 - `20260317230000_add_scheduled_messages.sql`
 - `20260327160000_add_background_jobs_hangfire_foundation.sql`
@@ -202,11 +204,17 @@ Migrations de referÃªncia:
 - `20260327193000_add_moodle_reauth_credentials.sql`
 - `20260327204500_allow_admin_manage_scheduled_messages.sql`
 
-ObservaÃ§Ãµes:
+Observações:
 
 - `scheduled_messages` e `background_jobs` compartilham o mesmo `id` quando o job nasce do agendador, preservando rastreabilidade operacional.
 - Cancelar ou reenfileirar jobs agendados deve atuar sobre `scheduled_messages`; alterar apenas `background_jobs` quebraria a fonte de verdade do scheduler.
-- `user_moodle_reauth_credentials` guarda apenas material cifrado; rotacionar `MOODLE_REAUTH_SECRET` invalida credenciais armazenadas e exige novo opt-in dos usuÃ¡rios.
+- `user_moodle_reauth_credentials` guarda apenas material cifrado; rotacionar `MOODLE_REAUTH_SECRET` invalida credenciais armazenadas e exige novo opt-in dos usuários.
+
+## Referencias
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [EDGE_FUNCTIONS.md](./EDGE_FUNCTIONS.md)
+- [README.md](./README.md)
 
 ## Attendance
 

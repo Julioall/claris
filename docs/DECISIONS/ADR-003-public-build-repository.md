@@ -1,6 +1,7 @@
 # ADR-003: Publicar build publico em repositorio separado
 
-Data: `2026-03-26`
+Data: `2026-04-01`
+Status: Aceita
 
 ## Contexto
 
@@ -21,3 +22,9 @@ Manter:
 - qualquer segredo ou logica sensivel deve continuar no Supabase e nas Edge Functions
 
 Essa decisao reforca a separacao entre cliente publico e backend autenticado.
+
+## Referencias
+
+- `.github/workflows/ci.yml`
+- `scripts/prepare-github-pages.mjs`
+- `scripts/sync-public-build-repo.mjs`

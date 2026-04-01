@@ -1,6 +1,7 @@
 # ADR-004: Deploy de Edge Functions com `--no-verify-jwt`
 
-Data: `2026-03-26`
+Data: `2026-04-01`
+Status: Aceita
 
 ## Contexto
 
@@ -17,3 +18,9 @@ Publicar essas functions com `--no-verify-jwt` e manter a autenticacao dentro do
 - a validacao fica centralizada e consistente no runtime `_shared/http`
 
 Essa decisao nao significa endpoint publico irrestrito; significa separar preflight de autorizacao de negocio.
+
+## Referencias
+
+- `docs/EDGE_FUNCTIONS.md`
+- `docs/ARCHITECTURE.md`
+- `docs/SUPABASE_RLS.md`

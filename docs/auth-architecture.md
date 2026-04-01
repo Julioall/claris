@@ -1,22 +1,18 @@
 # Auth Module Architecture
 
-## Objective
+Atualizado em `2026-04-01`.
 
-The old `AuthContext` had become a monolithic entry point for:
+## Objetivo
 
-- authentication and logout
-- local session persistence
-- Moodle integration details
-- initial and incremental course sync
-- sync progress UI state
-- risk recalculation
-- system notifications
+O modulo de autenticacao foi dividido para evitar que `AuthContext` continue como ponto monolitico de regra de negocio.
 
-That made unit testing, reuse, and regression control harder than necessary.
+Hoje o objetivo e:
 
-This refactor keeps the public `useAuth()` API compatible, but moves the implementation to a feature slice closer to a light Clean Architecture / Onion Architecture style.
+- manter a API publica de `useAuth()` estavel
+- isolar sessao Moodle e sincronizacao no slice `features/auth`
+- melhorar testabilidade e evolucao incremental do dominio
 
-## Current Slice
+## Estrutura Atual
 
 ```text
 src/features/auth/
@@ -37,77 +33,41 @@ src/features/auth/
     session-storage.ts
 ```
 
-## Responsibility Split
+## Responsabilidades
 
-### Presentation / composition
+### Composicao de UI
 
-- `src/contexts/AuthContext.tsx`
-  - only composes hooks and exposes the legacy `useAuth()` contract
-- `src/features/auth/context/MoodleSessionContext.tsx`
-  - dedicated access point for Moodle session consumers
+- `src/contexts/AuthContext.tsx`: composicao publica e compatibilidade de contrato (`useAuth()`).
+- `src/features/auth/context/MoodleSessionContext.tsx`: acesso focado para consumidores de credencial Moodle.
 
-### Application
+### Aplicacao
 
-- `src/features/auth/hooks/useAuthSession.ts`
-  - login / logout
-  - auth bootstrap from Supabase
-  - local session hydration
-  - authenticated state
-- `src/features/auth/hooks/useCourseSync.ts`
-  - initial sync
-  - incremental sync
-  - sync progress tracking
-  - orchestration of risk update and notifications
-- `src/features/auth/application/risk.service.ts`
-  - course risk recalculation
-  - fallback from course RPC to student RPC
-- `src/features/auth/application/system-notification.service.ts`
-  - writes sync lifecycle notifications
+- `useAuthSession.ts`: login, logout, bootstrap de sessao e estado autenticado.
+- `useCourseSync.ts`: sync inicial/incremental, progresso e orquestracao com risco/notificacoes.
+- `risk.service.ts`: recalculo de risco por curso/aluno.
+- `system-notification.service.ts`: eventos de notificacao de sync.
 
-### Infrastructure
+### Infraestrutura
 
-- `src/features/auth/infrastructure/session-storage.ts`
-  - sessionStorage load/save/clear
-- `src/features/auth/infrastructure/moodle-api.ts`
-  - Moodle auth edge call
-  - edge HTTP calls with timeout
-  - auth headers / publishable key / bearer token
-  - function error parsing
-- `src/features/auth/infrastructure/course-sync.service.ts`
-  - course resolution
-  - batched student/activity/grade sync execution
+- `session-storage.ts`: persistencia local de sessao.
+- `moodle-api.ts`: chamadas Edge para Moodle com timeout, auth headers e parsing de erro.
+- `course-sync.service.ts`: sincronizacao em lote de cursos/alunos/atividades/notas.
 
-### Domain
+### Dominio
 
-- `src/features/auth/domain/session.ts`
-  - `MoodleSession`, stored session, session context
-- `src/features/auth/domain/sync.ts`
-  - sync entities, step state, sync progress model
+- `domain/session.ts`: contratos de sessao Moodle.
+- `domain/sync.ts`: entidades de progresso e etapas de sincronizacao.
 
-## Mapping From The Old AuthContext
+## Regras Praticas
 
-- `AuthProvider`: now only composition
-- `login/logout`: `useAuthSession`
-- `user session / authenticated state`: `useAuthSession`
-- `Moodle session`: `MoodleSessionContext` + `useMoodleSession()`
-- `sync of courses/students/incremental`: `useCourseSync` + `course-sync.service.ts`
-- `progress tracking`: `useCourseSync` + `domain/sync.ts`
-- `risk recalculation`: `risk.service.ts`
-- `notification creation`: `system-notification.service.ts`
-- `invokeMoodleWithTimeout` and edge auth headers: `infrastructure/moodle-api.ts`
+- Se a UI so precisa de credenciais Moodle, usar `useMoodleSession()`.
+- Nova regra de sync deve entrar em `useCourseSync` ou servicos de suporte.
+- Persistencia local deve ficar em `session-storage.ts`.
+- Chamadas Moodle compartilhadas devem ficar em `moodle-api.ts`.
 
-## Practical Rules
+## Cobertura de Testes
 
-- New UI that only needs Moodle credentials should prefer `useMoodleSession()` instead of `useAuth()`.
-- New sync behavior should be added in `useCourseSync` or its supporting services, not in `AuthContext.tsx`.
-- New persistence logic belongs in `session-storage.ts`, not in hooks or components.
-- New Moodle edge calls should be centralized in `moodle-api.ts` when they share timeout/auth/error behavior.
+Cobertura atual recomendada:
 
-## Test Strategy
-
-The refactor keeps integration coverage around `AuthContext`, and adds focused unit tests for extracted services:
-
-- `src/features/auth/__tests__/moodle-api.test.ts`
-- `src/features/auth/__tests__/risk.service.test.ts`
-
-This keeps the provider covered end-to-end while also testing the new seams directly.
+- testes integrados no contexto publico (`AuthContext`)
+- testes unitarios de servicos extraidos do slice, principalmente API Moodle e calculo de risco

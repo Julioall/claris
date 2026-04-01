@@ -1,6 +1,6 @@
 # Edge Functions
 
-Atualizado em `2026-03-26`.
+Atualizado em `2026-04-01`.
 
 ## Objetivo
 
@@ -150,3 +150,9 @@ Responsavel pela sugestao de nota/feedback com IA e pela aprovacao manual com en
 - a function continua autenticada via `createHandler(..., { requireAuth: true })`
 - o `config.toml` local usa `verify_jwt = false` apenas para permitir preflight/browser reachability; a validacao real segue dentro do handler
 - respostas `null` do Moodle em `mod_assign_save_grade` sao tratadas como validas pelo cliente compartilhado
+
+## Referencias
+
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [SUPABASE_RLS.md](./SUPABASE_RLS.md)
+- [README.md](./README.md)

@@ -1,6 +1,6 @@
 # Architecture
 
-Atualizado em `2026-03-26`.
+Atualizado em `2026-04-01`.
 
 ## Visao Geral
 
@@ -30,7 +30,7 @@ Cada dominio vive em `src/features/<dominio>/` e pode expor:
 - `pages/` para adaptadores de rota
 - `types.ts` para contratos do dominio
 
-Os slices ativos hoje incluem `auth`, `courses`, `students`, `tasks`, `agenda`, `dashboard`, `claris`, `messages`, `automations`, `services`, `settings`, `reports`, `admin`, `whatsapp`.
+Os slices ativos hoje incluem `auth`, `courses`, `students`, `tasks`, `agenda`, `dashboard`, `claris`, `messages`, `campaigns`, `background-jobs`, `services`, `settings`, `reports`, `admin`, `whatsapp`.
 
 ### Fronteira de dados
 
@@ -118,3 +118,9 @@ Isso permite rodar:
 - configuracao e operacao administrativa: `src/features/admin`, `src/features/settings`, `src/features/services`
 - chat, sugestoes e historico da Claris: `src/features/claris`
 - fluxos multi-etapa, integracoes externas e efeitos colaterais relevantes: Edge Functions em `supabase/functions`
+
+## Leitura complementar
+
+- [README.md](./README.md)
+- [FRONTEND_MODULES.md](./FRONTEND_MODULES.md)
+- [auth-architecture.md](./auth-architecture.md)

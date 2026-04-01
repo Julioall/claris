@@ -1,6 +1,7 @@
 # ADR-001: Frontend por dominio e fronteira de dados
 
-Data: `2026-03-26`
+Data: `2026-04-01`
+Status: Aceita
 
 ## Contexto
 
@@ -25,3 +26,9 @@ Adotar:
 ## Reforco operacional
 
 O repositorio passa a validar essa decisao com `npm run guard:supabase-boundary`.
+
+## Referencias
+
+- `docs/ARCHITECTURE.md`
+- `docs/FRONTEND_MODULES.md`
+- `docs/auth-architecture.md`

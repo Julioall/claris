@@ -1,6 +1,7 @@
 # ADR-002: Compose base + override de desenvolvimento
 
-Data: `2026-03-26`
+Data: `2026-04-01`
+Status: Aceita
 
 ## Contexto
 
@@ -23,3 +24,9 @@ Tambem foi reduzida a dependencia de host networking:
 - smoke de Edge Functions usa apenas o compose base
 - desenvolvimento manual pode subir a stack completa com dois arquivos
 - o ambiente local fica mais portavel e mais facil de documentar por cenario
+
+## Referencias
+
+- `docker-compose.yml`
+- `docker-compose.dev.yml`
+- `docs/ARCHITECTURE.md`
