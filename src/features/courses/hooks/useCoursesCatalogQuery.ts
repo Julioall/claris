@@ -9,5 +9,6 @@ export function useCoursesCatalogQuery(userId?: string) {
     queryKey: courseKeys.catalog(userId),
     enabled: !!userId,
     queryFn: () => listCatalogCoursesForUser(userId!),
+    staleTime: 5 * 60_000,
   });
 }

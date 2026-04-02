@@ -36,6 +36,7 @@ export function useTasks() {
     queryKey: tasksQueryKey,
     queryFn: () => tasksRepository.listTasks(),
     enabled: !!user,
+    staleTime: 5 * 60_000,
   });
 
   const createMutation = useMutation({

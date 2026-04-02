@@ -41,25 +41,25 @@
 
 ### Tarefas
 
-- [ ] Adicionar `staleTime: 5 * 60_000` em `useCoursesCatalogQuery`
+- [x] Adicionar `staleTime: 5 * 60_000` em `useCoursesCatalogQuery`
   - Base de `useCoursesData` e `useAllCoursesData`; todo foco de janela reconstrói catálogo com N+1 queries
   - Arquivo: `src/features/courses/hooks/useCoursesCatalogQuery.ts`
   - AC: window focus não dispara refetch dentro de 5 min
 
-- [ ] Adicionar `staleTime: 2 * 60_000` em `useDashboardData`
+- [x] Adicionar `staleTime: 2 * 60_000` em `useDashboardData`
   - Dispara 9 sub-queries paralelas a cada foco de janela
   - Arquivo: `src/features/dashboard/hooks/useDashboardData.ts`
   - AC: validar que dados permanecem frescos para o caso de uso
 
-- [ ] Adicionar `staleTime: 5 * 60_000` em `useTasks` e `useCalendarEvents`
+- [x] Adicionar `staleTime: 5 * 60_000` em `useTasks` e `useCalendarEvents`
   - Tarefas e calendário são dados estáveis entre edições
   - AC: optimistic updates continuam funcionando
 
-- [ ] Adicionar `staleTime: 3 * 60_000` nos hooks de campaigns e messages
+- [x] Adicionar `staleTime: 3 * 60_000` nos hooks de campaigns e messages
   - Todos os `useQuery` em `src/features/campaigns/` e `src/features/messages/`
   - AC: nenhum refetch desnecessário em window focus para listas paradas
 
-- [ ] Cache module-level de `app_settings` em `claris-chat` (TTL 10 min)
+- [x] Cache module-level de `app_settings` em `claris-chat` (TTL 10 min)
   - A Edge Function busca `app_settings` a cada mensagem enviada (20 queries por sessão ativa)
   - Arquivo: `supabase/functions/claris-chat/index.ts`
   - AC: `pg_stat_statements` confirma redução de queries

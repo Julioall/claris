@@ -27,7 +27,16 @@ const asTrimmedString = (value: unknown): string =>
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
 
-async function readStoredSettings(userId: string): Promise<SettingsJson> {
+// Module-level cache para app_settings (TTL: 10 min)
+let _settingsCache: { value: SettingsJson; expiresAt: number } | null = null
+const SETTINGS_CACHE_TTL_MS = 10 * 60 * 1000
+
+async function readStoredSettings(): Promise<SettingsJson> {
+  const now = Date.now()
+  if (_settingsCache && now < _settingsCache.expiresAt) {
+    return _settingsCache.value
+  }
+
   const supabase = createServiceClient()
   const { data, error } = await supabase
     .from('app_settings')
@@ -39,7 +48,7 @@ async function readStoredSettings(userId: string): Promise<SettingsJson> {
 
   const rawSettings = asObject(data.claris_llm_settings)
 
-  return {
+  const settings: SettingsJson = {
     provider: asTrimmedString(rawSettings.provider),
     model: asTrimmedString(rawSettings.model),
     baseUrl: asTrimmedString(rawSettings.baseUrl),
@@ -47,6 +56,9 @@ async function readStoredSettings(userId: string): Promise<SettingsJson> {
     customInstructions: typeof rawSettings.customInstructions === 'string' ? rawSettings.customInstructions.trim() : '',
     configured: Boolean(rawSettings.configured),
   }
+
+  _settingsCache = { value: settings, expiresAt: now + SETTINGS_CACHE_TTL_MS }
+  return settings
 }
 
 Deno.serve(createHandler(async ({ body, user }) => {
@@ -57,7 +69,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
     return errorResponse('Permission denied for Claris IA.', 403)
   }
 
-  const storedSettings = await readStoredSettings(user.id)
+  const storedSettings = await readStoredSettings()
 
   const provider = (storedSettings.provider || DEFAULT_PROVIDER).toLowerCase()
   const model = storedSettings.model || ''
