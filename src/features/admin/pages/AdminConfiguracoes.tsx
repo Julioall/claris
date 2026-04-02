@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Bot, HelpCircle, Sparkles } from 'lucide-react';
+import { Bot, HelpCircle, RefreshCw, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,12 +12,15 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DataCleanupCard } from '@/features/settings/components/DataCleanupCard';
+import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import {
   fetchAdminSettings,
   saveAiGradingSettings,
   saveClarisConnectionSettings,
   saveRiskThresholdSettings,
+  syncProjectCatalog,
   testClarisLLM,
+  type CatalogSyncResult,
 } from '../api/settings';
 import { toast } from '@/hooks/use-toast';
 import {
@@ -99,6 +102,9 @@ function parseCsvInput(value: string): string[] {
 }
 
 export default function AdminConfiguracoes() {
+  const moodleSession = useMoodleSession();
+  const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
+  const [lastCatalogSyncResult, setLastCatalogSyncResult] = useState<CatalogSyncResult | null>(null);
   const [riskThresholdDays, setRiskThresholdDays] = useState<RiskThresholdDays>({
     atencao: 7,
     risco: 14,
@@ -762,6 +768,73 @@ export default function AdminConfiguracoes() {
           >
             {isSavingAiGrading ? 'Salvando...' : 'Salvar correcao com IA'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Sincronizacao Global do Catalogo Moodle */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <RefreshCw className="h-5 w-5" />
+            Sincronizacao Global do Catalogo Moodle
+          </CardTitle>
+          <CardDescription>
+            Importa todos os cursos e participantes do Moodle e cria usuarios tutores/monitores automaticamente.
+            Esta operacao pode levar alguns minutos dependendo do tamanho do catalogo.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {!moodleSession ? (
+            <p className="text-sm text-muted-foreground">
+              Necessario estar autenticado com credenciais Moodle para executar esta sincronizacao.
+            </p>
+          ) : (
+            <>
+              {lastCatalogSyncResult && (
+                <div className="grid gap-2 md:grid-cols-4">
+                  {([
+                    { label: 'Cursos', value: lastCatalogSyncResult.courses },
+                    { label: 'Usuarios', value: lastCatalogSyncResult.participantUsers },
+                    { label: 'Vinculos', value: lastCatalogSyncResult.userCourseLinks },
+                    { label: 'Grupos', value: lastCatalogSyncResult.groupAssignments },
+                  ] as const).map(({ label, value }) => (
+                    <div key={label} className="rounded-md border p-3 text-center">
+                      <p className="text-2xl font-bold">{value}</p>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <Button
+                onClick={async () => {
+                  setIsSyncingCatalog(true);
+                  setLastCatalogSyncResult(null);
+                  try {
+                    const result = await syncProjectCatalog(moodleSession.moodleUrl, moodleSession.moodleToken);
+                    setLastCatalogSyncResult(result);
+                    toast({
+                      title: 'Sincronizacao concluida',
+                      description: `${result.courses} cursos, ${result.participantUsers} usuarios, ${result.userCourseLinks} vinculos, ${result.groupAssignments} atribuicoes de grupo.`,
+                    });
+                  } catch (err) {
+                    toast({
+                      title: 'Erro na sincronizacao',
+                      description: err instanceof Error ? err.message : 'Erro desconhecido',
+                      variant: 'destructive',
+                    });
+                  } finally {
+                    setIsSyncingCatalog(false);
+                  }
+                }}
+                variant="outline"
+                className="w-full"
+                disabled={isSyncingCatalog}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${isSyncingCatalog ? 'animate-spin' : ''}`} />
+                {isSyncingCatalog ? 'Sincronizando...' : 'Sincronizar catalogo completo'}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 

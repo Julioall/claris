@@ -77,6 +77,31 @@ export async function saveAiGradingSettings(settings: AiGradingSettings) {
   );
 }
 
+export interface CatalogSyncResult {
+  success: boolean;
+  courses: number;
+  participantUsers: number;
+  userCourseLinks: number;
+  groupAssignments: number;
+}
+
+export async function syncProjectCatalog(moodleUrl: string, token: string): Promise<CatalogSyncResult> {
+  const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
+    body: {
+      action: 'sync_project_catalog',
+      moodleUrl,
+      token,
+    },
+  });
+
+  if (error) {
+    const message = await parseFunctionErrorMessage(error);
+    throw new Error(message ?? (error as { message?: string }).message ?? 'Erro ao sincronizar catalogo');
+  }
+
+  return data as CatalogSyncResult;
+}
+
 export async function testClarisLLM(input: ClarisConnectionInput) {
   const result = await supabase.functions.invoke('claris-llm-test', {
     body: {
