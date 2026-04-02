@@ -1712,21 +1712,33 @@ export type Database = {
       }
       dashboard_course_activity_aggregates: {
         Row: {
+          active_student_count: number
+          at_risk_student_count: number
           course_id: string
+          new_at_risk_this_week: number
           pending_correction_assignments: number
           pending_submission_assignments: number
+          uncorrected_activities_count: number
           updated_at: string
         }
         Insert: {
+          active_student_count?: number
+          at_risk_student_count?: number
           course_id: string
+          new_at_risk_this_week?: number
           pending_correction_assignments?: number
           pending_submission_assignments?: number
+          uncorrected_activities_count?: number
           updated_at?: string
         }
         Update: {
+          active_student_count?: number
+          at_risk_student_count?: number
           course_id?: string
+          new_at_risk_this_week?: number
           pending_correction_assignments?: number
           pending_submission_assignments?: number
+          uncorrected_activities_count?: number
           updated_at?: string
         }
         Relationships: [
@@ -3198,7 +3210,29 @@ export type Database = {
           risk_reasons: string[]
         }[]
       }
+      cleanup_old_records: { Args: never; Returns: Json }
       get_current_user_authorization_context: { Args: never; Returns: Json }
+      get_user_courses_catalog_with_stats: {
+        Args: { p_user_id: string }
+        Returns: {
+          at_risk_count: number
+          category: string
+          created_at: string
+          end_date: string
+          id: string
+          is_attendance_enabled: boolean
+          is_following: boolean
+          is_ignored: boolean
+          last_sync: string
+          moodle_course_id: string
+          name: string
+          short_name: string
+          start_date: string
+          student_count: number
+          student_ids: string[]
+          updated_at: string
+        }[]
+      }
       get_user_permission_keys: {
         Args: { p_user_id: string }
         Returns: string[]
@@ -3241,6 +3275,10 @@ export type Database = {
           total_count: number
           updated_at: string
         }[]
+      }
+      refresh_course_dashboard_aggregate: {
+        Args: { p_course_id: string }
+        Returns: undefined
       }
       resolve_current_app_user_id: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }
