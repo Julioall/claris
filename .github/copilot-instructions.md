@@ -172,3 +172,13 @@ The CI pipeline (`.github/workflows/ci.yml`) runs on every push or PR to `main`:
 6. **Deploy** - GitHub Pages deployment on `main` push
 
 Edge Function smoke tests (`.github/workflows/edge-smoke.yml`) gate Supabase deployments.
+
+## Versioning
+
+When implementing changes, always update the project version in `package.json` according to semantic versioning:
+
+- `patch` (`x.y.Z`): bug fixes, refactors without behavior changes, or internal maintenance.
+- `minor` (`x.Y.z`): backward-compatible new features or meaningful behavior enhancements.
+- `major` (`X.y.z`): breaking changes, removals, or incompatible contract changes.
+
+Do not skip version bump when code is changed for implementation work.
