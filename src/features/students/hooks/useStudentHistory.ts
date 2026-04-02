@@ -57,20 +57,22 @@ export function useStudentHistory(studentId: string | undefined) {
     queryFn: async (): Promise<StudentSyncSnapshot[]> => {
       if (!studentId) return [];
 
-      const { data: snapshotData, error: snapshotError } = await supabase
-        .from('student_sync_snapshots')
-        .select('*, courses(name, short_name, start_date, end_date)')
-        .eq('student_id', studentId)
-        .order('synced_at', { ascending: false })
-        .limit(60);
-
-      if (snapshotError) throw snapshotError;
-
-      const { data: activityData, error: activityError } = await supabase
-        .from('student_activities')
-        .select('course_id, due_date, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
-        .eq('student_id', studentId)
-        .eq('hidden', false);
+      const [
+        { data: snapshotData, error: snapshotError },
+        { data: activityData, error: activityError },
+      ] = await Promise.all([
+        supabase
+          .from('student_sync_snapshots')
+          .select('*, courses(name, short_name, start_date, end_date)')
+          .eq('student_id', studentId)
+          .order('synced_at', { ascending: false })
+          .limit(60),
+        supabase
+          .from('student_activities')
+          .select('course_id, due_date, activity_type, grade, grade_max, percentage, status, completed_at, submitted_at, graded_at')
+          .eq('student_id', studentId)
+          .eq('hidden', false),
+      ]);
 
       if (activityError) throw activityError;
 

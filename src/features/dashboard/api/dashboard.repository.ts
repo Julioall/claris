@@ -83,6 +83,10 @@ type DashboardCourseActivityAggregateRow = {
   course_id: string;
   pending_submission_assignments: number;
   pending_correction_assignments: number;
+  at_risk_student_count: number;
+  active_student_count: number;
+  uncorrected_activities_count: number;
+  new_at_risk_this_week: number;
 };
 
 type StudentCourseRow = {
@@ -370,7 +374,9 @@ async function listDashboardAggregates(courseIds: string[]) {
     chunkValues(courseIds).map(async (courseIdBatch) => {
       const { data, error } = await supabase
         .from('dashboard_course_activity_aggregates')
-        .select('course_id, pending_submission_assignments, pending_correction_assignments')
+        .select(
+          'course_id, pending_submission_assignments, pending_correction_assignments, at_risk_student_count, active_student_count, uncorrected_activities_count, new_at_risk_this_week',
+        )
         .in('course_id', courseIdBatch);
 
       if (error) throw error;
@@ -553,7 +559,16 @@ export const dashboardRepository = {
     const todayStart = startOfDay(now).toISOString();
     const todayEnd = endOfDay(now).toISOString();
     const activeStudentIdSet = new Set(activeStudentIds);
-    const studentIdSet = new Set(studentIds);
+
+    // Busca agregados antecipadamente para evitar queries transacionais redundantes
+    const dashboardAggregates = await listDashboardAggregates(courseIds);
+    const aggregateRows = dashboardAggregates as DashboardCourseActivityAggregateRow[];
+    const aggregateCourseIds = new Set(aggregateRows.map((aggregate) => aggregate.course_id));
+    const hasAggregateForEveryCourse = courseIds.every((courseId) => aggregateCourseIds.has(courseId));
+
+    // Quando há agregados para todos os cursos, pula queries transacionais de contagem
+    const useAggregatesForCounts = hasAggregateForEveryCourse;
+    const useAggregatesForCurrentWeek = hasAggregateForEveryCourse && selectedWeek === 'current';
 
     const [
       todayEventsResponse,
@@ -563,7 +578,6 @@ export const dashboardRepository = {
       newAtRisk,
       feedData,
       missedAssignments,
-      dashboardAggregates,
       uncorrectedActivities,
     ] = await Promise.all([
       (supabase.from('calendar_events' as never) as ReturnType<typeof supabase.from>)
@@ -578,11 +592,14 @@ export const dashboardRepository = {
         .lte('due_date', todayEnd)
         .neq('status', 'done'),
       activeStudentIds.length > 0 ? listStudentsAtRisk(activeStudentIds) : Promise.resolve([]),
-      activeStudentIds.length > 0 ? countActiveNormalStudents(activeStudentIds) : Promise.resolve(0),
-      activeStudentIds.length > 0 ? countNewAtRiskStudents(activeStudentIds, weekStart.toISOString()) : Promise.resolve(0),
+      useAggregatesForCounts
+        ? Promise.resolve(aggregateRows.reduce((total, row) => total + (row.active_student_count || 0), 0))
+        : (activeStudentIds.length > 0 ? countActiveNormalStudents(activeStudentIds) : Promise.resolve(0)),
+      useAggregatesForCurrentWeek
+        ? Promise.resolve(aggregateRows.reduce((total, row) => total + (row.new_at_risk_this_week || 0), 0))
+        : (activeStudentIds.length > 0 ? countNewAtRiskStudents(activeStudentIds, weekStart.toISOString()) : Promise.resolve(0)),
       listActivityFeedItems(userId, studentIds, normalizedCourseFilter),
       listPendingAssignments(courseIds),
-      listDashboardAggregates(courseIds),
       listUncorrectedActivities(courseIds),
     ]);
 
@@ -605,9 +622,6 @@ export const dashboardRepository = {
       .filter((activity) => activeStudentIdSet.has(activity.student_id))
       .filter((activity) => isStudentActivityWeightedInGradebook(activity))
       .filter((activity) => isStudentActivityPendingCorrection(activity));
-    const aggregateRows = dashboardAggregates as DashboardCourseActivityAggregateRow[];
-    const aggregateCourseIds = new Set(aggregateRows.map((aggregate) => aggregate.course_id));
-    const hasAggregateForEveryCourse = courseIds.every((courseId) => aggregateCourseIds.has(courseId));
     const pendingCorrectionAssignmentsCount = hasAggregateForEveryCourse
       ? aggregateRows.reduce((total, aggregate) => total + (aggregate.pending_correction_assignments || 0), 0)
       : pendingCorrectionActivities.length;

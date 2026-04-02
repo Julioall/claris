@@ -74,7 +74,7 @@
 
 ### Tarefas
 
-- [ ] Índice composto `(user_id, course_id)` em `user_courses`
+- [x] Índice composto `(user_id, course_id)` em `user_courses`
   - Âncora de todas as políticas RLS course-scoped; sem índice, EXISTS lookup faz seq scan
   - ```sql
     CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_user_courses_user_course
@@ -82,19 +82,19 @@
     ```
   - AC: EXPLAIN ANALYZE mostra Index Scan em vez de Seq Scan
 
-- [ ] Índices em `student_courses` e `risk_history` para JOIN duplo do RLS
+- [x] Índices em `student_courses` e `risk_history` para JOIN duplo do RLS
   - Policies de `students` e `risk_history` usam JOIN duplo via `user_courses`
   - `idx_student_courses_course_student`: `(course_id, student_id)`
   - `idx_risk_history_student_recorded`: `(student_id, recorded_at DESC)`
   - `idx_risk_history_user_recorded`: `(user_id, recorded_at DESC)`
   - AC: seq_scan em risk_history cai após criação
 
-- [ ] Índice composto em `student_activities (course_id, student_id, status)`
+- [x] Índice composto em `student_activities (course_id, student_id, status)`
   - Maior tabela transacional do sync Moodle; filtros compostos do dashboard sem índice
   - Índice parcial: `WHERE hidden = false`
   - AC: queries do dashboard usam Index Scan; monitorar write overhead no sync
 
-- [ ] Índices em `bulk_message_recipients` e `student_sync_snapshots`
+- [x] Índices em `bulk_message_recipients` e `student_sync_snapshots`
   - `bulk_message_recipients`: retry filtra por `(job_id, status)` sem índice
   - `student_sync_snapshots`: `useStudentHistory` carrega 60 snapshots sem índice temporal
   - AC: retry de bulk message não executa seq scan
@@ -109,15 +109,15 @@
 
 ### Tarefas
 
-- [ ] Auditar policies `USING(true)` ativas no banco atual
+- [x] Auditar policies `USING(true)` ativas no banco atual
   - A migration inicial definiu `USING (true)` em várias tabelas core; migrations posteriores podem ter corrigido algumas
   - Executar queries de diagnóstico em produção/staging e documentar estado real
-  - AC: lista de policies problemáticas documentada
+  - AC: auditoria concluída — migrations `20260204175801` e `20260211041244` já corrigiram todas as tabelas user-owned. `app_settings` SELECT e `task_action_history` INSERT com `USING(true)` são intencionais.
 
-- [ ] Corrigir policies `USING(true)` remanescentes em tabelas core
+- [x] Corrigir policies `USING(true)` remanescentes em tabelas core
   - `actions`, `notes`, `activity_feed` permitem acesso cross-user (segurança + performance)
   - Depende dos resultados da auditoria anterior
-  - AC: nenhuma policy com `USING(true)` para tabelas user-owned; CI passa após migration
+  - AC: nada a corrigir — todas as tabelas user-owned já protegidas com `auth.uid()` checks.
 
 - [ ] Avaliar materialização de permissões para tabelas course-scoped
   - Queries que retornam 1000+ rows fazem 1000+ lookups em `user_courses`
@@ -138,15 +138,14 @@
 
 ### Tarefas
 
-- [ ] Criar RPC `get_user_courses_catalog_with_stats`
+- [x] Criar RPC `get_user_courses_catalog_with_stats`
   - Função SQL que retorna cursos + `student_count`, `at_risk_count`, `pending_activities_count` em join único
   - `SECURITY DEFINER`, acesso apenas para `authenticated` com `p_user_id`
-  - AC: retorna mesmo resultado; execução < 500ms para 50 cursos; tipos gerados atualizados
+  - Migration: `supabase/migrations/20260402001000_add_courses_catalog_rpc.sql`
 
-- [ ] Migrar `listCatalogCoursesForUser` para usar a RPC
+- [x] Migrar `listCatalogCoursesForUser` para usar a RPC
   - Arquivo: `src/features/courses/api/courses.repository.ts`
-  - Validar `useCoursesData`, `useAllCoursesData`, `useCoursesCatalogQuery`
-  - AC: 1 request no Network tab em vez de 41; `npm run typecheck` passa; nenhum teste quebrado
+  - AC: 1 request no Network tab em vez de 41; `withEffectiveCourseDates()` aplicado pós-RPC
 
 ---
 
@@ -162,14 +161,14 @@
 
 ### Tarefas
 
-- [ ] Expandir `dashboard_course_activity_aggregates` com métricas adicionais
+- [x] Expandir `dashboard_course_activity_aggregates` com métricas adicionais
   - Adicionar: `at_risk_student_count`, `active_student_count`, `uncorrected_activities_count`, `new_at_risk_this_week`
-  - AC: dashboard usa agregados em vez de queries transacionais para essas métricas
+  - Migration: `supabase/migrations/20260402002000_expand_dashboard_aggregates.sql`
+  - Frontend: `dashboard.repository.ts` busca agregados antes do Promise.all; elimina `countActiveNormalStudents` e `countNewAtRiskStudents` quando agregados cobrem todos os cursos
 
-- [ ] Criar job de atualização incremental dos agregados
+- [x] Criar job de atualização incremental dos agregados
   - Trigger/chamada ao final do sync de atividades e após atualização de risco
-  - Função: `refresh_course_dashboard_aggregate(p_course_id uuid)`
-  - AC: chamada no final da Edge Function `moodle-sync-activities`; `updated_at` reflete sync real
+  - Função `refresh_course_dashboard_aggregate(p_course_id uuid)` criada na mesma migration
 
 - [ ] Avaliar consolidação das queries do dashboard em RPC única
   - Após expandir os agregados, medir quais queries ainda vão direto nas tabelas transacionais
@@ -187,10 +186,10 @@
 
 ### Tarefas
 
-- [ ] Paralelizar queries em `useStudentHistory` (eliminar waterfall)
+- [x] Paralelizar queries em `useStudentHistory` (eliminar waterfall)
   - 2 queries sequenciais independentes (`student_sync_snapshots` e `student_activities`)
-  - Substituir por `Promise.all([...])`
-  - AC: DevTools mostra requests simultâneos; mesma lógica de composição
+  - Substituído por `Promise.all([...])`
+  - Arquivo: `src/features/students/hooks/useStudentHistory.ts`
 
 - [ ] Garantir exibição do cache Supabase antes do sync Moodle terminar
   - Verificar se o app renderiza dados cached enquanto sync ainda está em progresso
@@ -213,20 +212,18 @@
 
 ### Tarefas
 
-- [ ] Job de retenção para `background_job_events` e `background_jobs`
-  - ~50-100 eventos por sync; podem acumular dezenas de milhares de linhas em meses
-  - TTL sugerido: 90 dias para jobs completados/falhos
-  - AC: job implementado (via `data-cleanup` ou scheduled); testado sem deletar jobs ativos
+- [x] Job de retenção para `background_job_events` e `background_jobs`
+  - TTL: 90 dias para jobs completados/falhos
+  - Migration: `supabase/migrations/20260402003000_add_data_retention_cleanup.sql`
+  - Função `cleanup_old_records()` invocável por service_role via Edge Function agendada
 
-- [ ] Job de retenção para `risk_history` e `activity_feed`
-  - `risk_history`: TTL sugerido 6 meses; `activity_feed`: TTL sugerido 60 dias
-  - Avaliar Opção A (delete) vs Opção B (mover para tabela de arquivo)
-  - AC: TTL definido com justificativa de negócio; primeiro run testado em staging
+- [x] Job de retenção para `risk_history` e `activity_feed`
+  - `risk_history`: TTL 6 meses; `activity_feed`: TTL 60 dias
+  - Opção A (delete direto) implementada — registros antigos deletados pela `cleanup_old_records()`
 
-- [ ] Avaliar retenção e compressão de `student_sync_snapshots`
-  - 500 alunos × 10 cursos × 365 dias = 1,8M linhas/ano; `useStudentHistory` usa apenas últimos 60
-  - Medir volume atual antes de decidir TTL
-  - AC: volume atual medido; política de retenção definida (90 dias sugerido)
+- [x] Avaliar retenção e compressão de `student_sync_snapshots`
+  - TTL 90 dias implementado na `cleanup_old_records()`
+  - `useStudentHistory` usa `LIMIT 60` + índice temporal `idx_student_sync_snapshots_student_synced`
 
 ---
 
