@@ -25,7 +25,7 @@ import {
 const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
 const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor']
 const MONITOR_ROLE_KEYWORDS = ['monitor']
-const ENROLLED_USERS_POOL_SIZE = 6
+const ENROLLED_USERS_POOL_SIZE = 4
 const MONITORED_GROUP_SLUGS = ['tutor', 'monitor'] as const
 
 type UserCourseRole = 'tutor' | 'monitor'
@@ -425,7 +425,12 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
   }
 }
 
-export async function syncProjectCatalog(_moodleUrl: string, token: string, requesterUserId: string): Promise<Response> {
+export async function syncProjectCatalog(
+  _moodleUrl: string,
+  token: string,
+  requesterUserId: string,
+  categoryId?: number,
+): Promise<Response> {
   const supabase = createServiceClient()
 
   const requesterIsAdmin = await isApplicationAdmin(supabase, requesterUserId)
@@ -456,7 +461,15 @@ export async function syncProjectCatalog(_moodleUrl: string, token: string, requ
     return errorResponse('No courses returned by Moodle for project sync', 502)
   }
 
-  const moodleCourseIds = moodleCourses.map((course) => String(course.id))
+  const scopedMoodleCourses = typeof categoryId === 'number'
+    ? moodleCourses.filter((course) => Number(course.category) === categoryId)
+    : moodleCourses
+
+  if (scopedMoodleCourses.length === 0) {
+    return errorResponse('No Moodle courses found for selected category.', 404)
+  }
+
+  const moodleCourseIds = scopedMoodleCourses.map((course) => String(course.id))
   const existingCourseCategories = await listCourseCategoriesByMoodleCourseIds(supabase, moodleCourseIds)
   const existingCategoryByMoodleCourseId = new Map(
     existingCourseCategories.map((course) => [course.moodle_course_id, course.category]),
@@ -464,7 +477,7 @@ export async function syncProjectCatalog(_moodleUrl: string, token: string, requ
 
   const now = new Date().toISOString()
   const unresolvedCourseIds: string[] = []
-  const coursesData = moodleCourses.map((course) => {
+  const coursesData = scopedMoodleCourses.map((course) => {
     const moodleCourseId = String(course.id)
     const categoryName = resolveCourseCategoryName(
       course.category,
@@ -615,10 +628,12 @@ export async function syncProjectCatalog(_moodleUrl: string, token: string, requ
       participantUsers: participants.length,
       userCourseLinks: links.length,
       groupAssignments: desiredGroupByUserId.size,
+      requestedCategoryId: categoryId ?? null,
     })
   } catch (syncError) {
     console.error('[moodle-sync-courses] Error during project catalog sync:', syncError)
-    return errorResponse('Failed to complete project-wide Moodle sync', 500)
+    const errorMessage = syncError instanceof Error ? syncError.message : 'Unknown error'
+    return errorResponse(`Failed to complete project-wide Moodle sync: ${errorMessage}`, 500)
   }
 }
 

@@ -105,6 +105,7 @@ export default function AdminConfiguracoes() {
   const moodleSession = useMoodleSession();
   const [isSyncingCatalog, setIsSyncingCatalog] = useState(false);
   const [lastCatalogSyncResult, setLastCatalogSyncResult] = useState<CatalogSyncResult | null>(null);
+  const [catalogCategoryIdInput, setCatalogCategoryIdInput] = useState('');
   const [riskThresholdDays, setRiskThresholdDays] = useState<RiskThresholdDays>({
     atencao: 7,
     risco: 14,
@@ -790,6 +791,23 @@ export default function AdminConfiguracoes() {
             </p>
           ) : (
             <>
+              <div className="space-y-2">
+                <Label htmlFor="catalog-category-id">ID da categoria Moodle (opcional)</Label>
+                <Input
+                  id="catalog-category-id"
+                  type="number"
+                  min={1}
+                  step={1}
+                  value={catalogCategoryIdInput}
+                  onChange={(e) => setCatalogCategoryIdInput(e.target.value)}
+                  placeholder="Ex.: 34"
+                  disabled={isSyncingCatalog}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Preencha para sincronizar apenas uma categoria e diminuir a carga. Em branco, sincroniza o catalogo inteiro.
+                </p>
+              </div>
+
               {lastCatalogSyncResult && (
                 <div className="grid gap-2 md:grid-cols-4">
                   {([
@@ -807,14 +825,19 @@ export default function AdminConfiguracoes() {
               )}
               <Button
                 onClick={async () => {
+                  const parsedCategoryId = Number(catalogCategoryIdInput);
+                  const categoryId = Number.isFinite(parsedCategoryId) && parsedCategoryId > 0
+                    ? Math.trunc(parsedCategoryId)
+                    : undefined;
+
                   setIsSyncingCatalog(true);
                   setLastCatalogSyncResult(null);
                   try {
-                    const result = await syncProjectCatalog(moodleSession.moodleUrl, moodleSession.moodleToken);
+                    const result = await syncProjectCatalog(moodleSession.moodleUrl, moodleSession.moodleToken, categoryId);
                     setLastCatalogSyncResult(result);
                     toast({
                       title: 'Sincronizacao concluida',
-                      description: `${result.courses} cursos, ${result.participantUsers} usuarios, ${result.userCourseLinks} vinculos, ${result.groupAssignments} atribuicoes de grupo.`,
+                      description: `${result.courses} cursos, ${result.participantUsers} usuarios, ${result.userCourseLinks} vinculos, ${result.groupAssignments} atribuicoes de grupo.${categoryId ? ` Categoria: ${categoryId}.` : ''}`,
                     });
                   } catch (err) {
                     toast({

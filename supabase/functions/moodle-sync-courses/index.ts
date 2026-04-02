@@ -23,7 +23,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
       return errorResponse('Only application admins can run project-wide Moodle sync.', 403)
     }
 
-    return await syncProjectCatalog(body.moodleUrl, body.token, user.id)
+    return await syncProjectCatalog(body.moodleUrl, body.token, user.id, body.categoryId)
   }
 
   const dbUser = await findUserById(supabase, user.id)

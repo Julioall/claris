@@ -83,14 +83,16 @@ export interface CatalogSyncResult {
   participantUsers: number;
   userCourseLinks: number;
   groupAssignments: number;
+  requestedCategoryId?: number | null;
 }
 
-export async function syncProjectCatalog(moodleUrl: string, token: string): Promise<CatalogSyncResult> {
+export async function syncProjectCatalog(moodleUrl: string, token: string, categoryId?: number): Promise<CatalogSyncResult> {
   const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
     body: {
       action: 'sync_project_catalog',
       moodleUrl,
       token,
+      categoryId,
     },
   });
 

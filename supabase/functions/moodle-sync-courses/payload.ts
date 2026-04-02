@@ -1,6 +1,7 @@
 import {
   expectBodyObject,
   readOptionalLiteral,
+  readOptionalPositiveInteger,
   readRequiredMoodleUrl,
   readRequiredPositiveInteger,
   readRequiredString,
@@ -27,6 +28,7 @@ export interface SyncProjectCatalogPayload {
   action: 'sync_project_catalog'
   moodleUrl: string
   token: string
+  categoryId?: number
 }
 
 export type MoodleSyncCoursesPayload = SyncCoursesPayload | LinkSelectedCoursesPayload | SyncProjectCatalogPayload
@@ -47,6 +49,7 @@ export function parseMoodleSyncCoursesPayload(rawBody: unknown): MoodleSyncCours
       action,
       moodleUrl: readRequiredMoodleUrl(body),
       token: readRequiredString(body, 'token'),
+      categoryId: readOptionalPositiveInteger(body, 'categoryId') ?? undefined,
     }
   }
 
