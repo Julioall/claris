@@ -14,29 +14,6 @@ import {
 
 type AssociationRole = 'tutor' | 'viewer';
 
-interface UserCourseRow {
-  course_id: string;
-  role: AssociationRole;
-}
-
-interface IgnoredCourseRow {
-  course_id: string;
-}
-
-interface AttendanceCourseRow {
-  course_id: string;
-}
-
-interface StudentIdRow {
-  student_id: string;
-}
-
-interface StudentCourseRiskRow {
-  students: {
-    current_risk_level: string;
-  } | null;
-}
-
 interface StudentCourseRow {
   student_id: string;
   enrollment_status: string | null;
@@ -44,95 +21,61 @@ interface StudentCourseRow {
   students: Student | null;
 }
 
-async function listCourseStudentIds(courseId: string): Promise<string[]> {
-  const { data, error } = await supabase
-    .from('student_courses')
-    .select('student_id')
-    .eq('course_id', courseId);
-
-  if (error) throw error;
-
-  return ((data || []) as StudentIdRow[]).map((entry) => entry.student_id);
-}
-
-async function countAtRiskStudents(courseId: string): Promise<number> {
-  const { data, error } = await supabase
-    .from('student_courses')
-    .select(`
-      student_id,
-      students!inner (current_risk_level)
-    `)
-    .eq('course_id', courseId);
-
-  if (error) throw error;
-
-  return ((data || []) as StudentCourseRiskRow[]).filter(
-    (entry) => entry.students && ['risco', 'critico'].includes(entry.students.current_risk_level),
-  ).length;
+interface CatalogRpcRow {
+  id: string;
+  moodle_course_id: string;
+  name: string;
+  short_name: string | null;
+  category: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  last_sync: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+  student_count: number;
+  at_risk_count: number;
+  is_following: boolean;
+  is_ignored: boolean;
+  is_attendance_enabled: boolean;
+  student_ids: string[];
 }
 
 export async function listCatalogCoursesForUser(userId: string): Promise<CourseWithStats[]> {
-  const { data: userCourses, error: userCoursesError } = await supabase
-    .from('user_courses')
-    .select('course_id, role')
-    .eq('user_id', userId);
-
-  if (userCoursesError) throw userCoursesError;
-
-  const { data: allCourses, error: coursesError } = await supabase
-    .from('courses')
-    .select('*')
-    .order('name');
-
-  if (coursesError) throw coursesError;
-
-  if (!allCourses || allCourses.length === 0) {
-    return [];
-  }
-
-  const { data: ignoredCourses, error: ignoredCoursesError } = await supabase
-    .from('user_ignored_courses')
-    .select('course_id')
-    .eq('user_id', userId);
-
-  if (ignoredCoursesError) throw ignoredCoursesError;
-
-  const { data: attendanceCourses, error: attendanceCoursesError } = await (supabase as SupabaseClient)
-    .from('attendance_course_settings')
-    .select('course_id')
-    .eq('user_id', userId);
-
-  if (attendanceCoursesError) throw attendanceCoursesError;
-
-  const followedCourseIds = new Set(
-    ((userCourses || []) as UserCourseRow[])
-      .filter((entry) => entry.role === 'tutor')
-      .map((entry) => entry.course_id),
-  );
-  const ignoredCourseIds = new Set(((ignoredCourses || []) as IgnoredCourseRow[]).map((entry) => entry.course_id));
-  const attendanceCourseIds = new Set(
-    ((attendanceCourses || []) as AttendanceCourseRow[]).map((entry) => entry.course_id),
+  const { data, error } = await (supabase as SupabaseClient).rpc(
+    'get_user_courses_catalog_with_stats',
+    { p_user_id: userId },
   );
 
-  const datedCourses = withEffectiveCourseDates(allCourses as Course[]);
+  if (error) throw error;
+  if (!data || (data as CatalogRpcRow[]).length === 0) return [];
 
-  return Promise.all(
-    datedCourses.map(async (course) => {
-      const studentIds = await listCourseStudentIds(course.id);
-      const isCourseInProgress = getCourseLifecycleStatus(course) === 'em_andamento';
-      const atRiskCount = isCourseInProgress ? await countAtRiskStudents(course.id) : 0;
+  const courses: Course[] = (data as CatalogRpcRow[]).map((row) => ({
+    id: row.id,
+    moodle_course_id: row.moodle_course_id,
+    name: row.name,
+    short_name: row.short_name,
+    category: row.category,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    last_sync: row.last_sync,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }));
 
-      return {
-        ...course,
-        students_count: studentIds.length,
-        at_risk_count: atRiskCount,
-        is_following: followedCourseIds.has(course.id),
-        is_ignored: ignoredCourseIds.has(course.id),
-        is_attendance_enabled: attendanceCourseIds.has(course.id),
-        student_ids: studentIds,
-      } as CourseWithStats;
-    }),
-  );
+  const datedCourses = withEffectiveCourseDates(courses);
+
+  return datedCourses.map((course, index) => {
+    const row = (data as CatalogRpcRow[])[index];
+    return {
+      ...course,
+      students_count: row.student_count,
+      at_risk_count: row.at_risk_count,
+      is_following: row.is_following,
+      is_ignored: row.is_ignored,
+      is_attendance_enabled: row.is_attendance_enabled,
+      student_ids: row.student_ids ?? [],
+    } as CourseWithStats;
+  });
 }
 
 export async function setCourseAssociationRole(userId: string, courseId: string, role: AssociationRole) {

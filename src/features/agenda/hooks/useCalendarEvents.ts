@@ -17,6 +17,7 @@ export function useCalendarEvents(from?: string, to?: string) {
     queryKey: eventsQueryKey,
     queryFn: () => calendarRepository.listEvents(from, to, user?.id),
     enabled: !!user,
+    staleTime: 5 * 60_000,
   });
 
   const createMutation = useMutation({

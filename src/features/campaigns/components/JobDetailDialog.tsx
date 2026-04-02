@@ -48,12 +48,14 @@ export function JobDetailDialog({ jobId, onClose }: JobDetailDialogProps) {
     queryKey: campaignKeys.bulkJobDetail(jobId),
     queryFn: () => getBulkJobDetail(jobId!),
     enabled: !!jobId,
+    staleTime: 3 * 60_000,
   });
 
   const { data: recipients = [], isLoading: recipientsLoading } = useQuery({
     queryKey: campaignKeys.bulkJobRecipients(jobId),
     queryFn: () => listBulkJobRecipients(jobId!),
     enabled: !!jobId,
+    staleTime: 3 * 60_000,
     refetchInterval: job?.status === 'processing' ? 3000 : false,
   });
 

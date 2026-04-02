@@ -75,6 +75,7 @@ export function BulkJobsTab({ mode = 'full', title }: BulkJobsTabProps) {
     queryKey: campaignKeys.bulkJobs({ status: statusFilter, search, page }),
     queryFn: () => listBulkJobs({ status: statusFilter, search, page, pageSize: PAGE_SIZE }),
     enabled: !!user,
+    staleTime: 3 * 60_000,
     refetchInterval: (query) => {
       const paginated = query.state.data as { items?: BulkJobListItem[] } | undefined;
       const hasActive = paginated?.items?.some(j => j.status === 'pending' || j.status === 'processing');

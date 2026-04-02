@@ -34,6 +34,7 @@ export function useDashboardData(
         courseFilter,
       }),
     enabled: !!user,
+    staleTime: 2 * 60_000,
   });
 
   return {
