@@ -14,6 +14,11 @@ import {
 } from '../_shared/domain/users/repository.ts'
 import { isApplicationAdmin } from '../_shared/auth/mod.ts'
 import {
+  appendBackgroundJobEvent,
+  upsertBackgroundJob,
+  updateBackgroundJob,
+} from '../_shared/domain/background-jobs/repository.ts'
+import {
   getAllCourses,
   getCategories,
   getCourseEnrolledUsers,
@@ -27,6 +32,17 @@ const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
 const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor']
 const MONITOR_ROLE_KEYWORDS = ['monitor']
 const ENROLLED_USERS_POOL_SIZE = 4
+
+function queueBackgroundTask(task: Promise<unknown>): void {
+  const runtime = globalThis as typeof globalThis & {
+    EdgeRuntime?: { waitUntil(promise: Promise<unknown>): void }
+  }
+  if (runtime.EdgeRuntime?.waitUntil) {
+    runtime.EdgeRuntime.waitUntil(task)
+    return
+  }
+  void task
+}
 const MONITORED_GROUP_SLUGS = ['tutor', 'monitor'] as const
 
 type UserCourseRole = 'tutor' | 'monitor'
@@ -452,25 +468,32 @@ function getAllDescendantIds(selectedIds: number[], allCategories: MoodleCategor
   return result
 }
 
-export async function syncProjectCatalog(
-  _moodleUrl: string,
-  token: string,
-  requesterUserId: string,
-  categoryIds?: number[],
-): Promise<Response> {
-  const supabase = createServiceClient()
-
-  const requesterIsAdmin = await isApplicationAdmin(supabase, requesterUserId)
-  if (!requesterIsAdmin) {
-    return errorResponse('Only application admins can run project-wide Moodle sync.', 403)
-  }
-
-  const requester = await findUserById(supabase, requesterUserId)
-  if (!requester) {
-    return errorResponse('Requester user not found', 404)
-  }
-
+async function runCatalogSyncInBackground(params: {
+  supabase: ReturnType<typeof createServiceClient>
+  jobId: string
+  token: string
+  requesterUserId: string
+  requesterDbId: string
+  categoryIds?: number[]
+}): Promise<void> {
+  const { supabase, jobId, token, requesterDbId, categoryIds } = params
   const moodleBaseUrl = normalizeUrl(PRIMARY_MOODLE_URL)
+  const startedAt = new Date().toISOString()
+
+  const markFailed = async (errorMessage: string) => {
+    await updateBackgroundJob(supabase, jobId, {
+      status: 'failed',
+      error_message: errorMessage,
+      completed_at: new Date().toISOString(),
+    })
+    await appendBackgroundJobEvent(supabase, {
+      userId: params.requesterUserId,
+      jobId,
+      eventType: 'job_failed',
+      level: 'error',
+      message: errorMessage,
+    })
+  }
 
   let moodleCourses: Awaited<ReturnType<typeof getAllCourses>>
   let categories: Awaited<ReturnType<typeof getCategories>>
@@ -480,12 +503,15 @@ export async function syncProjectCatalog(
       getCategories(moodleBaseUrl, token),
     ])
   } catch (sourceError) {
+    const msg = sourceError instanceof Error ? sourceError.message : 'Falha ao buscar cursos do Moodle'
     console.error('[moodle-sync-courses] Failed to fetch project catalog from Moodle:', sourceError)
-    return errorResponse('Failed to sync project catalog from Moodle', 500)
+    await markFailed(msg)
+    return
   }
 
   if (moodleCourses.length === 0) {
-    return errorResponse('No courses returned by Moodle for project sync', 502)
+    await markFailed('Nenhum curso retornado pelo Moodle para a sincronizacao global.')
+    return
   }
 
   const effectiveCategoryIds = Array.isArray(categoryIds) && categoryIds.length > 0
@@ -497,7 +523,8 @@ export async function syncProjectCatalog(
     : moodleCourses
 
   if (scopedMoodleCourses.length === 0) {
-    return errorResponse('No Moodle courses found for the selected categories.', 404)
+    await markFailed('Nenhum curso Moodle encontrado para as categorias selecionadas.')
+    return
   }
 
   const moodleCourseIds = scopedMoodleCourses.map((course) => String(course.id))
@@ -537,10 +564,10 @@ export async function syncProjectCatalog(
       '[moodle-sync-courses] Failed to resolve category hierarchy for project sync Moodle courses:',
       unresolvedCourseIds,
     )
-    return errorResponse(
-      'Failed to resolve Moodle categories during project sync. Retry to avoid incomplete school/category data.',
-      502,
+    await markFailed(
+      'Falha ao resolver hierarquia de categorias Moodle. Tente novamente para evitar dados incompletos de escola/categoria.',
     )
+    return
   }
 
   try {
@@ -606,65 +633,135 @@ export async function syncProjectCatalog(
     }
 
     const participants = [...participantsByMoodleUserId.values()]
-    if (participants.length === 0) {
-      return jsonResponse({
-        success: true,
-        courses: syncedCourses.length,
-        participantUsers: 0,
-        userCourseLinks: 0,
-        groupAssignments: 0,
+
+    let userCourseLinksCount = 0
+    let groupAssignmentsCount = 0
+
+    if (participants.length > 0) {
+      const moodleToUserId = await upsertUsersByMoodleUserId(supabase, participants, now)
+
+      const links: Array<{ user_id: string; course_id: string; role: UserCourseRole }> = []
+      const desiredRoleByUserId = new Map<string, UserCourseRole>()
+      for (const participant of participants) {
+        const userId = moodleToUserId.get(participant.moodleUserId)
+        if (!userId) continue
+
+        for (const [courseId, role] of participant.courseRoles.entries()) {
+          links.push({ user_id: userId, course_id: courseId, role })
+        }
+
+        const previousRole = desiredRoleByUserId.get(userId)
+        desiredRoleByUserId.set(userId, previousRole ? chooseHighestRole(previousRole, participant.strongestRole) : participant.strongestRole)
+      }
+
+      const LINK_BATCH_SIZE = 200
+      for (let i = 0; i < links.length; i += LINK_BATCH_SIZE) {
+        await upsertUserCourseLinksWithRoleUpdate(supabase, links.slice(i, i + LINK_BATCH_SIZE))
+      }
+
+      const groupIdsBySlug = await listGroupIdsBySlug(supabase, MONITORED_GROUP_SLUGS)
+      const desiredGroupByUserId = new Map<string, string>()
+      for (const [userId, role] of desiredRoleByUserId.entries()) {
+        const slug = role === 'monitor' ? 'monitor' : 'tutor'
+        const groupId = groupIdsBySlug.get(slug)
+        if (groupId) {
+          desiredGroupByUserId.set(userId, groupId)
+        }
+      }
+
+      await upsertTutorMonitorMemberships({
+        supabase,
+        desiredGroupByUserId,
+        assignedBy: requesterDbId,
       })
+
+      userCourseLinksCount = links.length
+      groupAssignmentsCount = desiredGroupByUserId.size
     }
 
-    const moodleToUserId = await upsertUsersByMoodleUserId(supabase, participants, now)
-
-    const links: Array<{ user_id: string; course_id: string; role: UserCourseRole }> = []
-    const desiredRoleByUserId = new Map<string, UserCourseRole>()
-    for (const participant of participants) {
-      const userId = moodleToUserId.get(participant.moodleUserId)
-      if (!userId) continue
-
-      for (const [courseId, role] of participant.courseRoles.entries()) {
-        links.push({ user_id: userId, course_id: courseId, role })
-      }
-
-      const previousRole = desiredRoleByUserId.get(userId)
-      desiredRoleByUserId.set(userId, previousRole ? chooseHighestRole(previousRole, participant.strongestRole) : participant.strongestRole)
-    }
-
-    const LINK_BATCH_SIZE = 200
-    for (let i = 0; i < links.length; i += LINK_BATCH_SIZE) {
-      await upsertUserCourseLinksWithRoleUpdate(supabase, links.slice(i, i + LINK_BATCH_SIZE))
-    }
-
-    const groupIdsBySlug = await listGroupIdsBySlug(supabase, MONITORED_GROUP_SLUGS)
-    const desiredGroupByUserId = new Map<string, string>()
-    for (const [userId, role] of desiredRoleByUserId.entries()) {
-      const slug = role === 'monitor' ? 'monitor' : 'tutor'
-      const groupId = groupIdsBySlug.get(slug)
-      if (groupId) {
-        desiredGroupByUserId.set(userId, groupId)
-      }
-    }
-
-    await upsertTutorMonitorMemberships({
-      supabase,
-      desiredGroupByUserId,
-      assignedBy: requester.id,
+    const completedAt = new Date().toISOString()
+    await updateBackgroundJob(supabase, jobId, {
+      status: 'completed',
+      completed_at: completedAt,
+      success_count: syncedCourses.length,
+      processed_items: syncedCourses.length,
+      total_items: syncedCourses.length,
+      metadata: {
+        courses: syncedCourses.length,
+        participantUsers: participants.length,
+        userCourseLinks: userCourseLinksCount,
+        groupAssignments: groupAssignmentsCount,
+        started_at: startedAt,
+        completed_at: completedAt,
+      },
     })
-
-    return jsonResponse({
-      success: true,
-      courses: syncedCourses.length,
-      participantUsers: participants.length,
-      userCourseLinks: links.length,
-      groupAssignments: desiredGroupByUserId.size,
+    await appendBackgroundJobEvent(supabase, {
+      userId: params.requesterUserId,
+      jobId,
+      eventType: 'job_completed',
+      message: `Sincronizacao concluida: ${syncedCourses.length} cursos, ${participants.length} usuarios, ${userCourseLinksCount} vinculos, ${groupAssignmentsCount} grupos.`,
     })
   } catch (syncError) {
     console.error('[moodle-sync-courses] Error during project catalog sync:', syncError)
-    const errorMessage = syncError instanceof Error ? syncError.message : 'Unknown error'
-    return errorResponse(`Failed to complete project-wide Moodle sync: ${errorMessage}`, 500)
+    const errorMessage = syncError instanceof Error ? syncError.message : 'Erro desconhecido durante a sincronizacao global'
+    await markFailed(errorMessage)
   }
+}
+
+export async function syncProjectCatalog(
+  _moodleUrl: string,
+  token: string,
+  requesterUserId: string,
+  categoryIds?: number[],
+): Promise<Response> {
+  const supabase = createServiceClient()
+
+  const requesterIsAdmin = await isApplicationAdmin(supabase, requesterUserId)
+  if (!requesterIsAdmin) {
+    return errorResponse('Only application admins can run project-wide Moodle sync.', 403)
+  }
+
+  const requester = await findUserById(supabase, requesterUserId)
+  if (!requester) {
+    return errorResponse('Requester user not found', 404)
+  }
+
+  const jobId = crypto.randomUUID()
+  const now = new Date().toISOString()
+
+  await upsertBackgroundJob(supabase, {
+    id: jobId,
+    userId: requesterUserId,
+    jobType: 'moodle_catalog_sync',
+    source: 'admin',
+    title: 'Sincronizacao global do catalogo Moodle',
+    description: 'Cursos, participantes e vinculos sendo sincronizados em segundo plano.',
+    status: 'processing',
+    startedAt: now,
+    metadata: {
+      category_ids: categoryIds ?? null,
+    },
+  })
+
+  await appendBackgroundJobEvent(supabase, {
+    userId: requesterUserId,
+    jobId,
+    eventType: 'job_started',
+    message: 'Sincronizacao global iniciada em segundo plano.',
+  })
+
+  queueBackgroundTask(
+    runCatalogSyncInBackground({
+      supabase,
+      jobId,
+      token,
+      requesterUserId,
+      requesterDbId: requester.id,
+      categoryIds,
+    }),
+  )
+
+  return jsonResponse({ jobId, status: 'processing' })
 }
 
 export async function linkSelectedCourses(userId: string, selectedCourseIds: string[]): Promise<Response> {

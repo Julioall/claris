@@ -84,11 +84,17 @@ export interface MoodleCategoryApi {
 }
 
 export interface CatalogSyncResult {
-  success: boolean;
   courses: number;
   participantUsers: number;
   userCourseLinks: number;
   groupAssignments: number;
+}
+
+export interface CatalogSyncJob {
+  jobId: string;
+  status: 'processing' | 'completed' | 'failed';
+  result?: CatalogSyncResult;
+  errorMessage?: string | null;
 }
 
 export async function listMoodleCategories(
@@ -130,7 +136,7 @@ export async function syncProjectCatalog(
   moodleUrl: string,
   token: string,
   categoryIds?: number[],
-): Promise<CatalogSyncResult> {
+): Promise<{ jobId: string; status: string }> {
   const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
     body: {
       action: 'sync_project_catalog',
@@ -142,10 +148,46 @@ export async function syncProjectCatalog(
 
   if (error) {
     const message = await parseFunctionErrorMessage(error);
-    throw new Error(message ?? (error as { message?: string }).message ?? 'Erro ao sincronizar catalogo');
+    throw new Error(message ?? (error as { message?: string }).message ?? 'Erro ao iniciar sincronizacao do catalogo');
   }
 
-  return data as CatalogSyncResult;
+  return data as { jobId: string; status: string };
+}
+
+export async function fetchCatalogSyncJob(jobId: string): Promise<CatalogSyncJob> {
+  const { data, error } = await supabase
+    .from('background_jobs' as never)
+    .select('id, status, error_message, metadata')
+    .eq('id', jobId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('Job nao encontrado');
+
+  const row = data as {
+    id: string;
+    status: string;
+    error_message: string | null;
+    metadata: Record<string, unknown> | null;
+  };
+
+  const status = (row.status === 'completed' || row.status === 'failed' ? row.status : 'processing') as CatalogSyncJob['status'];
+  const result: CatalogSyncResult | undefined =
+    status === 'completed' && row.metadata
+      ? {
+          courses: Number(row.metadata.courses ?? 0),
+          participantUsers: Number(row.metadata.participantUsers ?? 0),
+          userCourseLinks: Number(row.metadata.userCourseLinks ?? 0),
+          groupAssignments: Number(row.metadata.groupAssignments ?? 0),
+        }
+      : undefined;
+
+  return {
+    jobId: row.id,
+    status,
+    result,
+    errorMessage: row.error_message,
+  };
 }
 
 export async function testClarisLLM(input: ClarisConnectionInput) {
