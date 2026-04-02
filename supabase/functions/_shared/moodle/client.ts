@@ -271,6 +271,14 @@ export async function getUserCourses(
   return await callMoodleApi(moodleUrl, token, 'core_enrol_get_users_courses', { userid: userId }) as MoodleCourse[]
 }
 
+export async function getAllCourses(
+  moodleUrl: string,
+  token: string,
+): Promise<MoodleCourse[]> {
+  const data = await callMoodleApi(moodleUrl, token, 'core_course_get_courses')
+  return Array.isArray(data) ? data as MoodleCourse[] : []
+}
+
 export async function getCategories(moodleUrl: string, token: string): Promise<MoodleCategory[]> {
   try {
     const data = await callMoodleApi(moodleUrl, token, 'core_course_get_categories')

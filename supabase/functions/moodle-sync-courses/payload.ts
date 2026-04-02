@@ -7,7 +7,7 @@ import {
   readRequiredStringArray,
 } from '../_shared/http/mod.ts'
 
-const COURSE_SYNC_ACTIONS = ['sync_courses', 'link_selected_courses'] as const
+const COURSE_SYNC_ACTIONS = ['sync_courses', 'link_selected_courses', 'sync_project_catalog'] as const
 
 type CourseSyncAction = typeof COURSE_SYNC_ACTIONS[number]
 
@@ -23,7 +23,13 @@ export interface LinkSelectedCoursesPayload {
   selectedCourseIds: string[]
 }
 
-export type MoodleSyncCoursesPayload = SyncCoursesPayload | LinkSelectedCoursesPayload
+export interface SyncProjectCatalogPayload {
+  action: 'sync_project_catalog'
+  moodleUrl: string
+  token: string
+}
+
+export type MoodleSyncCoursesPayload = SyncCoursesPayload | LinkSelectedCoursesPayload | SyncProjectCatalogPayload
 
 export function parseMoodleSyncCoursesPayload(rawBody: unknown): MoodleSyncCoursesPayload {
   const body = expectBodyObject(rawBody)
@@ -33,6 +39,14 @@ export function parseMoodleSyncCoursesPayload(rawBody: unknown): MoodleSyncCours
     return {
       action,
       selectedCourseIds: readRequiredStringArray(body, 'selectedCourseIds'),
+    }
+  }
+
+  if (action === 'sync_project_catalog') {
+    return {
+      action,
+      moodleUrl: readRequiredMoodleUrl(body),
+      token: readRequiredString(body, 'token'),
     }
   }
 

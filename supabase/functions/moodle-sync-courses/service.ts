@@ -12,7 +12,9 @@ import {
   touchUserLastSync,
   updateUserProfile,
 } from '../_shared/domain/users/repository.ts'
+import { isApplicationAdmin } from '../_shared/auth/mod.ts'
 import {
+  getAllCourses,
   getCategories,
   getCourseEnrolledUsers,
   getSiteInfo,
@@ -21,8 +23,22 @@ import {
 } from '../_shared/moodle/mod.ts'
 
 const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
-const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor', 'monitor']
+const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor']
+const MONITOR_ROLE_KEYWORDS = ['monitor']
 const ENROLLED_USERS_POOL_SIZE = 6
+const MONITORED_GROUP_SLUGS = ['tutor', 'monitor'] as const
+
+type UserCourseRole = 'tutor' | 'monitor'
+
+interface ParticipantSyncAccumulator {
+  moodleUserId: string
+  moodleUsername: string
+  fullName: string
+  email: string | null
+  avatarUrl: string | null
+  strongestRole: UserCourseRole
+  courseRoles: Map<string, UserCourseRole>
+}
 
 function normalizeEmail(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null
@@ -55,6 +71,150 @@ function normalizeRoleValue(value: string): string {
 
 function roleMatchesTutorProfile(roleValue: string): boolean {
   return TUTOR_ROLE_KEYWORDS.some((keyword) => roleValue.includes(keyword))
+}
+
+function roleMatchesMonitorProfile(roleValue: string): boolean {
+  return MONITOR_ROLE_KEYWORDS.some((keyword) => roleValue.includes(keyword))
+}
+
+function chooseHighestRole(currentRole: UserCourseRole, nextRole: UserCourseRole): UserCourseRole {
+  if (currentRole === 'tutor' || nextRole === 'tutor') return 'tutor'
+  return 'monitor'
+}
+
+function resolveEnrolledUserRole(
+  enrolledUser: Awaited<ReturnType<typeof getCourseEnrolledUsers>>[number],
+): UserCourseRole | null {
+  const roleValues = (enrolledUser.roles ?? [])
+    .flatMap((role) => [role.shortname, role.name])
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map(normalizeRoleValue)
+
+  if (roleValues.length === 0) return null
+  if (roleValues.some((value) => roleMatchesTutorProfile(value))) return 'tutor'
+  if (roleValues.some((value) => roleMatchesMonitorProfile(value))) return 'monitor'
+  return null
+}
+
+function normalizeMoodleUsername(
+  enrolledUser: Awaited<ReturnType<typeof getCourseEnrolledUsers>>[number],
+): string {
+  const username = typeof enrolledUser.username === 'string' ? enrolledUser.username.trim() : ''
+  if (username.length > 0) return username
+  return `moodle_${enrolledUser.id}`
+}
+
+function normalizeFullName(
+  enrolledUser: Awaited<ReturnType<typeof getCourseEnrolledUsers>>[number],
+): string {
+  const fullName = typeof enrolledUser.fullname === 'string' ? enrolledUser.fullname.trim() : ''
+  if (fullName.length > 0) return fullName
+
+  const first = typeof enrolledUser.firstname === 'string' ? enrolledUser.firstname.trim() : ''
+  const last = typeof enrolledUser.lastname === 'string' ? enrolledUser.lastname.trim() : ''
+  const joined = `${first} ${last}`.trim()
+  return joined.length > 0 ? joined : `Usuario Moodle ${enrolledUser.id}`
+}
+
+async function listGroupIdsBySlug(
+  supabase: ReturnType<typeof createServiceClient>,
+  slugs: readonly string[],
+): Promise<Map<string, string>> {
+  const { data, error } = await supabase
+    .from('app_groups')
+    .select('id, slug')
+    .in('slug', [...slugs])
+
+  if (error) throw error
+
+  return new Map((data ?? []).map((group: { id: string; slug: string }) => [group.slug, group.id]))
+}
+
+async function upsertUsersByMoodleUserId(
+  supabase: ReturnType<typeof createServiceClient>,
+  participants: ParticipantSyncAccumulator[],
+  timestamp: string,
+): Promise<Map<string, string>> {
+  if (participants.length === 0) return new Map()
+
+  const payload = participants.map((participant) => ({
+    moodle_user_id: participant.moodleUserId,
+    moodle_username: participant.moodleUsername,
+    full_name: participant.fullName,
+    email: participant.email,
+    avatar_url: participant.avatarUrl,
+    updated_at: timestamp,
+  }))
+
+  const { data, error } = await supabase
+    .from('users')
+    .upsert(payload, { onConflict: 'moodle_user_id', ignoreDuplicates: false })
+    .select('id, moodle_user_id')
+
+  if (error) throw error
+
+  return new Map((data ?? []).map((row: { id: string; moodle_user_id: string }) => [row.moodle_user_id, row.id]))
+}
+
+async function upsertUserCourseLinksWithRoleUpdate(
+  supabase: ReturnType<typeof createServiceClient>,
+  payload: Array<{ user_id: string; course_id: string; role: UserCourseRole }>,
+): Promise<void> {
+  if (payload.length === 0) return
+
+  const { error } = await supabase
+    .from('user_courses')
+    .upsert(payload, { onConflict: 'user_id,course_id', ignoreDuplicates: false })
+
+  if (error) throw error
+}
+
+async function upsertTutorMonitorMemberships(params: {
+  supabase: ReturnType<typeof createServiceClient>
+  desiredGroupByUserId: Map<string, string>
+  assignedBy: string
+}): Promise<void> {
+  const userIds = [...params.desiredGroupByUserId.keys()]
+  if (userIds.length === 0) return
+
+  const { data, error } = await params.supabase
+    .from('user_group_memberships')
+    .select('user_id, group_id, app_groups!inner(slug)')
+    .in('user_id', userIds)
+
+  if (error) throw error
+
+  const existingByUserId = new Map<string, { groupId: string; slug: string }>()
+  for (const row of (data ?? []) as Array<{ user_id: string; group_id: string; app_groups: { slug: string } }>) {
+    existingByUserId.set(row.user_id, { groupId: row.group_id, slug: row.app_groups.slug })
+  }
+
+  const upserts: Array<{ user_id: string; group_id: string; assigned_by: string }> = []
+
+  for (const [userId, desiredGroupId] of params.desiredGroupByUserId.entries()) {
+    const existing = existingByUserId.get(userId)
+
+    if (!existing) {
+      upserts.push({ user_id: userId, group_id: desiredGroupId, assigned_by: params.assignedBy })
+      continue
+    }
+
+    if (!MONITORED_GROUP_SLUGS.includes(existing.slug as (typeof MONITORED_GROUP_SLUGS)[number])) {
+      continue
+    }
+
+    if (existing.groupId !== desiredGroupId) {
+      upserts.push({ user_id: userId, group_id: desiredGroupId, assigned_by: params.assignedBy })
+    }
+  }
+
+  if (upserts.length === 0) return
+
+  const { error: upsertError } = await params.supabase
+    .from('user_group_memberships')
+    .upsert(upserts, { onConflict: 'user_id', ignoreDuplicates: false })
+
+  if (upsertError) throw upsertError
 }
 
 function userHasTutorRoleInCourse(
@@ -262,6 +422,203 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
   } catch (upsertError) {
     console.error('Error upserting courses:', upsertError)
     return errorResponse('Failed to sync courses', 500)
+  }
+}
+
+export async function syncProjectCatalog(_moodleUrl: string, token: string, requesterUserId: string): Promise<Response> {
+  const supabase = createServiceClient()
+
+  const requesterIsAdmin = await isApplicationAdmin(supabase, requesterUserId)
+  if (!requesterIsAdmin) {
+    return errorResponse('Only application admins can run project-wide Moodle sync.', 403)
+  }
+
+  const requester = await findUserById(supabase, requesterUserId)
+  if (!requester) {
+    return errorResponse('Requester user not found', 404)
+  }
+
+  const moodleBaseUrl = normalizeUrl(PRIMARY_MOODLE_URL)
+
+  let moodleCourses: Awaited<ReturnType<typeof getAllCourses>>
+  let categories: Awaited<ReturnType<typeof getCategories>>
+  try {
+    ;[moodleCourses, categories] = await Promise.all([
+      getAllCourses(moodleBaseUrl, token),
+      getCategories(moodleBaseUrl, token),
+    ])
+  } catch (sourceError) {
+    console.error('[moodle-sync-courses] Failed to fetch project catalog from Moodle:', sourceError)
+    return errorResponse('Failed to sync project catalog from Moodle', 500)
+  }
+
+  if (moodleCourses.length === 0) {
+    return errorResponse('No courses returned by Moodle for project sync', 502)
+  }
+
+  const moodleCourseIds = moodleCourses.map((course) => String(course.id))
+  const existingCourseCategories = await listCourseCategoriesByMoodleCourseIds(supabase, moodleCourseIds)
+  const existingCategoryByMoodleCourseId = new Map(
+    existingCourseCategories.map((course) => [course.moodle_course_id, course.category]),
+  )
+
+  const now = new Date().toISOString()
+  const unresolvedCourseIds: string[] = []
+  const coursesData = moodleCourses.map((course) => {
+    const moodleCourseId = String(course.id)
+    const categoryName = resolveCourseCategoryName(
+      course.category,
+      categories,
+      existingCategoryByMoodleCourseId.get(moodleCourseId) ?? null,
+    )
+
+    if (course.category && !categoryName) {
+      unresolvedCourseIds.push(moodleCourseId)
+    }
+
+    return {
+      moodle_course_id: moodleCourseId,
+      name: course.fullname,
+      short_name: course.shortname,
+      category: categoryName,
+      start_date: course.startdate ? new Date(course.startdate * 1000).toISOString() : null,
+      end_date: course.enddate ? new Date(course.enddate * 1000).toISOString() : null,
+      last_sync: now,
+      updated_at: now,
+    }
+  })
+
+  if (unresolvedCourseIds.length > 0) {
+    console.error(
+      '[moodle-sync-courses] Failed to resolve category hierarchy for project sync Moodle courses:',
+      unresolvedCourseIds,
+    )
+    return errorResponse(
+      'Failed to resolve Moodle categories during project sync. Retry to avoid incomplete school/category data.',
+      502,
+    )
+  }
+
+  try {
+    const syncedCourses = await upsertCourses(supabase, coursesData)
+
+    const courseByMoodleCourseId = new Map(syncedCourses.map((course) => [course.moodle_course_id, course]))
+    const participantsByMoodleUserId = new Map<string, ParticipantSyncAccumulator>()
+
+    const numericCourseIds = syncedCourses
+      .map((course) => Number(course.moodle_course_id))
+      .filter((courseId): courseId is number => Number.isFinite(courseId) && courseId > 0)
+
+    for (let index = 0; index < numericCourseIds.length; index += ENROLLED_USERS_POOL_SIZE) {
+      const batch = numericCourseIds.slice(index, index + ENROLLED_USERS_POOL_SIZE)
+      const settled = await Promise.allSettled(
+        batch.map(async (courseId) => {
+          const enrolledUsers = await getCourseEnrolledUsers(moodleBaseUrl, token, courseId)
+          const course = courseByMoodleCourseId.get(String(courseId))
+          if (!course) return
+
+          for (const enrolledUser of enrolledUsers) {
+            const role = resolveEnrolledUserRole(enrolledUser)
+            if (!role) continue
+
+            const moodleUserId = String(enrolledUser.id)
+            const existing = participantsByMoodleUserId.get(moodleUserId)
+
+            const nextEmail = normalizeEmail(enrolledUser.email ?? null)
+            if (!existing) {
+              participantsByMoodleUserId.set(moodleUserId, {
+                moodleUserId,
+                moodleUsername: normalizeMoodleUsername(enrolledUser),
+                fullName: normalizeFullName(enrolledUser),
+                email: nextEmail,
+                avatarUrl: enrolledUser.profileimageurl ?? null,
+                strongestRole: role,
+                courseRoles: new Map([[course.id, role]]),
+              })
+              continue
+            }
+
+            const previousCourseRole = existing.courseRoles.get(course.id)
+            if (previousCourseRole) {
+              existing.courseRoles.set(course.id, chooseHighestRole(previousCourseRole, role))
+            } else {
+              existing.courseRoles.set(course.id, role)
+            }
+
+            existing.strongestRole = chooseHighestRole(existing.strongestRole, role)
+
+            if (!existing.email && nextEmail) {
+              existing.email = nextEmail
+            }
+          }
+        }),
+      )
+
+      for (const result of settled) {
+        if (result.status === 'rejected') {
+          console.warn('[moodle-sync-courses] Failed to fetch enrolled users for one course in project sync:', result.reason)
+        }
+      }
+    }
+
+    const participants = [...participantsByMoodleUserId.values()]
+    if (participants.length === 0) {
+      return jsonResponse({
+        success: true,
+        courses: syncedCourses.length,
+        participantUsers: 0,
+        userCourseLinks: 0,
+        groupAssignments: 0,
+      })
+    }
+
+    const moodleToUserId = await upsertUsersByMoodleUserId(supabase, participants, now)
+
+    const links: Array<{ user_id: string; course_id: string; role: UserCourseRole }> = []
+    const desiredRoleByUserId = new Map<string, UserCourseRole>()
+    for (const participant of participants) {
+      const userId = moodleToUserId.get(participant.moodleUserId)
+      if (!userId) continue
+
+      for (const [courseId, role] of participant.courseRoles.entries()) {
+        links.push({ user_id: userId, course_id: courseId, role })
+      }
+
+      const previousRole = desiredRoleByUserId.get(userId)
+      desiredRoleByUserId.set(userId, previousRole ? chooseHighestRole(previousRole, participant.strongestRole) : participant.strongestRole)
+    }
+
+    const LINK_BATCH_SIZE = 200
+    for (let i = 0; i < links.length; i += LINK_BATCH_SIZE) {
+      await upsertUserCourseLinksWithRoleUpdate(supabase, links.slice(i, i + LINK_BATCH_SIZE))
+    }
+
+    const groupIdsBySlug = await listGroupIdsBySlug(supabase, MONITORED_GROUP_SLUGS)
+    const desiredGroupByUserId = new Map<string, string>()
+    for (const [userId, role] of desiredRoleByUserId.entries()) {
+      const slug = role === 'monitor' ? 'monitor' : 'tutor'
+      const groupId = groupIdsBySlug.get(slug)
+      if (groupId) {
+        desiredGroupByUserId.set(userId, groupId)
+      }
+    }
+
+    await upsertTutorMonitorMemberships({
+      supabase,
+      desiredGroupByUserId,
+      assignedBy: requester.id,
+    })
+
+    return jsonResponse({
+      success: true,
+      courses: syncedCourses.length,
+      participantUsers: participants.length,
+      userCourseLinks: links.length,
+      groupAssignments: desiredGroupByUserId.size,
+    })
+  } catch (syncError) {
+    console.error('[moodle-sync-courses] Error during project catalog sync:', syncError)
+    return errorResponse('Failed to complete project-wide Moodle sync', 500)
   }
 }
 

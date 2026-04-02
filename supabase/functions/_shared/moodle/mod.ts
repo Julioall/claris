@@ -7,6 +7,7 @@ export {
   callMoodleApiPost,
   getSiteInfo,
   getUserCourses,
+  getAllCourses,
   getCategories,
   buildCategoryPath,
   resolveCourseCategoryName,
