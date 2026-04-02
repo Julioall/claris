@@ -12,9 +12,17 @@ import {
   touchUserLastSync,
   updateUserProfile,
 } from '../_shared/domain/users/repository.ts'
-import { getCategories, getSiteInfo, getUserCourses, resolveCourseCategoryName } from '../_shared/moodle/mod.ts'
+import {
+  getCategories,
+  getCourseEnrolledUsers,
+  getSiteInfo,
+  getUserCourses,
+  resolveCourseCategoryName,
+} from '../_shared/moodle/mod.ts'
 
 const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
+const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor', 'monitor']
+const ENROLLED_USERS_POOL_SIZE = 6
 
 function normalizeEmail(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null
@@ -35,6 +43,66 @@ function isValidEmail(email: string | null): email is string {
 
 function normalizeUrl(value: string): string {
   return value.trim().replace(/\/+$/, '').toLowerCase()
+}
+
+function normalizeRoleValue(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function roleMatchesTutorProfile(roleValue: string): boolean {
+  return TUTOR_ROLE_KEYWORDS.some((keyword) => roleValue.includes(keyword))
+}
+
+function userHasTutorRoleInCourse(
+  enrolledUsers: Awaited<ReturnType<typeof getCourseEnrolledUsers>>,
+  moodleUserId: number,
+): boolean {
+  const currentUser = enrolledUsers.find((user) => Number(user.id) === moodleUserId)
+  if (!currentUser) return false
+
+  const roleValues = (currentUser.roles ?? [])
+    .flatMap((role) => [role.shortname, role.name])
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map(normalizeRoleValue)
+
+  if (roleValues.length === 0) return false
+
+  return roleValues.some((value) => roleMatchesTutorProfile(value))
+}
+
+async function listCoursesWithTutorRole(params: {
+  moodleBaseUrl: string
+  token: string
+  moodleUserId: number
+  moodleCourseIds: number[]
+}): Promise<Set<string>> {
+  const tutorCourseIds = new Set<string>()
+  if (params.moodleCourseIds.length === 0) return tutorCourseIds
+
+  for (let index = 0; index < params.moodleCourseIds.length; index += ENROLLED_USERS_POOL_SIZE) {
+    const batch = params.moodleCourseIds.slice(index, index + ENROLLED_USERS_POOL_SIZE)
+
+    const settled = await Promise.allSettled(
+      batch.map(async (courseId) => {
+        const enrolledUsers = await getCourseEnrolledUsers(params.moodleBaseUrl, params.token, courseId)
+        if (userHasTutorRoleInCourse(enrolledUsers, params.moodleUserId)) {
+          tutorCourseIds.add(String(courseId))
+        }
+      }),
+    )
+
+    for (const result of settled) {
+      if (result.status === 'rejected') {
+        console.warn('[moodle-sync-courses] Could not resolve tutor role for one course:', result.reason)
+      }
+    }
+  }
+
+  return tutorCourseIds
 }
 
 export async function syncCourses(_moodleUrl: string, token: string, userId: string): Promise<Response> {
@@ -108,6 +176,9 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
 
   const now = new Date().toISOString()
   const unresolvedCourseIds: string[] = []
+  const moodleCourseIds = moodleCourses
+    .map((course) => Number(course.id))
+    .filter((courseId): courseId is number => Number.isFinite(courseId) && courseId > 0)
 
   const coursesData = moodleCourses.map((course) => {
     const moodleCourseId = String(course.id)
@@ -146,6 +217,47 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
 
   try {
     const syncedCourses = await upsertCourses(supabase, coursesData)
+    const existingLinkedCourseIds = new Set(await listLinkedCourseIds(supabase, dbUser.id))
+
+    const moodleCourseIdsToInspect = (syncedCourses || [])
+      .filter((course) => !existingLinkedCourseIds.has(course.id))
+      .map((course) => Number(course.moodle_course_id))
+      .filter((courseId): courseId is number => Number.isFinite(courseId) && courseId > 0)
+
+    const tutorCourseIds = await listCoursesWithTutorRole({
+      moodleBaseUrl,
+      token,
+      moodleUserId: numericUserId,
+      moodleCourseIds: moodleCourseIdsToInspect,
+    })
+
+    if (tutorCourseIds.size > 0) {
+      const links = (syncedCourses || [])
+        .filter((course) => tutorCourseIds.has(course.moodle_course_id))
+        .map((course) => ({
+          user_id: dbUser.id,
+          course_id: course.id,
+          role: 'tutor',
+        }))
+
+      const LINK_BATCH_SIZE = 100
+      for (let i = 0; i < links.length; i += LINK_BATCH_SIZE) {
+        await upsertUserCourseLinks(supabase, links.slice(i, i + LINK_BATCH_SIZE))
+      }
+
+      console.log(`[moodle-sync-courses] Auto-linked ${links.length} tutor course(s) for user ${dbUser.id}`)
+    } else if (moodleCourseIdsToInspect.length === 0) {
+      console.log(
+        `[moodle-sync-courses] No new courses to inspect for auto-linking for user ${dbUser.id}. Existing links kept.`,
+      )
+    } else {
+      console.warn(
+        `[moodle-sync-courses] No tutor/teacher/monitor role found in fetched courses for moodle_user_id=${numericUserId}. Manual linking remains available.`,
+      )
+    }
+
+    await touchUserLastSync(supabase, dbUser.id, now)
+
     return jsonResponse({ success: true, courses: syncedCourses || [] })
   } catch (upsertError) {
     console.error('Error upserting courses:', upsertError)
