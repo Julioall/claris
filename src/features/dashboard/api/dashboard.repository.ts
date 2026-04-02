@@ -565,9 +565,14 @@ export const dashboardRepository = {
     const aggregateRows = dashboardAggregates as DashboardCourseActivityAggregateRow[];
     const aggregateCourseIds = new Set(aggregateRows.map((aggregate) => aggregate.course_id));
     const hasAggregateForEveryCourse = courseIds.every((courseId) => aggregateCourseIds.has(courseId));
+    const aggregateActiveRegularStudentsCount = aggregateRows.reduce(
+      (total, row) => total + (row.active_student_count || 0),
+      0,
+    );
 
-    // Quando há agregados para todos os cursos, pula queries transacionais de contagem
-    const useAggregatesForCounts = hasAggregateForEveryCourse;
+    // Evita zero incorreto quando novas colunas de agregado ainda não foram populadas.
+    const useAggregatesForCounts =
+      hasAggregateForEveryCourse && (aggregateActiveRegularStudentsCount > 0 || activeStudentIds.length === 0);
     const useAggregatesForCurrentWeek = hasAggregateForEveryCourse && selectedWeek === 'current';
 
     const [
@@ -593,7 +598,7 @@ export const dashboardRepository = {
         .neq('status', 'done'),
       activeStudentIds.length > 0 ? listStudentsAtRisk(activeStudentIds) : Promise.resolve([]),
       useAggregatesForCounts
-        ? Promise.resolve(aggregateRows.reduce((total, row) => total + (row.active_student_count || 0), 0))
+        ? Promise.resolve(aggregateActiveRegularStudentsCount)
         : (activeStudentIds.length > 0 ? countActiveNormalStudents(activeStudentIds) : Promise.resolve(0)),
       useAggregatesForCurrentWeek
         ? Promise.resolve(aggregateRows.reduce((total, row) => total + (row.new_at_risk_this_week || 0), 0))
