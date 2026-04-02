@@ -2,7 +2,7 @@ import { createHandler, errorResponse } from '../_shared/http/mod.ts'
 import { isApplicationAdmin, userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import { findUserById } from '../_shared/domain/users/repository.ts'
-import { syncCourses, linkSelectedCourses, syncProjectCatalog } from './service.ts'
+import { syncCourses, linkSelectedCourses, syncProjectCatalog, listMoodleCategories } from './service.ts'
 import { parseMoodleSyncCoursesPayload } from './payload.ts'
 
 Deno.serve(createHandler(async ({ body, user }) => {
@@ -17,13 +17,21 @@ Deno.serve(createHandler(async ({ body, user }) => {
     return await linkSelectedCourses(user.id, body.selectedCourseIds)
   }
 
+  if (body.action === 'list_moodle_categories') {
+    const isAdmin = await isApplicationAdmin(supabase, user.id)
+    if (!isAdmin) {
+      return errorResponse('Only application admins can list Moodle categories.', 403)
+    }
+    return await listMoodleCategories(body.token)
+  }
+
   if (body.action === 'sync_project_catalog') {
     const isAdmin = await isApplicationAdmin(supabase, user.id)
     if (!isAdmin) {
       return errorResponse('Only application admins can run project-wide Moodle sync.', 403)
     }
 
-    return await syncProjectCatalog(body.moodleUrl, body.token, user.id, body.categoryId)
+    return await syncProjectCatalog(body.moodleUrl, body.token, user.id, body.categoryIds)
   }
 
   const dbUser = await findUserById(supabase, user.id)

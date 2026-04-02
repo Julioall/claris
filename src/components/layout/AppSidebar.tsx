@@ -81,6 +81,7 @@ const adminNavItems = [
   { title: 'Suporte', url: '/admin/suporte' },
   { title: 'Conversas Claris', url: '/admin/conversas-claris' },
   { title: 'Servicos da Aplicacao', url: '/admin/servicos-aplicacao' },
+  { title: 'Sincronizacao', url: '/admin/sincronizacao' },
   { title: 'Configuracoes', url: '/admin/configuracoes' },
 ];
 

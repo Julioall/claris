@@ -1,14 +1,13 @@
 import {
   expectBodyObject,
   readOptionalLiteral,
-  readOptionalPositiveInteger,
   readRequiredMoodleUrl,
   readRequiredPositiveInteger,
   readRequiredString,
   readRequiredStringArray,
 } from '../_shared/http/mod.ts'
 
-const COURSE_SYNC_ACTIONS = ['sync_courses', 'link_selected_courses', 'sync_project_catalog'] as const
+const COURSE_SYNC_ACTIONS = ['sync_courses', 'link_selected_courses', 'sync_project_catalog', 'list_moodle_categories'] as const
 
 type CourseSyncAction = typeof COURSE_SYNC_ACTIONS[number]
 
@@ -28,10 +27,16 @@ export interface SyncProjectCatalogPayload {
   action: 'sync_project_catalog'
   moodleUrl: string
   token: string
-  categoryId?: number
+  categoryIds?: number[]
 }
 
-export type MoodleSyncCoursesPayload = SyncCoursesPayload | LinkSelectedCoursesPayload | SyncProjectCatalogPayload
+export interface ListMoodleCategoriesPayload {
+  action: 'list_moodle_categories'
+  moodleUrl: string
+  token: string
+}
+
+export type MoodleSyncCoursesPayload = SyncCoursesPayload | LinkSelectedCoursesPayload | SyncProjectCatalogPayload | ListMoodleCategoriesPayload
 
 export function parseMoodleSyncCoursesPayload(rawBody: unknown): MoodleSyncCoursesPayload {
   const body = expectBodyObject(rawBody)
@@ -44,12 +49,22 @@ export function parseMoodleSyncCoursesPayload(rawBody: unknown): MoodleSyncCours
     }
   }
 
-  if (action === 'sync_project_catalog') {
+  if (action === 'list_moodle_categories') {
     return {
       action,
       moodleUrl: readRequiredMoodleUrl(body),
       token: readRequiredString(body, 'token'),
-      categoryId: readOptionalPositiveInteger(body, 'categoryId') ?? undefined,
+    }
+  }
+
+  if (action === 'sync_project_catalog') {
+    const rawIds = Array.isArray(body['categoryIds']) ? body['categoryIds'] : undefined
+    const categoryIds = rawIds?.filter((v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v > 0)
+    return {
+      action,
+      moodleUrl: readRequiredMoodleUrl(body),
+      token: readRequiredString(body, 'token'),
+      categoryIds: categoryIds && categoryIds.length > 0 ? categoryIds : undefined,
     }
   }
 

@@ -77,22 +77,66 @@ export async function saveAiGradingSettings(settings: AiGradingSettings) {
   );
 }
 
+export interface MoodleCategoryApi {
+  id: number;
+  name: string;
+  parent: number;
+}
+
 export interface CatalogSyncResult {
   success: boolean;
   courses: number;
   participantUsers: number;
   userCourseLinks: number;
   groupAssignments: number;
-  requestedCategoryId?: number | null;
 }
 
-export async function syncProjectCatalog(moodleUrl: string, token: string, categoryId?: number): Promise<CatalogSyncResult> {
+export async function listMoodleCategories(
+  moodleUrl: string,
+  token: string,
+): Promise<{ categories: MoodleCategoryApi[] }> {
+  const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
+    body: { action: 'list_moodle_categories', moodleUrl, token },
+  });
+
+  if (error) {
+    const message = await parseFunctionErrorMessage(error);
+    throw new Error(message ?? (error as { message?: string }).message ?? 'Erro ao carregar categorias');
+  }
+
+  return data as { categories: MoodleCategoryApi[] };
+}
+
+export async function fetchSyncCategoryIds(): Promise<number[]> {
+  const { data } = await supabase
+    .from('app_settings')
+    .select('sync_category_ids')
+    .eq('singleton_id', GLOBAL_APP_SETTINGS_ID)
+    .maybeSingle();
+
+  const raw = (data as { sync_category_ids?: unknown } | null)?.sync_category_ids;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is number => typeof v === 'number');
+}
+
+export async function saveSyncCategoryIds(ids: number[]): Promise<void> {
+  const { error } = await supabase
+    .from('app_settings')
+    .upsert({ singleton_id: GLOBAL_APP_SETTINGS_ID, sync_category_ids: ids }, { onConflict: 'singleton_id' });
+  if (error) throw error;
+}
+
+export async function syncProjectCatalog(
+  moodleUrl: string,
+  token: string,
+  categoryIds?: number[],
+): Promise<CatalogSyncResult> {
   const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
     body: {
       action: 'sync_project_catalog',
       moodleUrl,
       token,
-      categoryId,
+      categoryIds,
     },
   });
 

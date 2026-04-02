@@ -30,3 +30,4 @@ export const AdminErrorLogsPage = lazy(() => import('@/features/admin/pages/Admi
 export const AdminSupportPage = lazy(() => import('@/features/admin/pages/AdminSuporte'));
 export const AdminClarisConversationsPage = lazy(() => import('@/features/admin/pages/AdminConversasClaris'));
 export const AdminApplicationServicesPage = lazy(() => import('@/features/admin/pages/AdminServicosAplicacao'));
+export const AdminSincronizacaoPage = lazy(() => import('@/features/admin/pages/AdminSincronizacao'));

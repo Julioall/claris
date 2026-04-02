@@ -21,6 +21,7 @@ import {
   getUserCourses,
   resolveCourseCategoryName,
 } from '../_shared/moodle/mod.ts'
+import type { MoodleCategory } from '../_shared/moodle/types.ts'
 
 const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
 const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor']
@@ -425,11 +426,37 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
   }
 }
 
+export async function listMoodleCategories(token: string): Promise<Response> {
+  const moodleBaseUrl = normalizeUrl(PRIMARY_MOODLE_URL)
+  try {
+    const categories = await getCategories(moodleBaseUrl, token)
+    return jsonResponse({ categories })
+  } catch (err) {
+    console.error('[moodle-sync-courses] Failed to list categories:', err)
+    return errorResponse('Failed to fetch Moodle categories', 500)
+  }
+}
+
+function getAllDescendantIds(selectedIds: number[], allCategories: MoodleCategory[]): Set<number> {
+  const result = new Set<number>(selectedIds)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const cat of allCategories) {
+      if (!result.has(cat.id) && result.has(cat.parent)) {
+        result.add(cat.id)
+        changed = true
+      }
+    }
+  }
+  return result
+}
+
 export async function syncProjectCatalog(
   _moodleUrl: string,
   token: string,
   requesterUserId: string,
-  categoryId?: number,
+  categoryIds?: number[],
 ): Promise<Response> {
   const supabase = createServiceClient()
 
@@ -461,12 +488,16 @@ export async function syncProjectCatalog(
     return errorResponse('No courses returned by Moodle for project sync', 502)
   }
 
-  const scopedMoodleCourses = typeof categoryId === 'number'
-    ? moodleCourses.filter((course) => Number(course.category) === categoryId)
+  const effectiveCategoryIds = Array.isArray(categoryIds) && categoryIds.length > 0
+    ? getAllDescendantIds(categoryIds, categories)
+    : null
+
+  const scopedMoodleCourses = effectiveCategoryIds
+    ? moodleCourses.filter((course) => effectiveCategoryIds.has(Number(course.category)))
     : moodleCourses
 
   if (scopedMoodleCourses.length === 0) {
-    return errorResponse('No Moodle courses found for selected category.', 404)
+    return errorResponse('No Moodle courses found for the selected categories.', 404)
   }
 
   const moodleCourseIds = scopedMoodleCourses.map((course) => String(course.id))
@@ -628,7 +659,6 @@ export async function syncProjectCatalog(
       participantUsers: participants.length,
       userCourseLinks: links.length,
       groupAssignments: desiredGroupByUserId.size,
-      requestedCategoryId: categoryId ?? null,
     })
   } catch (syncError) {
     console.error('[moodle-sync-courses] Error during project catalog sync:', syncError)
