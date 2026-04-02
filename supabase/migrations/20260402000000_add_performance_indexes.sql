@@ -14,10 +14,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_student_courses_course_student
 
 -- 3. Índices em risk_history para JOIN duplo do RLS e ordenação temporal
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_risk_history_student_recorded
-  ON public.risk_history (student_id, recorded_at DESC);
+  ON public.risk_history (student_id, created_at DESC);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_risk_history_user_recorded
-  ON public.risk_history (user_id, recorded_at DESC);
+  ON public.risk_history (user_id, created_at DESC);
 
 -- 4. Índice composto parcial em student_activities (course_id, student_id, status)
 --    Maior tabela transacional do sync Moodle; filtros compostos do dashboard sem índice.
