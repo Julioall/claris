@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Building2, Check, FolderOpen, RefreshCw } from 'lucide-react';
+import { Building2, Check, FolderOpen, Loader2, RefreshCw, XCircle } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
@@ -14,10 +14,12 @@ import { Spinner } from '@/components/ui/spinner';
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import { toast } from '@/hooks/use-toast';
 import {
+  fetchCatalogSyncJob,
   fetchSyncCategoryIds,
   listMoodleCategories,
   saveSyncCategoryIds,
   syncProjectCatalog,
+  type CatalogSyncJob,
   type CatalogSyncResult,
   type MoodleCategoryApi,
 } from '../api/settings';
@@ -161,7 +163,10 @@ export default function AdminSincronizacao() {
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<CatalogSyncResult | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncJob, setSyncJob] = useState<CatalogSyncJob | null>(null);
   const hasAutoLoadedRef = useRef(false);
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     fetchSyncCategoryIds()
@@ -222,25 +227,78 @@ export default function AdminSincronizacao() {
   const handleSync = async () => {
     if (!moodleSession) return;
     setSyncResult(null);
+    setSyncError(null);
+    setSyncJob(null);
     setIsSyncing(true);
+
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+
     try {
       const categoryIds = selectedIds.size > 0 ? [...selectedIds] : undefined;
-      const result = await syncProjectCatalog(moodleSession.moodleUrl, moodleSession.moodleToken, categoryIds);
-      setSyncResult(result);
+      const { jobId } = await syncProjectCatalog(moodleSession.moodleUrl, moodleSession.moodleToken, categoryIds);
+
+      setSyncJob({ jobId, status: 'processing' });
+
       toast({
-        title: 'Sincronizacao concluida',
-        description: `${result.courses} cursos, ${result.participantUsers} usuarios, ${result.userCourseLinks} vinculos, ${result.groupAssignments} grupos.`,
+        title: 'Sincronizacao iniciada',
+        description: 'O processo esta rodando em segundo plano. Aguarde a conclusao.',
       });
+
+      pollIntervalRef.current = setInterval(async () => {
+        try {
+          const job = await fetchCatalogSyncJob(jobId);
+          setSyncJob(job);
+
+          if (job.status === 'completed') {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setIsSyncing(false);
+            if (job.result) {
+              setSyncResult(job.result);
+              toast({
+                title: 'Sincronizacao concluida',
+                description: `${job.result.courses} cursos, ${job.result.participantUsers} usuarios, ${job.result.userCourseLinks} vinculos, ${job.result.groupAssignments} grupos.`,
+              });
+            }
+          } else if (job.status === 'failed') {
+            if (pollIntervalRef.current) {
+              clearInterval(pollIntervalRef.current);
+              pollIntervalRef.current = null;
+            }
+            setIsSyncing(false);
+            setSyncError(job.errorMessage ?? 'Erro desconhecido na sincronizacao');
+            toast({
+              title: 'Erro na sincronizacao',
+              description: job.errorMessage ?? 'Erro desconhecido',
+              variant: 'destructive',
+            });
+          }
+        } catch (pollErr) {
+          console.warn('[AdminSincronizacao] Falha ao consultar status do job, tentando novamente...', pollErr);
+        }
+      }, 4000);
     } catch (err) {
+      setIsSyncing(false);
       toast({
-        title: 'Erro na sincronizacao',
+        title: 'Erro ao iniciar sincronizacao',
         description: err instanceof Error ? err.message : 'Erro desconhecido',
         variant: 'destructive',
       });
-    } finally {
-      setIsSyncing(false);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="space-y-6">
@@ -336,6 +394,33 @@ export default function AdminSincronizacao() {
               )}
             </CardContent>
           </Card>
+
+          {syncJob?.status === 'processing' && (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin shrink-0" />
+                  <p className="text-sm">
+                    Sincronizacao em andamento em segundo plano. Isso pode levar alguns minutos...
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {syncError && (
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2 text-destructive">
+                  <XCircle className="h-5 w-5" />
+                  Erro na Sincronizacao
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">{syncError}</p>
+              </CardContent>
+            </Card>
+          )}
 
           {syncResult && (
             <Card>
