@@ -140,14 +140,14 @@ describe("CourseSelectorDialog", () => {
     const { onOpenChange, onSync } = renderDialog();
 
     await waitFor(() => {
-      expect(screen.getByText(/2 cursos selecionados/i)).toBeInTheDocument();
+      expect(screen.getByText(/3 cursos selecionados/i)).toBeInTheDocument();
     });
 
-    expect(screen.queryByText("Evento C")).not.toBeInTheDocument();
+    expect(screen.getByText("Evento C")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^Sincronizar$/i }));
 
-    expect(onSync).toHaveBeenCalledWith(["c1", "c2"]);
+    expect(onSync).toHaveBeenCalledWith(["c1", "c2", "c4"]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(prefsUpsertMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -165,7 +165,7 @@ describe("CourseSelectorDialog", () => {
     const { onSync } = renderDialog();
 
     await waitFor(() => {
-      expect(screen.getByText(/2 cursos selecionados/i)).toBeInTheDocument();
+      expect(screen.getByText(/3 cursos selecionados/i)).toBeInTheDocument();
     });
 
     await user.click(screen.getByRole("button", { name: /Limpar sele/i }));
@@ -175,8 +175,8 @@ describe("CourseSelectorDialog", () => {
     expect(screen.getByRole("button", { name: /^Sincronizar$/i })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: /^Sincronizar$/i }));
 
-    expect(onSync).toHaveBeenCalledWith(expect.arrayContaining(["c1", "c2"]));
-    expect(onSync.mock.calls[0][0]).toHaveLength(2);
+    expect(onSync).toHaveBeenCalledWith(expect.arrayContaining(["c1", "c2", "c4"]));
+    expect(onSync.mock.calls[0][0]).toHaveLength(3);
   });
 
   it("loads saved preferences and includes finished courses when enabled", async () => {

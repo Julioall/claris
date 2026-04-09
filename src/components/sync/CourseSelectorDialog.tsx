@@ -43,13 +43,6 @@ interface SchoolNode {
 }
 
 function isCourseFinishedForSyncFilter(course: Course): boolean {
-  const hasDeclaredEndDate = Boolean(course.end_date?.trim());
-  const hasEffectiveEndDate = Boolean(course.effective_end_date?.trim());
-
-  if (!hasDeclaredEndDate && !hasEffectiveEndDate) {
-    return true;
-  }
-
   return !isCourseEffectivelyActive(course);
 }
 
