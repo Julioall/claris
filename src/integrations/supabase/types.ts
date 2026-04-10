@@ -3084,6 +3084,125 @@ export type Database = {
         }
         Relationships: []
       }
+      uc_enrollments: {
+        Row: {
+          caminho_curso: string | null
+          categoria: string | null
+          cpf: string | null
+          email: string | null
+          id: string
+          id_uc: string
+          import_batch_id: string | null
+          imported_at: string
+          inicio_uc_at: string | null
+          matriculado_em_at: string | null
+          nome_pessoa: string
+          nome_uc: string
+          nota_final_num: number | null
+          nota_final_raw: string | null
+          nunca_acessou_uc: boolean
+          papel: string
+          status_uc: string | null
+          telefone1: string | null
+          telefone2: string | null
+          termino_uc_at: string | null
+          ultimo_acesso_plataforma_at: string | null
+          ultimo_acesso_uc_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          caminho_curso?: string | null
+          categoria?: string | null
+          cpf?: string | null
+          email?: string | null
+          id?: string
+          id_uc: string
+          import_batch_id?: string | null
+          imported_at?: string
+          inicio_uc_at?: string | null
+          matriculado_em_at?: string | null
+          nome_pessoa: string
+          nome_uc: string
+          nota_final_num?: number | null
+          nota_final_raw?: string | null
+          nunca_acessou_uc?: boolean
+          papel: string
+          status_uc?: string | null
+          telefone1?: string | null
+          telefone2?: string | null
+          termino_uc_at?: string | null
+          ultimo_acesso_plataforma_at?: string | null
+          ultimo_acesso_uc_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          caminho_curso?: string | null
+          categoria?: string | null
+          cpf?: string | null
+          email?: string | null
+          id?: string
+          id_uc?: string
+          import_batch_id?: string | null
+          imported_at?: string
+          inicio_uc_at?: string | null
+          matriculado_em_at?: string | null
+          nome_pessoa?: string
+          nome_uc?: string
+          nota_final_num?: number | null
+          nota_final_raw?: string | null
+          nunca_acessou_uc?: boolean
+          papel?: string
+          status_uc?: string | null
+          telefone1?: string | null
+          telefone2?: string | null
+          termino_uc_at?: string | null
+          ultimo_acesso_plataforma_at?: string | null
+          ultimo_acesso_uc_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'uc_enrollments_import_batch_id_fkey'
+            columns: ['import_batch_id']
+            isOneToOne: false
+            referencedRelation: 'uc_import_batches'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      uc_import_batches: {
+        Row: {
+          error_message: string | null
+          filename: string | null
+          id: string
+          imported_at: string
+          imported_by: string | null
+          status: string
+          total_records: number
+          upserted_records: number
+        }
+        Insert: {
+          error_message?: string | null
+          filename?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          status?: string
+          total_records?: number
+          upserted_records?: number
+        }
+        Update: {
+          error_message?: string | null
+          filename?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          status?: string
+          total_records?: number
+          upserted_records?: number
+        }
+        Relationships: []
+      }
       users: {
         Row: {
           avatar_url: string | null
@@ -3247,6 +3366,18 @@ export type Database = {
         Returns: {
           course_id: string
         }[]
+      }
+      list_uc_enrollments_paginated: {
+        Args: {
+          p_categoria?: string
+          p_nome_uc?: string
+          p_page?: number
+          p_page_size?: number
+          p_papel?: string
+          p_search?: string
+          p_status_uc?: string
+        }
+        Returns: Json
       }
       list_students_paginated: {
         Args: {

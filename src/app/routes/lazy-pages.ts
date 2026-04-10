@@ -7,6 +7,7 @@ export const SchoolsPage = lazy(() => import('@/features/courses/pages/SchoolsPa
 export const CoursePanelPage = lazy(() => import('@/features/courses/pages/CoursePanelPage'));
 export const StudentsPage = lazy(() => import('@/features/students/pages/StudentsPage'));
 export const StudentProfilePage = lazy(() => import('@/features/students/pages/StudentProfilePage'));
+export const EnrollmentsPage = lazy(() => import('@/features/enrollments/pages/EnrollmentsPage'));
 export const TasksPage = lazy(() => import('@/features/tasks/pages/TasksPage'));
 export const AgendaPage = lazy(() => import('@/features/agenda/pages/AgendaPage'));
 export const MessagesPage = lazy(() => import('@/features/messages/pages/MessagesPage'));
