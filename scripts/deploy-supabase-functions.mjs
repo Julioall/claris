@@ -22,6 +22,7 @@ const DEFAULT_FUNCTIONS = [
   'whatsapp-instance-manager',
   'receive-whatsapp-webhook',
   'whatsapp-messaging',
+  'import-uc-enrollments',
 ];
 
 const __filename = fileURLToPath(import.meta.url);

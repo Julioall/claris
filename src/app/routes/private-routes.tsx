@@ -8,6 +8,7 @@ import {
   ClarisPage,
   CoursePanelPage,
   DashboardPage,
+  EnrollmentsPage,
   MessagesPage,
   MyCoursesPage,
   MyServicesPage,
@@ -39,6 +40,7 @@ export function renderPrivateRoutes() {
       <Route path="/cursos/:id" element={<PermissionRoute permission={APP_PERMISSIONS.COURSES_PANEL_VIEW}><CoursePanelPage /></PermissionRoute>} />
       <Route path="/alunos" element={<PermissionRoute permission={APP_PERMISSIONS.STUDENTS_VIEW}><StudentsPage /></PermissionRoute>} />
       <Route path="/alunos/:id" element={<PermissionRoute permission={APP_PERMISSIONS.STUDENTS_VIEW}><StudentProfilePage /></PermissionRoute>} />
+      <Route path="/gerencia" element={<PermissionRoute permission={APP_PERMISSIONS.ENROLLMENTS_VIEW}><EnrollmentsPage /></PermissionRoute>} />
       <Route path="/tarefas" element={<PermissionRoute permission={APP_PERMISSIONS.TASKS_VIEW}><TasksPage /></PermissionRoute>} />
       <Route path="/agenda" element={<PermissionRoute permission={APP_PERMISSIONS.AGENDA_VIEW}><AgendaPage /></PermissionRoute>} />
       <Route path="/mensagens" element={<PermissionRoute permission={APP_PERMISSIONS.MESSAGES_VIEW}><MessagesPage /></PermissionRoute>} />
