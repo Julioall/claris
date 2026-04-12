@@ -31,7 +31,6 @@ export const KNOWN_ENROLLMENT_ROLES = [
   'Aluno',
   'Monitor',
   'Tutor',
-  'Professor Presencial',
 ] as const;
 
 export type KnownEnrollmentRole = (typeof KNOWN_ENROLLMENT_ROLES)[number];
@@ -125,6 +124,69 @@ export interface EnrollmentSummary {
   total: number;
   byRole: Record<string, number>;
   byStatus: Record<string, number>;
+}
+
+export interface EnrollmentDashboardFilters {
+  startDate: string;
+  endDate: string;
+  tutor: string;
+  school: string;
+  category: string;
+  statusUc: string;
+}
+
+export interface EnrollmentDashboardOverview {
+  rows: number;
+  students: number;
+  tutors: number;
+  schools: number;
+  courses: number;
+  units: number;
+  activeStudents: number;
+  suspendedStudents: number;
+  completedStudents: number;
+  neverAccessedStudents: number;
+  averageGrade: number | null;
+  activeRate: number | null;
+  neverAccessRate: number | null;
+}
+
+export interface EnrollmentDashboardDatum {
+  label: string;
+  value: number;
+}
+
+export interface EnrollmentDashboardTrendDatum {
+  label: string;
+  students: number;
+  units: number;
+}
+
+export interface EnrollmentDashboardRankingDatum {
+  label: string;
+  students: number;
+  units: number;
+}
+
+export interface EnrollmentDashboardData {
+  overview: EnrollmentDashboardOverview;
+  roleBreakdown: EnrollmentDashboardDatum[];
+  statusBreakdown: EnrollmentDashboardDatum[];
+  accessBreakdown: EnrollmentDashboardDatum[];
+  monthlyTrend: EnrollmentDashboardTrendDatum[];
+  topSchools: EnrollmentDashboardRankingDatum[];
+  topTutors: EnrollmentDashboardRankingDatum[];
+  topMonitors: EnrollmentDashboardRankingDatum[];
+  topCourses: EnrollmentDashboardRankingDatum[];
+}
+
+export interface EnrollmentDashboardOptions {
+  schools: string[];
+  tutors: string[];
+  dateRange: {
+    min: string | null;
+    max: string | null;
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

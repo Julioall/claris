@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import {
+  fetchEnrollmentDashboard,
+  fetchEnrollmentDashboardOptions,
   fetchDistinctEnrollmentValues,
   fetchEnrollmentSummary,
   fetchEnrollmentsPage,
   ENROLLMENTS_PAGE_SIZE,
 } from '../api/enrollments.repository';
-import type { EnrollmentFilters } from '../types';
+import type { EnrollmentDashboardFilters, EnrollmentFilters } from '../types';
 
 export const enrollmentKeys = {
   all: ['uc_enrollments'] as const,
@@ -14,6 +16,9 @@ export const enrollmentKeys = {
   filterValues: (column: string) =>
     [...enrollmentKeys.all, 'filter-values', column] as const,
   summary: () => [...enrollmentKeys.all, 'summary'] as const,
+  dashboard: (filters: EnrollmentDashboardFilters) =>
+    [...enrollmentKeys.all, 'dashboard', filters] as const,
+  dashboardOptions: () => [...enrollmentKeys.all, 'dashboard-options'] as const,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,6 +72,34 @@ export function useEnrollmentSummary() {
   });
   return {
     summary: query.data ?? null,
+    isLoading: query.isLoading,
+  };
+}
+
+export function useEnrollmentDashboard(filters: EnrollmentDashboardFilters) {
+  const query = useQuery({
+    queryKey: enrollmentKeys.dashboard(filters),
+    queryFn: () => fetchEnrollmentDashboard(filters),
+    staleTime: 30 * 1000,
+  });
+
+  return {
+    dashboard: query.data ?? null,
+    isLoading: query.isLoading,
+    isFetching: query.isFetching,
+    error: query.error?.message ?? null,
+  };
+}
+
+export function useEnrollmentDashboardOptions() {
+  const query = useQuery({
+    queryKey: enrollmentKeys.dashboardOptions(),
+    queryFn: fetchEnrollmentDashboardOptions,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  return {
+    options: query.data ?? null,
     isLoading: query.isLoading,
   };
 }

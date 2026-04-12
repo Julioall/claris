@@ -45,6 +45,12 @@ vi.mock("@/features/dashboard/components/ActivityFeed", () => ({
   ),
 }));
 
+vi.mock("@/features/dashboard/components/ManagerialViews", () => ({
+  ManagerialViews: ({ courses }: { courses: Array<{ id: string }> }) => (
+    <div data-testid="managerial-views">{courses.length}</div>
+  ),
+}));
+
 vi.mock("@/features/claris/components/ClarisSuggestions", () => ({
   ClarisSuggestions: () => <div data-testid="claris-suggestions" />,
 }));
@@ -101,5 +107,6 @@ describe("Dashboard page", () => {
     expect(screen.getByTestId("activities-to-review")).toHaveTextContent("2");
     expect(screen.getByTestId("course-overview")).toHaveTextContent("1");
     expect(screen.getByTestId("activity-feed")).toHaveTextContent("1");
+    expect(screen.getByTestId("managerial-views")).toHaveTextContent("1");
   });
 });

@@ -1,5 +1,7 @@
+import { HelpCircle, LucideIcon } from 'lucide-react';
+
 import { cn } from '@/lib/utils';
-import { LucideIcon } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 
 interface StatCardProps {
   title: string;
@@ -13,6 +15,8 @@ interface StatCardProps {
   };
   variant?: 'default' | 'warning' | 'danger' | 'success' | 'pending' | 'risk';
   className?: string;
+  /** Texto explicativo exibido no tooltip do ícone "?" ao lado do título. */
+  tooltip?: string;
 }
 
 export function StatCard({ 
@@ -22,7 +26,8 @@ export function StatCard({
   icon: Icon,
   trend,
   variant = 'default',
-  className 
+  className,
+  tooltip,
 }: StatCardProps) {
   const variantStyles = {
     default: 'bg-card',
@@ -41,7 +46,25 @@ export function StatCard({
     )}>
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="flex items-center gap-1 text-sm font-medium text-muted-foreground">
+            {title}
+            {tooltip && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    className="inline-flex shrink-0 items-center justify-center rounded-full text-muted-foreground/50 hover:text-muted-foreground focus-visible:outline-none"
+                    aria-label="Mais informações sobre este indicador"
+                  >
+                    <HelpCircle className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-xs leading-relaxed">
+                  {tooltip}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </p>
           <p className="text-2xl font-bold tracking-tight">{value}</p>
           {subtitle && (
             <p className="text-xs text-muted-foreground">{subtitle}</p>

@@ -18,6 +18,7 @@ import { getCourseLifecycleStatus } from '@/lib/course-dates';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { ActivitiesToReview } from '../components/ActivitiesToReview';
 import { CourseOverview } from '../components/CourseOverview';
+import { ManagerialViews } from '../components/ManagerialViews';
 import { PriorityList } from '../components/PriorityList';
 import { WeeklyIndicators } from '../components/WeeklyIndicators';
 import { useDashboardData } from '../hooks/useDashboardData';
@@ -128,6 +129,9 @@ export default function DashboardPage() {
 
       {/* Claris IA proactive suggestions panel */}
       <ClarisSuggestions />
+
+      {/* Managerial analytics views */}
+      <ManagerialViews courses={ongoingCourses} />
 
       {/* Main content grid */}
       <div className="grid gap-6 lg:grid-cols-2">

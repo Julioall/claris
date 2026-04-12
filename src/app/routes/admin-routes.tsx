@@ -10,7 +10,6 @@ import {
   AdminJobsPage,
   AdminMetricsPage,
   AdminSettingsPage,
-  AdminSincronizacaoPage,
   AdminSupportPage,
   AdminUsersPage,
 } from './lazy-pages';
@@ -41,7 +40,6 @@ export function renderAdminRoutes() {
       <Route path="/admin/suporte" element={<AdminSupportPage />} />
       <Route path="/admin/conversas-claris" element={<AdminClarisConversationsPage />} />
       <Route path="/admin/servicos-aplicacao" element={<AdminApplicationServicesPage />} />
-      <Route path="/admin/sincronizacao" element={<AdminSincronizacaoPage />} />
     </Route>
   );
 }

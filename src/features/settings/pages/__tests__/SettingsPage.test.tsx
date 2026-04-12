@@ -1,20 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import SettingsPage from '@/features/settings/pages/SettingsPage';
 import { MESSAGE_PREFERENCES_STORAGE_KEY } from '@/features/messages/lib/message-preferences';
 
 const useAuthMock = vi.fn();
-const fromMock = vi.fn();
 const invokeMock = vi.fn();
 const logoutMock = vi.fn();
-const syncDataMock = vi.fn();
-
-const selectMock = vi.fn();
-const eqMock = vi.fn();
-const maybeSingleMock = vi.fn();
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
@@ -22,7 +16,6 @@ vi.mock('@/contexts/AuthContext', () => ({
 
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
     functions: {
       invoke: (...args: unknown[]) => invokeMock(...args),
     },
@@ -39,7 +32,7 @@ const setAuthUser = () => {
     },
     logout: logoutMock,
     lastSync: '2026-02-20T12:00:00.000Z',
-    syncData: syncDataMock,
+    syncData: vi.fn(),
     isSyncing: false,
     isOfflineMode: false,
     courses: [],
@@ -76,36 +69,17 @@ describe('Settings page', () => {
       error: null,
     });
     setAuthUser();
-
-    maybeSingleMock.mockResolvedValue({ data: null, error: null });
-    eqMock.mockReturnValue({ maybeSingle: maybeSingleMock });
-    selectMock.mockReturnValue({ eq: eqMock });
-    fromMock.mockImplementation(() => ({
-      select: selectMock,
-    }));
   });
 
-  it('shows profile, theme and sync for all users', async () => {
+  it('shows profile and theme cards for all users', async () => {
     renderPage();
 
     expect(screen.getByRole('heading', { level: 1, name: /configuracoes/i })).toBeInTheDocument();
     expect(screen.getByText('Julio Tutor')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Sincronizacao Geral/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Sincronizacao Geral/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sair da conta/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /mensagens/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /limpeza operacional do banco/i })).not.toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(fromMock).toHaveBeenCalledWith('app_settings');
-    });
-  });
-
-  it('triggers initial general sync', async () => {
-    const user = userEvent.setup();
-    renderPage();
-
-    await user.click(screen.getByRole('button', { name: /Sincronizacao Geral/i }));
-    expect(syncDataMock).toHaveBeenCalledTimes(1);
   });
 
   it('shows the background job reauthorization preference and allows disabling it', async () => {

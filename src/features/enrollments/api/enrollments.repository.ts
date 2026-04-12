@@ -6,7 +6,14 @@
  */
 
 import { supabase } from '@/integrations/supabase/client';
-import type { EnrollmentFilters, EnrollmentListPage, EnrollmentSummary } from '../types';
+import type {
+  EnrollmentDashboardData,
+  EnrollmentDashboardFilters,
+  EnrollmentDashboardOptions,
+  EnrollmentFilters,
+  EnrollmentListPage,
+  EnrollmentSummary,
+} from '../types';
 import { mapDbRowToEnrollment } from '../lib/mappers';
 
 export const ENROLLMENTS_PAGE_SIZE = 30;
@@ -98,5 +105,109 @@ export async function fetchEnrollmentSummary(): Promise<EnrollmentSummary> {
     total: rows.length,
     byRole,
     byStatus,
+  };
+}
+
+export async function fetchEnrollmentDashboard(
+  filters: EnrollmentDashboardFilters,
+): Promise<EnrollmentDashboardData> {
+  const { data, error } = await supabase.rpc('get_uc_enrollments_dashboard', {
+    p_start_date: filters.startDate || undefined,
+    p_end_date: filters.endDate || undefined,
+    p_tutor: filters.tutor || undefined,
+    p_school: filters.school || undefined,
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const result = (data ?? {}) as Partial<EnrollmentDashboardData>;
+
+  return {
+    overview: {
+      rows: result.overview?.rows ?? 0,
+      students: result.overview?.students ?? 0,
+      tutors: result.overview?.tutors ?? 0,
+      schools: result.overview?.schools ?? 0,
+      courses: result.overview?.courses ?? 0,
+      units: result.overview?.units ?? 0,
+      activeStudents: result.overview?.activeStudents ?? 0,
+      suspendedStudents: result.overview?.suspendedStudents ?? 0,
+      completedStudents: result.overview?.completedStudents ?? 0,
+      neverAccessedStudents: result.overview?.neverAccessedStudents ?? 0,
+      averageGrade: result.overview?.averageGrade ?? null,
+      activeRate: result.overview?.activeRate ?? null,
+      neverAccessRate: result.overview?.neverAccessRate ?? null,
+    },
+    roleBreakdown: result.roleBreakdown ?? [],
+    statusBreakdown: result.statusBreakdown ?? [],
+    accessBreakdown: result.accessBreakdown ?? [],
+    monthlyTrend: result.monthlyTrend ?? [],
+    topSchools: result.topSchools ?? [],
+    topTutors: result.topTutors ?? [],
+    topMonitors: result.topMonitors ?? [],
+    topCourses: result.topCourses ?? [],
+  };
+}
+
+export async function fetchEnrollmentDashboardOptions(): Promise<EnrollmentDashboardOptions> {
+  const normalize = (value: string | null | undefined) => (
+    (value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim()
+      .toLowerCase()
+  );
+
+  const loadTutorsFallback = async () => {
+    const { data, error } = await supabase
+      .from('uc_enrollments')
+      .select('nome_pessoa, papel')
+      .not('nome_pessoa', 'is', null);
+
+    if (error) return [];
+
+    const uniqueTutors = new Set<string>();
+
+    (data ?? []).forEach((row) => {
+      const role = normalize((row as { papel?: string | null }).papel);
+      const name = (row as { nome_pessoa?: string | null }).nome_pessoa?.trim();
+      if (!name) return;
+
+      if (role === 'tutor' || role.includes('tutor')) {
+        uniqueTutors.add(name);
+      }
+    });
+
+    return Array.from(uniqueTutors).sort((left, right) => left.localeCompare(right, 'pt-BR'));
+  };
+
+  const { data, error } = await supabase.rpc('get_uc_enrollments_dashboard_options');
+
+  if (error) {
+    const tutors = await loadTutorsFallback();
+
+    return {
+      schools: [],
+      tutors,
+      dateRange: {
+        min: null,
+        max: null,
+      },
+    };
+  }
+
+  const result = (data ?? {}) as Partial<EnrollmentDashboardOptions>;
+  const rpcTutors = (result.tutors ?? []).filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+  const tutors = rpcTutors.length > 0 ? rpcTutors : await loadTutorsFallback();
+
+  return {
+    schools: result.schools ?? [],
+    tutors,
+    dateRange: {
+      min: result.dateRange?.min ?? null,
+      max: result.dateRange?.max ?? null,
+    },
   };
 }

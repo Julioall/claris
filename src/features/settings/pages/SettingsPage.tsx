@@ -1,33 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
-import { Clock, LogOut, MessageSquare, RefreshCw, User } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { LogOut, MessageSquare, User } from 'lucide-react';
 
-import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchGlobalSettings } from '@/features/settings/api';
 import { MessagePreferencesCard } from '@/features/settings/components/MessagePreferencesCard';
 import { MoodleReauthCard } from '@/features/settings/components/MoodleReauthCard';
 import { ThemeCard } from '@/features/settings/components/ThemeCard';
-import { DEFAULT_MOODLE_URL } from '@/lib/global-app-settings';
 
 export default function SettingsPage() {
-  const { user, logout, lastSync, syncData, isSyncing, isOfflineMode, courses } = useAuth();
-  const { data: globalSettings } = useQuery({
-    queryKey: ['settings', 'global'],
-    queryFn: fetchGlobalSettings,
-  });
-
-  const moodleConnectionUrl = globalSettings?.moodleConnectionUrl || DEFAULT_MOODLE_URL;
-
-  const formatDate = (date: string | null) => {
-    if (!date) return 'Nunca';
-    return format(new Date(date), "dd 'de' MMMM 'de' yyyy 'as' HH:mm", { locale: ptBR });
-  };
+  const { user, logout } = useAuth();
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -75,59 +57,6 @@ export default function SettingsPage() {
             <ThemeCard />
             {user ? <MoodleReauthCard userId={user.id} /> : null}
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <RefreshCw className="h-5 w-5" />
-                Sincronizacao
-              </CardTitle>
-              <CardDescription>
-                Sincronizacao geral para carga inicial da plataforma (quando ainda nao houver dados)
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Ultima sincronizacao:</span>
-                  <span className="font-medium">{formatDate(lastSync)}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                  <MoodleIcon className="h-4 w-4" />
-                  <span className="text-muted-foreground">URL do Moodle:</span>
-                  <span className="font-medium">{moodleConnectionUrl}</span>
-                </div>
-              </div>
-
-              <Separator />
-
-              <div className="rounded-md border bg-muted/30 p-3">
-                <p className="text-sm text-muted-foreground">
-                  Use este botao apenas no inicio, quando ainda nao houver dados sincronizados. Para uso diario,
-                  prefira os botoes incrementais nas telas de Alunos e Unidades Curriculares.
-                </p>
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={syncData}
-                disabled={isOfflineMode || isSyncing || courses.length > 0}
-                className="w-full"
-              >
-                {isSyncing ? 'Sincronizando...' : 'Sincronizacao Geral'}
-              </Button>
-
-              {courses.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  A Sincronizacao Geral fica disponivel apenas quando ainda nao houver dados na plataforma.
-                </p>
-              )}
-            </CardContent>
-          </Card>
 
           <Card className="border-destructive/30">
             <CardHeader>
