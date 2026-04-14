@@ -27,7 +27,9 @@ import { toast } from 'sonner';
 import {
   cancelAdminBackgroundJob,
   canAdminCancelBackgroundJob,
+  canAdminForceTerminateBackgroundJob,
   canAdminRetryBackgroundJob,
+  forceTerminateAdminBackgroundJob,
   getAdminBackgroundJobDetails,
   listAdminBackgroundJobs,
   retryAdminBackgroundJob,
@@ -117,7 +119,7 @@ function StatCard(props: {
 }
 
 function canShowActions(job: AdminBackgroundJobRow) {
-  return canAdminRetryBackgroundJob(job) || canAdminCancelBackgroundJob(job);
+  return canAdminRetryBackgroundJob(job) || canAdminCancelBackgroundJob(job) || canAdminForceTerminateBackgroundJob(job);
 }
 
 function JobDetails({ details }: { details: AdminBackgroundJobDetails }) {
@@ -282,6 +284,17 @@ export default function AdminJobs() {
     },
     onError: (error) => {
       toast.error(error instanceof Error ? error.message : 'Erro ao cancelar job.');
+    },
+  });
+
+  const forceTerminateMutation = useMutation({
+    mutationFn: forceTerminateAdminBackgroundJob,
+    onSuccess: async (_data, job) => {
+      toast.success('Job interrompido forçadamente.');
+      await refreshAdminJobs(job.id);
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : 'Erro ao interromper job.');
     },
   });
 
@@ -474,7 +487,7 @@ export default function AdminJobs() {
                                           event.stopPropagation();
                                           retryMutation.mutate(job);
                                         }}
-                                        disabled={retryMutation.isPending || cancelMutation.isPending}
+                                        disabled={retryMutation.isPending || cancelMutation.isPending || forceTerminateMutation.isPending}
                                       >
                                         {retryMutation.isPending && retryMutation.variables?.id === job.id ? (
                                           <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
@@ -493,7 +506,7 @@ export default function AdminJobs() {
                                           event.stopPropagation();
                                           cancelMutation.mutate(job);
                                         }}
-                                        disabled={retryMutation.isPending || cancelMutation.isPending}
+                                        disabled={retryMutation.isPending || cancelMutation.isPending || forceTerminateMutation.isPending}
                                       >
                                         {cancelMutation.isPending && cancelMutation.variables?.id === job.id ? (
                                           <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
@@ -504,9 +517,28 @@ export default function AdminJobs() {
                                       </Button>
                                     ) : null}
 
+                                    {canAdminForceTerminateBackgroundJob(job) ? (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          forceTerminateMutation.mutate(job);
+                                        }}
+                                        disabled={forceTerminateMutation.isPending || retryMutation.isPending || cancelMutation.isPending}
+                                      >
+                                        {forceTerminateMutation.isPending && forceTerminateMutation.variables?.id === job.id ? (
+                                          <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <XCircle className="mr-2 h-4 w-4" />
+                                        )}
+                                        Forçar Cancelamento
+                                      </Button>
+                                    ) : null}
+
                                     <p className="text-xs text-muted-foreground">
-                                      Disponivel apenas para jobs baseados em agendamentos. Jobs reenfileirados voltam para
-                                      a fila e serao executados na proxima rodada automatica.
+                                      Jobs reenfileirados voltam para a fila e serão executados na próxima rodada automática.
+                                      Forçar cancelamento encerra o registro do job sem afetar o processamento em andamento.
                                     </p>
                                   </CardContent>
                                 </Card>
