@@ -537,8 +537,8 @@ export default function AdminJobs() {
                                     ) : null}
 
                                     <p className="text-xs text-muted-foreground">
-                                      Jobs reenfileirados voltam para a fila e serao executados na proxima rodada automatica.
-                                      Forcar cancelamento encerra o registro do job sem afetar o processamento em andamento.
+                                      Jobs reenfileirados voltam para a fila e serão executados na próxima rodada automática.
+                                      Forçar cancelamento encerra o registro do job sem afetar o processamento em andamento.
                                     </p>
                                   </CardContent>
                                 </Card>

@@ -292,16 +292,22 @@ export async function retryAdminBackgroundJob(job: AdminBackgroundJobRow): Promi
   if (error || !data) throw error ?? new Error('Agendamento nao encontrado para reenfileiramento.');
 
   // When retrying a stuck processing job, cancel this background_job record
-  // so the next execution creates a fresh tracking entry
+  // so the next execution creates a fresh tracking entry. This is best-effort:
+  // if the job already reached a terminal state, the update will simply not match.
   if (job.status === 'processing') {
-    await supabase
+    const { error: bgError } = await supabase
       .from(BACKGROUND_JOBS_TABLE)
       .update({
         status: 'cancelled' as const,
         completed_at: new Date().toISOString(),
         error_message: 'Interrompido e reenfileirado manualmente pelo painel administrativo.',
       })
-      .eq('id', job.id);
+      .eq('id', job.id)
+      .eq('status', 'processing');
+
+    if (bgError) {
+      console.error('Failed to mark stuck background job as cancelled during retry:', bgError);
+    }
   }
 
   await appendAdminJobEvent(
@@ -334,14 +340,21 @@ export async function cancelAdminBackgroundJob(job: AdminBackgroundJobRow): Prom
   if (error) throw error;
   if (!data) throw new Error('Somente agendamentos pendentes ou em processamento podem ser cancelados.');
 
-  await supabase
+  // Best-effort: mark the background_job record as cancelled. If the job
+  // already reached a terminal state, the update will simply not match.
+  const { error: bgError } = await supabase
     .from(BACKGROUND_JOBS_TABLE)
     .update({
       status: 'cancelled' as const,
       completed_at: new Date().toISOString(),
       error_message: 'Cancelado manualmente pelo painel administrativo.',
     })
-    .eq('id', job.id);
+    .eq('id', job.id)
+    .in('status', ['pending', 'processing']);
+
+  if (bgError) {
+    console.error('Failed to mark background job as cancelled:', bgError);
+  }
 
   await appendAdminJobEvent(
     job,
