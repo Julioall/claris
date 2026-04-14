@@ -30,6 +30,7 @@ import type { EnrollmentDashboardFilters } from '../types';
 interface WorkloadKPIsProps {
   hasData: boolean;
   filters: EnrollmentDashboardFilters;
+  excludeSuspended: boolean;
 }
 
 function fmt(value: number, decimals = 1) {
@@ -62,8 +63,8 @@ function RateCell({ value }: { value: number }) {
   return <span className={color}>{fmtPct(value)}</span>;
 }
 
-export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
-  const { data, isLoading, error } = useWorkloadKPIs(filters, hasData);
+export function WorkloadKPIs({ hasData, filters, excludeSuspended }: WorkloadKPIsProps) {
+  const { data, isLoading, error } = useWorkloadKPIs({ ...filters, excludeSuspended }, hasData);
   const [actorTab, setActorTab] = useState<'tutores' | 'monitores'>('tutores');
 
   if (!hasData) return null;
@@ -130,12 +131,14 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
       ? (actorRows.reduce((acc, t) => acc + t.totalUcs, 0) / actorRows.length)
       : 0;
 
-  const barData = actorRows.slice(0, 15).map((t) => ({
+  const barData = actorRows.map((t) => ({
     name: t.tutorName.split(' ')[0],
     fullName: t.tutorName,
     alunos: t.totalStudents,
     ucs: t.totalUcs,
   }));
+
+  const chartHeight = Math.max(280, barData.length * 28);
 
   return (
     <Card>
@@ -163,10 +166,10 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
           <StatCard
             title={actorTab === 'tutores' ? 'Tutores na base' : 'Monitores na base'}
             value={fmtInt(totalActors)}
-            subtitle={`${fmtInt(totalActorUcs)} UCs monitoradas`}
+            subtitle={`${fmtInt(totalActorUcs)} Turmas monitoradas`}
             icon={UserSquare2}
             variant="pending"
-            tooltip={`Número de ${actorPluralLabel} distintos identificados na base importada, com pelo menos uma UC no recorte filtrado.`}
+            tooltip={`Número de ${actorPluralLabel} distintos identificados na base importada, com pelo menos uma Turma (UC) no recorte filtrado.`}
           />
           <StatCard
             title="Alunos únicos"
@@ -185,12 +188,12 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
             tooltip={`Total de alunos únicos do papel dividido pelo número de ${actorPluralLabel}. Indica a carga média de acompanhamento por ${actorLabel}.`}
           />
           <StatCard
-            title={`Média UCs / ${actorLabel}`}
+            title={`Média Turmas / ${actorLabel}`}
             value={fmt(avgUcsPerActor)}
-            subtitle="unidades curriculares"
+            subtitle="turmas (UCs)"
             icon={BookOpen}
             variant="success"
-            tooltip={`Soma das UCs de todos os ${actorPluralLabel} dividida pelo número de ${actorPluralLabel}. Indica quantas turmas cada ${actorLabel} gerencia em média.`}
+            tooltip={`Soma das Turmas de todos os ${actorPluralLabel} dividida pelo número de ${actorPluralLabel}. Indica quantas turmas cada ${actorLabel} gerencia em média.`}
           />
         </div>
 
@@ -207,7 +210,7 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-1.5 text-sm">
                   {actorTab === 'tutores' ? 'Indicadores por Tutor' : 'Indicadores por Monitor'}
-                  <KpiTooltip content={`UCs supervisionadas, volume de alunos, nota média, taxa de conclusão (nota ≥ 60), taxa de acesso (acessou ao menos uma vez) e taxa de retenção (alunos ativos) por ${actorLabel}.`} />
+                  <KpiTooltip content={`Turmas supervisionadas, volume de alunos, nota média, taxa de conclusão (nota ≥ 60), taxa de acesso (acessou ao menos uma vez) e taxa de retenção (alunos ativos) por ${actorLabel}. Uma "Turma" corresponde a uma Unidade Curricular (id_uc) na base importada.`} />
                 </CardTitle>
                 <CardDescription>
                   UCs supervisionadas, volume de alunos, nota média, taxa de acesso e retenção por {actorLabel}.
@@ -223,7 +226,7 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
                     <TableHeader>
                       <TableRow>
                         <TableHead>{actorTab === 'tutores' ? 'Tutor' : 'Monitor'}</TableHead>
-                        <TableHead className="text-right">UCs</TableHead>
+                        <TableHead className="text-right">Turmas</TableHead>
                         <TableHead className="text-right">Alunos</TableHead>
                         <TableHead className="text-right">Nota Média</TableHead>
                         <TableHead className="text-right">Conclusão ≥ 60</TableHead>
@@ -264,10 +267,10 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
               <CardHeader className="pb-2">
                 <CardTitle className="flex items-center gap-1.5 text-sm">
                   Indicadores por Categoria de Curso
-                  <KpiTooltip content={`Distribuição de carga (UCs e ${actorPluralLabel}), volume de alunos, nota média, taxa de conclusão (nota ≥ 60) e taxa de acesso por tipo de curso (categoria).`} />
+                  <KpiTooltip content={`Distribuição de carga (Turmas e ${actorPluralLabel}), volume de alunos, nota média, taxa de conclusão (nota ≥ 60) e taxa de acesso por categoria de curso. Cada "Turma" corresponde a uma Unidade Curricular (id_uc) na base importada.`} />
                 </CardTitle>
                 <CardDescription>
-                  Distribuição de carga, conclusão, acesso e desempenho por tipo de curso para {actorPluralLabel}.
+                  Distribuição de carga, conclusão, acesso e desempenho por categoria de curso para {actorPluralLabel}.
                 </CardDescription>
               </CardHeader>
               <CardContent className="overflow-x-auto">
@@ -279,8 +282,8 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Tipo de Curso</TableHead>
-                        <TableHead className="text-right">UCs</TableHead>
+                        <TableHead>Categoria</TableHead>
+                        <TableHead className="text-right">Turmas</TableHead>
                         <TableHead className="text-right">{actorTab === 'tutores' ? 'Tutores' : 'Monitores'}</TableHead>
                         <TableHead className="text-right">Alunos</TableHead>
                         <TableHead className="text-right">Nota Média</TableHead>
@@ -320,15 +323,15 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-1.5 text-sm">
                       {actorTab === 'tutores' ? 'Alunos supervisionados por tutor' : 'Alunos supervisionados por monitor'}
-                      <KpiTooltip content={`Top 15 ${actorPluralLabel} pelo total de alunos únicos supervisionados. Permite comparar a distribuição de carga entre ${actorPluralLabel}.`} />
+                      <KpiTooltip content={`Todos os ${actorPluralLabel} pelo total de alunos únicos supervisionados, ordenados de forma decrescente. Permite comparar a distribuição de carga entre ${actorPluralLabel}.`} />
                   </CardTitle>
-                    <CardDescription>Top 15 {actorPluralLabel} pelo volume de alunos.</CardDescription>
+                    <CardDescription>Todos os {actorPluralLabel} pelo volume de alunos.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {barData.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Sem dados.</p>
                   ) : (
-                    <ResponsiveContainer width="100%" height={280}>
+                    <ResponsiveContainer width="100%" height={chartHeight}>
                       <BarChart data={barData} layout="vertical" margin={{ left: 4, right: 16 }}>
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                         <XAxis type="number" tick={{ fontSize: 11 }} />
@@ -355,16 +358,16 @@ export function WorkloadKPIs({ hasData, filters }: WorkloadKPIsProps) {
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-1.5 text-sm">
-                      {actorTab === 'tutores' ? 'UCs supervisionadas por tutor' : 'UCs supervisionadas por monitor'}
-                      <KpiTooltip content={`Top 15 ${actorPluralLabel} pelo número de UCs gerenciadas, ordenados de forma decrescente. Indica quem acumula mais turmas.`} />
+                      {actorTab === 'tutores' ? 'Turmas supervisionadas por tutor' : 'Turmas supervisionadas por monitor'}
+                      <KpiTooltip content={`Todos os ${actorPluralLabel} pelo número de Turmas (UCs) gerenciadas, ordenados de forma decrescente. Indica quem acumula mais turmas.`} />
                   </CardTitle>
-                    <CardDescription>Top 15 {actorPluralLabel} pelo número de UCs.</CardDescription>
+                    <CardDescription>Todos os {actorPluralLabel} pelo número de Turmas.</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {barData.length === 0 ? (
                     <p className="text-sm text-muted-foreground">Sem dados.</p>
                   ) : (
-                    <ResponsiveContainer width="100%" height={280}>
+                    <ResponsiveContainer width="100%" height={chartHeight}>
                       <BarChart
                         data={[...barData].sort((a, b) => b.ucs - a.ucs)}
                         layout="vertical"

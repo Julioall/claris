@@ -30,6 +30,7 @@ import type { EnrollmentDashboardFilters } from '../types';
 interface DropoutKPIsProps {
   hasData: boolean;
   filters: EnrollmentDashboardFilters;
+  excludeSuspended: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,8 +86,8 @@ function barColor(dropoutRate: number) {
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function DropoutKPIs({ hasData, filters }: DropoutKPIsProps) {
-  const { data, isLoading, error } = useDropoutKPIs(filters, hasData);
+export function DropoutKPIs({ hasData, filters, excludeSuspended }: DropoutKPIsProps) {
+  const { data, isLoading, error } = useDropoutKPIs({ ...filters, excludeSuspended }, hasData);
 
   if (!hasData) return null;
 

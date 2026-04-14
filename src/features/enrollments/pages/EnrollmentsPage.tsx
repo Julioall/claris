@@ -21,6 +21,7 @@ import {
   GraduationCap,
   RefreshCw,
   School,
+  UserMinus,
   Users,
   UserSquare2,
 } from 'lucide-react';
@@ -55,6 +56,7 @@ import {
 } from '@/components/ui/select';
 import { Spinner } from '@/components/ui/spinner';
 import { StatCard } from '@/components/ui/StatCard';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePermissions } from '@/hooks/usePermissions';
 
@@ -249,10 +251,10 @@ export default function EnrollmentsPage() {
   const [strategicTab, setStrategicTab] = useState<'overview' | 'tendencias' | 'rankings' | 'executivo'>('overview');
   const [rankingActorTab, setRankingActorTab] = useState<'tutores' | 'monitores'>('tutores');
 
-  const { options, isLoading: isLoadingOptions } = useEnrollmentDashboardOptions();
   const categoryOptions = useEnrollmentFilterValues('categoria');
   const statusOptions = useEnrollmentFilterValues('status_uc');
   const { dashboard, isLoading, isFetching, error } = useEnrollmentDashboard(filters);
+  const [excludeSuspended, setExcludeSuspended] = useState(true);
 
   const hasData = (dashboard?.overview.rows ?? 0) > 0;
   const activeFilterBadges = [
@@ -442,6 +444,22 @@ export default function EnrollmentsPage() {
               Carregando opcoes de filtro...
             </div>
           )}
+
+          <div className="flex items-center gap-3 rounded-lg border bg-muted/40 px-4 py-3">
+            <UserMinus className="h-4 w-4 text-muted-foreground shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">Excluir alunos suspensos dos indicadores</p>
+              <p className="text-xs text-muted-foreground">
+                Quando ativo, alunos com status "Suspenso" não são contabilizados nos indicadores de
+                desempenho (Carga de Trabalho e Fuga de Alunos). Indicadores de evasão podem incluí-los quando desativado.
+              </p>
+            </div>
+            <Switch
+              checked={excludeSuspended}
+              onCheckedChange={setExcludeSuspended}
+              aria-label="Excluir alunos suspensos dos indicadores"
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -760,9 +778,9 @@ export default function EnrollmentsPage() {
             </Tabs>
           )}
 
-          {sessionTab === 'carga' && <WorkloadKPIs hasData={hasData} filters={filters} />}
+          {sessionTab === 'carga' && <WorkloadKPIs hasData={hasData} filters={filters} excludeSuspended={excludeSuspended} />}
 
-          {sessionTab === 'fuga' && <DropoutKPIs hasData={hasData} filters={filters} />}
+          {sessionTab === 'fuga' && <DropoutKPIs hasData={hasData} filters={filters} excludeSuspended={excludeSuspended} />}
         </>
       )}
     </div>
