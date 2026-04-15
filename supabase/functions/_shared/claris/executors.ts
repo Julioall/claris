@@ -1785,6 +1785,10 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
   if (args.description !== undefined) updates.description = args.description?.trim() ?? null
   if (args.priority) updates.priority = priorityMap[args.priority] ?? args.priority
   if (args.due_date !== undefined) updates.due_date = args.due_date || null
+  if (args.origin_reason) updates.origin_reason = String(args.origin_reason).trim()
+  if (Array.isArray(args.tags) && args.tags.length > 0) {
+    updates.tags = (args.tags as string[]).map((t: string) => String(t).trim()).filter(Boolean)
+  }
 
   if (Object.keys(updates).length === 0) {
     return { error: 'Nenhum campo informado para atualização.' }
@@ -1795,7 +1799,7 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
     .update(updates)
     .eq('id', taskId)
     .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
-    .select('id, title, status, priority, due_date')
+    .select('id, title, status, priority, due_date, origin_reason, tags')
     .maybeSingle()
 
   if (error) return { error: 'Falha ao atualizar tarefa.' }
@@ -2191,6 +2195,8 @@ async function listCourses(userId: string, args: ToolCallArgs, supabase: Supabas
 
   return {
     total: courseIds.length,
+    shown: courses.length,
+    has_more: courses.length < courseIds.length,
     courses: courses.map((c) => {
       const risk = riskByCourse.get(c.id) ?? { total: 0 }
       return {
@@ -2268,6 +2274,7 @@ async function listStudents(userId: string, args: ToolCallArgs, supabase: Supaba
   const rows = data ?? []
   return {
     total: rows.length,
+    has_more: rows.length === limit,
     students: rows.map((s) => ({
       id: s.id,
       full_name: s.full_name,
