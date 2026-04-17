@@ -459,7 +459,7 @@ actor_dropout AS (
           WHEN norm_status IN (
             'nao atualmente', 'nao_atualmente', 'inativo', 'evadido', 'desistiu')
             OR (NOT p_exclude_suspended AND norm_status = 'suspenso')
-          THEN EXTRACT(epoch FROM (ultimo_acesso_uc_at - matriculado_em_at)) / 86400.0
+          THEN EXTRACT(epoch FROM (ultimo_acesso_uc_at - matriculado_em_at::timestamptz)) / 86400.0
           ELSE NULL
         END
       )
@@ -481,7 +481,7 @@ category_dropout AS (
     THEN 1 ELSE 0 END)::int                                                               AS evaded_count,
     SUM(CASE WHEN NOT sa.nunca_acessou_uc THEN 1 ELSE 0 END)::int                        AS accessed_count,
     ROUND(
-      AVG(EXTRACT(epoch FROM (sa.termino_uc_at - sa.matriculado_em_at)) / 86400.0)
+      AVG(EXTRACT(epoch FROM (sa.termino_uc_at::timestamptz - sa.matriculado_em_at::timestamptz)) / 86400.0)
     )::int                                                                                 AS avg_days_in_course
   FROM student_actor sa
   GROUP BY categoria
@@ -517,13 +517,13 @@ global_stats AS (
           WHEN norm_status IN (
             'nao atualmente', 'nao_atualmente', 'inativo', 'evadido', 'desistiu')
             OR (NOT p_exclude_suspended AND norm_status = 'suspenso')
-          THEN EXTRACT(epoch FROM (ultimo_acesso_uc_at - matriculado_em_at)) / 86400.0
+          THEN EXTRACT(epoch FROM (ultimo_acesso_uc_at - matriculado_em_at::timestamptz)) / 86400.0
           ELSE NULL
         END
       )
     )::int                                                                                 AS avg_days_to_dropout,
     ROUND(
-      AVG(EXTRACT(epoch FROM (termino_uc_at - matriculado_em_at)) / 86400.0)
+      AVG(EXTRACT(epoch FROM (termino_uc_at::timestamptz - matriculado_em_at::timestamptz)) / 86400.0)
     )::int                                                                                 AS avg_days_in_course
   FROM student_rows
 )
