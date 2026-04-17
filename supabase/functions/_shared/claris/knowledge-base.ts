@@ -42,7 +42,7 @@ Os dados de cursos, turmas, alunos, notas e atividades são importados do Moodle
   {
     id: 'navigation',
     title: 'Navegação e Páginas da Plataforma',
-    keywords: ['navegação', 'menu', 'páginas', 'seções', 'onde fica', 'acessar', 'navegar'],
+    keywords: ['navegação', 'menu', 'páginas', 'seções', 'onde fica', 'acessar', 'navegar', 'relatórios'],
     content: `
 A plataforma possui as seguintes seções acessíveis pelo menu lateral:
 
@@ -60,6 +60,9 @@ Calendário de compromissos: web aulas, reuniões de alinhamento, entregas e eve
 
 **Mensagens**
 Central de comunicação com alunos via WhatsApp. Suporta envio individual e em lote com templates de mensagens. Inclui histórico de contatos e status de entrega.
+
+**Relatórios**
+Exportação de dados acadêmicos em Excel: atividades, notas, matrículas e totais por curso. Use para análise externa ou apresentações à coordenação.
 
 **Automações**
 Ferramentas de automação: envios em lote programados, rotinas recorrentes e agendamentos de mensagens em massa.
@@ -150,7 +153,7 @@ O fluxo recomendado para acompanhamento de alunos na Claris é:
   {
     id: 'tasks',
     title: 'Gestão de Tarefas Pedagógicas',
-    keywords: ['tarefas', 'criar tarefa', 'pendências', 'prioridade', 'gestão de tarefas', 'task'],
+    keywords: ['tarefas', 'criar tarefa', 'pendências', 'prioridade', 'gestão de tarefas', 'task', 'kanban'],
     content: `
 As tarefas na Claris representam ações pedagógicas que o tutor/monitor precisa executar.
 
@@ -168,17 +171,24 @@ As tarefas na Claris representam ações pedagógicas que o tutor/monitor precis
 - **Prioridade**: Baixa, Média, Alta, Urgente
 - **Prazo**: data limite para execução
 - **Vínculo**: aluno, curso, UC ou classe relacionada
-- **Status**: Aberta, Em andamento, Concluída
+- **Status**: A Fazer, Em andamento, Concluída
+- **Tags**: rótulos de categorização (ex.: recuperacao, risco, uc)
+
+**Visualizações disponíveis:**
+- **Lista (padrão)**: todas as tarefas em ordem de prazo/prioridade
+- **Kanban**: colunas organizadas por status (A Fazer / Em andamento / Concluída) — alterne pelo botão no cabeçalho da página
 
 **Criando tarefas com a Claris IA:**
 - "Crie uma tarefa para contatar o aluno João Silva, risco crítico, prazo amanhã"
 - "Gere um checklist de abertura para a UC de Matemática"
 - "Crie tarefas de acompanhamento para os 5 alunos mais críticos do Curso de Administração"
+- "Liste minhas tarefas do aluno Maria Santos" (filtra por aluno via entity_id)
 
 **Dicas:**
 - Sempre vincule tarefas a alunos ou cursos para facilitar o rastreamento
 - Use prioridade "Urgente" apenas para ações que precisam de atenção no mesmo dia
-- A Claris IA pode listar suas tarefas em aberto e sugerir priorização
+- A Claris IA pode listar suas tarefas em aberto, filtrar por aluno/curso/tag e sugerir priorização
+- Para excluir uma tarefa, peça à Claris IA — ela solicitará confirmação explícita do usuário antes de executar delete_task. Prefira marcar como concluída com change_task_status quando possível.
     `.trim(),
   },
 
@@ -197,12 +207,18 @@ A Agenda centraliza todos os compromissos do tutor/monitor: web aulas, reuniões
 - **Alinhamento**: reunião com coordenação ou colegas
 - **Reunião**: encontro individual ou em grupo
 - **Entrega**: prazo de atividade ou relatório
+- **Treinamento**: capacitação interna
 - **Outro**: compromisso personalizado
+
+**Visualizações disponíveis:**
+- **Lista (padrão)**: eventos em ordem cronológica
+- **Calendário**: grade mensal com os eventos distribuídos nos dias — alterne pelo botão no cabeçalho
 
 **Criando eventos com a Claris IA:**
 - "Crie um evento de web aula para o Curso de Direito na terça às 19h"
 - "Agende um alinhamento com a turma de Engenharia na sexta às 10h"
 - "Mostre meus próximos compromissos desta semana"
+- "Cadastre todos esses eventos" (para listas, a Claris usa batch_create_events)
 
 **Dicas:**
 - Antes de cada web aula, peça à Claris IA um checklist preparatório
@@ -264,6 +280,12 @@ A Claris IA é o assistente inteligente integrado à plataforma. Ela pode respon
 
 **O que a Claris IA pode fazer:**
 
+*Cursos e alunos:*
+- "Quais são meus cursos?"
+- "Liste os alunos do Curso de Administração"
+- "Mostre alunos com status ativo no Curso de Direito"
+- "Buscar aluno Maria Santos"
+
 *Análise e leitura de dados:*
 - "Quais alunos estão em risco crítico?"
 - "Resumo do aluno João Silva"
@@ -283,6 +305,8 @@ A Claris IA é o assistente inteligente integrado à plataforma. Ela pode respon
 *Mensagens:*
 - "Rascunhe uma mensagem de acompanhamento para alunos em risco"
 - "Envie uma mensagem de abertura de semana para a turma de Administração"
+- "Qual o status dos meus envios em lote?" (consulta jobs de mensagem)
+- "Cancele o job de envio pendente [id]"
 
 *Sugestões proativas:*
 - A Claris IA analisa automaticamente o contexto e exibe sugestões no Dashboard
@@ -369,6 +393,38 @@ A seção de Automações centraliza ferramentas para envios em lote, mensagens 
 
 **Dica:**
 Use Automações quando precisar comunicar com muitos alunos de uma só vez. Para contatos individuais urgentes, use Mensagens diretamente.
+    `.trim(),
+  },
+
+  // -----------------------------------------------------------------------
+  // REPORTS
+  // -----------------------------------------------------------------------
+  {
+    id: 'reports',
+    title: 'Relatórios e Exportação de Dados',
+    keywords: ['relatório', 'relatórios', 'exportar', 'excel', 'download', 'planilha', 'dados', 'exportação'],
+    content: `
+A Claris permite exportar dados acadêmicos em formato Excel (.xlsx) para análise externa ou compartilhamento com a equipe.
+
+**Tipos de relatório disponíveis:**
+- **Atividades**: detalhe de todas as atividades dos alunos (tipo, nota, prazo, status de entrega)
+- **Notas**: notas por curso e por aluno (média, porcentagem, nota formatada)
+- **Matrículas**: lista de alunos matriculados por curso com status de matrícula
+- **Totais por curso**: contagem consolidada de atividades, alunos e médias por curso
+
+**Como exportar:**
+1. Acesse o menu **Relatórios** na barra lateral
+2. Selecione o tipo de relatório e os filtros desejados (curso, período, etc.)
+3. Clique em **Exportar** para baixar o arquivo Excel
+
+**Quando usar relatórios:**
+- Preparar apresentações para coordenação ou gestão
+- Analisar dados em ferramentas externas (Excel, Google Sheets, Power BI)
+- Documentar o desempenho de turmas em períodos específicos
+- Identificar padrões de entrega e notas que não estão visíveis na plataforma
+
+**Dica:**
+A Claris IA não gera relatórios em Excel diretamente — use a seção Relatórios para downloads. A IA pode analisar os dados e apontar os principais insights antes de você exportar.
     `.trim(),
   },
 
