@@ -22,6 +22,8 @@
 -- 1. Workload KPI RPC
 -- ─────────────────────────────────────────────────────────────────────────────
 
+BEGIN;
+
 CREATE OR REPLACE FUNCTION public.get_uc_workload_kpis(
   p_start_date        DATE    DEFAULT NULL,
   p_end_date          DATE    DEFAULT NULL,
@@ -282,10 +284,13 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_uc_workload_kpis(DATE, DATE, TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO authenticated;
 
+COMMIT;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. Dropout / Evasion KPI RPC
 -- ─────────────────────────────────────────────────────────────────────────────
+
+BEGIN;
 
 CREATE OR REPLACE FUNCTION public.get_uc_dropout_kpis(
   p_start_date        DATE    DEFAULT NULL,
@@ -621,11 +626,14 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.get_uc_dropout_kpis(DATE, DATE, TEXT, TEXT, TEXT, TEXT, BOOLEAN) TO authenticated;
 
+COMMIT;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. Fix roleBreakdown in get_uc_enrollments_dashboard
 --    Count distinct people per role instead of rows.
 -- ─────────────────────────────────────────────────────────────────────────────
+
+BEGIN;
 
 CREATE OR REPLACE FUNCTION public.get_uc_enrollments_dashboard(
   p_start_date DATE DEFAULT NULL,
@@ -926,3 +934,5 @@ SELECT jsonb_build_object(
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_uc_enrollments_dashboard(DATE, DATE, TEXT, TEXT) TO authenticated;
+
+COMMIT;
