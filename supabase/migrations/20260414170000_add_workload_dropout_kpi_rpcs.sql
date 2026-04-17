@@ -472,19 +472,18 @@ actor_dropout AS (
 category_dropout AS (
   SELECT
     categoria,
-    COUNT(DISTINCT sr.id_uc)::int                                                         AS uc_count,
+    COUNT(DISTINCT sa.id_uc)::int                                                         AS uc_count,
     COUNT(*)::int                                                                          AS total_students,
-    SUM(CASE WHEN norm_status = 'ativo' THEN 1 ELSE 0 END)::int                          AS active_count,
-    SUM(CASE WHEN norm_status IN (
+    SUM(CASE WHEN sa.norm_status = 'ativo' THEN 1 ELSE 0 END)::int                       AS active_count,
+    SUM(CASE WHEN sa.norm_status IN (
       'nao atualmente', 'nao_atualmente', 'inativo', 'evadido', 'desistiu')
-      OR (NOT p_exclude_suspended AND norm_status = 'suspenso')
+      OR (NOT p_exclude_suspended AND sa.norm_status = 'suspenso')
     THEN 1 ELSE 0 END)::int                                                               AS evaded_count,
-    SUM(CASE WHEN NOT nunca_acessou_uc THEN 1 ELSE 0 END)::int                           AS accessed_count,
+    SUM(CASE WHEN NOT sa.nunca_acessou_uc THEN 1 ELSE 0 END)::int                        AS accessed_count,
     ROUND(
-      AVG(EXTRACT(epoch FROM (termino_uc_at - matriculado_em_at)) / 86400.0)
+      AVG(EXTRACT(epoch FROM (sa.termino_uc_at - sa.matriculado_em_at)) / 86400.0)
     )::int                                                                                 AS avg_days_in_course
   FROM student_actor sa
-  INNER JOIN student_rows sr ON sr.id_uc = sa.id_uc AND sr.nome_pessoa = sa.nome_pessoa
   GROUP BY categoria
 ),
 
