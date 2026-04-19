@@ -90,11 +90,14 @@ export interface ToolCallArgs {
   description?: string
   severity?: 'info' | 'warning' | 'critical'
   risk_levels?: string[]
+  risk_level?: 'normal' | 'atencao' | 'risco' | 'critico' | 'inativo'
   student_name_query?: string
   student_id?: string
   limit?: number
   status?: string
   student_name?: string
+  name_query?: string
+  enrollment_status?: 'ativo' | 'concluido' | 'suspenso' | 'inativo'
   audience?: 'students_at_risk' | 'students_with_pending_activities' | 'course_students'
   message?: string
   course_name_query?: string
@@ -114,6 +117,7 @@ export interface ToolCallArgs {
   entity_type?: 'student' | 'course' | 'uc' | 'class' | 'custom'
   entity_id?: string
   origin_reason?: string
+  tag?: string
   tags?: string[]
   tasks?: Array<{
     title?: string
@@ -188,6 +192,8 @@ const TOOL_REQUIRED_PERMISSIONS: Partial<Record<string, string>> = {
   get_grade_risk: 'students.view',
   get_engagement_signals: 'students.view',
   get_recent_attendance_risk: 'students.view',
+  list_courses: 'students.view',
+  list_students: 'students.view',
   get_pending_tasks: 'tasks.view',
   create_task: 'tasks.view',
   batch_create_tasks: 'tasks.view',
@@ -195,6 +201,7 @@ const TOOL_REQUIRED_PERMISSIONS: Partial<Record<string, string>> = {
   change_task_status: 'tasks.view',
   add_tag_to_task: 'tasks.view',
   list_tasks: 'tasks.view',
+  delete_task: 'tasks.view',
   create_event: 'agenda.view',
   batch_create_events: 'agenda.view',
   update_event: 'agenda.view',
@@ -205,6 +212,7 @@ const TOOL_REQUIRED_PERMISSIONS: Partial<Record<string, string>> = {
   prepare_single_student_message_send: 'messages.view',
   confirm_single_student_message_send: 'messages.view',
   list_message_templates: 'messages.view',
+  list_message_jobs: 'messages.view',
   get_notifications: 'messages.view',
   notify_user: 'messages.view',
   prepare_bulk_message_send: 'messages.bulk_send',
@@ -237,10 +245,14 @@ export async function executeToolCall(
       return getDashboardSummary(userId, supabase)
     case 'get_students_at_risk':
       return getStudentsAtRisk(userId, args, supabase)
+    case 'list_courses':
+      return listCourses(userId, args, supabase)
+    case 'list_students':
+      return listStudents(userId, args, supabase)
     case 'get_pending_tasks':
       return getPendingTasks(userId, args, supabase)
     case 'get_student_details':
-      return getStudentDetails(userId, args.student_name ?? '', supabase)
+      return getStudentDetails(userId, args, supabase)
     case 'get_activities_to_review':
       return getActivitiesToReview(userId, args, supabase)
     case 'find_students_for_messaging':
@@ -251,6 +263,8 @@ export async function executeToolCall(
       return confirmSingleStudentMessageSend(userId, args, context, supabase)
     case 'list_message_templates':
       return listMessageTemplates(userId, args, supabase)
+    case 'list_message_jobs':
+      return listMessageJobs(userId, args, supabase)
     case 'get_notifications':
       return getNotifications(userId, args, supabase)
     case 'notify_user':
@@ -274,6 +288,8 @@ export async function executeToolCall(
       return addTagToTask(userId, args, supabase)
     case 'list_tasks':
       return listTasks(userId, args, supabase)
+    case 'delete_task':
+      return deleteTask(userId, args, supabase)
     // Calendar / agenda management
     case 'create_event':
       return createEvent(userId, args, supabase)
@@ -474,22 +490,32 @@ async function getPendingTasks(userId: string, args: ToolCallArgs, supabase: Sup
 
 // ---------------------------------------------------------------------------
 
-async function getStudentDetails(userId: string, studentName: string, supabase: Supabase) {
-  if (!studentName.trim()) return { error: 'Nome do aluno não informado.' }
+async function getStudentDetails(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const studentId = (args.student_id ?? '').trim()
+  const studentName = (args.student_name ?? '').trim()
+
+  if (!studentId && !studentName) return { error: 'Informe student_id ou student_name para obter os detalhes do aluno.' }
 
   const courseIds = await getUserCourseIds(userId, supabase)
   const studentIds = await getStudentIdsInCourses(courseIds, supabase)
   if (studentIds.length === 0) return { error: 'Nenhum aluno encontrado nos seus cursos.' }
 
-  const { data: students } = await supabase
+  let query = supabase
     .from('students')
     .select('id, full_name, email, current_risk_level, risk_reasons, last_access, tags')
     .in('id', studentIds)
-    .ilike('full_name', `%${studentName}%`)
     .limit(3)
 
+  if (studentId) {
+    query = query.eq('id', studentId)
+  } else {
+    query = query.ilike('full_name', `%${studentName}%`)
+  }
+
+  const { data: students } = await query
+
   if (!students || students.length === 0) {
-    return { error: `Nenhum aluno encontrado com o nome "${studentName}".` }
+    return { error: `Nenhum aluno encontrado com o critério informado: "${studentId || studentName}".` }
   }
 
   const student = students[0]
@@ -1759,6 +1785,10 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
   if (args.description !== undefined) updates.description = args.description?.trim() ?? null
   if (args.priority) updates.priority = priorityMap[args.priority] ?? args.priority
   if (args.due_date !== undefined) updates.due_date = args.due_date || null
+  if (args.origin_reason) updates.origin_reason = String(args.origin_reason).trim()
+  if (Array.isArray(args.tags) && args.tags.length > 0) {
+    updates.tags = (args.tags as string[]).map((t: string) => String(t).trim()).filter(Boolean)
+  }
 
   if (Object.keys(updates).length === 0) {
     return { error: 'Nenhum campo informado para atualização.' }
@@ -1769,7 +1799,7 @@ async function updateTask(userId: string, args: ToolCallArgs, supabase: Supabase
     .update(updates)
     .eq('id', taskId)
     .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
-    .select('id, title, status, priority, due_date')
+    .select('id, title, status, priority, due_date, origin_reason, tags')
     .maybeSingle()
 
   if (error) return { error: 'Falha ao atualizar tarefa.' }
@@ -1856,7 +1886,7 @@ async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase)
 
   let query = supabase
     .from('tasks')
-    .select('id, title, description, status, priority, due_date, suggested_by_ai, created_at')
+    .select('id, title, description, status, priority, due_date, suggested_by_ai, created_at, entity_type, entity_id, tags')
     .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
     .order('due_date', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -1874,10 +1904,33 @@ async function listTasks(userId: string, args: ToolCallArgs, supabase: Supabase)
     query = query.in('status', ['todo', 'in_progress'])
   }
 
+  if (args.priority) {
+    query = query.eq('priority', args.priority)
+  }
+
+  if (args.entity_type) {
+    query = query.eq('entity_type', args.entity_type)
+  }
+
+  if (args.entity_id) {
+    query = query.eq('entity_id', args.entity_id)
+  }
+
   const { data, error } = await query
   if (error) return { error: 'Falha ao listar tarefas.' }
 
-  return data ?? []
+  let rows = data ?? []
+
+  // Post-filter by tag if requested (tags is an array column)
+  if (args.tag) {
+    const tagQuery = args.tag.toLowerCase()
+    rows = rows.filter((task) => {
+      const taskTags = Array.isArray(task.tags) ? (task.tags as string[]) : []
+      return taskTags.some((t) => String(t).toLowerCase().includes(tagQuery))
+    })
+  }
+
+  return rows
 }
 
 // ---------------------------------------------------------------------------
@@ -2103,6 +2156,204 @@ async function listEvents(userId: string, args: ToolCallArgs, supabase: Supabase
   if (error) return { error: 'Falha ao listar eventos.' }
 
   return data ?? []
+}
+
+// ---------------------------------------------------------------------------
+// Course and student listing executors
+// ---------------------------------------------------------------------------
+
+async function listCourses(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 20, 100)
+  const courseIds = await getUserCourseIds(userId, supabase)
+  if (courseIds.length === 0) return { total: 0, courses: [] }
+
+  const { data: courses } = await supabase
+    .from('courses')
+    .select('id, name, short_name, category, start_date, end_date')
+    .in('id', courseIds)
+    .order('name', { ascending: true })
+    .limit(limit)
+
+  if (!courses || courses.length === 0) return { total: 0, courses: [] }
+
+  // Fetch risk distribution per course
+  const { data: scRows } = await supabase
+    .from('student_courses')
+    .select('course_id, student_id, students(current_risk_level)')
+    .in('course_id', courseIds)
+
+  const riskByCourse = new Map<string, Record<string, number>>()
+  for (const row of scRows ?? []) {
+    const courseId = (row as { course_id: string }).course_id
+    const student = (row as { students?: { current_risk_level?: string | null } | null }).students
+    const level = student?.current_risk_level ?? 'normal'
+    const entry = riskByCourse.get(courseId) ?? { normal: 0, atencao: 0, risco: 0, critico: 0, inativo: 0, total: 0 }
+    if (level in entry) entry[level]++
+    entry.total++
+    riskByCourse.set(courseId, entry)
+  }
+
+  return {
+    total: courseIds.length,
+    shown: courses.length,
+    has_more: courses.length < courseIds.length,
+    courses: courses.map((c) => {
+      const risk = riskByCourse.get(c.id) ?? { total: 0 }
+      return {
+        id: c.id,
+        name: c.name,
+        short_name: c.short_name,
+        category: c.category,
+        start_date: c.start_date,
+        end_date: c.end_date,
+        student_count: risk.total,
+        risk_distribution: {
+          normal: risk.normal ?? 0,
+          atencao: risk.atencao ?? 0,
+          risco: risk.risco ?? 0,
+          critico: risk.critico ?? 0,
+          inativo: risk.inativo ?? 0,
+        },
+      }
+    }),
+  }
+}
+
+// ---------------------------------------------------------------------------
+
+async function listStudents(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 15, 50)
+  const courseIds = await getUserCourseIds(userId, supabase)
+  if (courseIds.length === 0) return { total: 0, students: [] }
+
+  // If course_name_query is provided, narrow the course scope first
+  let filteredCourseIds = courseIds
+  if (args.course_name_query) {
+    const { data: matchedCourses } = await supabase
+      .from('courses')
+      .select('id')
+      .in('id', courseIds)
+      .ilike('name', `%${args.course_name_query}%`)
+      .limit(20)
+    filteredCourseIds = (matchedCourses ?? []).map((c: { id: string }) => c.id)
+    if (filteredCourseIds.length === 0) return { total: 0, students: [], message: `Nenhum curso encontrado com o nome "${args.course_name_query}".` }
+  }
+
+  const studentIds = await getStudentIdsInCourses(filteredCourseIds, supabase)
+  if (studentIds.length === 0) return { total: 0, students: [] }
+
+  // Apply enrollment_status filter if needed
+  let allowedStudentIds = studentIds
+  if (args.enrollment_status) {
+    const { data: statusRows } = await supabase
+      .from('student_courses')
+      .select('student_id')
+      .in('course_id', filteredCourseIds)
+      .eq('enrollment_status', args.enrollment_status)
+    const allowed = new Set((statusRows ?? []).map((r: { student_id: string }) => r.student_id))
+    allowedStudentIds = studentIds.filter((id) => allowed.has(id))
+    if (allowedStudentIds.length === 0) return { total: 0, students: [] }
+  }
+
+  let query = supabase
+    .from('students')
+    .select('id, full_name, email, current_risk_level, last_access')
+    .in('id', allowedStudentIds)
+    .order('full_name', { ascending: true })
+    .limit(limit)
+
+  if (args.name_query) {
+    query = query.ilike('full_name', `%${args.name_query}%`)
+  }
+
+  if (args.risk_level) {
+    query = query.eq('current_risk_level', args.risk_level)
+  }
+
+  const { data } = await query
+  const rows = data ?? []
+  return {
+    total: rows.length,
+    has_more: rows.length === limit,
+    students: rows.map((s) => ({
+      id: s.id,
+      full_name: s.full_name,
+      email: s.email,
+      current_risk_level: s.current_risk_level,
+      last_access: s.last_access,
+    })),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Message job listing executor
+// ---------------------------------------------------------------------------
+
+async function listMessageJobs(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const limit = Math.min(args.limit ?? 10, 30)
+
+  let query = supabase
+    .from('bulk_message_jobs')
+    .select('id, status, message_content, origin, total_recipients, sent_count, failed_count, created_at, completed_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (args.status) {
+    query = query.eq('status', args.status)
+  }
+
+  const { data, error } = await query
+  if (error) return { error: 'Falha ao listar jobs de mensagem.' }
+
+  return {
+    total: (data ?? []).length,
+    jobs: (data ?? []).map((job) => ({
+      id: job.id,
+      status: job.status,
+      origin: job.origin,
+      total_recipients: job.total_recipients,
+      sent_count: job.sent_count,
+      failed_count: job.failed_count,
+      created_at: job.created_at,
+      completed_at: job.completed_at,
+      message_preview: typeof job.message_content === 'string' ? job.message_content.slice(0, 120) : '',
+    })),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Task deletion executor
+// ---------------------------------------------------------------------------
+
+async function deleteTask(userId: string, args: ToolCallArgs, supabase: Supabase) {
+  const taskId = (args.task_id ?? '').trim()
+  if (!taskId) return { error: 'Campo task_id é obrigatório para remover uma tarefa.' }
+
+  const { data: existing } = await supabase
+    .from('tasks')
+    .select('id, title')
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+    .eq('id', taskId)
+    .maybeSingle()
+
+  if (!existing) return { error: 'Tarefa não encontrada ou sem permissão de acesso.' }
+
+  const { error } = await supabase
+    .from('tasks')
+    .delete()
+    .eq('id', taskId)
+    .or(`created_by.eq.${userId},assigned_to.eq.${userId}`)
+
+  if (error) return { error: 'Falha ao remover tarefa.' }
+
+  await auditAiAction(userId, 'delete_task', args, `task deleted: id=${taskId} title="${existing.title}"`, supabase)
+  return {
+    success: true,
+    deleted: true,
+    task_id: taskId,
+    title: existing.title,
+  }
 }
 
 // ---------------------------------------------------------------------------

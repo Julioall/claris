@@ -38,6 +38,7 @@ const TASK_TOOL_NAMES = [
   'change_task_status',
   'add_tag_to_task',
   'list_tasks',
+  'delete_task',
   'generate_weekly_checklist',
 ] as const
 
@@ -46,6 +47,7 @@ const MESSAGING_TOOL_NAMES = [
   'prepare_single_student_message_send',
   'confirm_single_student_message_send',
   'list_message_templates',
+  'list_message_jobs',
   'prepare_bulk_message_send',
   'confirm_bulk_message_send',
   'cancel_bulk_message_send',
@@ -61,6 +63,8 @@ const ANALYTICS_TOOL_NAMES = [
   'get_engagement_signals',
   'get_recent_attendance_risk',
   'get_upcoming_calendar_commitments',
+  'list_courses',
+  'list_students',
 ] as const
 
 const ROUTINE_TOOL_NAMES = [
@@ -88,6 +92,9 @@ const SYSTEM_PROMPT_LINES = [
   'Para listas de tarefas, checklists ou varios eventos de uma vez, prefira batch_create_tasks e batch_create_events.',
   'Para mensagens em lote, sempre prepare antes e so confirme depois de confirmacao explicita do usuario na mensagem mais recente.',
   'Para envio individual com nomes ambiguos, use find_students_for_messaging e reutilize o student_id retornado.',
+  'Para buscar cursos do tutor, use list_courses. Para listar alunos com filtros, use list_students.',
+  'Para verificar status de envios de mensagem ja criados, use list_message_jobs.',
+  'Para deletar uma tarefa, exija confirmacao explicita antes de usar delete_task; prefira change_task_status com status "done" quando possivel.',
   'Quando o usuario pedir ajuda sobre a plataforma, use get_platform_help.',
   'Fluxo preferido: 1) resumir contexto 2) apontar riscos ou pendencias 3) sugerir acoes 4) executar se permitido.',
 ] as const
@@ -155,6 +162,12 @@ export function selectClarisToolsForMessage(input: ToolSelectionInput): ToolDefi
       'whatsapp',
       'template',
       'destinatario',
+      'job de envio',
+      'disparo',
+      'disparos',
+      'status do envio',
+      'jobs de mensagem',
+      'envios de mensagem',
     ])
   ) {
     addTools(selectedToolNames, MESSAGING_TOOL_NAMES)
@@ -175,6 +188,7 @@ export function selectClarisToolsForMessage(input: ToolSelectionInput): ToolDefi
       'calendario',
       'cronograma',
       'treinamento',
+      'aula',
     ])
   ) {
     addTools(selectedToolNames, AGENDA_TOOL_NAMES)
@@ -194,6 +208,10 @@ export function selectClarisToolsForMessage(input: ToolSelectionInput): ToolDefi
       'prazo',
       'prioridade',
       'kanban',
+      'apagar tarefa',
+      'deletar tarefa',
+      'excluir tarefa',
+      'remover tarefa',
     ])
   ) {
     addTools(selectedToolNames, TASK_TOOL_NAMES)
@@ -204,6 +222,8 @@ export function selectClarisToolsForMessage(input: ToolSelectionInput): ToolDefi
     hasAnyKeyword(combinedText, [
       'aluno',
       'alunos',
+      'estudante',
+      'estudantes',
       'risco',
       'nota',
       'notas',
@@ -211,11 +231,18 @@ export function selectClarisToolsForMessage(input: ToolSelectionInput): ToolDefi
       'engajamento',
       'acesso',
       'curso',
+      'cursos',
       'turma',
+      'turmas',
+      'escola',
+      'escolas',
       'historico',
       'desistente',
       'atividade pendente',
       'correcao',
+      'meus cursos',
+      'lista de alunos',
+      'listar alunos',
     ])
   ) {
     addTools(selectedToolNames, ANALYTICS_TOOL_NAMES)
