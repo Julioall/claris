@@ -112,6 +112,36 @@ export function AssignmentSuggestionPanel({
   const [jobItems, setJobItems] = useState<Record<string, ActivityGradeSuggestionJobItem>>({});
   const [rows, setRows] = useState<Record<string, SuggestionRowState>>({});
   const [closedSuggestionIds, setClosedSuggestionIds] = useState<Record<string, true>>({});
+  const [isDiscardingAll, setIsDiscardingAll] = useState(false);
+  const [showDiscardAllConfirm, setShowDiscardAllConfirm] = useState(false);
+    // Função para descartar todos os feedbacks IA pendentes
+    const handleDiscardAll = async () => {
+      setIsDiscardingAll(true);
+      try {
+        // Marca todos os pendentes como descartados (remove da tela)
+        setClosedSuggestionIds((current) => {
+          const next = { ...current };
+          Object.keys(rows).forEach((id) => {
+            next[id] = true;
+          });
+          return next;
+        });
+        setRows((current) => {
+          const next = { ...current };
+          Object.keys(rows).forEach((id) => {
+            delete next[id];
+          });
+          return next;
+        });
+        toast({
+          title: 'Feedbacks descartados',
+          description: 'Todos os feedbacks pendentes foram descartados para esta atividade.',
+        });
+      } finally {
+        setIsDiscardingAll(false);
+        setShowDiscardAllConfirm(false);
+      }
+    };
   const pendingCorrectionSubmissions = useMemo(
     () => submissions.filter((submission) => getStudentActivityWorkflowStatus(submission) === 'pending_correction'),
     [submissions],
@@ -656,17 +686,42 @@ export function AssignmentSuggestionPanel({
           </Button>
         ) : null}
         {isExpanded && hasSuggestions ? (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => void handleApproveAll()}
-            disabled={!canApproveAll}
-          >
-            {isApprovingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Aceitar Tudo
-          </Button>
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => void handleApproveAll()}
+              disabled={!canApproveAll}
+            >
+              {isApprovingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Aceitar Tudo
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => setShowDiscardAllConfirm(true)}
+              disabled={isDiscardingAll || isApprovingAll}
+            >
+              {isDiscardingAll ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Descartar Tudo
+            </Button>
+          </>
         ) : null}
+              {/* Modal de confirmação para descartar tudo */}
+              {showDiscardAllConfirm && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+                  <div className="rounded-lg bg-white p-6 shadow-xl max-w-sm w-full">
+                    <h2 className="text-lg font-semibold mb-2">Descartar todos os feedbacks?</h2>
+                    <p className="mb-4 text-sm text-muted-foreground">Esta ação irá remover todos os feedbacks IA pendentes desta atividade. Tem certeza que deseja continuar?</p>
+                    <div className="flex justify-end gap-2">
+                      <Button type="button" variant="outline" size="sm" onClick={() => setShowDiscardAllConfirm(false)} disabled={isDiscardingAll}>Cancelar</Button>
+                      <Button type="button" variant="destructive" size="sm" onClick={handleDiscardAll} disabled={isDiscardingAll}>Descartar Tudo</Button>
+                    </div>
+                  </div>
+                </div>
+              )}
         {pendingCorrectionSubmissions.length > 0 ? (
           <Button
             type="button"

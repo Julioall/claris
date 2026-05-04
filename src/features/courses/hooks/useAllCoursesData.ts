@@ -21,6 +21,11 @@ function updateCatalogCourses(
   return updater(current ?? []);
 }
 
+function invalidateCourseScopeQueries(queryClient: ReturnType<typeof useQueryClient>, userId?: string) {
+  queryClient.invalidateQueries({ queryKey: ['students', userId ?? 'anonymous'] });
+  queryClient.invalidateQueries({ queryKey: ['dashboard', userId ?? 'anonymous'] });
+}
+
 export function useAllCoursesData() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -40,6 +45,7 @@ export function useAllCoursesData() {
             course.id === courseId ? { ...course, is_following: nextFollowing } : course,
           )),
       );
+      invalidateCourseScopeQueries(queryClient, user?.id);
     },
   });
 
@@ -107,6 +113,7 @@ export function useAllCoursesData() {
             courseIds.includes(course.id) ? { ...course, is_following: false } : course,
           )),
       );
+      invalidateCourseScopeQueries(queryClient, user?.id);
     },
   });
 

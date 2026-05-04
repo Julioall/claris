@@ -223,8 +223,9 @@ describe("StudentGradesTab", () => {
     expect(screen.getByText("Trabalho Final")).toBeInTheDocument();
     expect(screen.getByText("Projeto 2")).toBeInTheDocument();
     expect(screen.queryByText("Forum de Boas-vindas")).not.toBeInTheDocument();
-    expect(screen.getByText("Pendente de Correcao")).toBeInTheDocument();
-    expect(screen.getByText("Pendente de Envio")).toBeInTheDocument();
+    // "Trabalho Final" (assignment sem submitted_at) agora deve ser "Pendente de Envio"
+    expect(screen.getAllByText("Pendente de Envio").length).toBeGreaterThanOrEqual(1);
+    // "Pendente de Correcao" só aparece se houver submitted_at
   });
 
   it("does not show the AI suggestion action in the student grade screen anymore", async () => {

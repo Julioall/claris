@@ -60,20 +60,27 @@ export function getStudentActivityWorkflowStatus(
   }
 
   const hasCompletionEvidence = Boolean(activity.completed_at) || COMPLETED_STATUSES.has(normalizedStatus);
-  const hasSubmittedEvidence = (
-    Boolean(activity.submitted_at) ||
-    SUBMITTED_STATUSES.has(normalizedStatus) ||
-    (isAssignmentLike(activity.activity_type) && hasCompletionEvidence)
-  );
 
+  // Para assignments, só considera pendente de correção se houver submissão real
+  if (isAssignmentLike(activity.activity_type)) {
+    const hasSubmitted = Boolean(activity.submitted_at) || SUBMITTED_STATUSES.has(normalizedStatus);
+    if (hasSubmitted) {
+      return 'pending_correction';
+    }
+    if (hasCompletionEvidence) {
+      return 'completed';
+    }
+    return 'pending_submission';
+  }
+
+  // Para outros tipos, mantém lógica anterior
+  const hasSubmittedEvidence = Boolean(activity.submitted_at) || SUBMITTED_STATUSES.has(normalizedStatus) || (isAssignmentLike(activity.activity_type) && hasCompletionEvidence);
   if (hasSubmittedEvidence) {
     return 'pending_correction';
   }
-
   if (hasCompletionEvidence) {
     return 'completed';
   }
-
   return 'pending_submission';
 }
 

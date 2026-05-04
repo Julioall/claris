@@ -4,15 +4,15 @@ import {
   findCourseByMoodleCourseId,
   insertStudentSyncSnapshots,
   listExistingCourseStudentLinks,
+  removeStudentCourseLinks,
   touchCourseLastSync,
   upsertStudentCourseLinks,
   upsertStudents,
 } from '../_shared/domain/moodle-sync/repository.ts'
 import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import { getCourseEnrolledUsers, getCourseSuspendedUserIds, getUserProfilesByIds } from '../_shared/moodle/mod.ts'
+import { isStudentLikeUser } from '../_shared/moodle/student-role.ts'
 
-const STAFF_ROLE_SHORTNAMES = new Set(['manager', 'editingteacher', 'teacher', 'coursecreator'])
-const STUDENT_ROLE_SHORTNAMES = new Set(['student', 'aluno', 'estudante'])
 const MOBILE_CUSTOM_FIELD_KEYS = new Set([
   'celular',
   'telefonecelular',
@@ -208,48 +208,6 @@ function isActiveValue(value: unknown): boolean {
   return false
 }
 
-function normalizeRoleShortname(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-}
-
-function isStudentRoleShortname(role: string): boolean {
-  if (STUDENT_ROLE_SHORTNAMES.has(role)) return true
-  return role.includes('student') || role.includes('aluno') || role.includes('estudante')
-}
-
-function isStaffRoleShortname(role: string): boolean {
-  if (STAFF_ROLE_SHORTNAMES.has(role)) return true
-  return (
-    role.includes('teacher') ||
-    role.includes('professor') ||
-    role.includes('docente') ||
-    role.includes('tutor') ||
-    role.includes('monitor') ||
-    role.includes('coordenador') ||
-    role.includes('manager') ||
-    role.includes('admin')
-  )
-}
-
-function isStudentLikeUser(user: { roles?: { shortname?: string }[] }): boolean {
-  const roleShortnames = (user.roles || [])
-    .map((role) => normalizeRoleShortname(String(role.shortname || '')))
-    .filter(Boolean)
-
-  if (roleShortnames.length === 0) return true
-
-  if (roleShortnames.some((role) => isStudentRoleShortname(role))) return true
-
-  if (roleShortnames.some((role) => isStaffRoleShortname(role))) return false
-
-  // If user has explicit roles but none map to student, be conservative and exclude.
-  return false
-}
-
 function resolveEnrollmentStatus(args: {
   isMassSuspensionPreStartIgnored: boolean
   isSuspendedByOnlySuspended: boolean
@@ -301,10 +259,28 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
 
   const usersWithoutRoles = enrolledUsers.filter((u) => !u.roles || u.roles.length === 0).length
   const students = enrolledUsers.filter((u) => isStudentLikeUser(u))
+  const nonStudentUsers = enrolledUsers.filter((u) => !isStudentLikeUser(u))
   console.log(`Found ${students.length} students in course ${courseId}`)
   console.log(
-    `[moodle-sync-students] course=${courseId} enrolled_users=${enrolledUsers.length} users_without_roles=${usersWithoutRoles} inferred_students=${students.length}`
+    `[moodle-sync-students] course=${courseId} enrolled_users=${enrolledUsers.length} users_without_roles=${usersWithoutRoles} inferred_students=${students.length} non_students=${nonStudentUsers.length}`
   )
+
+  const existingCourseLinks = await listExistingCourseStudentLinks(supabase, dbCourse.id)
+  const nonStudentMoodleUserIds = new Set(
+    nonStudentUsers
+      .map((user) => String(user.id))
+      .filter((id) => id.length > 0)
+  )
+  const nonStudentCourseStudentIds = existingCourseLinks
+    .filter((row) => row.moodle_user_id && nonStudentMoodleUserIds.has(String(row.moodle_user_id)))
+    .map((row) => row.student_id)
+
+  if (nonStudentCourseStudentIds.length > 0) {
+    await removeStudentCourseLinks(supabase, dbCourse.id, nonStudentCourseStudentIds)
+    console.log(
+      `[moodle-sync-students] course=${courseId} removed_non_student_links=${nonStudentCourseStudentIds.length}`
+    )
+  }
 
   const suspendedStudentsInCourse = students.filter((student) => suspendedUserIds.has(student.id))
   const isCourseNotStarted = dbCourse.start_date ? new Date(dbCourse.start_date) > new Date() : false
@@ -471,12 +447,11 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
 
     const currentMoodleUserIds = new Set(studentsData.map((s) => s.moodle_user_id))
 
-    const existingCourseLinks = await listExistingCourseStudentLinks(supabase, dbCourse.id)
-
     const inferredSuspendedLinks = existingCourseLinks
       .map((row) => {
         const moodleUserId = row.moodle_user_id ? String(row.moodle_user_id) : null
         if (!moodleUserId) return null
+        if (nonStudentMoodleUserIds.has(moodleUserId)) return null
         if (currentMoodleUserIds.has(moodleUserId)) return null
         const moodleUserIdNumber = Number(moodleUserId)
         if (!Number.isFinite(moodleUserIdNumber) || !suspendedUserIds.has(moodleUserIdNumber)) return null

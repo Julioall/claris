@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { FileSpreadsheet } from 'lucide-react';
 import type * as XLSXType from 'xlsx-js-style';
 import { Spinner } from '@/components/ui/spinner';
@@ -34,6 +33,22 @@ import {
 } from '@/features/reports/api';
 
 const SEM_CATEGORIA = 'Sem categoria';
+const REPORT_FILE_COURSE_SLUG_MAX_LENGTH = 48;
+
+function buildReportFileName(reportType: 'notas' | 'pendencias', courseGroup: string, date = new Date()) {
+  const courseSlug = courseGroup
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_ ]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .slice(0, REPORT_FILE_COURSE_SLUG_MAX_LENGTH)
+    .replace(/[_-]+$/g, '');
+
+  const dateStamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
+
+  return `relatorio_${reportType}_${courseSlug || 'curso'}_${dateStamp}.xlsx`;
+}
 
 function daysSinceAccess(lastAccess: string | null | undefined): number | string {
   if (!lastAccess) return '-';
@@ -538,16 +553,7 @@ export default function ReportsPage() {
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Relatorio de Notas');
 
-      const safeCourseName = selectedCourseGroup
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9-_ ]/g, '')
-        .trim()
-        .replace(/\s+/g, '_');
-
-      const date = new Date();
-      const dateStamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-      const fileName = `relatorio_notas_${safeCourseName || 'curso'}_${dateStamp}.xlsx`;
+      const fileName = buildReportFileName('notas', selectedCourseGroup);
 
       XLSX.writeFile(workbook, fileName);
       toast.success('Relatório gerado com sucesso');
@@ -692,16 +698,7 @@ export default function ReportsPage() {
       applyPendingStyles(XLSX, detailWs);
       XLSX.utils.book_append_sheet(workbook, detailWs, 'Detalhamento');
 
-      const safeCourseName = selectedCourseGroup
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-zA-Z0-9-_ ]/g, '')
-        .trim()
-        .replace(/\s+/g, '_');
-
-      const date = new Date();
-      const dateStamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
-      const fileName = `relatorio_pendencias_${safeCourseName || 'curso'}_${dateStamp}.xlsx`;
+      const fileName = buildReportFileName('pendencias', selectedCourseGroup);
 
       XLSX.writeFile(workbook, fileName);
       toast.success('Relatório de pendências gerado com sucesso');

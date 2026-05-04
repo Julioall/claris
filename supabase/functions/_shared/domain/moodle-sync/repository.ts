@@ -191,6 +191,22 @@ export async function upsertStudentCourseLinks(
   if (error) throw error
 }
 
+export async function removeStudentCourseLinks(
+  supabase: AppSupabaseClient,
+  courseId: string,
+  studentIds: string[],
+): Promise<void> {
+  if (studentIds.length === 0) return
+
+  const { error } = await supabase
+    .from('student_courses')
+    .delete()
+    .eq('course_id', courseId)
+    .in('student_id', studentIds)
+
+  if (error) throw error
+}
+
 export async function touchCourseLastSync(
   supabase: AppSupabaseClient,
   courseId: string,

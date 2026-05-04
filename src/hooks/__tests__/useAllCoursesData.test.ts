@@ -101,7 +101,8 @@ describe('useAllCoursesData', () => {
   });
 
   it('toggles follow and switches association role', async () => {
-    const { wrapper } = createQueryClientWrapper();
+    const { queryClient, wrapper } = createQueryClientWrapper();
+    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useAllCoursesData(), { wrapper });
 
     await waitFor(() => {
@@ -125,6 +126,8 @@ describe('useAllCoursesData', () => {
     await waitFor(() => {
       expect(result.current.courses.find((course) => course.id === 'c-1')?.is_following).toBe(false);
     });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['students', 'user-1'] });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['dashboard', 'user-1'] });
   });
 
   it('toggles ignore for a single course', async () => {
@@ -182,7 +185,8 @@ describe('useAllCoursesData', () => {
   });
 
   it('unfollows multiple courses using viewer role', async () => {
-    const { wrapper } = createQueryClientWrapper();
+    const { queryClient, wrapper } = createQueryClientWrapper();
+    const invalidateQueriesSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const { result } = renderHook(() => useAllCoursesData(), { wrapper });
 
     await waitFor(() => {
@@ -197,6 +201,8 @@ describe('useAllCoursesData', () => {
     await waitFor(() => {
       expect(result.current.courses.every((course) => !course.is_following)).toBe(true);
     });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['students', 'user-1'] });
+    expect(invalidateQueriesSpy).toHaveBeenCalledWith({ queryKey: ['dashboard', 'user-1'] });
   });
 
   it('toggles attendance for a single course', async () => {

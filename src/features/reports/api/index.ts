@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { listAccessibleCourseIds } from '@/lib/course-access';
+import { listCatalogCoursesForUser } from '@/features/courses/api/courses.repository';
 
 export interface TutorCourse {
   id: string;
@@ -86,39 +86,20 @@ async function paginateRows<T>(fetchPage: (page: number) => Promise<{ data: T[] 
 }
 
 export async function fetchTutorCourses(userId: string): Promise<TutorCourse[]> {
-  const accessibleCourseIds = await listAccessibleCourseIds(userId, 'tutor');
-
-  if (accessibleCourseIds.length === 0) {
-    return [];
-  }
-
-  const courseResults = await Promise.all(
-    chunkValues(accessibleCourseIds).map(async (courseIdBatch) => {
-      const { data, error } = await supabase
-        .from('courses')
-        .select('id, name, short_name, category, start_date, end_date')
-        .in('id', courseIdBatch);
-
-      if (error) {
-        throw error;
-      }
-
-      return data ?? [];
-    }),
-  );
-
-  const normalizedCourses = courseResults.flat().map((course) => ({
-    id: course.id,
-    name: course.name,
-    short_name: course.short_name,
-    category: course.category,
-    start_date: course.start_date,
-    end_date: course.end_date,
-  }));
+  const followedCourses = (await listCatalogCoursesForUser(userId))
+    .filter((course) => course.is_following)
+    .map((course) => ({
+      id: course.id,
+      name: course.name,
+      short_name: course.short_name,
+      category: course.category,
+      start_date: course.start_date,
+      end_date: course.end_date,
+    }));
 
   const uniqueById = new Map<string, TutorCourse>();
 
-  normalizedCourses.forEach((course) => {
+  followedCourses.forEach((course) => {
     uniqueById.set(course.id, course);
   });
 

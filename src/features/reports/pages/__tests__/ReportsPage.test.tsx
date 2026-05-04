@@ -270,6 +270,7 @@ describe("Reports page", () => {
   const generateReport = async (options?: {
     includeSuspendedStudents?: boolean;
     reportType?: "notas" | "pendencias";
+    courseGroup?: string;
   }) => {
     const user = userEvent.setup();
     render(<ReportsPage />);
@@ -284,7 +285,7 @@ describe("Reports page", () => {
     }
 
     await user.click(screen.getAllByRole("combobox")[1]);
-    await user.click(await screen.findByRole("option", { name: "Turma A" }));
+    await user.click(await screen.findByRole("option", { name: options?.courseGroup ?? "Turma A" }));
     await user.click(await screen.findByText("Matematica (MAT)"));
 
     if (options?.includeSuspendedStudents === false) {
@@ -387,6 +388,24 @@ describe("Reports page", () => {
 
     expect(notesWorksheet?.B5?.s?.fill?.fgColor?.rgb).toBe("FFE0E0E0");
     expect(notesWorksheet?.B5?.s?.font?.color?.rgb).toBe("FF999999");
+  });
+
+  it("keeps the exported report filename short for long course names", async () => {
+    const longCourseGroup = "Senai Escola SENAI Catalao Tecnico em Internet Das Coisas - Iot - Itinerario V - Ensino Medio 1060181 - Tecnico em Internet Das Coisas - Iot - Itinerario V - Ensino Medio - 000022026";
+    fetchTutorCoursesMock.mockResolvedValueOnce([
+      {
+        ...tutorCoursesResponse[0],
+        category: longCourseGroup,
+      },
+    ]);
+
+    await generateReport({ courseGroup: longCourseGroup });
+
+    const exportedFileName = writeFileMock.mock.calls[0]?.[1];
+    expect(exportedFileName).toMatch(/^relatorio_notas_/);
+    expect(exportedFileName).toMatch(/_\d{8}\.xlsx$/);
+    expect(String(exportedFileName).length).toBeLessThanOrEqual(80);
+    expect(exportedFileName).not.toContain("000022026");
   });
 
   it("only includes evaluative pending activities with positive gradebook weight evidence", async () => {
