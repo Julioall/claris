@@ -28,6 +28,24 @@ interface ToolCall {
 
 export type ChatMessage = LoopChatMessage
 
+interface ResponsesFunctionCall {
+  type: 'function_call'
+  call_id?: string
+  id?: string
+  name: string
+  arguments: string
+}
+
+type ResponsesInputItem =
+  | { role: 'user' | 'assistant'; content: string }
+  | { type: 'function_call_output'; call_id: string; output: string }
+  | Record<string, unknown>
+
+interface ResponsesRequestContext {
+  instructions: string
+  input: ResponsesInputItem[]
+}
+
 export interface ClarisUiAction {
   id: string
   label: string
@@ -69,6 +87,118 @@ const MAX_ITERATIONS = 15
 const supportsTemperature = (model: string): boolean => {
   const normalizedModel = model.trim().toLowerCase()
   return !normalizedModel.startsWith('gpt-5') && !normalizedModel.startsWith('o')
+}
+
+const prefersResponsesApi = (model: string): boolean => {
+  const normalizedModel = model.trim().toLowerCase()
+  return normalizedModel.startsWith('gpt-5') || normalizedModel.startsWith('o')
+}
+
+const asObject = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+
+const asString = (value: unknown): string =>
+  typeof value === 'string' ? value : ''
+
+function buildResponsesRequestContext(messages: ChatMessage[]): ResponsesRequestContext {
+  const requestMessages = buildRequestMessagesForModel(messages)
+  const instructionLines: string[] = []
+  const input: ResponsesInputItem[] = []
+
+  for (const message of requestMessages) {
+    if (message.role === 'system') {
+      if (message.content) instructionLines.push(message.content)
+      continue
+    }
+
+    if (message.role === 'tool') {
+      if (message.tool_call_id) {
+        input.push({
+          type: 'function_call_output',
+          call_id: message.tool_call_id,
+          output: message.content ?? '',
+        })
+      }
+      continue
+    }
+
+    if (message.role === 'assistant' && Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+      for (const toolCall of message.tool_calls) {
+        input.push({
+          type: 'function_call',
+          call_id: toolCall.id,
+          id: toolCall.id,
+          name: toolCall.function.name,
+          arguments: toolCall.function.arguments,
+        })
+      }
+      continue
+    }
+
+    input.push({
+      role: message.role,
+      content: message.content ?? '',
+    })
+  }
+
+  return {
+    instructions: instructionLines.join('\n\n'),
+    input,
+  }
+}
+
+function toResponsesTools(tools: ToolDefinition[]): Array<Record<string, unknown>> {
+  return tools.map((tool) => ({
+    type: 'function',
+    name: tool.function.name,
+    description: tool.function.description,
+    parameters: tool.function.parameters,
+  }))
+}
+
+function extractResponsesText(payload: Record<string, unknown>): string {
+  const directOutputText = asString(payload.output_text).trim()
+  if (directOutputText) return directOutputText
+
+  const outputs = Array.isArray(payload.output) ? payload.output : []
+  for (const output of outputs) {
+    const outputObject = asObject(output)
+    const content = Array.isArray(outputObject.content) ? outputObject.content : []
+
+    for (const item of content) {
+      const itemObject = asObject(item)
+      const text = asString(itemObject.text).trim()
+      if ((itemObject.type === 'output_text' || itemObject.type === 'text') && text) {
+        return text
+      }
+    }
+  }
+
+  return ''
+}
+
+function extractResponsesFunctionCalls(payload: Record<string, unknown>): ResponsesFunctionCall[] {
+  const outputs = Array.isArray(payload.output) ? payload.output : []
+  return outputs.flatMap((output): ResponsesFunctionCall[] => {
+    const outputObject = asObject(output)
+    if (outputObject.type !== 'function_call') return []
+
+    const name = asString(outputObject.name)
+    const args = asString(outputObject.arguments)
+    const callId = asString(outputObject.call_id) || asString(outputObject.id)
+
+    if (!name || !callId) return []
+
+    return [{
+      type: 'function_call',
+      call_id: callId,
+      id: asString(outputObject.id) || callId,
+      name,
+      arguments: args,
+    }]
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +488,96 @@ export async function runClarisLoop(
   let richBlocks: ClarisRichBlock[] = []
 
   try {
+    if (prefersResponsesApi(settings.model)) {
+      const responsesRequestContext = buildResponsesRequestContext(history)
+      const responsesInput = [...responsesRequestContext.input]
+      const responseTools = toResponsesTools(tools)
+
+      for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
+        const requestBody: Record<string, unknown> = {
+          model: settings.model,
+          max_output_tokens: 4000,
+          tools: responseTools,
+          input: responsesInput,
+        }
+
+        if (responsesRequestContext.instructions) {
+          requestBody.instructions = responsesRequestContext.instructions
+        }
+
+        const response = await fetch(`${settings.baseUrl}/responses`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${settings.apiKey}`,
+          },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal,
+        })
+
+        let payload: Record<string, unknown> = {}
+        try {
+          payload = await response.json() as Record<string, unknown>
+        } catch {
+          payload = {}
+        }
+
+        if (!response.ok) {
+          const errorMessage =
+            asString(asObject(payload.error).message) ||
+            asString(payload.error) ||
+            asString(payload.message) ||
+            `LLM returned status ${response.status}`
+          throw new Error(`LLM returned status ${response.status}: ${errorMessage}`)
+        }
+
+        const functionCalls = extractResponsesFunctionCalls(payload)
+        if (functionCalls.length === 0) {
+          return {
+            reply: extractResponsesText(payload),
+            latencyMs: Date.now() - start,
+            uiActions,
+            richBlocks,
+          }
+        }
+
+        const outputItems = Array.isArray(payload.output)
+          ? payload.output.filter((item): item is Record<string, unknown> => (
+              item !== null && typeof item === 'object' && !Array.isArray(item)
+            ))
+          : []
+        responsesInput.push(...outputItems)
+
+        for (const toolCall of functionCalls) {
+          let toolResult: unknown
+          try {
+            const args = JSON.parse(toolCall.arguments || '{}') as ToolCallArgs
+            toolResult = await executeToolCall(toolCall.name, args, userId, context)
+          } catch (err) {
+            toolResult = { error: err instanceof Error ? err.message : 'Tool execution failed.' }
+          }
+
+          responsesInput.push({
+            type: 'function_call_output',
+            call_id: toolCall.call_id || toolCall.id || toolCall.name,
+            output: summarizeToolResultForModel(toolCall.name, toolResult),
+          })
+
+          const actionsFromTool = collectUiActions(toolResult)
+          if (actionsFromTool.length > 0) {
+            uiActions = actionsFromTool
+          }
+
+          const blocksFromTool = generateRichBlocks(toolCall.name, toolResult)
+          if (blocksFromTool.length > 0) {
+            richBlocks = blocksFromTool
+          }
+        }
+      }
+
+      throw new Error('Max tool-call iterations reached without a final response.')
+    }
+
     for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
       const requestMessages = buildRequestMessagesForModel(history)
       const requestBody: Record<string, unknown> = {

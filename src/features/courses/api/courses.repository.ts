@@ -5,12 +5,12 @@ import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course
 import type { Student } from '@/features/students/types';
 
 import {
-  EMPTY_COURSE_PANEL_STATS,
   type Course,
   type CoursePanelData,
   type CourseWithStats,
   type StudentActivity,
 } from '../types';
+import { buildCoursePanelStats } from '../lib/course-panel-stats';
 
 type AssociationRole = 'tutor' | 'viewer';
 
@@ -284,48 +284,18 @@ export async function getCoursePanel(courseId: string): Promise<CoursePanelData>
   }, []);
 
   const isCourseInProgress = getCourseLifecycleStatus(normalizedCourseData) === 'em_andamento';
-  const riskDistribution = {
-    normal: 0,
-    atencao: 0,
-    risco: 0,
-    critico: 0,
-  };
-
-  if (isCourseInProgress) {
-    students.forEach((student) => {
-      const level = student.current_risk_level || 'normal';
-      if (level in riskDistribution) {
-        riskDistribution[level as keyof typeof riskDistribution] += 1;
-      }
-    });
-  }
-
-  const visibleActivityIds = new Set(
-    activities
-      .filter((activity) => !activity.hidden)
-      .map((activity) => activity.moodle_activity_id),
-  );
-  const visibleActivityRecords = activityRecords.filter((activity) =>
-    visibleActivityIds.has(activity.moodle_activity_id),
-  );
-  const completedActivities = visibleActivityRecords.filter(
-    (activity) => activity.status === 'completed',
-  ).length;
 
   return {
     course: normalizedCourseData,
     students,
     activities,
     activitySubmissions: activityRecords,
-    stats: {
-      ...EMPTY_COURSE_PANEL_STATS,
-      totalStudents: students.length,
-      atRiskStudents: riskDistribution.risco + riskDistribution.critico,
-      totalActivities: activities.filter((activity) => !activity.hidden).length,
-      completionRate: visibleActivityRecords.length > 0
-        ? Math.round((completedActivities / visibleActivityRecords.length) * 100)
-        : 0,
-      riskDistribution,
-    },
+    stats: buildCoursePanelStats({
+      activities,
+      activityRecords,
+      enrollmentRows: (studentCourseRows || []) as StudentCourseRow[],
+      isCourseInProgress,
+      students,
+    }),
   };
 }

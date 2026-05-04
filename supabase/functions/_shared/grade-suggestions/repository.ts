@@ -237,10 +237,6 @@ export async function markStudentActivityApproved(
       status: 'graded',
       graded_at: params.approvedAt,
       updated_at: params.approvedAt,
-      -- Limpa feedback/nota IA pendente ao lançar nota manualmente
-      ai_suggested_grade: null,
-      ai_suggested_feedback: null,
-      ai_suggestion_status: null,
     })
     .eq('id', params.studentActivityId)
 

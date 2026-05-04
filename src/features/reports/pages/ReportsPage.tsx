@@ -35,8 +35,19 @@ import {
 const SEM_CATEGORIA = 'Sem categoria';
 const REPORT_FILE_COURSE_SLUG_MAX_LENGTH = 48;
 
+function getClassNameFromCourseGroup(courseGroup: string) {
+  const trimmedCourseGroup = courseGroup.trim();
+  const hierarchyParts = trimmedCourseGroup
+    .split('>')
+    .map(part => part.trim())
+    .filter(Boolean);
+
+  return hierarchyParts[3] || hierarchyParts[hierarchyParts.length - 1] || trimmedCourseGroup;
+}
+
 function buildReportFileName(reportType: 'notas' | 'pendencias', courseGroup: string, date = new Date()) {
-  const courseSlug = courseGroup
+  const className = getClassNameFromCourseGroup(courseGroup);
+  const courseSlug = className
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^a-zA-Z0-9-_ ]/g, '')
@@ -47,7 +58,7 @@ function buildReportFileName(reportType: 'notas' | 'pendencias', courseGroup: st
 
   const dateStamp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}`;
 
-  return `relatorio_${reportType}_${courseSlug || 'curso'}_${dateStamp}.xlsx`;
+  return `relatorio_${reportType}_${courseSlug || 'turma'}_${dateStamp}.xlsx`;
 }
 
 function daysSinceAccess(lastAccess: string | null | undefined): number | string {
@@ -796,6 +807,7 @@ export default function ReportsPage() {
 
               {availableUnitsWithStatus.map(unit => {
                 const checked = selectedUnitIds.includes(unit.id);
+                const unitName = simplifyUnitName(unit.name);
                 return (
                   <label
                     key={unit.id}
@@ -808,9 +820,8 @@ export default function ReportsPage() {
                     />
                     <div className="flex-1 min-w-0 space-y-1">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm">
-                          {unit.name}
-                          {unit.short_name ? ` (${unit.short_name})` : ''}
+                        <span className="text-sm" title={unit.name}>
+                          {unitName}
                         </span>
                         <Badge
                           variant="outline"

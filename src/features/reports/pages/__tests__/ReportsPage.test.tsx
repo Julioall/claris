@@ -124,7 +124,7 @@ vi.mock("xlsx-js-style", () => ({
 const tutorCoursesResponse = [
   {
     id: "course-1",
-    name: "Matematica",
+    name: "Matematica (1003121 - Matematica)",
     short_name: "MAT",
     category: "Turma A",
     start_date: "2020-01-10T00:00:00.000Z",
@@ -286,7 +286,7 @@ describe("Reports page", () => {
 
     await user.click(screen.getAllByRole("combobox")[1]);
     await user.click(await screen.findByRole("option", { name: options?.courseGroup ?? "Turma A" }));
-    await user.click(await screen.findByText("Matematica (MAT)"));
+    await user.click(await screen.findByText("Matematica"));
 
     if (options?.includeSuspendedStudents === false) {
       await user.click(screen.getByRole("switch", { name: /incluir alunos suspensos/i }));
@@ -406,6 +406,21 @@ describe("Reports page", () => {
     expect(exportedFileName).toMatch(/_\d{8}\.xlsx$/);
     expect(String(exportedFileName).length).toBeLessThanOrEqual(80);
     expect(exportedFileName).not.toContain("000022026");
+  });
+
+  it("uses the class name from the course hierarchy in the exported filename", async () => {
+    const courseGroup = "SENAI > Curso Tecnico > Internet das Coisas > Turma A";
+    fetchTutorCoursesMock.mockResolvedValueOnce([
+      {
+        ...tutorCoursesResponse[0],
+        category: courseGroup,
+      },
+    ]);
+
+    await generateReport({ courseGroup });
+
+    const exportedFileName = writeFileMock.mock.calls[0]?.[1];
+    expect(exportedFileName).toMatch(/^relatorio_notas_Turma_A_\d{8}\.xlsx$/);
   });
 
   it("only includes evaluative pending activities with positive gradebook weight evidence", async () => {

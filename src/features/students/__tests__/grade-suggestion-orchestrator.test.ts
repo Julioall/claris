@@ -235,6 +235,42 @@ describe("grade suggestion orchestrator", () => {
     }));
   });
 
+  it("preserva mensagem de erro quando a atualizacao local falha apos postagem no Moodle", async () => {
+    const finalizeAudit = vi.fn().mockResolvedValue(undefined);
+
+    const output = await approveGradeSuggestion({
+      auditId: "audit-4-local",
+      approvedGrade: 7,
+      approvedFeedback: "Feedback final aprovado",
+      approvedAt: "2026-03-26T10:00:00.000Z",
+    }, {
+      loadAudit: vi.fn().mockResolvedValue({
+        id: "audit-4-local",
+        status: "success",
+        maxGrade: 10,
+        moodleAssignId: 55,
+        studentId: "student-1",
+        courseId: "course-1",
+        studentActivityId: "activity-1",
+      }),
+      saveGradeToMoodle: vi.fn().mockResolvedValue(null),
+      markActivityApproved: vi.fn().mockRejectedValue({
+        message: "Could not find the 'ai_suggested_grade' column of 'student_activities' in the schema cache",
+        code: "PGRST204",
+      }),
+      finalizeAudit,
+    });
+
+    expect(output).toMatchObject({
+      success: false,
+      message: "Could not find the 'ai_suggested_grade' column of 'student_activities' in the schema cache",
+    });
+    expect(finalizeAudit).toHaveBeenCalledWith("audit-4-local", expect.objectContaining({
+      status: "approval_error",
+      errorMessage: "Could not find the 'ai_suggested_grade' column of 'student_activities' in the schema cache",
+    }));
+  });
+
   it("permite aprovar manualmente uma sugestao marcada para revisao humana", async () => {
     const saveGradeToMoodle = vi.fn().mockResolvedValue({ ok: true });
     const markActivityApproved = vi.fn().mockResolvedValue(undefined);

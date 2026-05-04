@@ -27,9 +27,16 @@ const asTrimmedString = (value: unknown): string =>
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
 
-// Module-level cache para app_settings (TTL: 10 min)
+// Cache only confirmed, usable settings. Caching an empty setup makes a freshly
+// saved Claris IA configuration look unavailable until the Edge isolate restarts.
 let _settingsCache: { value: SettingsJson; expiresAt: number } | null = null
-const SETTINGS_CACHE_TTL_MS = 10 * 60 * 1000
+const SETTINGS_CACHE_TTL_MS = 30 * 1000
+
+const shouldCacheSettings = (settings: SettingsJson): boolean =>
+  Boolean(settings.configured) &&
+  Boolean(settings.model) &&
+  Boolean(settings.baseUrl) &&
+  Boolean(settings.apiKey)
 
 async function readStoredSettings(): Promise<SettingsJson> {
   const now = Date.now()
@@ -57,7 +64,9 @@ async function readStoredSettings(): Promise<SettingsJson> {
     configured: Boolean(rawSettings.configured),
   }
 
-  _settingsCache = { value: settings, expiresAt: now + SETTINGS_CACHE_TTL_MS }
+  _settingsCache = shouldCacheSettings(settings)
+    ? { value: settings, expiresAt: now + SETTINGS_CACHE_TTL_MS }
+    : null
   return settings
 }
 

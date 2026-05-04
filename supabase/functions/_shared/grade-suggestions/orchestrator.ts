@@ -70,6 +70,24 @@ export interface ApproveSuggestionOutput {
   approvedFeedback?: string
 }
 
+function errorMessage(value: unknown, fallback: string): string {
+  if (value instanceof Error && value.message.trim()) {
+    return value.message
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    for (const key of ['message', 'details', 'hint', 'code']) {
+      const field = record[key]
+      if (typeof field === 'string' && field.trim()) {
+        return field.trim()
+      }
+    }
+  }
+
+  return fallback
+}
+
 function mergeSources(
   ...groups: Array<GradeSuggestionResult['sourcesUsed']>
 ): GradeSuggestionResult['sourcesUsed'] {
@@ -331,16 +349,18 @@ export async function approveGradeSuggestion(
       approvedFeedback,
     }
   } catch (error) {
+    const message = errorMessage(error, 'Falha ao lancar nota no Moodle.')
+
     await deps.finalizeAudit(audit.id, {
       status: 'approval_error',
       approvedGrade,
       approvedFeedback,
-      errorMessage: error instanceof Error ? error.message : 'Falha ao lancar nota no Moodle.',
+      errorMessage: message,
     })
 
     return {
       success: false,
-      message: error instanceof Error ? error.message : 'Falha ao lancar nota no Moodle.',
+      message,
     }
   }
 }
