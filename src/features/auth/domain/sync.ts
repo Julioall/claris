@@ -43,12 +43,17 @@ export const STEP_FUNCTION_MAP: Record<CourseScopedSyncEntity, string> = {
 };
 
 export const STEP_BATCH_CONFIG: Record<CourseScopedSyncEntity, { batchSize: number; timeoutMs: number }> = {
-  students: { batchSize: 5, timeoutMs: 30000 },
-  activities: { batchSize: 3, timeoutMs: 30000 },
-  grades: { batchSize: 2, timeoutMs: 30000 },
+  students: { batchSize: 1, timeoutMs: 60000 },
+  activities: { batchSize: 1, timeoutMs: 90000 },
+  grades: { batchSize: 1, timeoutMs: 90000 },
 };
 
-export const BATCH_DELAY_MS = 120;
+export const BATCH_DELAY_MS = 1000;
+
+export const STUDENT_BATCH_CONFIG: Partial<Record<CourseScopedSyncEntity, { batchSize: number; delayMs: number }>> = {
+  activities: { batchSize: 12, delayMs: 700 },
+  grades: { batchSize: 10, delayMs: 700 },
+};
 
 export function createInitialSyncProgress(): SyncProgress {
   return {

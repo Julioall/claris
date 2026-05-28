@@ -1,7 +1,13 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { Course } from '@/features/courses/types';
 
-import { BATCH_DELAY_MS, STEP_BATCH_CONFIG, STEP_FUNCTION_MAP, type CourseScopedSyncEntity } from '../domain/sync';
+import {
+  BATCH_DELAY_MS,
+  STEP_BATCH_CONFIG,
+  STEP_FUNCTION_MAP,
+  STUDENT_BATCH_CONFIG,
+  type CourseScopedSyncEntity,
+} from '../domain/sync';
 import type { MoodleSession } from '../domain/session';
 import { invokeMoodleFunctionWithTimeout } from './moodle-api';
 
@@ -61,32 +67,22 @@ export async function runBatchedEntitySync(params: {
         if (!Number.isFinite(parsedCourseId)) return 0;
 
         try {
-          const { data, error } = await invokeMoodleFunctionWithTimeout({
+          const result = await runCourseEntitySync({
+            accessToken: params.accessToken,
+            courseId: parsedCourseId,
+            entity: params.entity,
             functionName,
-            body: {
-              moodleUrl: params.session.moodleUrl,
-              token: params.session.moodleToken,
-              courseId: parsedCourseId,
-            },
+            session: params.session,
             timeoutMs,
-            accessTokenOverride: params.accessToken,
           });
 
-          if (error || data?.error) {
-            console.warn(`${params.entity} sync failed for course ${course.moodle_course_id}:`, error || data?.error);
+          if (!result.succeeded) {
+            console.warn(`${params.entity} sync failed for course ${course.moodle_course_id}:`, result.errorMessage);
             errorCount += 1;
             return 0;
           }
 
-          if (params.entity === 'students') {
-            return (data as { students?: unknown[] })?.students?.length || 0;
-          }
-
-          if (params.entity === 'activities') {
-            return Number(data?.activitiesCount || 0);
-          }
-
-          return Number(data?.gradesCount || 0);
+          return result.totalCount;
         } catch (error) {
           console.warn(`${params.entity} sync error for course ${course.moodle_course_id}:`, error);
           errorCount += 1;
@@ -117,4 +113,82 @@ export async function runBatchedEntitySync(params: {
     succeeded: !failedCompletely,
     errorCount,
   };
+}
+
+async function runCourseEntitySync(params: {
+  accessToken?: string;
+  courseId: number;
+  entity: CourseScopedSyncEntity;
+  functionName: string;
+  session: MoodleSession;
+  timeoutMs: number;
+}): Promise<{ totalCount: number; succeeded: boolean; errorMessage?: string }> {
+  const studentBatchConfig = STUDENT_BATCH_CONFIG[params.entity];
+  let totalCount = 0;
+  let studentBatchPage = 1;
+  let guard = 0;
+
+  while (guard < 200) {
+    guard += 1;
+
+    const body: Record<string, unknown> = {
+      moodleUrl: params.session.moodleUrl,
+      token: params.session.moodleToken,
+      courseId: params.courseId,
+    };
+
+    if (studentBatchConfig) {
+      body.studentBatchPage = studentBatchPage;
+      body.studentBatchSize = studentBatchConfig.batchSize;
+    }
+
+    const { data, error } = await invokeMoodleFunctionWithTimeout({
+      functionName: params.functionName,
+      body,
+      timeoutMs: params.timeoutMs,
+      accessTokenOverride: params.accessToken,
+    });
+
+    if (error || data?.error) {
+      return {
+        totalCount,
+        succeeded: false,
+        errorMessage:
+          error?.message ||
+          (typeof data?.error === 'string' ? data.error : undefined) ||
+          'Falha ao sincronizar curso',
+      };
+    }
+
+    totalCount += readEntityCount(params.entity, data);
+
+    if (!studentBatchConfig || !data?.hasMore) {
+      return { totalCount, succeeded: true };
+    }
+
+    const nextPage = Number(data.nextStudentBatchPage);
+    studentBatchPage = Number.isFinite(nextPage) && nextPage > studentBatchPage
+      ? nextPage
+      : studentBatchPage + 1;
+
+    await wait(studentBatchConfig.delayMs);
+  }
+
+  return {
+    totalCount,
+    succeeded: false,
+    errorMessage: 'Limite de lotes excedido durante a sincronizacao do curso',
+  };
+}
+
+function readEntityCount(entity: CourseScopedSyncEntity, data: Record<string, unknown> | null): number {
+  if (entity === 'students') {
+    return (data as { students?: unknown[] } | null)?.students?.length || 0;
+  }
+
+  if (entity === 'activities') {
+    return Number(data?.activitiesCount || 0);
+  }
+
+  return Number(data?.gradesCount || 0);
 }

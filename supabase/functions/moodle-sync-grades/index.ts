@@ -30,5 +30,8 @@ Deno.serve(createHandler(async ({ body, user }) => {
     return errorResponse('Forbidden for this course.', 403)
   }
 
-  return await syncGrades(body.moodleUrl, body.token, body.courseId)
+  return await syncGrades(body.moodleUrl, body.token, body.courseId, {
+    studentBatchPage: body.studentBatchPage,
+    studentBatchSize: body.studentBatchSize,
+  })
 }, { requireAuth: true, parseBody: parseMoodleSyncGradesPayload }))

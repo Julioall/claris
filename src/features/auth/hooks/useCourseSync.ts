@@ -131,7 +131,11 @@ export interface UseCourseSyncResult {
   syncData: () => Promise<void>;
   syncSelectedCourses: (courseIds: string[]) => Promise<void>;
   syncStudentsIncremental: (courseIds: string[]) => Promise<void>;
-  syncCourseIncremental: (courseId: string, entities?: CourseScopedSyncEntity[]) => Promise<void>;
+  syncCourseIncremental: (
+    courseId: string,
+    entities?: CourseScopedSyncEntity[],
+    options?: { silent?: boolean; successTitle?: string },
+  ) => Promise<void>;
   showCourseSelector: boolean;
   setShowCourseSelector: (show: boolean) => void;
 }
@@ -273,7 +277,7 @@ export function useCourseSync(params: {
       }
 
       const initialPhaseEntities: SyncEntity[] = ['courses', 'students'];
-      const deepPhaseEntities: CourseScopedSyncEntity[] = ['activities', 'grades'];
+      const deepPhaseEntities: CourseScopedSyncEntity[] = [];
 
       setIsSyncing(true);
       setSyncProgress({
@@ -370,7 +374,7 @@ export function useCourseSync(params: {
 
         toast({
           title: 'Sincronizacao inicial concluida',
-          description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados. Atividades e notas continuarao em segundo plano.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
+          description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados. Atividades e notas serao atualizadas automaticamente ao abrir cada UC.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
         });
 
         void trackEvent(context.user.id, 'sync_finish', {
@@ -379,6 +383,18 @@ export function useCourseSync(params: {
             students: totalStudents,
             activities: 0,
             grades: 0,
+          },
+        });
+
+        void createSystemNotification(context.user.id, {
+          title: 'Sincronizacao concluida',
+          description: 'Cursos e alunos foram atualizados. Atividades e notas serao sincronizadas ao abrir cada UC.',
+          eventType: 'sync_finish',
+          severity: 'info',
+          metadata: {
+            sync_phase: 'initial',
+            courses: syncedCourses.length,
+            students: totalStudents,
           },
         });
 
@@ -686,6 +702,7 @@ export function useCourseSync(params: {
     labels?: {
       successTitle?: string;
       emptyMessage?: string;
+      silent?: boolean;
     },
   ): Promise<ScopedSyncSummary | null> => {
     return await trackActivity({
@@ -744,10 +761,12 @@ export function useCourseSync(params: {
         if (entities.includes('activities')) parts.push(`${summary.activities} atividades`);
         if (entities.includes('grades')) parts.push(`${summary.grades} notas`);
 
-        toast({
-          title: labels?.successTitle || 'Sincronizacao incremental concluida',
-          description: `${selectedCourses.length} curso(s): ${parts.join(', ')} atualizados.`,
-        });
+        if (!labels?.silent) {
+          toast({
+            title: labels?.successTitle || 'Sincronizacao incremental concluida',
+            description: `${selectedCourses.length} curso(s): ${parts.join(', ')} atualizados.`,
+          });
+        }
 
         return summary;
       } catch (error) {
@@ -774,10 +793,12 @@ export function useCourseSync(params: {
   const syncCourseIncremental = useCallback(async (
     courseId: string,
     entities: CourseScopedSyncEntity[] = ['students', 'activities', 'grades'],
+    options?: { silent?: boolean; successTitle?: string },
   ) => {
     await syncEntitiesIncremental([courseId], entities, {
-      successTitle: 'Unidade curricular sincronizada',
+      successTitle: options?.successTitle || 'Unidade curricular sincronizada',
       emptyMessage: 'Nao foi possivel encontrar a unidade curricular selecionada.',
+      silent: options?.silent,
     });
   }, [syncEntitiesIncremental]);
 

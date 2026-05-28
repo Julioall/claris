@@ -13,10 +13,41 @@ import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dash
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 import { parseNullableNumber, parseNullablePercentage } from '../_shared/validation/mod.ts'
 
-// Pool size increased from 8 to 16 for better parallelization
-// Expected impact: ~50% reduction in total sync time for 100+ students
-const GRADE_FETCH_POOL_SIZE = 16
+const GRADE_FETCH_POOL_SIZE = 4
 const GRADE_SYNC_REUSE_WINDOW_MINUTES = 10
+const DEFAULT_STUDENT_BATCH_SIZE = 10
+const MAX_STUDENT_BATCH_SIZE = 25
+const MOODLE_BATCH_DELAY_MS = 300
+
+interface StudentBatchOptions {
+  studentBatchPage?: number
+  studentBatchSize?: number
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function resolveStudentBatch<TStudent>(
+  students: TStudent[],
+  options: StudentBatchOptions = {},
+) {
+  const page = Math.max(1, options.studentBatchPage ?? 1)
+  const batchSize = Math.min(
+    MAX_STUDENT_BATCH_SIZE,
+    Math.max(1, options.studentBatchSize ?? DEFAULT_STUDENT_BATCH_SIZE),
+  )
+  const start = (page - 1) * batchSize
+  const selectedStudents = students.slice(start, start + batchSize)
+  const hasMore = start + selectedStudents.length < students.length
+
+  return {
+    batchSize,
+    hasMore,
+    nextStudentBatchPage: hasMore ? page + 1 : null,
+    page,
+    selectedStudents,
+    totalStudents: students.length,
+  }
+}
 
 function readOptionalText(value: unknown): string | null {
   if (typeof value !== 'string') return null
@@ -94,7 +125,12 @@ function hasGradebookWeight(item: Record<string, unknown>, itemGradeMax: number 
   return (itemGradeMax ?? 0) > 0
 }
 
-export async function syncGrades(moodleUrl: string, token: string, courseId: number): Promise<Response> {
+export async function syncGrades(
+  moodleUrl: string,
+  token: string,
+  courseId: number,
+  options: StudentBatchOptions = {},
+): Promise<Response> {
   const supabase = createServiceClient()
 
   const gradesCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
@@ -105,10 +141,24 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
 
   if (!enrolledStudents?.length) {
     await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
-    return jsonResponse({ success: true, gradesCount: 0 })
+    return jsonResponse({ success: true, gradesCount: 0, hasMore: false, processedStudents: 0, totalStudents: 0 })
   }
 
   console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`)
+
+  const studentBatch = resolveStudentBatch(enrolledStudents, options)
+  if (studentBatch.selectedStudents.length === 0) {
+    return jsonResponse({
+      success: true,
+      gradesCount: 0,
+      activityGradesCount: 0,
+      hasMore: false,
+      nextStudentBatchPage: null,
+      processedStudents: 0,
+      skippedStudents: 0,
+      totalStudents: studentBatch.totalStudents,
+    })
+  }
 
   const recentSyncCutoffIso = new Date(
     Date.now() - (GRADE_SYNC_REUSE_WINDOW_MINUTES * 60 * 1000),
@@ -125,7 +175,7 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
     console.warn('[moodle-sync-grades] Unable to load recent sync window. Continuing without delta optimization:', error)
   }
 
-  const studentsToFetch = enrolledStudents.filter(
+  const studentsToFetch = studentBatch.selectedStudents.filter(
     (enrollment) => !recentlySyncedStudentIds.has(enrollment.student_id),
   )
 
@@ -136,12 +186,20 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
   }
 
   if (studentsToFetch.length === 0) {
-    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+    if (!studentBatch.hasMore) {
+      await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+    }
     return jsonResponse({
       success: true,
       gradesCount: 0,
       activityGradesCount: 0,
-      skippedStudents: enrolledStudents.length,
+      hasMore: studentBatch.hasMore,
+      nextStudentBatchPage: studentBatch.nextStudentBatchPage,
+      processedStudents: studentBatch.selectedStudents.length,
+      skippedStudents: studentBatch.selectedStudents.length,
+      studentBatchPage: studentBatch.page,
+      studentBatchSize: studentBatch.batchSize,
+      totalStudents: studentBatch.totalStudents,
     })
   }
 
@@ -259,6 +317,10 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
         console.error(`Error fetching grades for course ${courseId}:`, result.reason)
       }
     }
+
+    if (i + GRADE_FETCH_POOL_SIZE < studentsToFetch.length) {
+      await wait(MOODLE_BATCH_DELAY_MS)
+    }
   }
 
   // Batch upsert activity grades
@@ -280,13 +342,21 @@ export async function syncGrades(moodleUrl: string, token: string, courseId: num
     }
   }
 
-  await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+  if (!studentBatch.hasMore) {
+    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+  }
 
   return jsonResponse({
     success: true,
     gradesCount,
     activityGradesCount,
-    skippedStudents: enrolledStudents.length - studentsToFetch.length,
+    hasMore: studentBatch.hasMore,
+    nextStudentBatchPage: studentBatch.nextStudentBatchPage,
+    processedStudents: studentBatch.selectedStudents.length,
+    skippedStudents: studentBatch.selectedStudents.length - studentsToFetch.length,
+    studentBatchPage: studentBatch.page,
+    studentBatchSize: studentBatch.batchSize,
+    totalStudents: studentBatch.totalStudents,
   })
 }
 

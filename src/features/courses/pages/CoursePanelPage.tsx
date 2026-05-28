@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -36,6 +36,34 @@ import { cn } from '@/lib/utils';
 import { AssignmentSuggestionPanel } from '../components/AssignmentSuggestionPanel';
 import { useCoursePanel } from '../hooks/useCoursePanel';
 
+type CoursePanelSyncSection = 'students' | 'activities' | 'course';
+
+const COURSE_AUTO_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
+const COURSE_AUTO_SYNC_KEY_PREFIX = 'claris:course-auto-sync';
+
+function buildCourseAutoSyncKey(userId: string, courseId: string) {
+  return `${COURSE_AUTO_SYNC_KEY_PREFIX}:${userId}:${courseId}`;
+}
+
+function shouldRunCourseAutoSync(key: string) {
+  try {
+    const previousTimestamp = Number(window.sessionStorage.getItem(key) || 0);
+    return !Number.isFinite(previousTimestamp) ||
+      previousTimestamp <= 0 ||
+      Date.now() - previousTimestamp > COURSE_AUTO_SYNC_COOLDOWN_MS;
+  } catch {
+    return true;
+  }
+}
+
+function markCourseAutoSyncStarted(key: string) {
+  try {
+    window.sessionStorage.setItem(key, String(Date.now()));
+  } catch {
+    // sessionStorage can be unavailable in restricted browser contexts.
+  }
+}
+
 export default function CoursePanelPage() {
   const { id } = useParams<{ id: string }>();
   const {
@@ -52,12 +80,13 @@ export default function CoursePanelPage() {
     isLoadingAttendanceFlag,
     toggleAttendance,
   } = useCoursePanel(id);
-  const { isEditMode, syncCourseIncremental, isSyncing, isOfflineMode } = useAuth();
+  const { user, isEditMode, syncCourseIncremental, isSyncing, isOfflineMode } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
-  const [isSyncingSection, setIsSyncingSection] = useState<'students' | 'activities' | null>(null);
+  const [isSyncingSection, setIsSyncingSection] = useState<CoursePanelSyncSection | null>(null);
   const [studentsPage, setStudentsPage] = useState(1);
   const [activitiesPage, setActivitiesPage] = useState(1);
+  const autoSyncInFlightKeyRef = useRef<string | null>(null);
 
   const studentsPageSize = 25;
   const activitiesPageSize = 12;
@@ -148,6 +177,50 @@ export default function CoursePanelPage() {
     }
   }, [activitiesPage, activitiesTotalPages]);
 
+  useEffect(() => {
+    if (
+      !id ||
+      !user?.id ||
+      !course?.id ||
+      course.id !== id ||
+      isOfflineMode ||
+      isLoading ||
+      isSyncing ||
+      isSyncingSection !== null
+    ) {
+      return;
+    }
+
+    const autoSyncKey = buildCourseAutoSyncKey(user.id, id);
+    if (autoSyncInFlightKeyRef.current === autoSyncKey || !shouldRunCourseAutoSync(autoSyncKey)) {
+      return;
+    }
+
+    autoSyncInFlightKeyRef.current = autoSyncKey;
+    markCourseAutoSyncStarted(autoSyncKey);
+    setIsSyncingSection('course');
+
+    void syncCourseIncremental(id, ['students', 'activities', 'grades'], {
+      silent: true,
+      successTitle: 'Atualizacao automatica da UC',
+    })
+      .then(() => refetch())
+      .finally(() => {
+        autoSyncInFlightKeyRef.current = null;
+        setIsSyncingSection(null);
+      });
+  }, [
+    course?.id,
+    id,
+    isLoading,
+    isOfflineMode,
+    isSyncing,
+    isSyncingSection,
+    refetch,
+    syncCourseIncremental,
+    user?.id,
+  ]);
+
   if (isLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -196,7 +269,9 @@ export default function CoursePanelPage() {
         <div className="flex items-center gap-2">
           <div className="mr-2 hidden text-right text-xs text-muted-foreground md:block">
             <span>Última sincronização:</span>
-            <span className="ml-1 font-medium">{formatDateTime(course.last_sync)}</span>
+            <span className="ml-1 font-medium">
+              {isSyncingSection === 'course' ? 'Atualizando...' : formatDateTime(course.last_sync)}
+            </span>
           </div>
         </div>
       </div>
@@ -339,7 +414,9 @@ export default function CoursePanelPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Última sincronização:</span>
-                  <span className="font-medium">{formatDateTime(course.last_sync)}</span>
+                  <span className="font-medium">
+                    {isSyncingSection === 'course' ? 'Atualizando...' : formatDateTime(course.last_sync)}
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <MoodleIcon className="h-4 w-4" />

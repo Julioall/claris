@@ -41,6 +41,9 @@ const INVALID_CITY_VALUES = new Set([
   'brasileiro',
   'brasil',
 ])
+const MOODLE_REQUEST_SPACING_MS = 300
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function normalizeCustomFieldKey(value: string): string {
   return value
@@ -251,10 +254,9 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
 
   if (!dbCourse) return errorResponse('Course not found in database', 404)
 
-  const [enrolledUsers, suspendedUserIds] = await Promise.all([
-    getCourseEnrolledUsers(moodleUrl, token, courseId),
-    getCourseSuspendedUserIds(moodleUrl, token, courseId),
-  ])
+  const enrolledUsers = await getCourseEnrolledUsers(moodleUrl, token, courseId)
+  await wait(MOODLE_REQUEST_SPACING_MS)
+  const suspendedUserIds = await getCourseSuspendedUserIds(moodleUrl, token, courseId)
   console.log(`Found ${enrolledUsers.length} enrolled users in course ${courseId}`)
 
   const usersWithoutRoles = enrolledUsers.filter((u) => !u.roles || u.roles.length === 0).length

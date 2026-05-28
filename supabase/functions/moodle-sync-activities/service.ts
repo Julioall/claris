@@ -13,11 +13,48 @@ import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dash
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 
 const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
-// Pool size increased from 8 to 16 for better parallelization
-const COMPLETION_FETCH_POOL_SIZE = 16
+const COMPLETION_FETCH_POOL_SIZE = 4
 const COMPLETION_REUSE_WINDOW_MINUTES = 10
+const DEFAULT_STUDENT_BATCH_SIZE = 12
+const MAX_STUDENT_BATCH_SIZE = 25
+const MOODLE_BATCH_DELAY_MS = 300
 
-export async function syncActivities(moodleUrl: string, token: string, courseId: number): Promise<Response> {
+interface StudentBatchOptions {
+  studentBatchPage?: number
+  studentBatchSize?: number
+}
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+function resolveStudentBatch(
+  studentIds: string[],
+  options: StudentBatchOptions = {},
+) {
+  const page = Math.max(1, options.studentBatchPage ?? 1)
+  const batchSize = Math.min(
+    MAX_STUDENT_BATCH_SIZE,
+    Math.max(1, options.studentBatchSize ?? DEFAULT_STUDENT_BATCH_SIZE),
+  )
+  const start = (page - 1) * batchSize
+  const selectedStudentIds = studentIds.slice(start, start + batchSize)
+  const hasMore = start + selectedStudentIds.length < studentIds.length
+
+  return {
+    batchSize,
+    hasMore,
+    nextStudentBatchPage: hasMore ? page + 1 : null,
+    page,
+    selectedStudentIds,
+    totalStudents: studentIds.length,
+  }
+}
+
+export async function syncActivities(
+  moodleUrl: string,
+  token: string,
+  courseId: number,
+  options: StudentBatchOptions = {},
+): Promise<Response> {
   const supabase = createServiceClient()
 
   const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
@@ -38,7 +75,19 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   const studentIds = await listStudentIdsByCourseId(supabase, dbCourse.id)
   if (studentIds.length === 0) {
     await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
-    return jsonResponse({ success: true, activitiesCount: 0 })
+    return jsonResponse({ success: true, activitiesCount: 0, hasMore: false, processedStudents: 0, totalStudents: 0 })
+  }
+
+  const studentBatch = resolveStudentBatch(studentIds, options)
+  if (studentBatch.selectedStudentIds.length === 0) {
+    return jsonResponse({
+      success: true,
+      activitiesCount: 0,
+      hasMore: false,
+      nextStudentBatchPage: null,
+      processedStudents: 0,
+      totalStudents: studentBatch.totalStudents,
+    })
   }
 
   // Extract activities
@@ -46,7 +95,14 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   console.log(`Found ${activities.length} activities (quiz/assign/forum) in course ${courseId}`)
   if (activities.length === 0) {
     await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
-    return jsonResponse({ success: true, activitiesCount: 0 })
+    return jsonResponse({
+      success: true,
+      activitiesCount: 0,
+      hasMore: false,
+      nextStudentBatchPage: null,
+      processedStudents: studentBatch.selectedStudentIds.length,
+      totalStudents: studentBatch.totalStudents,
+    })
   }
 
   // Fetch due dates
@@ -54,11 +110,11 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
   const quizDueDates = await fetchQuizDueDates(moodleUrl, token, courseId, activities)
 
   // Fetch per-student completion status
-  const completionByStudent = await fetchCompletionStatuses(moodleUrl, token, courseId, studentIds, dbCourse.id, supabase)
+  const completionByStudent = await fetchCompletionStatuses(moodleUrl, token, courseId, studentBatch.selectedStudentIds, dbCourse.id, supabase)
 
   // Build and upsert records
   const now = new Date().toISOString()
-  const activityRecords = buildActivityRecords(activities, studentIds, dbCourse.id, assignDueDates, quizDueDates, completionByStudent, now)
+  const activityRecords = buildActivityRecords(activities, studentBatch.selectedStudentIds, dbCourse.id, assignDueDates, quizDueDates, completionByStudent, now)
 
   console.log(`Preparing to upsert ${activityRecords.length} activity records`)
 
@@ -70,10 +126,21 @@ export async function syncActivities(moodleUrl: string, token: string, courseId:
     console.error('Error upserting activities:', error)
   }
 
-  await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
+  if (!studentBatch.hasMore) {
+    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
+  }
 
   console.log(`Upserted ${activitiesCount} activity records`)
-  return jsonResponse({ success: true, activitiesCount })
+  return jsonResponse({
+    success: true,
+    activitiesCount,
+    hasMore: studentBatch.hasMore,
+    nextStudentBatchPage: studentBatch.nextStudentBatchPage,
+    processedStudents: studentBatch.selectedStudentIds.length,
+    studentBatchPage: studentBatch.page,
+    studentBatchSize: studentBatch.batchSize,
+    totalStudents: studentBatch.totalStudents,
+  })
 }
 
 async function refreshDashboardAggregatesForCourse(
@@ -389,6 +456,10 @@ async function fetchCompletionStatuses(
       if (item.status === 'fulfilled') {
         result.set(item.value.studentId, item.value.activityMap)
       }
+    }
+
+    if (i + COMPLETION_FETCH_POOL_SIZE < studentsToFetch.length) {
+      await wait(MOODLE_BATCH_DELAY_MS)
     }
   }
 

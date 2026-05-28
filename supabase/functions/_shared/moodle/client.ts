@@ -9,6 +9,8 @@ import type {
 
 const INVALID_PARAMETER_MESSAGE = 'valor invalido de parametro'
 const NUMERIC_CATEGORY_PATTERN = /^\d+$/
+const USER_PROFILE_BATCH_SIZE = 25
+const USER_PROFILE_BATCH_DELAY_MS = 300
 const ENROLLED_USERS_OPTIONAL_FIELDS = [
   'id',
   'username',
@@ -27,6 +29,8 @@ const ENROLLED_USERS_OPTIONAL_FIELDS = [
   'lastaccess',
   'lastcourseaccess',
 ].join(',')
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function normalizeForComparison(value: string): string {
   return value
@@ -439,11 +443,10 @@ export async function getUserProfilesByIds(
   const uniqueIds = Array.from(new Set(userIds.filter((id) => Number.isFinite(id) && id > 0)))
   if (uniqueIds.length === 0) return new Map()
 
-  const BATCH_SIZE = 50
   const profilesById = new Map<number, MoodleUserProfile>()
 
-  for (let i = 0; i < uniqueIds.length; i += BATCH_SIZE) {
-    const batch = uniqueIds.slice(i, i + BATCH_SIZE)
+  for (let i = 0; i < uniqueIds.length; i += USER_PROFILE_BATCH_SIZE) {
+    const batch = uniqueIds.slice(i, i + USER_PROFILE_BATCH_SIZE)
     const params: Record<string, string | number> = { field: 'id' }
 
     for (let index = 0; index < batch.length; index += 1) {
@@ -461,6 +464,10 @@ export async function getUserProfilesByIds(
       }
     } catch (error) {
       console.error('[moodle] Failed to fetch user profiles by ids batch:', error)
+    }
+
+    if (i + USER_PROFILE_BATCH_SIZE < uniqueIds.length) {
+      await wait(USER_PROFILE_BATCH_DELAY_MS)
     }
   }
 

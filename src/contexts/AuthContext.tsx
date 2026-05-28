@@ -16,7 +16,11 @@ interface ExtendedAuthContextType extends AuthContextType {
   closeSyncProgress: () => void;
   syncSelectedCourses: (courseIds: string[]) => Promise<void>;
   syncStudentsIncremental: (courseIds: string[]) => Promise<void>;
-  syncCourseIncremental: (courseId: string, entities?: CourseScopedSyncEntity[]) => Promise<void>;
+  syncCourseIncremental: (
+    courseId: string,
+    entities?: CourseScopedSyncEntity[],
+    options?: { silent?: boolean; successTitle?: string },
+  ) => Promise<void>;
   showCourseSelector: boolean;
   setShowCourseSelector: (show: boolean) => void;
   isEditMode: boolean;

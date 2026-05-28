@@ -1,6 +1,7 @@
 import {
   expectBodyObject,
   readOptionalLiteral,
+  readOptionalPositiveInteger,
   readRequiredMoodleUrl,
   readRequiredPositiveInteger,
   readRequiredString,
@@ -12,6 +13,8 @@ export interface SyncGradesPayload {
   action: 'sync_grades'
   courseId: number
   moodleUrl: string
+  studentBatchPage?: number
+  studentBatchSize?: number
   token: string
 }
 
@@ -30,6 +33,8 @@ export function parseMoodleSyncGradesPayload(rawBody: unknown): MoodleSyncGrades
     action,
     courseId: readRequiredPositiveInteger(body, 'courseId'),
     moodleUrl: readRequiredMoodleUrl(body),
+    studentBatchPage: readOptionalPositiveInteger(body, 'studentBatchPage'),
+    studentBatchSize: readOptionalPositiveInteger(body, 'studentBatchSize'),
     token: readRequiredString(body, 'token'),
   }
 

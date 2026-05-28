@@ -14,6 +14,8 @@ const getActivityGradeSuggestionJobMock = vi.fn();
 const resumeActivityGradeSuggestionJobMock = vi.fn();
 const approveStudentGradeSuggestionMock = vi.fn();
 const useMoodleSessionMock = vi.fn();
+const syncCourseIncrementalMock = vi.fn();
+const refetchCoursePanelMock = vi.fn();
 
 vi.mock("@/features/courses/hooks/useCoursePanel", () => ({
   useCoursePanel: (...args: unknown[]) => useCoursePanelMock(...args),
@@ -56,6 +58,7 @@ function renderPage() {
 describe("CoursePanel page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.clear();
     useMoodleSessionMock.mockReturnValue({
       moodleToken: "token-1",
       moodleUrl: "https://moodle.example.com",
@@ -132,10 +135,12 @@ describe("CoursePanel page", () => {
     useAuthMock.mockReturnValue({
       user: { id: "u-1" },
       isEditMode: false,
-      syncCourseIncremental: vi.fn(),
+      syncCourseIncremental: syncCourseIncrementalMock,
       isSyncing: false,
       isOfflineMode: false,
     });
+    syncCourseIncrementalMock.mockResolvedValue(undefined);
+    refetchCoursePanelMock.mockResolvedValue(undefined);
 
     useCoursePanelMock.mockReturnValue({
       course: {
@@ -233,7 +238,7 @@ describe("CoursePanel page", () => {
       },
       isLoading: false,
       error: null,
-      refetch: vi.fn(),
+      refetch: refetchCoursePanelMock,
       toggleActivityVisibility: toggleActivityVisibilityMock,
       isAttendanceEnabled: false,
       isLoadingAttendanceFlag: false,
@@ -300,6 +305,21 @@ describe("CoursePanel page", () => {
     expect(screen.getByText(/alunos matriculados/i)).toBeInTheDocument();
     expect(screen.getByText(/distribui/i)).toBeInTheDocument();
     expect(screen.getByText("15/03/2026")).toBeInTheDocument();
+  });
+
+  it("starts a silent course refresh when opening the course", async () => {
+    renderPage();
+
+    await waitFor(() => {
+      expect(syncCourseIncrementalMock).toHaveBeenCalledWith(
+        "c-1",
+        ["students", "activities", "grades"],
+        expect.objectContaining({ silent: true }),
+      );
+    });
+    await waitFor(() => {
+      expect(refetchCoursePanelMock).toHaveBeenCalled();
+    });
   });
 
   it("expands assignment activity with per-student statuses", async () => {

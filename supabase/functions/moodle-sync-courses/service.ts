@@ -22,7 +22,10 @@ import {
 
 const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
 const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor', 'monitor']
-const ENROLLED_USERS_POOL_SIZE = 6
+const ENROLLED_USERS_POOL_SIZE = 2
+const ENROLLED_USERS_BATCH_DELAY_MS = 500
+
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function normalizeEmail(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null
@@ -100,12 +103,21 @@ async function listCoursesWithTutorRole(params: {
         console.warn('[moodle-sync-courses] Could not resolve tutor role for one course:', result.reason)
       }
     }
+
+    if (index + ENROLLED_USERS_POOL_SIZE < params.moodleCourseIds.length) {
+      await wait(ENROLLED_USERS_BATCH_DELAY_MS)
+    }
   }
 
   return tutorCourseIds
 }
 
-export async function syncCourses(_moodleUrl: string, token: string, userId: string): Promise<Response> {
+export async function syncCourses(
+  _moodleUrl: string,
+  token: string,
+  userId: string,
+  options: { autoLinkTutorCourses?: boolean } = {},
+): Promise<Response> {
   const supabase = createServiceClient()
 
   const dbUser = await findUserByMoodleUserId(supabase, userId)
@@ -176,9 +188,6 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
 
   const now = new Date().toISOString()
   const unresolvedCourseIds: string[] = []
-  const moodleCourseIds = moodleCourses
-    .map((course) => Number(course.id))
-    .filter((courseId): courseId is number => Number.isFinite(courseId) && courseId > 0)
 
   const coursesData = moodleCourses.map((course) => {
     const moodleCourseId = String(course.id)
@@ -217,19 +226,25 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
 
   try {
     const syncedCourses = await upsertCourses(supabase, coursesData)
-    const existingLinkedCourseIds = new Set(await listLinkedCourseIds(supabase, dbUser.id))
+    const existingLinkedCourseIds = options.autoLinkTutorCourses
+      ? new Set(await listLinkedCourseIds(supabase, dbUser.id))
+      : new Set<string>()
 
-    const moodleCourseIdsToInspect = (syncedCourses || [])
-      .filter((course) => !existingLinkedCourseIds.has(course.id))
-      .map((course) => Number(course.moodle_course_id))
-      .filter((courseId): courseId is number => Number.isFinite(courseId) && courseId > 0)
+    const moodleCourseIdsToInspect = options.autoLinkTutorCourses
+      ? (syncedCourses || [])
+        .filter((course) => !existingLinkedCourseIds.has(course.id))
+        .map((course) => Number(course.moodle_course_id))
+        .filter((courseId): courseId is number => Number.isFinite(courseId) && courseId > 0)
+      : []
 
-    const tutorCourseIds = await listCoursesWithTutorRole({
-      moodleBaseUrl,
-      token,
-      moodleUserId: numericUserId,
-      moodleCourseIds: moodleCourseIdsToInspect,
-    })
+    const tutorCourseIds = options.autoLinkTutorCourses
+      ? await listCoursesWithTutorRole({
+        moodleBaseUrl,
+        token,
+        moodleUserId: numericUserId,
+        moodleCourseIds: moodleCourseIdsToInspect,
+      })
+      : new Set<string>()
 
     if (tutorCourseIds.size > 0) {
       const links = (syncedCourses || [])
@@ -246,6 +261,10 @@ export async function syncCourses(_moodleUrl: string, token: string, userId: str
       }
 
       console.log(`[moodle-sync-courses] Auto-linked ${links.length} tutor course(s) for user ${dbUser.id}`)
+    } else if (!options.autoLinkTutorCourses) {
+      console.log(
+        `[moodle-sync-courses] Tutor role auto-link skipped for user ${dbUser.id}. Selected courses are linked explicitly.`,
+      )
     } else if (moodleCourseIdsToInspect.length === 0) {
       console.log(
         `[moodle-sync-courses] No new courses to inspect for auto-linking for user ${dbUser.id}. Existing links kept.`,
