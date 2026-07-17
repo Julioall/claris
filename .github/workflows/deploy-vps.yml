@@ -132,7 +132,22 @@ jobs:
             if ! command -v docker >/dev/null 2>&1; then
               curl -fsSL https://get.docker.com | \$SUDO sh
             fi
-            docker compose version >/dev/null 2>&1 || { echo 'Docker Compose plugin is required'; exit 1; }
+
+            if [ -n "\$SUDO" ] && ! docker info >/dev/null 2>&1; then
+              \$SUDO usermod -aG docker '$VPS_USER'
+            fi
+
+            if ! \$SUDO docker compose version >/dev/null 2>&1 && \
+               ! command -v docker-compose >/dev/null 2>&1; then
+              if command -v apt-get >/dev/null 2>&1; then
+                \$SUDO apt-get update
+                \$SUDO apt-get install -y docker-compose-plugin || \
+                  \$SUDO apt-get install -y docker-compose
+              else
+                echo 'Docker Compose plugin or docker-compose is required'
+                exit 1
+              fi
+            fi
             command -v rsync >/dev/null 2>&1 || { \$SUDO apt-get update && \$SUDO apt-get install -y rsync; }
             \$SUDO mkdir -p '$VPS_APP_DIR'
             \$SUDO chown -R '$VPS_USER': '$VPS_APP_DIR'"
@@ -219,12 +234,33 @@ jobs:
           }
 
           run_compose() {
-            run_docker compose \
-              --env-file .env.production \
-              -f docker-compose.yml \
-              -f docker-compose.dev.yml \
-              -f docker-compose.vps.yml \
-              \"\$@\"
+            if run_docker compose version >/dev/null 2>&1; then
+              run_docker compose \
+                --env-file .env.production \
+                -f docker-compose.yml \
+                -f docker-compose.dev.yml \
+                -f docker-compose.vps.yml \
+                \"\$@\"
+            elif command -v docker-compose >/dev/null 2>&1; then
+              if docker info >/dev/null 2>&1; then
+                docker-compose \
+                  --env-file .env.production \
+                  -f docker-compose.yml \
+                  -f docker-compose.dev.yml \
+                  -f docker-compose.vps.yml \
+                  \"\$@\"
+              else
+                sudo docker-compose \
+                  --env-file .env.production \
+                  -f docker-compose.yml \
+                  -f docker-compose.dev.yml \
+                  -f docker-compose.vps.yml \
+                  \"\$@\"
+              fi
+            else
+              echo 'Docker Compose is unavailable for the deploy user'
+              return 1
+            fi
           }
 
           run_compose up -d --build --remove-orphans
