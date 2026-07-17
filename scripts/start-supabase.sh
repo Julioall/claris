@@ -170,6 +170,28 @@ prepare_workdir_alias() {
   ln -sfn /workspace "${WORKDIR}"
 }
 
+configure_public_auth_url() {
+  site_url="${SUPABASE_SITE_URL:-}"
+  config_file="${WORKDIR}/supabase/config.toml"
+
+  if [ -z "${site_url}" ]; then
+    return
+  fi
+
+  case "${site_url}" in
+    https://*) ;;
+    *)
+      log "SUPABASE_SITE_URL must start with https://."
+      return 1
+      ;;
+  esac
+
+  # The production checkout is refreshed on every deploy, so replacing this
+  # development-only value is deterministic and does not affect local usage.
+  sed -i "s#^site_url = .*#site_url = \"${site_url}\"#" "${config_file}"
+  log "Auth site URL configured as ${site_url}."
+}
+
 cleanup() {
   log "Stopping Supabase local stack..."
   run_supabase stop --no-backup || true
@@ -183,6 +205,8 @@ rm -f "${READY_FILE}"
 
 log "Using workdir: ${WORKDIR}"
 cd "${WORKDIR}"
+
+configure_public_auth_url
 
 log "Preparing edge function secrets before startup..."
 set_function_secrets

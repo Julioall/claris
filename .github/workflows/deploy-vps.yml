@@ -1,0 +1,250 @@
+name: Deploy Claris to VPS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - src/**
+      - public/**
+      - supabase/**
+      - scripts/start-supabase.sh
+      - package.json
+      - package-lock.json
+      - Dockerfile.frontend.production
+      - Dockerfile.supabase-runner
+      - docker-compose.yml
+      - docker-compose.dev.yml
+      - docker-compose.vps.yml
+      - deploy/**
+      - .github/workflows/deploy-vps.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claris-vps-production
+  cancel-in-progress: true
+
+env:
+  VPS_APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/claris' }}
+  VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+  COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'claris' }}
+  APP_DOMAIN: claris.novascript.com.br
+  SUPABASE_DOMAIN: api.novascript.com.br
+  EVOLUTION_DOMAIN: evolution.novascript.com.br
+  ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+  VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY || secrets.VPS_SSH_PASSWORD }}
+
+jobs:
+  deploy:
+    name: Validate, sync and deploy
+    runs-on: ubuntu-latest
+    environment: vps
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy configuration
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
+          MOODLE_REAUTH_SECRET: ${{ secrets.MOODLE_REAUTH_SECRET }}
+          SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+
+          require_value() {
+            [ -n "$2" ] || { echo "::error::Configure $1 in the vps environment"; exit 1; }
+          }
+
+          require_secret() {
+            require_value "$1" "$2"
+            case "$2" in
+              *$'\n'*|*$'\r'*|*'$'*) echo "::error::$1 must not contain line breaks or dollar signs"; exit 1 ;;
+            esac
+          }
+
+          require_value VPS_HOST "$VPS_HOST"
+          require_value VPS_USER "$VPS_USER"
+          require_value VPS_SSH_KEY_or_VPS_SSH_PASSWORD "$VPS_AUTH_SECRET"
+          require_value ACME_EMAIL "$ACME_EMAIL"
+          require_secret SUPABASE_PUBLISHABLE_KEY "$SUPABASE_PUBLISHABLE_KEY"
+          require_secret EVOLUTION_API_KEY "$EVOLUTION_API_KEY"
+          require_secret MOODLE_REAUTH_SECRET "$MOODLE_REAUTH_SECRET"
+          require_secret SCHEDULED_MESSAGES_CRON_SECRET "$SCHEDULED_MESSAGES_CRON_SECRET"
+          require_secret WEBHOOK_SECRET "$WEBHOOK_SECRET"
+
+          case "$VPS_SSH_PORT" in
+            ''|*[!0-9]*) echo "::error::VPS_SSH_PORT must be numeric"; exit 1 ;;
+          esac
+
+      - name: Test frontend
+        env:
+          VITE_SUPABASE_URL: https://api.novascript.com.br
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Validate production Compose
+        env:
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
+          MOODLE_REAUTH_SECRET: ${{ secrets.MOODLE_REAUTH_SECRET }}
+          SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.vps.yml config --quiet
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y rsync
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "$VPS_SSH_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+          if printf '%s' "$VPS_AUTH_SECRET" | grep -q 'BEGIN .*PRIVATE KEY'; then
+            printf '%s\n' "$VPS_AUTH_SECRET" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            echo 'VPS_AUTH_MODE=key' >> "$GITHUB_ENV"
+          else
+            sudo apt-get install -y sshpass
+            echo 'VPS_AUTH_MODE=password' >> "$GITHUB_ENV"
+          fi
+
+      - name: Prepare VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          REMOTE_SCRIPT="set -euo pipefail
+            SUDO=''
+            if [ \"\$(id -u)\" -ne 0 ]; then SUDO='sudo'; fi
+            if ! command -v docker >/dev/null 2>&1; then
+              curl -fsSL https://get.docker.com | \$SUDO sh
+            fi
+            docker compose version >/dev/null 2>&1 || { echo 'Docker Compose plugin is required'; exit 1; }
+            command -v rsync >/dev/null 2>&1 || { \$SUDO apt-get update && \$SUDO apt-get install -y rsync; }
+            \$SUDO mkdir -p '$VPS_APP_DIR'
+            \$SUDO chown -R '$VPS_USER': '$VPS_APP_DIR'"
+
+          if [ "$VPS_AUTH_MODE" = key ]; then
+            ssh -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" ssh -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+          fi
+
+      - name: Sync repository
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          EXCLUDES=(
+            --exclude '.git/'
+            --exclude '.github/'
+            --exclude '.env'
+            --exclude '.env.*'
+            --exclude 'node_modules/'
+            --exclude 'dist/'
+            --exclude '.supabase/'
+            --exclude 'supabase/.temp/'
+            --exclude 'supabase/functions/.env'
+          )
+
+          if [ "$VPS_AUTH_MODE" = key ]; then
+            rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p $VPS_SSH_PORT" \
+              "${EXCLUDES[@]}" ./ "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" rsync -az --delete -e "ssh -p $VPS_SSH_PORT" \
+              "${EXCLUDES[@]}" ./ "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
+          fi
+
+      - name: Write production environment
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
+          MOODLE_REAUTH_SECRET: ${{ secrets.MOODLE_REAUTH_SECRET }}
+          SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+        run: |
+          set -euo pipefail
+          ENV_FILE="$(mktemp)"
+          {
+            printf 'APP_DOMAIN=%s\n' "$APP_DOMAIN"
+            printf 'SUPABASE_DOMAIN=%s\n' "$SUPABASE_DOMAIN"
+            printf 'EVOLUTION_DOMAIN=%s\n' "$EVOLUTION_DOMAIN"
+            printf 'ACME_EMAIL=%s\n' "$ACME_EMAIL"
+            printf 'SUPABASE_PUBLISHABLE_KEY=%s\n' "$SUPABASE_PUBLISHABLE_KEY"
+            printf 'EVOLUTION_API_KEY=%s\n' "$EVOLUTION_API_KEY"
+            printf 'MOODLE_REAUTH_SECRET=%s\n' "$MOODLE_REAUTH_SECRET"
+            printf 'SCHEDULED_MESSAGES_CRON_SECRET=%s\n' "$SCHEDULED_MESSAGES_CRON_SECRET"
+            printf 'WEBHOOK_SECRET=%s\n' "$WEBHOOK_SECRET"
+          } > "$ENV_FILE"
+
+          if [ "$VPS_AUTH_MODE" = key ]; then
+            scp -i ~/.ssh/deploy_key -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" scp -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
+          fi
+          rm -f "$ENV_FILE"
+
+      - name: Build and restart services
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+          REMOTE_SCRIPT="$(cat <<EOF
+          set -euo pipefail
+          cd '$VPS_APP_DIR'
+          export COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME'
+          DOCKER=docker
+          if ! docker info >/dev/null 2>&1; then DOCKER='sudo docker'; fi
+          COMPOSE=\"\$DOCKER compose --env-file .env.production -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.vps.yml\"
+
+          \$COMPOSE up -d --build --remove-orphans
+          \$COMPOSE ps
+          \$DOCKER image prune -f
+
+          check_url() {
+            name=\"\$1\"
+            url=\"\$2\"
+            attempt=1
+            while [ \"\$attempt\" -le 24 ]; do
+              if curl --fail --silent --show-error --max-time 15 \"\$url\" >/dev/null; then
+                echo \"\$name is healthy at \$url\"
+                return 0
+              fi
+              echo \"Waiting for \$name (\$attempt/24)...\"
+              attempt=\$((attempt + 1))
+              sleep 10
+            done
+            \$COMPOSE logs --tail=150
+            return 1
+          }
+
+          check_url frontend 'https://$APP_DOMAIN/health'
+          check_url supabase 'https://$SUPABASE_DOMAIN/rest/v1/'
+          check_url evolution 'https://$EVOLUTION_DOMAIN/'
+          EOF
+          )"
+
+          if [ "$VPS_AUTH_MODE" = key ]; then
+            ssh -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" ssh -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+          fi

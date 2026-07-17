@@ -197,6 +197,58 @@ Variáveis opcionais:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 ```
 
+## Deploy na VPS
+
+O workflow [`.github/workflows/deploy-vps.yml`](.github/workflows/deploy-vps.yml)
+publica a stack completa usando `docker-compose.vps.yml`, Nginx para o build
+estatico do frontend e Caddy para HTTPS automatico.
+
+Crie no GitHub o environment `vps` e configure:
+
+Dominios fixos do deploy:
+
+- site: `https://claris.novascript.com.br/`;
+- Supabase: `https://api.novascript.com.br/`;
+- Evolution: `https://evolution.novascript.com.br/`.
+
+Variables:
+
+- `ACME_EMAIL`: e-mail usado pelo Caddy para os certificados;
+- `VPS_APP_DIR` (opcional, padrao `/opt/claris`);
+- `VPS_SSH_PORT` (opcional, padrao `22`).
+
+Secrets:
+
+- `VPS_HOST` e `VPS_USER`;
+- `VPS_SSH_KEY` (recomendado) ou `VPS_SSH_PASSWORD`;
+- `SUPABASE_PUBLISHABLE_KEY` (para a stack CLI atual, use a chave local
+  exibida na secao "Variaveis locais");
+- `EVOLUTION_API_KEY`;
+- `MOODLE_REAUTH_SECRET`;
+- `SCHEDULED_MESSAGES_CRON_SECRET`;
+- `WEBHOOK_SECRET`.
+
+Todos os segredos da aplicacao devem ser valores aleatorios longos, sem quebras
+de linha nem `$`. Exemplo para gerar um valor hexadecimal:
+
+```bash
+openssl rand -hex 32
+```
+
+Crie registros DNS `A`/`AAAA` para `claris.novascript.com.br`,
+`api.novascript.com.br` e `evolution.novascript.com.br`, todos apontando para a VPS, e libere
+as portas TCP `80` e `443`, UDP `443` e a porta SSH. Banco, Studio, Mailpit e a
+porta direta da Evolution nao sao publicados pelo Compose de VPS.
+
+O deploy ocorre em push para `main` nos arquivos relevantes ou manualmente por
+`workflow_dispatch`. O primeiro boot pode levar alguns minutos enquanto o
+Supabase baixa imagens e aplica as migrations.
+
+> Importante: o runner atual usa o Supabase CLI, que e adequado para
+> desenvolvimento e homologacao. Antes de armazenar dados reais ou abrir o
+> sistema para usuarios, migre a camada Supabase para o Compose oficial de
+> self-hosting, com chaves proprias, backups e monitoramento.
+
 ## Variaveis de Ambiente GitHub Actions / Public Build
 
 Os valores do Supabase usados no build do Vite (`VITE_SUPABASE_*`) **nao devem ser commitados no repositorio**. Configure-os como **secrets** no ambiente `supabase` do GitHub para que os workflows de build e deploy os utilizem automaticamente.
