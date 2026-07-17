@@ -34,6 +34,7 @@ env:
   SUPABASE_DOMAIN: api.novascript.com.br
   EVOLUTION_DOMAIN: evolution.novascript.com.br
   ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+  SUPABASE_PUBLISHABLE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
   VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY || secrets.VPS_SSH_PASSWORD }}
 
 jobs:
@@ -51,7 +52,6 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
           MOODLE_REAUTH_SECRET: ${{ secrets.MOODLE_REAUTH_SECRET }}
           SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
@@ -74,7 +74,6 @@ jobs:
           require_value VPS_USER "$VPS_USER"
           require_value VPS_SSH_KEY_or_VPS_SSH_PASSWORD "$VPS_AUTH_SECRET"
           require_value ACME_EMAIL "$ACME_EMAIL"
-          require_secret SUPABASE_PUBLISHABLE_KEY "$SUPABASE_PUBLISHABLE_KEY"
           require_secret EVOLUTION_API_KEY "$EVOLUTION_API_KEY"
           require_secret MOODLE_REAUTH_SECRET "$MOODLE_REAUTH_SECRET"
           require_secret SCHEDULED_MESSAGES_CRON_SECRET "$SCHEDULED_MESSAGES_CRON_SECRET"
@@ -87,7 +86,7 @@ jobs:
       - name: Test frontend
         env:
           VITE_SUPABASE_URL: https://api.novascript.com.br
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.SUPABASE_PUBLISHABLE_KEY }}
         run: |
           npm ci
           npm run typecheck
@@ -96,7 +95,6 @@ jobs:
 
       - name: Validate production Compose
         env:
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
           MOODLE_REAUTH_SECRET: ${{ secrets.MOODLE_REAUTH_SECRET }}
           SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}
@@ -175,7 +173,6 @@ jobs:
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
           VPS_USER: ${{ secrets.VPS_USER }}
-          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
           EVOLUTION_API_KEY: ${{ secrets.EVOLUTION_API_KEY }}
           MOODLE_REAUTH_SECRET: ${{ secrets.MOODLE_REAUTH_SECRET }}
           SCHEDULED_MESSAGES_CRON_SECRET: ${{ secrets.SCHEDULED_MESSAGES_CRON_SECRET }}

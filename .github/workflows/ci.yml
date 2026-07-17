@@ -12,9 +12,6 @@ on:
 permissions:
   contents: read
 
-env:
-  PUBLIC_DEPLOY_REPO: Julioall/claris-ia
-
 jobs:
   supabase-boundary:
     name: Supabase Boundary
@@ -67,7 +64,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
-    environment: supabase
+    environment: vps
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,106 +74,6 @@ jobs:
       - run: npm ci
       - name: Build application
         env:
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+          VITE_SUPABASE_URL: https://api.novascript.com.br
         run: npm run build
-
-  publish-public-build:
-    name: Publish Public Build
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs:
-      - supabase-boundary
-      - lint
-      - test
-      - typecheck
-      - build
-    runs-on: ubuntu-latest
-    environment: supabase
-    steps:
-      - name: Check public deploy token
-        id: check-token
-        shell: bash
-        env:
-          PUBLIC_BUILD_DEPLOY_TOKEN: ${{ secrets.PUBLIC_BUILD_DEPLOY_TOKEN }}
-        run: |
-          if [ -n "${PUBLIC_BUILD_DEPLOY_TOKEN}" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::PUBLIC_BUILD_DEPLOY_TOKEN is not configured. Skipping public build publish."
-          fi
-      - if: steps.check-token.outputs.available == 'true'
-        uses: actions/checkout@v4
-      - if: steps.check-token.outputs.available == 'true'
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - if: steps.check-token.outputs.available == 'true'
-        run: npm ci
-      - name: Set public build base path
-        if: steps.check-token.outputs.available == 'true'
-        shell: bash
-        run: |
-          repo_name="${PUBLIC_DEPLOY_REPO#*/}"
-          owner_name="${PUBLIC_DEPLOY_REPO%/*}"
-          repo_name_lower="${repo_name,,}"
-          owner_name_lower="${owner_name,,}"
-
-          if [ "$repo_name_lower" = "${owner_name_lower}.github.io" ]; then
-            echo "VITE_BASE_PATH=/" >> "$GITHUB_ENV"
-          else
-            echo "VITE_BASE_PATH=/${repo_name}/" >> "$GITHUB_ENV"
-          fi
-      - name: Build public artifact
-        if: steps.check-token.outputs.available == 'true'
-        env:
-          VITE_SUPABASE_PROJECT_ID: ${{ secrets.SUPABASE_PROJECT_ID }}
-          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        run: npm run build:github-pages
-      - name: Initialize public repository state
-        if: steps.check-token.outputs.available == 'true'
-        shell: bash
-        env:
-          PUBLIC_BUILD_DEPLOY_TOKEN: ${{ secrets.PUBLIC_BUILD_DEPLOY_TOKEN }}
-        run: |
-          rm -rf public-site
-          mkdir -p public-site
-          cd public-site
-
-          git init
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add origin "https://x-access-token:${PUBLIC_BUILD_DEPLOY_TOKEN}@github.com/${PUBLIC_DEPLOY_REPO}.git"
-
-          if git ls-remote --exit-code --heads origin main >/dev/null 2>&1; then
-            git fetch --depth=1 origin main
-            git checkout -B main FETCH_HEAD
-          else
-            git checkout -B main
-          fi
-      - name: Sync public repository contents
-        if: steps.check-token.outputs.available == 'true'
-        run: >
-          node scripts/sync-public-build-repo.mjs
-          --dist-dir dist
-          --target-dir public-site
-          --target-repo ${PUBLIC_DEPLOY_REPO}
-          --source-repo ${GITHUB_REPOSITORY}
-          --source-commit ${GITHUB_SHA}
-      - name: Commit and push public artifact
-        if: steps.check-token.outputs.available == 'true'
-        shell: bash
-        run: |
-          cd public-site
-
-          if [ -z "$(git status --short)" ]; then
-            echo "Public repository already up to date."
-            exit 0
-          fi
-
-          git add -A
-          git commit -m "Deploy build from ${GITHUB_REPOSITORY}@${GITHUB_SHA}"
-          git push origin HEAD:main

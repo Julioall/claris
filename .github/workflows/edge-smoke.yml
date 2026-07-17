@@ -40,7 +40,6 @@ jobs:
     name: Smoke test local Edge Functions
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    environment: supabase
     env:
       SCHEDULED_MESSAGES_CRON_SECRET: claris-scheduled-messages-local-secret
 

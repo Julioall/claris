@@ -169,7 +169,7 @@ The CI pipeline (`.github/workflows/ci.yml`) runs on every push or PR to `main`:
 3. **Test** - `npm run test`
 4. **Typecheck** - `npm run typecheck`
 5. **Build** - `npm run build`
-6. **Deploy** - GitHub Pages deployment on `main` push
+6. **Deploy** - VPS deployment on `main` push
 
 Edge Function smoke tests (`.github/workflows/edge-smoke.yml`) gate Supabase deployments.
 

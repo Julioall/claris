@@ -142,24 +142,10 @@ Alternativamente:
 node scripts/smoke-edge-functions.mjs
 ```
 
-Em push para `main` com mudancas relevantes de `supabase/**`, `docker-compose*.yml` ou scripts de deploy, o workflow [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) roda o smoke local. Se ele concluir com sucesso, o workflow dedicado [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml) dispara o deploy remoto do Supabase aplicando `db push --include-all` e publicando o conjunto remoto padrao de Edge Functions.
-
-O processamento automatico dos agendamentos roda em [.github/workflows/process-scheduled-messages.yml](.github/workflows/process-scheduled-messages.yml):
-
-- execucao recorrente a cada 5 minutos;
-- `workflow_dispatch` para dry-run ou para um `scheduled_message_id` especifico;
-- chamada autenticada por `SCHEDULED_MESSAGES_CRON_SECRET` para `process-scheduled-messages`.
-
-Secrets necessarios no GitHub Actions para esse deploy remoto, configurados no **ambiente `supabase`** (Settings → Environments → supabase):
-
-- `SUPABASE_ACCESS_TOKEN`
-- `SUPABASE_PASSWORD`
-
-O ambiente `supabase` e referenciado diretamente pelo job de deploy (`environment: supabase`).
-
-O workflow resolve automaticamente o projeto remoto a partir do secret `SUPABASE_PROJECT_ID` configurado no ambiente `supabase` (veja a secao [Variaveis de Ambiente GitHub Actions / Public Build](#variaveis-de-ambiente-github-actions--public-build) abaixo).
-
-Tambem e possivel disparar manualmente o deploy remoto via `workflow_dispatch` no workflow [.github/workflows/supabase-deploy.yml](.github/workflows/supabase-deploy.yml).
+Em push com mudancas relevantes, o workflow
+[.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) valida as
+Edge Functions contra uma stack Supabase local descartavel. A publicacao da
+aplicacao e da stack Supabase acontece exclusivamente pelo deploy da VPS.
 
 ## Tornar o smoke obrigatório na main
 
@@ -221,8 +207,6 @@ Secrets:
 
 - `VPS_HOST` e `VPS_USER`;
 - `VPS_SSH_KEY` (recomendado) ou `VPS_SSH_PASSWORD`;
-- `SUPABASE_PUBLISHABLE_KEY` (para a stack CLI atual, use a chave local
-  exibida na secao "Variaveis locais");
 - `EVOLUTION_API_KEY`;
 - `MOODLE_REAUTH_SECRET`;
 - `SCHEDULED_MESSAGES_CRON_SECRET`;
@@ -249,55 +233,6 @@ Supabase baixa imagens e aplica as migrations.
 > sistema para usuarios, migre a camada Supabase para o Compose oficial de
 > self-hosting, com chaves proprias, backups e monitoramento.
 
-## Variaveis de Ambiente GitHub Actions / Public Build
-
-Os valores do Supabase usados no build do Vite (`VITE_SUPABASE_*`) **nao devem ser commitados no repositorio**. Configure-os como **secrets** no ambiente `supabase` do GitHub para que os workflows de build e deploy os utilizem automaticamente.
-
-### Onde configurar
-
-Todos os secrets abaixo devem ser adicionados em **Settings → Environments → supabase → Environment secrets**:
-
-| Secret | Descricao |
-|---|---|
-| `SUPABASE_PROJECT_ID` | ID do projeto Supabase (ex.: `mmddjuiemvywwqspjovg`) |
-| `SUPABASE_PUBLISHABLE_KEY` | Chave publica (anon key) do Supabase |
-| `SUPABASE_URL` | URL do projeto Supabase (ex.: `https://<project-id>.supabase.co`) |
-| `SUPABASE_PUBLIC_URL` | URL publica usada pelas Edge Functions para registrar webhooks externos (ex.: `https://<project-id>.supabase.co`) |
-| `SUPABASE_ACCESS_TOKEN` | Token de acesso para deploy via CLI |
-| `SUPABASE_PASSWORD` | Senha do banco de dados Supabase |
-| `MOODLE_REAUTH_SECRET` | Segredo usado para cifrar a credencial de reautorizacao do Moodle nas Edge Functions |
-| `SCHEDULED_MESSAGES_CRON_SECRET` | Segredo compartilhado usado para autorizar a chamada do executor de agendamentos |
-
-> O ambiente `supabase` e usado pelo job de **build** e pelo job de **deploy remoto** (`supabase-deploy.yml`). Os secrets sao injetados como variaveis de ambiente com o prefixo `VITE_` necessario para o Vite durante o build.
-
-No deploy remoto do Supabase, `MOODLE_REAUTH_SECRET` e `SCHEDULED_MESSAGES_CRON_SECRET` tambem sao sincronizados automaticamente do GitHub Environment para os secrets de runtime das Edge Functions via `supabase secrets set`.
-
-O workflow de scheduler remoto tambem usa:
-
-- `SUPABASE_URL`
-- `SUPABASE_PUBLISHABLE_KEY`
-- `SCHEDULED_MESSAGES_CRON_SECRET`
-
-### Publicacao do build em repositorio publico
-
-O fluxo de CI publica o build otimizado em `Julioall/claris-ia`, mantendo este repositorio como origem privada do codigo-fonte.
-
-- o repositorio publico recebe apenas os artefatos estaticos do `dist/`, sincronizados para `site/`;
-- o deploy do GitHub Pages acontece no proprio repositorio publico, por um workflow versionado junto com os artefatos;
-- alteracoes manuais no repositorio publico podem ser sobrescritas no proximo deploy.
-
-Para habilitar essa publicacao automatica, adicione no repositorio privado o secret abaixo em **Settings -> Environments -> supabase -> Environment secrets**:
-
-| Secret | Descricao |
-|---|---|
-| `PUBLIC_BUILD_DEPLOY_TOKEN` | Fine-grained PAT com permissao `Contents: Read and write` no repositorio `Julioall/claris-ia` |
-
-Observacoes:
-
-- se o token nao estiver configurado, o workflow de CI continua validando lint/test/build, mas pula a publicacao no repositorio publico;
-- o repositorio `Julioall/claris-ia` precisa ficar com **Settings -> Pages -> Source = GitHub Actions**;
-- o build publico continua expondo o JavaScript cliente, entao segredos e logica sensivel devem permanecer no Supabase / Edge Functions, nunca no frontend.
-
 ### Desenvolvimento local
 
 Para as Edge Functions locais, o `docker compose` ja injeta defaults de teste para:
@@ -317,59 +252,10 @@ O runner local copia esses segredos automaticamente para `supabase/functions/.en
 
 O repositorio utiliza GitHub Actions (`.github/workflows/ci.yml`) para rodar lint, testes e build automaticamente em cada push ou pull request para a branch `main`.
 
-Em push para `main`, o mesmo workflow pode publicar o build otimizado em `Julioall/claris-ia`, desde que o secret `PUBLIC_BUILD_DEPLOY_TOKEN` esteja configurado. O build de deploy calcula automaticamente o subcaminho do repositorio publico e gera um `404.html` a partir do `index.html` para manter o roteamento do React Router funcionando em refresh e links diretos.
-
-## Supabase Remoto
-
-O fluxo local sobe um Supabase isolado com migrations e Edge Functions locais. Isso nao atualiza automaticamente o projeto Supabase remoto usado por previews do Lovable.
-
-Quando houver mudancas de schema ou de Edge Functions que precisem refletir no projeto remoto, sincronize manualmente o projeto correto.
-
-### Migrations remotas
-
-No PowerShell do Windows, prefira `npm.cmd` por causa da `ExecutionPolicy`.
-
-Antes de sincronizar o projeto remoto, autentique a Supabase CLI com `npm.cmd exec --yes --package supabase@latest -- supabase login` ou exporte `SUPABASE_ACCESS_TOKEN` no ambiente.
-
-```powershell
-npm.cmd exec --yes --package supabase@latest -- supabase link --project-ref <project-ref>
-npm.cmd exec --yes --package supabase@latest -- supabase db push --include-all
-```
-
-### Deploy remoto das Edge Functions
-
-As Edge Functions expostas ao navegador usam tratamento de CORS no runtime compartilhado e continuam validando autenticacao dentro da function. Para que o preflight do browser chegue ate esse handler, o deploy remoto deve usar `--no-verify-jwt`.
-
-Deploy apenas das functions da Claris:
-
-```powershell
-npm.cmd run supabase:functions:deploy:claris -- --project-ref <project-ref>
-```
-
-Deploy do conjunto remoto padrao versionado no repositorio:
-
-```powershell
-npm.cmd run supabase:functions:deploy -- --project-ref <project-ref>
-```
-
-Se o projeto ja estiver previamente linkado, reutilize o link atual:
-
-```powershell
-npm.cmd run supabase:functions:deploy -- --skip-link claris-llm-test claris-chat
-```
-
-### Validacao rapida do preflight
-
-Depois do deploy remoto, valide o preflight da function antes de retestar no Lovable:
-
-```powershell
-curl.exe -i -X OPTIONS "https://<project-ref>.supabase.co/functions/v1/claris-llm-test" ^
-  -H "Origin: https://<seu-preview>.lovable.app" ^
-  -H "Access-Control-Request-Method: POST" ^
-  -H "Access-Control-Request-Headers: authorization,apikey,content-type,x-client-info"
-```
-
-O retorno esperado e `200` ou `204`, com `Access-Control-Allow-Origin` presente na resposta.
+O unico fluxo de publicacao e
+[.github/workflows/deploy-vps.yml](.github/workflows/deploy-vps.yml). O scheduler
+de mensagens tambem roda continuamente na VPS pelo container
+`claris-scheduled-messages-runner`.
 
 ### GITHUB_TOKEN
 
