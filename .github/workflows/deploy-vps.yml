@@ -209,13 +209,27 @@ jobs:
           set -euo pipefail
           cd '$VPS_APP_DIR'
           export COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME'
-          DOCKER=docker
-          if ! docker info >/dev/null 2>&1; then DOCKER='sudo docker'; fi
-          COMPOSE=\"\$DOCKER compose --env-file .env.production -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.vps.yml\"
 
-          \$COMPOSE up -d --build --remove-orphans
-          \$COMPOSE ps
-          \$DOCKER image prune -f
+          run_docker() {
+            if docker info >/dev/null 2>&1; then
+              docker \"\$@\"
+            else
+              sudo docker \"\$@\"
+            fi
+          }
+
+          run_compose() {
+            run_docker compose \
+              --env-file .env.production \
+              -f docker-compose.yml \
+              -f docker-compose.dev.yml \
+              -f docker-compose.vps.yml \
+              \"\$@\"
+          }
+
+          run_compose up -d --build --remove-orphans
+          run_compose ps
+          run_docker image prune -f
 
           check_url() {
             name=\"\$1\"
@@ -230,7 +244,7 @@ jobs:
               attempt=\$((attempt + 1))
               sleep 10
             done
-            \$COMPOSE logs --tail=150
+            run_compose logs --tail=150
             return 1
           }
 
