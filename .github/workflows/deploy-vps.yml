@@ -234,8 +234,15 @@ jobs:
           }
 
           run_compose() {
-            if run_docker compose version >/dev/null 2>&1; then
-              run_docker compose \
+            if docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+              docker compose \
+                --env-file .env.production \
+                -f docker-compose.yml \
+                -f docker-compose.dev.yml \
+                -f docker-compose.vps.yml \
+                \"\$@\"
+            elif sudo docker compose version >/dev/null 2>&1; then
+              sudo docker compose \
                 --env-file .env.production \
                 -f docker-compose.yml \
                 -f docker-compose.dev.yml \
@@ -258,7 +265,7 @@ jobs:
                   \"\$@\"
               fi
             else
-              echo 'Docker Compose is unavailable for the deploy user'
+              echo 'Docker Compose is unavailable for both the deploy user and root'
               return 1
             fi
           }
