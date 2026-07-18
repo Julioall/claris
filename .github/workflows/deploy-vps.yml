@@ -227,9 +227,9 @@ jobs:
 
           run_docker() {
             if docker info >/dev/null 2>&1; then
-              docker \"\$@\"
+              docker "\$@"
             else
-              sudo docker \"\$@\"
+              sudo docker "\$@"
             fi
           }
 
@@ -240,14 +240,14 @@ jobs:
                 -f docker-compose.yml \
                 -f docker-compose.dev.yml \
                 -f docker-compose.vps.yml \
-                \"\$@\"
+                "\$@"
             elif sudo docker compose version >/dev/null 2>&1; then
               sudo docker compose \
                 --env-file .env.production \
                 -f docker-compose.yml \
                 -f docker-compose.dev.yml \
                 -f docker-compose.vps.yml \
-                \"\$@\"
+                "\$@"
             elif command -v docker-compose >/dev/null 2>&1; then
               if docker info >/dev/null 2>&1; then
                 docker-compose \
@@ -255,14 +255,14 @@ jobs:
                   -f docker-compose.yml \
                   -f docker-compose.dev.yml \
                   -f docker-compose.vps.yml \
-                  \"\$@\"
+                  "\$@"
               else
                 sudo docker-compose \
                   --env-file .env.production \
                   -f docker-compose.yml \
                   -f docker-compose.dev.yml \
                   -f docker-compose.vps.yml \
-                  \"\$@\"
+                  "\$@"
               fi
             else
               echo 'Docker Compose is unavailable for both the deploy user and root'
@@ -275,15 +275,15 @@ jobs:
           run_docker image prune -f
 
           check_url() {
-            name=\"\$1\"
-            url=\"\$2\"
+            name="\$1"
+            url="\$2"
             attempt=1
-            while [ \"\$attempt\" -le 24 ]; do
-              if curl --fail --silent --show-error --max-time 15 \"\$url\" >/dev/null; then
-                echo \"\$name is healthy at \$url\"
+            while [ "\$attempt" -le 24 ]; do
+              if curl --fail --silent --show-error --max-time 15 "\$url" >/dev/null; then
+                echo "\$name is healthy at \$url"
                 return 0
               fi
-              echo \"Waiting for \$name (\$attempt/24)...\"
+              echo "Waiting for \$name (\$attempt/24)..."
               attempt=\$((attempt + 1))
               sleep 10
             done
