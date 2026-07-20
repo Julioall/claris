@@ -7,6 +7,10 @@ import { APP_PERMISSIONS } from "@/lib/access-control";
 const useAuthMock = vi.fn();
 const usePermissionsMock = vi.fn();
 
+vi.mock("@/lib/feature-flags", () => ({
+  featureFlags: { evolution: true },
+}));
+
 vi.mock("@/contexts/AuthContext", () => ({
   AuthProvider: ({ children }: { children: ReactNode }) => <>{children}</>,
   useAuth: () => useAuthMock(),

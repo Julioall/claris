@@ -16,6 +16,10 @@ const useSidebarMock = vi.fn();
 const usePermissionsMock = vi.fn();
 const logoutMock = vi.fn();
 
+vi.mock("@/lib/feature-flags", () => ({
+  featureFlags: { evolution: true },
+}));
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
 }));
