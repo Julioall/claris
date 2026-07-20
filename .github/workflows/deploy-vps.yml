@@ -153,9 +153,12 @@ jobs:
             \$SUDO chown -R '$VPS_USER': '$VPS_APP_DIR'"
 
           if [ "$VPS_AUTH_MODE" = key ]; then
-            ssh -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+            ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+              -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
           else
-            sshpass -p "$VPS_AUTH_SECRET" ssh -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+            sshpass -p "$VPS_AUTH_SECRET" ssh \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+              -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
           fi
 
       - name: Sync repository
@@ -177,10 +180,11 @@ jobs:
           )
 
           if [ "$VPS_AUTH_MODE" = key ]; then
-            rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -p $VPS_SSH_PORT" \
+            rsync -az --delete -e "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -i ~/.ssh/deploy_key -p $VPS_SSH_PORT" \
               "${EXCLUDES[@]}" ./ "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
           else
-            sshpass -p "$VPS_AUTH_SECRET" rsync -az --delete -e "ssh -p $VPS_SSH_PORT" \
+            sshpass -p "$VPS_AUTH_SECRET" rsync -az --delete \
+              -e "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p $VPS_SSH_PORT" \
               "${EXCLUDES[@]}" ./ "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
           fi
 
@@ -208,9 +212,12 @@ jobs:
           } > "$ENV_FILE"
 
           if [ "$VPS_AUTH_MODE" = key ]; then
-            scp -i ~/.ssh/deploy_key -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
+            scp -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+              -i ~/.ssh/deploy_key -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
           else
-            sshpass -p "$VPS_AUTH_SECRET" scp -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
+            sshpass -p "$VPS_AUTH_SECRET" scp \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+              -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
           fi
           rm -f "$ENV_FILE"
 
@@ -298,7 +305,10 @@ jobs:
           )"
 
           if [ "$VPS_AUTH_MODE" = key ]; then
-            ssh -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+            ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+              -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
           else
-            sshpass -p "$VPS_AUTH_SECRET" ssh -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+            sshpass -p "$VPS_AUTH_SECRET" ssh \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=20 \
+              -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
           fi
