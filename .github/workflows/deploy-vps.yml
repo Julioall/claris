@@ -12,6 +12,7 @@ on:
       - package-lock.json
       - Dockerfile.frontend.production
       - Dockerfile.supabase-runner
+      - .dockerignore
       - docker-compose.yml
       - docker-compose.dev.yml
       - docker-compose.vps.yml
@@ -46,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate deploy configuration
         env:
@@ -167,13 +168,14 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -euo pipefail
+          test -f dist/index.html || { echo '::error::Frontend build artifact dist/index.html is missing'; exit 1; }
+
           EXCLUDES=(
             --exclude '.git/'
             --exclude '.github/'
             --exclude '.env'
             --exclude '.env.*'
             --exclude 'node_modules/'
-            --exclude 'dist/'
             --exclude '.supabase/'
             --exclude 'supabase/.temp/'
             --exclude 'supabase/functions/.env'

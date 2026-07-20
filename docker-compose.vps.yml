@@ -12,9 +12,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.frontend.production
-      args:
-        VITE_SUPABASE_URL: https://${SUPABASE_DOMAIN}
-        VITE_SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
     ports: !reset []
     environment: !reset {}
     volumes: !reset []
