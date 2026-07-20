@@ -105,6 +105,7 @@ set_function_secrets() {
 
   write_secret "EVOLUTION_API_URL" "${evo_url}"
   write_secret "EVOLUTION_API_KEY" "${EVOLUTION_API_KEY:-}"
+  write_secret "EVOLUTION_ENABLED" "${EVOLUTION_ENABLED:-true}"
   write_secret "MOODLE_REAUTH_SECRET" "${MOODLE_REAUTH_SECRET:-}"
   write_secret "SCHEDULED_MESSAGES_CRON_SECRET" "${scheduled_messages_secret}"
   write_secret "SUPABASE_PUBLIC_URL" "${SUPABASE_PUBLIC_URL:-${SUPABASE_API_URL}}"

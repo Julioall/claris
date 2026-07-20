@@ -5,6 +5,7 @@ services:
       SUPABASE_SITE_URL: https://${APP_DOMAIN}
       MOODLE_REAUTH_SECRET: ${MOODLE_REAUTH_SECRET}
       SCHEDULED_MESSAGES_CRON_SECRET: ${SCHEDULED_MESSAGES_CRON_SECRET}
+      EVOLUTION_ENABLED: ${EVOLUTION_ENABLED:-false}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
       WEBHOOK_SECRET: ${WEBHOOK_SECRET}
 
@@ -22,6 +23,7 @@ services:
       SCHEDULED_MESSAGES_CRON_SECRET: ${SCHEDULED_MESSAGES_CRON_SECRET}
 
   evolution-api:
+    profiles: ["evolution"]
     ports: !reset []
     environment:
       SERVER_URL: https://${EVOLUTION_DOMAIN}
@@ -35,8 +37,6 @@ services:
       frontend:
         condition: service_healthy
       supabase:
-        condition: service_healthy
-      evolution-api:
         condition: service_healthy
     ports:
       - "80:80"

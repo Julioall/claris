@@ -59,6 +59,11 @@ export async function evolutionRequest(
   method: EvolutionMethod,
   body?: unknown,
 ): Promise<unknown> {
+  const enabled = (Deno.env.get('EVOLUTION_ENABLED') ?? 'true').trim().toLowerCase()
+  if (!['1', 'true', 'yes', 'on'].includes(enabled)) {
+    throw new Error('Evolution API is disabled by EVOLUTION_ENABLED.')
+  }
+
   const apiKey = getConfiguredApiKey()
   const baseUrls = getCandidateBaseUrls()
 

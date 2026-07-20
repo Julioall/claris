@@ -200,6 +200,7 @@ Dominios fixos do deploy:
 Variables:
 
 - `ACME_EMAIL`: e-mail usado pelo Caddy para os certificados;
+- `EVOLUTION_ENABLED`: use `true` para iniciar a Evolution API e exibir as telas de WhatsApp/servicos; o padrao e `false`;
 - `VPS_APP_DIR` (opcional, padrao `/opt/claris`);
 - `VPS_SSH_PORT` (opcional, padrao `22`).
 
@@ -241,6 +242,7 @@ Para as Edge Functions locais, o `docker compose` ja injeta defaults de teste pa
 - `SCHEDULED_MESSAGES_CRON_SECRET`
 - `EVOLUTION_API_URL`
 - `EVOLUTION_API_KEY`
+- `EVOLUTION_ENABLED`
 - `SUPABASE_PUBLIC_URL`
 - `WEBHOOK_SECRET`
 

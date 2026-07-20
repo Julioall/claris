@@ -16,6 +16,7 @@ import {
 import { AdminErrorBoundary } from './admin/AdminErrorBoundary';
 import { AdminLayout } from './admin/AdminLayout';
 import { AdminRoute } from './admin/AdminRoute';
+import { featureFlags } from '@/lib/feature-flags';
 
 export function renderAdminRoutes() {
   return (
@@ -39,7 +40,7 @@ export function renderAdminRoutes() {
       <Route path="/admin/logs-erros" element={<AdminErrorLogsPage />} />
       <Route path="/admin/suporte" element={<AdminSupportPage />} />
       <Route path="/admin/conversas-claris" element={<AdminClarisConversationsPage />} />
-      <Route path="/admin/servicos-aplicacao" element={<AdminApplicationServicesPage />} />
+      {featureFlags.evolution && <Route path="/admin/servicos-aplicacao" element={<AdminApplicationServicesPage />} />}
     </Route>
   );
 }

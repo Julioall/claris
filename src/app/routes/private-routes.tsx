@@ -23,6 +23,7 @@ import {
 import { PermissionRoute } from './PermissionRoute';
 import { ProtectedRoute } from './ProtectedRoute';
 import { APP_PERMISSIONS } from '@/lib/access-control';
+import { featureFlags } from '@/lib/feature-flags';
 
 export function renderPrivateRoutes() {
   return (
@@ -42,13 +43,13 @@ export function renderPrivateRoutes() {
       <Route path="/tarefas" element={<PermissionRoute permission={APP_PERMISSIONS.TASKS_VIEW}><TasksPage /></PermissionRoute>} />
       <Route path="/agenda" element={<PermissionRoute permission={APP_PERMISSIONS.AGENDA_VIEW}><AgendaPage /></PermissionRoute>} />
       <Route path="/mensagens" element={<PermissionRoute permission={APP_PERMISSIONS.MESSAGES_VIEW}><MessagesPage /></PermissionRoute>} />
-      <Route path="/whatsapp" element={<PermissionRoute permission={APP_PERMISSIONS.WHATSAPP_VIEW}><WhatsAppPage /></PermissionRoute>} />
+      {featureFlags.evolution && <Route path="/whatsapp" element={<PermissionRoute permission={APP_PERMISSIONS.WHATSAPP_VIEW}><WhatsAppPage /></PermissionRoute>} />}
       <Route path="/campanhas" element={<PermissionRoute permission={APP_PERMISSIONS.MESSAGES_BULK_SEND}><CampaignsPage /></PermissionRoute>} />
       <Route path="/claris" element={<PermissionRoute permission={APP_PERMISSIONS.CLARIS_VIEW}><ClarisPage /></PermissionRoute>} />
       <Route path="/automacoes" element={<Navigate to="/campanhas?tab=campanhas" replace />} />
       <Route path="/relatorios" element={<PermissionRoute permission={APP_PERMISSIONS.REPORTS_VIEW}><ReportsPage /></PermissionRoute>} />
       <Route path="/configuracoes" element={<PermissionRoute permission={APP_PERMISSIONS.SETTINGS_VIEW}><SettingsPage /></PermissionRoute>} />
-      <Route path="/meus-servicos" element={<PermissionRoute permission={APP_PERMISSIONS.SERVICES_VIEW}><MyServicesPage /></PermissionRoute>} />
+      {featureFlags.evolution && <Route path="/meus-servicos" element={<PermissionRoute permission={APP_PERMISSIONS.SERVICES_VIEW}><MyServicesPage /></PermissionRoute>} />}
       <Route path="/sem-acesso" element={<NoAccessPage />} />
     </Route>
   );

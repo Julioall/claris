@@ -44,6 +44,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { usePermissions } from '@/hooks/usePermissions';
 import { APP_PERMISSIONS, type AppPermissionKey } from '@/lib/access-control';
+import { featureFlags } from '@/lib/feature-flags';
 
 type SidebarNavItem = {
   title: string;
@@ -60,9 +61,17 @@ const mainNavItems: SidebarNavItem[] = [
   { title: 'Tarefas', url: '/tarefas', icon: CheckSquare, permission: APP_PERMISSIONS.TASKS_VIEW },
   { title: 'Agenda', url: '/agenda', icon: CalendarDays, permission: APP_PERMISSIONS.AGENDA_VIEW },
   { title: 'Mensagens', url: '/mensagens', icon: MessageSquare, permission: APP_PERMISSIONS.MESSAGES_VIEW },
-  { title: 'WhatsApp', url: '/whatsapp', icon: MessageCircle, permission: APP_PERMISSIONS.WHATSAPP_VIEW },
+  ...(featureFlags.evolution
+    ? [
+        { title: 'WhatsApp', url: '/whatsapp', icon: MessageCircle, permission: APP_PERMISSIONS.WHATSAPP_VIEW },
+      ]
+    : []),
   { title: 'Campanhas', url: '/campanhas', icon: Megaphone, permission: APP_PERMISSIONS.MESSAGES_BULK_SEND },
-  { title: 'Meus Servicos', url: '/meus-servicos', icon: Plug, permission: APP_PERMISSIONS.SERVICES_VIEW },
+  ...(featureFlags.evolution
+    ? [
+        { title: 'Meus Servicos', url: '/meus-servicos', icon: Plug, permission: APP_PERMISSIONS.SERVICES_VIEW },
+      ]
+    : []),
   { title: 'Claris IA', url: '/claris', icon: Sparkles, permission: APP_PERMISSIONS.CLARIS_VIEW },
   { title: 'Relatorios', url: '/relatorios', icon: FileSpreadsheet, permission: APP_PERMISSIONS.REPORTS_VIEW },
 ];
@@ -80,7 +89,9 @@ const adminNavItems = [
   { title: 'Logs de Erro', url: '/admin/logs-erros' },
   { title: 'Suporte', url: '/admin/suporte' },
   { title: 'Conversas Claris', url: '/admin/conversas-claris' },
-  { title: 'Servicos da Aplicacao', url: '/admin/servicos-aplicacao' },
+  ...(featureFlags.evolution
+    ? [{ title: 'Servicos da Aplicacao', url: '/admin/servicos-aplicacao' }]
+    : []),
   { title: 'Configuracoes', url: '/admin/configuracoes' },
 ];
 

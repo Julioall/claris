@@ -34,6 +34,7 @@ env:
   APP_DOMAIN: claris.novascript.com.br
   SUPABASE_DOMAIN: api.novascript.com.br
   EVOLUTION_DOMAIN: evolution.novascript.com.br
+  EVOLUTION_ENABLED: ${{ vars.EVOLUTION_ENABLED || 'false' }}
   ACME_EMAIL: ${{ vars.ACME_EMAIL }}
   SUPABASE_PUBLISHABLE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
   VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY || secrets.VPS_SSH_PASSWORD }}
@@ -80,6 +81,12 @@ jobs:
           require_secret SCHEDULED_MESSAGES_CRON_SECRET "$SCHEDULED_MESSAGES_CRON_SECRET"
           require_secret WEBHOOK_SECRET "$WEBHOOK_SECRET"
 
+          case "$EVOLUTION_ENABLED" in
+            true|false) ;;
+            *) echo "::error::EVOLUTION_ENABLED must be true or false"; exit 1 ;;
+          esac
+          echo "Evolution enabled: $EVOLUTION_ENABLED"
+
           case "$VPS_SSH_PORT" in
             ''|*[!0-9]*) echo "::error::VPS_SSH_PORT must be numeric"; exit 1 ;;
           esac
@@ -88,6 +95,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: https://api.novascript.com.br
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.SUPABASE_PUBLISHABLE_KEY }}
+          VITE_EVOLUTION_ENABLED: ${{ env.EVOLUTION_ENABLED }}
         run: |
           npm ci
           npm run typecheck
@@ -205,6 +213,12 @@ jobs:
             printf 'APP_DOMAIN=%s\n' "$APP_DOMAIN"
             printf 'SUPABASE_DOMAIN=%s\n' "$SUPABASE_DOMAIN"
             printf 'EVOLUTION_DOMAIN=%s\n' "$EVOLUTION_DOMAIN"
+            printf 'EVOLUTION_ENABLED=%s\n' "$EVOLUTION_ENABLED"
+            if [ "$EVOLUTION_ENABLED" = 'true' ]; then
+              printf 'COMPOSE_PROFILES=evolution\n'
+            else
+              printf 'COMPOSE_PROFILES=\n'
+            fi
             printf 'ACME_EMAIL=%s\n' "$ACME_EMAIL"
             printf 'SUPABASE_PUBLISHABLE_KEY=%s\n' "$SUPABASE_PUBLISHABLE_KEY"
             printf 'EVOLUTION_API_KEY=%s\n' "$EVOLUTION_API_KEY"
@@ -279,7 +293,20 @@ jobs:
             fi
           }
 
-          run_compose up -d --build --remove-orphans
+          if [ '$EVOLUTION_ENABLED' != 'true' ]; then
+            run_compose --profile evolution stop evolution-api || true
+          fi
+
+          services='supabase frontend scheduled-messages-runner caddy'
+          if [ '$EVOLUTION_ENABLED' = 'true' ]; then
+            services="\$services evolution-api"
+          fi
+
+          if ! run_compose up -d --build --remove-orphans \$services; then
+            run_compose ps --all || true
+            run_compose logs --tail=200 supabase || true
+            exit 1
+          fi
           run_compose ps
           run_docker image prune -f
 
@@ -302,7 +329,9 @@ jobs:
 
           check_url frontend 'https://$APP_DOMAIN/health'
           check_url supabase 'https://$SUPABASE_DOMAIN/rest/v1/'
-          check_url evolution 'https://$EVOLUTION_DOMAIN/'
+          if [ '$EVOLUTION_ENABLED' = 'true' ]; then
+            check_url evolution 'https://$EVOLUTION_DOMAIN/'
+          fi
           EOF
           )"
 
