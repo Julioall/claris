@@ -145,9 +145,10 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: testes para `OPTIONS`, 400, 401, 403, 404, 409, 422 e 500.
   - Implementado em `_shared/http` com correlation ID, logger seguro, `ApiError`, autorizacao e seams de teste; cobertura em `edge-http-handler.test.ts`.
 
-- [ ] `SB-0103` Padronizar validacao de payload
+- [x] `SB-0103` Padronizar validacao de payload
   - Expandir `_shared/validation` com parsers reutilizaveis e limites de payload.
   - AC: payload invalido nunca chega ao service/repository.
+  - Implementado com limite global configuravel, validadores tipados e testes que comprovam o bloqueio antes do caso de uso.
 
 - [ ] `SB-0104` Definir estrutura por caso de uso
   - Convencao: `index.ts`, `payload.ts`, `service.ts`, `repository.ts`, `mapper.ts` e testes.

@@ -115,6 +115,8 @@ Os tipos compartilhados e helpers opt-in ficam em `_shared/http/contract.ts` e `
 
 Erros inesperados retornam uma mensagem generica e nunca incluem stack trace ou a mensagem interna. O logger compartilhado filtra metadados com nomes sensiveis e handlers nao devem registrar body, `Authorization`, tokens ou credenciais.
 
+O runtime limita bodies JSON a 10 MiB por padrao antes do parser. Endpoints que transportam midia podem declarar um limite maior explicitamente. `_shared/http/body.ts` oferece leitores estritos para boolean, inteiros com faixa, UUID, data ISO, objetos, arrays, enums e paginacao; JSON malformado ou com shape invalido retorna 400, enquanto campos semanticamente invalidos em contratos V1 retornam 422.
+
 ### Banco
 
 `_shared/db/` oferece:

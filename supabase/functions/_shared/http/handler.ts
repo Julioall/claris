@@ -31,6 +31,7 @@ type AuthenticatedHandlerFn<TBody> = (ctx: AuthenticatedHandlerContext<TBody>) =
 type AuthenticatedUser = AuthenticatedHandlerContext['user']
 type AuthResolver = (req: Request) => Promise<AuthenticatedUser | null>
 type AuthorizationFn<TBody> = (ctx: AuthenticatedHandlerContext<TBody>) => boolean | Promise<boolean>
+const DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024
 
 interface HandlerOptions<TBody> {
   /** If true, validates Authorization header and injects user into context. */
@@ -45,6 +46,8 @@ interface HandlerOptions<TBody> {
   createCorrelationId?: () => string
   /** Optional logger factory; it must not log request bodies or credentials. */
   createLogger?: (correlationId: string) => RequestLogger
+  /** Maximum UTF-8 request body size. Defaults to 10 MiB. */
+  maxBodyBytes?: number
 }
 
 async function resolveAuthenticatedUser(req: Request): Promise<AuthenticatedUser | null> {
@@ -100,7 +103,17 @@ export function createHandler<TBody = EmptyBody>(
       // Parse body (empty object for GET/DELETE or when no body is provided)
       let rawBody: unknown = {}
       if (req.method === 'POST' || req.method === 'PUT' || req.method === 'PATCH') {
+        const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES
+        const declaredLength = Number(req.headers.get('content-length'))
+        if (Number.isFinite(declaredLength) && declaredLength > maxBodyBytes) {
+          return handledErrorResponse(req, correlationId, 'payload_too_large', 'Request body too large', 413)
+        }
+
         const text = await req.text()
+        if (new TextEncoder().encode(text).byteLength > maxBodyBytes) {
+          return handledErrorResponse(req, correlationId, 'payload_too_large', 'Request body too large', 413)
+        }
+
         if (text.trim()) {
           try {
             rawBody = JSON.parse(text)

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from '../../../../supabase/functions/_shared/http/api-error.ts';
+import { RequestBodyValidationError } from '../../../../supabase/functions/_shared/http/body.ts';
 import { API_VERSION_HEADER } from '../../../../supabase/functions/_shared/http/contract.ts';
 import { createHandler } from '../../../../supabase/functions/_shared/http/handler.ts';
 
@@ -42,6 +43,37 @@ describe('createHandler', () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: 'invalid_json', correlationId: 'generated-correlation' },
     });
+  });
+
+  it('rejects oversized payloads before parsing or executing the use case', async () => {
+    const useCase = vi.fn(async () => new Response());
+    const parseBody = vi.fn(() => ({}));
+    const handler = createHandler(useCase, { ...options(), maxBodyBytes: 4, parseBody });
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: V1_HEADERS,
+      body: '12345',
+    }));
+
+    expect(response.status).toBe(413);
+    expect(parseBody).not.toHaveBeenCalled();
+    expect(useCase).not.toHaveBeenCalled();
+  });
+
+  it('does not execute the use case when semantic validation fails', async () => {
+    const useCase = vi.fn(async () => new Response());
+    const handler = createHandler(useCase, {
+      ...options(),
+      parseBody: () => { throw new RequestBodyValidationError('Invalid enabled', 422); },
+    });
+    const response = await handler(new Request('https://example.test', {
+      method: 'POST',
+      headers: V1_HEADERS,
+      body: '{}',
+    }));
+
+    expect(response.status).toBe(422);
+    expect(useCase).not.toHaveBeenCalled();
   });
 
   it('returns 401 when authentication cannot resolve a user', async () => {

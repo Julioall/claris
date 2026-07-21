@@ -7,7 +7,7 @@ import {
   expectBodyObject,
   isApiV1Request,
   jsonResponse,
-  RequestBodyValidationError,
+  readRequiredBoolean,
 } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
@@ -36,12 +36,7 @@ function settingsResponse(req: Request, result: MoodleReauthSettingsResult): Res
 
 function parseBody(rawBody: unknown): MoodleReauthSettingsPayload {
   const body = expectBodyObject(rawBody)
-
-  if (typeof body.enabled !== 'boolean') {
-    throw new RequestBodyValidationError('Invalid enabled')
-  }
-
-  return { enabled: body.enabled }
+  return { enabled: readRequiredBoolean(body, 'enabled') }
 }
 
 Deno.serve(createHandler(async ({ body, req, user }) => {

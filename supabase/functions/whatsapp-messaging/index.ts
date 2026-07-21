@@ -1585,4 +1585,8 @@ const handler = async ({
   }
 }
 
-Deno.serve(createHandler(handler, { requireAuth: true, parseBody }))
+Deno.serve(createHandler(handler, {
+  maxBodyBytes: MAX_MEDIA_PAYLOAD_SIZE + 1024 * 1024,
+  parseBody,
+  requireAuth: true,
+}))
