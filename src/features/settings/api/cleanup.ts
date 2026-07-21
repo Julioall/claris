@@ -1,69 +1,51 @@
-// API para limpeza de dados (DataCleanupCard)
+import { invokeEdgeFunction } from '@/integrations/http/edge-function-client';
+import type { CleanupSelectionId } from '@/features/settings/lib/cleanup-options';
 
-import { supabase } from '@/integrations/supabase/client';
-import { resolveCleanupTables as resolveCleanupTablesBySelection } from '@/features/settings/lib/cleanup-options';
+const FUNCTION_NAME = 'data-cleanup';
+const CLEANUP_CONFIRMATION = 'CONFIRM_OPERATIONAL_DATA_CLEANUP_V1';
+export const DATA_CLEANUP_CONTRACT_VERSION = 1 as const;
 
-export interface CleanupDataInput {
-  mode?: 'full_cleanup' | 'selected_cleanup';
-  tables?: string[];
-}
+export type CleanupDataInput =
+  | { confirmed: true; mode: 'full_cleanup' }
+  | { confirmed: true; mode: 'selected_cleanup'; selectionIds: CleanupSelectionId[] };
 
 export interface CleanupDataError {
-  table: string;
-  error?: string;
-  success?: boolean;
+  error: string;
+  selectionId: CleanupSelectionId;
 }
 
 export interface CleanupDataResponse {
-  success: boolean;
-  cleaned: string[];
+  completedSelectionIds: CleanupSelectionId[];
+  contractVersion: typeof DATA_CLEANUP_CONTRACT_VERSION;
   errors: CleanupDataError[];
+  operationId: string;
+  success: boolean;
 }
 
-export function resolveCleanupTables(selectionIdOrIds: string | string[]) {
-  return resolveCleanupTablesBySelection(selectionIdOrIds);
-}
+export async function cleanupData(input: CleanupDataInput): Promise<CleanupDataResponse> {
+  if (input.confirmed !== true) {
+    throw new Error('A limpeza exige confirmação explícita.');
+  }
+  if (input.mode === 'selected_cleanup' && input.selectionIds.length === 0) {
+    throw new Error('Selecione ao menos uma categoria para limpeza.');
+  }
 
-export async function cleanupData(input: CleanupDataInput = {}) {
-  return supabase.functions.invoke<CleanupDataResponse>('data-cleanup', {
+  const response = await invokeEdgeFunction<CleanupDataResponse>(FUNCTION_NAME, {
     body: {
-      mode: input.mode ?? 'full_cleanup',
-      tables: input.tables ?? [],
+      action: 'execute_cleanup',
+      confirmation: CLEANUP_CONFIRMATION,
+      mode: input.mode,
+      ...(input.mode === 'selected_cleanup' ? { selectionIds: input.selectionIds } : {}),
     },
   });
-}
 
-export async function cleanupSelection(selectionId: string): Promise<{ success: boolean; error?: string }> {
-  return cleanupSelections([selectionId]);
-}
-
-export async function cleanupSelections(selectionIds: string[]): Promise<{ success: boolean; error?: string }> {
-  const tables = resolveCleanupTables(selectionIds);
-
-  if (tables.length === 0) {
-    return { success: false, error: 'Tabela desconhecida' };
+  if (
+    !response
+    || typeof response !== 'object'
+    || response.contractVersion !== DATA_CLEANUP_CONTRACT_VERSION
+  ) {
+    throw new Error('Versão incompatível do contrato de limpeza.');
   }
 
-  try {
-    const { data, error } = await cleanupData({
-      mode: 'selected_cleanup',
-      tables,
-    });
-
-    if (error) {
-      return { success: false, error: error.message };
-    }
-
-    const firstError = data?.errors.find((item) => item.error);
-    if (firstError) {
-      return { success: false, error: firstError.error ?? 'Erro desconhecido' };
-    }
-
-    return { success: true };
-  } catch (err) {
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : 'Erro desconhecido',
-    };
-  }
+  return response;
 }

@@ -1,4 +1,5 @@
 import {
+  RequestBodyValidationError,
   expectBodyObject,
   readOptionalLiteral,
   readOptionalPositiveInteger,
@@ -7,7 +8,7 @@ import {
   readRequiredString,
 } from '../_shared/http/mod.ts'
 
-const GRADE_SYNC_ACTIONS = ['sync_grades', 'debug_grades'] as const
+const GRADE_SYNC_ACTIONS = ['sync_grades'] as const
 
 export interface SyncGradesPayload {
   action: 'sync_grades'
@@ -18,36 +19,29 @@ export interface SyncGradesPayload {
   token: string
 }
 
-export interface DebugGradesPayload extends SyncGradesPayload {
-  action: 'debug_grades'
-  userId: number
-}
-
-export type MoodleSyncGradesPayload = SyncGradesPayload | DebugGradesPayload
+export type MoodleSyncGradesPayload = SyncGradesPayload
 
 export function parseMoodleSyncGradesPayload(rawBody: unknown): MoodleSyncGradesPayload {
   const body = expectBodyObject(rawBody)
   const action = readOptionalLiteral(body, 'action', GRADE_SYNC_ACTIONS) ?? 'sync_grades'
+  const allowedFields = new Set([
+    'action',
+    'courseId',
+    'moodleUrl',
+    'studentBatchPage',
+    'studentBatchSize',
+    'token',
+  ])
+  if (Object.keys(body).some((field) => !allowedFields.has(field))) {
+    throw new RequestBodyValidationError('Invalid request fields', 422)
+  }
 
-  const base = {
+  return {
     action,
     courseId: readRequiredPositiveInteger(body, 'courseId'),
     moodleUrl: readRequiredMoodleUrl(body),
     studentBatchPage: readOptionalPositiveInteger(body, 'studentBatchPage'),
     studentBatchSize: readOptionalPositiveInteger(body, 'studentBatchSize'),
     token: readRequiredString(body, 'token'),
-  }
-
-  if (action === 'debug_grades') {
-    return {
-      ...base,
-      action,
-      userId: readRequiredPositiveInteger(body, 'userId'),
-    }
-  }
-
-  return {
-    ...base,
-    action,
   }
 }

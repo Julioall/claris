@@ -423,6 +423,42 @@ export type Database = {
         }
         Relationships: []
       }
+      app_admin_operation_audit_log: {
+        Row: {
+          actor_id: string
+          correlation_id: string
+          created_at: string
+          details: Json
+          id: string
+          operation: string
+          operation_id: string
+          phase: string
+          status: string
+        }
+        Insert: {
+          actor_id: string
+          correlation_id: string
+          created_at?: string
+          details?: Json
+          id?: string
+          operation: string
+          operation_id: string
+          phase: string
+          status: string
+        }
+        Update: {
+          actor_id?: string
+          correlation_id?: string
+          created_at?: string
+          details?: Json
+          id?: string
+          operation?: string
+          operation_id?: string
+          phase?: string
+          status?: string
+        }
+        Relationships: []
+      }
       app_error_logs: {
         Row: {
           category: string

@@ -20,6 +20,7 @@ const DEFAULT_FUNCTIONS = [
   'moodle-sync-students',
   'moodle-sync-activities',
   'moodle-sync-grades',
+  'admin-diagnostics',
   'moodle-sync-jobs',
   'moodle-grade-suggestions',
   'moodle-messaging',

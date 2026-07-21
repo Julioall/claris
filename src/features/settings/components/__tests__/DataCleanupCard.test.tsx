@@ -29,8 +29,11 @@ describe('DataCleanupCard', () => {
     });
 
     cleanupDataMock.mockResolvedValue({
-      data: { cleaned: [], errors: [] },
-      error: null,
+      contractVersion: 1,
+      operationId: '00000000-0000-4000-8000-000000000099',
+      success: true,
+      completedSelectionIds: [],
+      errors: [],
     });
   });
 
@@ -67,8 +70,9 @@ describe('DataCleanupCard', () => {
     await waitFor(() => {
       expect(cleanupDataMock).toHaveBeenCalledWith(
         expect.objectContaining({
+          confirmed: true,
           mode: 'selected_cleanup',
-          tables: expect.arrayContaining(['courses', 'user_courses']),
+          selectionIds: ['course_catalog'],
         }),
       );
     });
@@ -84,12 +88,11 @@ describe('DataCleanupCard', () => {
   it('shows destructive toast when backend reports partial cleanup failure', async () => {
     const user = userEvent.setup();
     cleanupDataMock.mockResolvedValue({
-      data: {
-        success: false,
-        cleaned: [],
-        errors: [{ table: 'background_jobs', error: 'fail background_jobs' }],
-      },
-      error: null,
+      contractVersion: 1,
+      operationId: '00000000-0000-4000-8000-000000000099',
+      success: false,
+      completedSelectionIds: [],
+      errors: [{ selectionId: 'background_jobs', error: 'fail background_jobs' }],
     });
 
     render(<DataCleanupCard />);
@@ -108,6 +111,6 @@ describe('DataCleanupCard', () => {
 
     expect(lastToastCall?.title).toMatch(/parcial/i);
     expect(lastToastCall?.variant).toBe('destructive');
-    expect(lastToastCall?.description).toContain('background_jobs: fail background_jobs');
+    expect(lastToastCall?.description).toContain('Background jobs: fail background_jobs');
   });
 });

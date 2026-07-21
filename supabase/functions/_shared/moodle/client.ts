@@ -114,7 +114,10 @@ export async function getMoodleToken(
 
     try {
       const data = JSON.parse(text)
-      console.log('Token response:', JSON.stringify(data))
+      console.log('Moodle token request completed.', {
+        errorCode: typeof data?.errorcode === 'string' ? data.errorcode : null,
+        success: typeof data?.token === 'string' && data.token.length > 0,
+      })
       return data
     } catch {
       console.error('Failed to parse JSON response:', text.substring(0, 200))

@@ -4,21 +4,23 @@
 import { isApplicationAdmin } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import { apiSuccessResponse, createHandler } from '../_shared/http/mod.ts'
-import { parseDataCleanupPayload } from './payload.ts'
-import { createDataCleanupRepository } from './repository.ts'
-import { executeDataCleanup } from './service.ts'
+import { createGradeDiagnosticGateway } from './gateway.ts'
+import { parseAdminDiagnosticsPayload } from './payload.ts'
+import { createAdminDiagnosticsRepository } from './repository.ts'
+import { executeAdminDiagnostics } from './service.ts'
 
 const supabase = createServiceClient()
-const repository = createDataCleanupRepository(supabase)
+const repository = createAdminDiagnosticsRepository(supabase)
+const gateway = createGradeDiagnosticGateway(supabase)
 
 Deno.serve(createHandler(async ({ body, correlationId, user }) => {
   return apiSuccessResponse(
-    await executeDataCleanup(repository, user.id, correlationId, body),
+    await executeAdminDiagnostics(repository, gateway, user.id, correlationId, body),
     correlationId,
   )
 }, {
   authorize: ({ user }) => isApplicationAdmin(supabase, user.id),
-  maxBodyBytes: 16 * 1024,
-  parseBody: parseDataCleanupPayload,
+  maxBodyBytes: 8 * 1024,
+  parseBody: parseAdminDiagnosticsPayload,
   requireAuth: true,
 }))

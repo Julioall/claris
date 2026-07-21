@@ -32,6 +32,7 @@ Posturas especiais válidas:
 - `claris_suggestions` e `claris_suggestion_cooldowns`: policies de dono permanecem como defesa, mas os grants de browser foram revogados; feed e comandos passam por `claris-suggestions`.
 - `app_permission_definitions`, `app_groups`, `app_group_permissions`, `user_group_memberships` e `admin_user_roles`: policies permanecem como defesa, mas os grants de browser foram revogados; contexto e administracao passam por `access-control`.
 - As sete tabelas `app_service_*` de instancias, eventos, jobs, limites, saude, webhooks e permissoes de grupo sao exclusivas de `service_role`; a aplicacao usa `whatsapp-instance-manager`.
+- `app_admin_operation_audit_log`: acesso exclusivo de `service_role`; eventos de limpeza e diagnostico sao append-only e bloqueiam `UPDATE`/`DELETE` por trigger.
 
 ## Usuários E Preferências
 
@@ -257,6 +258,23 @@ Regra canônica:
 - `support_tickets` nao permite `INSERT`, `UPDATE` ou `DELETE` pelo browser. Abertura e alteracao passam por `support-tickets`, que deriva usuario, atribuicao, contexto e resolucao no servidor.
 - `support_tickets` preserva somente `SELECT` para `authenticated`, protegido pela policy `support_tickets_admin_realtime_select`, para que o `RealtimeGateway` administrativo receba notificacoes de novos tickets.
 - `admin-observability` exige application admin, pagina e filtra no backend, registra `resolved_by` com o ator e redige chaves sensiveis antes de produzir DTOs.
+
+### Manutencao e diagnosticos administrativos
+
+Tabela:
+
+- `app_admin_operation_audit_log`
+
+Regra canonica:
+
+- `anon` e `authenticated` nao possuem qualquer grant; somente `service_role` pode inserir e consultar eventos.
+- o trigger `reject_app_admin_operation_audit_mutation` impede `UPDATE` e `DELETE`, inclusive para fluxos backend comuns.
+- `data-cleanup` grava um evento `requested` antes de remover dados e outro `completed`/`failed` ao terminar; ator e correlation ID sao derivados do request autenticado.
+- `admin-diagnostics` usa a mesma trilha para consultas de nota ao Moodle e nunca persiste token, resposta bruta ou identificador externo nos detalhes.
+
+Migration de referencia:
+
+- `20260721260000_secure_admin_diagnostics.sql`
 
 Migration de referência:
 

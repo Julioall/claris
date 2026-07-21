@@ -181,7 +181,7 @@ Antes de publicar mudancas em functions ou migrations:
 3. atualizar [SUPABASE_RLS.md](./SUPABASE_RLS.md) se houve mudanca de policy
 4. manter contratos do payload versionados quando uma function for consumida por mais de um cliente
 
-O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas, listagem segura de instancias WhatsApp, overview/eventos pessoais e administracao de instancias sem dados brutos da Evolution, historico actor-scoped da Claris, sugestoes atomicas com rollback/retry, disponibilidade sem segredo de provedor, suporte com identidade derivada do token, observabilidade administrativa, controle de acesso com auditoria/anti-lockout e a fronteira de sync/jobs (preferencias, risco, polling, feed, autorizacao admin e cancelamento condicional).
+O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas, listagem segura de instancias WhatsApp, overview/eventos pessoais e administracao de instancias sem dados brutos da Evolution, historico actor-scoped da Claris, sugestoes atomicas com rollback/retry, disponibilidade sem segredo de provedor, suporte com identidade derivada do token, observabilidade administrativa, controle de acesso com auditoria/anti-lockout, limpeza confirmada/auditada, diagnostico Moodle sem credencial no payload e a fronteira de sync/jobs (preferencias, risco, polling, feed, autorizacao admin e cancelamento condicional).
 
 ## Functions chave
 
@@ -197,7 +197,8 @@ O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e
 - `whatsapp-messaging`: instancias acessiveis, conversas, contatos, mensagens e midia em contrato V1 sem expor respostas brutas da Evolution
 - `whatsapp-instance-manager`: overview e eventos pessoais actor-scoped, listagem/comandos compartilhados admin-only e gateway da Evolution encapsulado; DTO V1 omite persistencia e respostas brutas do provedor
 - `moodle-*`: autenticacao e sincronizacao incremental com Moodle
-- `data-cleanup`: limpeza operacional admin-only, com ordenacao server-side e cobertura ampliada do banco
+- `admin-diagnostics`: lista cursos/alunos e executa diagnostico de notas admin-only; recebe UUIDs internos, renova a credencial Moodle no servidor, audita a consulta e omite o payload bruto do provedor
+- `data-cleanup`: limpeza operacional admin-only; recebe categorias funcionais em vez de nomes de tabela, exige confirmacao literal, resolve/ordena alvos no servidor, redige erros internos e registra eventos imutaveis antes/depois da operacao
 - `moodle-reauth-settings`: referencia de handler fino com payload, contrato, service, repository e mapper separados
 - `app-telemetry`: coleta autenticada e best-effort de uso/erros, sem permitir identidade fornecida pelo frontend
 - `support-tickets`: abre tickets para o ator autenticado e concentra listagem/atualizacao administrativa; atribuicao, contexto e data de resolucao sao definidos no servidor

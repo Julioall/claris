@@ -22,7 +22,6 @@ import {
   CLEANUP_CATEGORY_LABELS,
   CLEANUP_OPTIONS,
   getCleanupOption,
-  resolveCleanupTables,
   shouldClearCoursesCache,
   type CleanupOption,
 } from '../lib/cleanup-options';
@@ -41,14 +40,16 @@ const PRESERVED_RESOURCES = [
   'Instancias e limites de servicos compartilhados',
 ];
 
-function formatCleanupErrors(errors: Array<{ table: string; error?: string }> | undefined) {
+function formatCleanupErrors(errors: Array<{ selectionId: string; error?: string }> | undefined) {
   if (!errors || errors.length === 0) return null;
   const summarized = errors
     .slice(0, 4)
-    .map(({ table, error }) => `${table}: ${error ?? 'erro desconhecido'}`);
+    .map(({ selectionId, error }) => (
+      `${getCleanupOption(selectionId)?.label ?? selectionId}: ${error ?? 'erro desconhecido'}`
+    ));
 
   if (errors.length > 4) {
-    summarized.push(`+${errors.length - 4} tabela(s) com falha`);
+    summarized.push(`+${errors.length - 4} categoria(s) com falha`);
   }
 
   return summarized.join(', ');
@@ -56,13 +57,13 @@ function formatCleanupErrors(errors: Array<{ table: string; error?: string }> | 
 
 export function DataCleanupCard() {
   const { setCourses } = useAuth();
-  const [selectedOptions, setSelectedOptions] = useState<string[]>([]);
+  const [selectedOptions, setSelectedOptions] = useState<CleanupOption['id'][]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showFullCleanupDialog, setShowFullCleanupDialog] = useState(false);
   const [isFullCleanupLoading, setIsFullCleanupLoading] = useState(false);
 
-  const toggleOption = (optionId: string) => {
+  const toggleOption = (optionId: CleanupOption['id']) => {
     setSelectedOptions((prev) => (
       prev.includes(optionId)
         ? prev.filter((id) => id !== optionId)
@@ -93,43 +94,25 @@ export function DataCleanupCard() {
   };
 
   const executeCleanup = async () => {
-    const tables = resolveCleanupTables(selectedOptions);
-    if (tables.length === 0) {
-      toast({
-        title: 'Nenhuma tabela resolvida',
-        description: 'Nao foi possivel identificar as tabelas para limpeza.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     setIsLoading(true);
     setShowConfirmDialog(false);
 
     try {
-      const { data, error } = await cleanupData({
+      const data = await cleanupData({
+        confirmed: true,
         mode: 'selected_cleanup',
-        tables,
+        selectionIds: selectedOptions,
       });
-
-      if (error) {
-        toast({
-          title: 'Erro na limpeza',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
 
       if (shouldClearCoursesCache(selectedOptions)) {
         setCourses([]);
       }
 
-      const errorSummary = formatCleanupErrors(data?.errors);
-      if (data?.errors?.length) {
+      const errorSummary = formatCleanupErrors(data.errors);
+      if (data.errors.length) {
         toast({
           title: 'Limpeza parcialmente concluida',
-          description: errorSummary ?? `${data.errors.length} tabela(s) falharam durante a limpeza.`,
+          description: errorSummary ?? `${data.errors.length} categoria(s) falharam durante a limpeza.`,
           variant: 'destructive',
         });
         return;
@@ -157,24 +140,15 @@ export function DataCleanupCard() {
     setShowFullCleanupDialog(false);
 
     try {
-      const { data, error } = await cleanupData({ mode: 'full_cleanup' });
-
-      if (error) {
-        toast({
-          title: 'Erro na limpeza completa',
-          description: error.message,
-          variant: 'destructive',
-        });
-        return;
-      }
+      const data = await cleanupData({ confirmed: true, mode: 'full_cleanup' });
 
       setCourses([]);
 
-      const errorSummary = formatCleanupErrors(data?.errors);
-      if (data?.errors?.length) {
+      const errorSummary = formatCleanupErrors(data.errors);
+      if (data.errors.length) {
         toast({
           title: 'Limpeza parcialmente concluida',
-          description: errorSummary ?? `${data.errors.length} tabela(s) falharam durante a limpeza.`,
+          description: errorSummary ?? `${data.errors.length} categoria(s) falharam durante a limpeza.`,
           variant: 'destructive',
         });
         return;

@@ -6,57 +6,41 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import {
   debugStudentGrades,
   listGradeDebugCourses,
-  listGradeDebugStudentsByMoodleCourseId,
+  listGradeDebugStudents,
+  type GradeDebugCourseOption,
+  type GradeDebugResult,
+  type GradeDebugStudentOption,
 } from '../api';
 
-interface CourseOption {
-  id: string;
-  name: string;
-  moodle_course_id: string;
-}
-
-interface StudentOption {
-  id: string;
-  full_name: string;
-  moodle_user_id: string;
-}
-
 export function GradeDebugCard() {
-  const moodleSession = useMoodleSession();
   const [isOpen, setIsOpen] = useState(false);
-  const [courses, setCourses] = useState<CourseOption[]>([]);
-  const [students, setStudents] = useState<StudentOption[]>([]);
+  const [courses, setCourses] = useState<GradeDebugCourseOption[]>([]);
+  const [students, setStudents] = useState<GradeDebugStudentOption[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string>('');
   const [selectedStudent, setSelectedStudent] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
-  const [debugResponse, setDebugResponse] = useState<unknown>(null);
+  const [debugResponse, setDebugResponse] = useState<GradeDebugResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const loadCourses = async () => {
     if (courses.length > 0) return;
 
-    const { data } = await listGradeDebugCourses();
-
-    if (data) {
-      setCourses(data as CourseOption[]);
+    try {
+      setCourses(await listGradeDebugCourses());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar cursos');
     }
   };
 
   const loadStudents = async (courseId: string) => {
-    const { data, error } = await listGradeDebugStudentsByMoodleCourseId(courseId);
-
-    if (error) {
+    try {
+      setStudents(await listGradeDebugStudents(courseId));
+    } catch (err) {
       setStudents([]);
-      setError(error.message);
-      return;
-    }
-
-    if (data) {
-      setStudents(data as StudentOption[]);
+      setError(err instanceof Error ? err.message : 'Erro ao carregar alunos');
     }
   };
 
@@ -69,27 +53,17 @@ export function GradeDebugCard() {
   };
 
   const fetchGradeDebug = async () => {
-    if (!selectedCourse || !selectedStudent || !moodleSession) return;
+    if (!selectedCourse || !selectedStudent) return;
 
     setIsLoading(true);
     setDebugResponse(null);
     setError(null);
 
     try {
-      const student = students.find(s => s.id === selectedStudent);
-      if (!student) throw new Error('Aluno não encontrado');
-
-      const { data, error: invokeError } = await debugStudentGrades({
-        moodleUrl: moodleSession.moodleUrl,
-        token: moodleSession.moodleToken,
-        courseId: parseInt(selectedCourse, 10),
-        userId: parseInt(student.moodle_user_id, 10),
+      const data = await debugStudentGrades({
+        courseId: selectedCourse,
+        studentId: selectedStudent,
       });
-
-      if (invokeError) {
-        throw new Error(invokeError.message);
-      }
-
       setDebugResponse(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao buscar notas');
@@ -107,10 +81,10 @@ export function GradeDebugCard() {
               <div>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Bug className="h-5 w-5" />
-                  Debug de Notas (API Moodle)
+                  Diagnóstico de Notas do Moodle
                 </CardTitle>
                 <CardDescription>
-                  Visualize a resposta bruta da API de notas do Moodle
+                  Execute uma consulta administrativa segura, sem expor credenciais ou payload bruto
                 </CardDescription>
               </div>
               {isOpen ? (
@@ -133,7 +107,7 @@ export function GradeDebugCard() {
                   </SelectTrigger>
                   <SelectContent>
                     {courses.map((course) => (
-                      <SelectItem key={course.id} value={course.moodle_course_id}>
+                      <SelectItem key={course.id} value={course.id}>
                         {course.name}
                       </SelectItem>
                     ))}
@@ -154,7 +128,7 @@ export function GradeDebugCard() {
                   <SelectContent>
                     {students.map((student) => (
                       <SelectItem key={student.id} value={student.id}>
-                        {student.full_name}
+                        {student.fullName}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -175,7 +149,7 @@ export function GradeDebugCard() {
               ) : (
                 <>
                   <GraduationCap className="h-4 w-4 mr-2" />
-                  Buscar Notas (API Raw)
+                  Executar diagnóstico
                 </>
               )}
             </Button>
@@ -188,7 +162,7 @@ export function GradeDebugCard() {
 
             {debugResponse && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium">Resposta da API:</h4>
+                <h4 className="text-sm font-medium">Resultado normalizado:</h4>
                 <ScrollArea className="h-[400px] w-full rounded-md border bg-muted/50 p-4">
                   <pre className="text-xs whitespace-pre-wrap font-mono">
                     {JSON.stringify(debugResponse, null, 2)}

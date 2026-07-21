@@ -433,9 +433,12 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
   - As telas pessoal e administrativa usam comandos tipados pelo client HTTP compartilhado, sem `getSession`, `fetch`, URL Supabase, linha de banco ou action generica. As sete tabelas operacionais de integracoes sao service-only; ownership, ator e correlation ID foram validados no smoke real.
   - O inventario caiu de 9 para 7 arquivos com acesso Supabase (4 legados + 3 adapters aprovados) e de 7 para 4 chamadas `.from()`. Os dois clients migrados sairam do budget de divida.
 
-- [ ] `SB-0906` Migrar limpeza e ferramentas de diagnostico
+- [x] `SB-0906` Migrar limpeza e ferramentas de diagnostico
   - `data-cleanup`, grade debug e testes de integracao apenas por endpoints admin.
   - AC: operacoes destrutivas exigem confirmacao explicita, autorizacao e auditoria.
+  - `data-cleanup` agora exige a intencao `execute_cleanup`, modo obrigatorio e confirmacao literal; o frontend envia IDs funcionais de categorias, enquanto nomes de tabelas, dependencias e ordem ficam exclusivamente no backend. Erros de banco sao redigidos e cada execucao grava eventos `requested` e `completed`/`failed` em uma tabela service-only imutavel.
+  - `admin-diagnostics` substitui queries de cursos/matriculas e o antigo `debug_grades`: somente application admins acessam o contrato, o browser envia UUIDs internos e a credencial Moodle e renovada no servidor. A resposta e limitada a campos de nota normalizados, sem token, IDs Moodle ou payload bruto do provedor.
+  - O inventario caiu de 7 para 5 arquivos com acesso Supabase (2 legados + 3 adapters aprovados), de 4 para 1 chamada `.from()` e de 5 para 2 invocacoes diretas. Os dois clients de settings sairam do budget de divida; o smoke real cobre autorizacao, spoof, confirmacao, redaction e auditoria.
 
 ## Epic 10 — Encerramento da fronteira Supabase no frontend
 

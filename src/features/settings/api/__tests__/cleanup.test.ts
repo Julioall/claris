@@ -1,95 +1,62 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanupSelection, resolveCleanupTables } from '@/features/settings/api/cleanup';
+import { cleanupData } from '@/features/settings/api/cleanup';
+import { CLEANUP_OPTIONS } from '@/features/settings/lib/cleanup-options';
 
-const invokeMock = vi.fn();
+const invokeEdgeFunctionMock = vi.hoisted(() => vi.fn());
 
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: {
-      invoke: (...args: unknown[]) => invokeMock(...args),
-    },
-  },
+vi.mock('@/integrations/http/edge-function-client', () => ({
+  invokeEdgeFunction: invokeEdgeFunctionMock,
 }));
 
 describe('settings cleanup api', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    invokeEdgeFunctionMock.mockReset();
+    invokeEdgeFunctionMock.mockResolvedValue({
+      contractVersion: 1,
+      success: true,
+      operationId: '00000000-0000-4000-8000-000000000099',
+      completedSelectionIds: ['academic_activities'],
+      errors: [],
+    });
   });
 
-  it('expands course cleanup to include dependent tables', () => {
-    expect(resolveCleanupTables('courses')).toEqual([
-      'background_job_events',
-      'background_job_items',
-      'background_jobs',
-      'ai_grade_suggestion_job_items',
-      'ai_grade_suggestion_history',
-      'ai_grade_suggestion_jobs',
-      'activity_feed',
-      'attendance_records',
-      'attendance_course_settings',
-      'dashboard_course_activity_aggregates',
-      'student_sync_snapshots',
-      'student_activities',
-      'student_course_grades',
-      'student_courses',
-      'user_courses',
-      'user_ignored_courses',
-      'courses',
-    ]);
+  it('keeps physical table names out of frontend cleanup options', () => {
+    expect(CLEANUP_OPTIONS).toContainEqual(expect.objectContaining({ id: 'course_catalog' }));
+    expect(CLEANUP_OPTIONS.every((option) => !('tables' in option))).toBe(true);
   });
 
-  it('maps activities cleanup to the expanded activity-related tables before invoking the edge function', async () => {
-    invokeMock.mockResolvedValue({
-      data: { success: true, cleaned: ['student_activities'], errors: [] },
-      error: null,
+  it('sends a versioned destructive intent only after explicit confirmation', async () => {
+    await cleanupData({
+      confirmed: true,
+      mode: 'selected_cleanup',
+      selectionIds: ['academic_activities'],
     });
 
-    const result = await cleanupSelection('activities');
-
-    expect(result).toEqual({ success: true });
-    expect(invokeMock).toHaveBeenCalledWith(
-      'data-cleanup',
-      expect.objectContaining({
-        body: {
-          mode: 'selected_cleanup',
-          tables: [
-            'ai_grade_suggestion_job_items',
-            'ai_grade_suggestion_history',
-            'ai_grade_suggestion_jobs',
-            'dashboard_course_activity_aggregates',
-            'student_activities',
-            'student_course_grades',
-          ],
-        },
-      }),
-    );
-  });
-
-  it('returns the first backend cleanup error when the edge function reports partial failure', async () => {
-    invokeMock.mockResolvedValue({
-      data: {
-        success: false,
-        cleaned: [],
-        errors: [{ table: 'user_courses', error: 'fail user_courses' }],
+    expect(invokeEdgeFunctionMock).toHaveBeenCalledWith('data-cleanup', {
+      body: {
+        action: 'execute_cleanup',
+        confirmation: 'CONFIRM_OPERATIONAL_DATA_CLEANUP_V1',
+        mode: 'selected_cleanup',
+        selectionIds: ['academic_activities'],
       },
-      error: null,
-    });
-
-    const result = await cleanupSelection('courses');
-
-    expect(result).toEqual({
-      success: false,
-      error: 'fail user_courses',
     });
   });
 
-  it('rejects unknown cleanup selections without calling the backend', async () => {
-    const result = await cleanupSelection('unknown-table');
+  it('does not send a selection field for full cleanup', async () => {
+    await cleanupData({ confirmed: true, mode: 'full_cleanup' });
 
-    expect(result).toEqual({
-      success: false,
-      error: 'Tabela desconhecida',
+    expect(invokeEdgeFunctionMock.mock.calls[0][1].body).toEqual({
+      action: 'execute_cleanup',
+      confirmation: 'CONFIRM_OPERATIONAL_DATA_CLEANUP_V1',
+      mode: 'full_cleanup',
     });
-    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing runtime confirmation before invoking the backend', async () => {
+    await expect(cleanupData({
+      confirmed: false,
+      mode: 'full_cleanup',
+    } as never)).rejects.toThrow(/confirmação explícita/i);
+    expect(invokeEdgeFunctionMock).not.toHaveBeenCalled();
   });
 });

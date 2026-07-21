@@ -99,6 +99,9 @@ verify_jwt = false
 [functions.moodle-sync-grades]
 verify_jwt = false
 
+[functions.admin-diagnostics]
+verify_jwt = false
+
 [functions.moodle-sync-jobs]
 verify_jwt = false
 

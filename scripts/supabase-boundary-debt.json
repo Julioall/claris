@@ -15,30 +15,6 @@
       }
     },
     {
-      "path": "src/features/settings/api/cleanup.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/settings/api/gradeDebug.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/lib/course-access.ts",
       "counts": {
         "clientImports": 1,

@@ -1,78 +1,88 @@
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdgeFunction } from '@/integrations/http/edge-function-client';
+
+const FUNCTION_NAME = 'admin-diagnostics';
+export const ADMIN_DIAGNOSTICS_CONTRACT_VERSION = 1 as const;
 
 export interface GradeDebugCourseOption {
   id: string;
   name: string;
-  moodle_course_id: string;
 }
 
 export interface GradeDebugStudentOption {
+  fullName: string;
   id: string;
-  full_name: string;
-  moodle_user_id: string;
 }
 
-export async function syncGradesDebug() {
-  return supabase.functions.invoke('moodle-sync-grades', { body: {} });
+export interface GradeDebugItem {
+  activityId: string | null;
+  gradeFormatted: string | null;
+  gradeMax: number | string | null;
+  gradeRaw: number | string | null;
+  itemName: string | null;
+  itemType: string | null;
+  module: string | null;
+  percentageFormatted: string | null;
 }
 
-export async function listGradeDebugCourses() {
-  return supabase
-    .from('courses')
-    .select('id, name, moodle_course_id')
-    .order('name');
+interface GradeDebugCoursesResponse {
+  contractVersion: typeof ADMIN_DIAGNOSTICS_CONTRACT_VERSION;
+  items: GradeDebugCourseOption[];
 }
 
-export async function listGradeDebugStudentsByMoodleCourseId(moodleCourseId: string) {
-  const { data: course, error: courseError } = await supabase
-    .from('courses')
-    .select('id')
-    .eq('moodle_course_id', moodleCourseId)
-    .single();
+interface GradeDebugStudentsResponse {
+  contractVersion: typeof ADMIN_DIAGNOSTICS_CONTRACT_VERSION;
+  items: GradeDebugStudentOption[];
+}
 
-  if (courseError) {
-    return { data: null, error: courseError };
+export interface GradeDebugResult {
+  contractVersion: typeof ADMIN_DIAGNOSTICS_CONTRACT_VERSION;
+  course: GradeDebugCourseOption;
+  courseGrade: GradeDebugItem | null;
+  items: GradeDebugItem[];
+  operationId: string;
+  student: GradeDebugStudentOption;
+  summary: {
+    returnedItems: number;
+    totalItems: number;
+    truncated: boolean;
+  };
+}
+
+function assertContract<T extends { contractVersion: number }>(response: T): T {
+  if (
+    !response
+    || typeof response !== 'object'
+    || response.contractVersion !== ADMIN_DIAGNOSTICS_CONTRACT_VERSION
+  ) {
+    throw new Error('Versão incompatível do contrato de diagnóstico.');
   }
-
-  if (!course) {
-    return { data: [] as GradeDebugStudentOption[], error: null };
-  }
-
-  const { data, error } = await supabase
-    .from('student_courses')
-    .select('students!inner(id, full_name, moodle_user_id)')
-    .eq('course_id', course.id)
-    .limit(20);
-
-  if (error) {
-    return { data: null, error };
-  }
-
-  const students = (data ?? []).map((row) => {
-    const student = row.students as GradeDebugStudentOption;
-    return {
-      id: student.id,
-      full_name: student.full_name,
-      moodle_user_id: student.moodle_user_id,
-    };
-  });
-
-  return { data: students, error: null };
+  return response;
 }
 
-export async function debugStudentGrades(params: {
-  moodleUrl: string;
-  token: string;
-  courseId: number;
-  userId: number;
-}) {
-  return supabase.functions.invoke('moodle-sync-grades', {
-    body: {
-      action: 'debug_grades',
-      moodleUrl: params.moodleUrl,
-      token: params.token,
-      courseId: params.courseId,
-      userId: params.userId,
-    },
+async function invoke<T extends { contractVersion: number }>(
+  body: Record<string, unknown>,
+): Promise<T> {
+  return assertContract(await invokeEdgeFunction<T>(FUNCTION_NAME, { body }));
+}
+
+export async function listGradeDebugCourses(): Promise<GradeDebugCourseOption[]> {
+  return (await invoke<GradeDebugCoursesResponse>({ action: 'list_grade_courses' })).items;
+}
+
+export async function listGradeDebugStudents(courseId: string): Promise<GradeDebugStudentOption[]> {
+  return (await invoke<GradeDebugStudentsResponse>({
+    action: 'list_grade_students',
+    courseId,
+  })).items;
+}
+
+export function debugStudentGrades(input: {
+  courseId: string;
+  studentId: string;
+}): Promise<GradeDebugResult> {
+  return invoke({
+    action: 'run_grade_diagnostic',
+    courseId: input.courseId,
+    studentId: input.studentId,
   });
 }

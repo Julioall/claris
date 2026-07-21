@@ -370,31 +370,3 @@ async function refreshDashboardAggregatesForCourse(
     console.error('[moodle-sync-grades] Error refreshing dashboard aggregates:', error)
   }
 }
-
-export async function debugGrades(
-  moodleUrl: string,
-  token: string,
-  courseId: number,
-  userId: number
-): Promise<Response> {
-  const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
-    courseid: courseId,
-    userid: userId,
-  }) as { usergrades?: Array<{ gradeitems?: Array<Record<string, unknown>> }> }
-
-  return jsonResponse({
-    success: true,
-    raw_response: gradesData,
-    course_grade_item: gradesData.usergrades?.[0]?.gradeitems?.find((item: Record<string, unknown>) => item.itemtype === 'course'),
-    all_item_types: gradesData.usergrades?.[0]?.gradeitems?.map((item: Record<string, unknown>) => ({
-      itemtype: item.itemtype,
-      itemname: item.itemname,
-      cmid: item.cmid,
-      itemmodule: item.itemmodule,
-      graderaw: item.graderaw,
-      grademax: item.grademax,
-      gradeformatted: item.gradeformatted,
-      percentageformatted: item.percentageformatted,
-    })),
-  })
-}

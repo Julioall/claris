@@ -506,16 +506,37 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'generate-automated-tasks',
     },
     {
-      body: { mode: 'truncate_everything' },
+      body: { action: 'execute_cleanup', mode: 'truncate_everything' },
       expectedStatus: 400,
       name: 'data-cleanup invalid-mode',
       path: 'data-cleanup',
     },
     {
-      body: { mode: 'full_cleanup' },
+      body: {
+        action: 'execute_cleanup',
+        confirmation: 'CONFIRM_OPERATIONAL_DATA_CLEANUP_V1',
+        mode: 'full_cleanup',
+      },
       expectedStatus: 401,
       name: 'data-cleanup valid-no-auth',
       path: 'data-cleanup',
+    },
+    {
+      body: { action: 'list_grade_courses' },
+      expectedStatus: 401,
+      name: 'admin-diagnostics valid-no-auth',
+      path: 'admin-diagnostics',
+    },
+    {
+      body: {
+        action: 'run_grade_diagnostic',
+        courseId: '00000000-0000-4000-8000-000000000001',
+        studentId: '00000000-0000-4000-8000-000000000002',
+        token: 'browser-token',
+      },
+      expectedStatus: 422,
+      name: 'admin-diagnostics rejects-browser-credentials',
+      path: 'admin-diagnostics',
     },
     {
       body: { action: 'bad_action' },
@@ -614,9 +635,9 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'moodle-sync-activities',
     },
     {
-      body: { action: 'debug_grades', courseId: 1, userId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
+      body: { action: 'sync_grades', courseId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
       expectedStatus: 401,
-      name: 'moodle-sync-grades debug-no-auth',
+      name: 'moodle-sync-grades sync-no-auth',
       path: 'moodle-sync-grades',
     },
     {
@@ -967,6 +988,7 @@ function runCourseManagementGrantChecks() {
           ('user_group_memberships'::TEXT),
           ('admin_user_roles'::TEXT),
           ('app_access_audit_log'::TEXT),
+          ('app_admin_operation_audit_log'::TEXT),
           ('app_service_instances'::TEXT),
           ('app_service_instance_events'::TEXT),
           ('app_service_instance_jobs'::TEXT),
@@ -4107,11 +4129,229 @@ async function runAdminObservabilityChecks(status, accessToken, authUserId) {
   log('Suporte e observabilidade admin validados com identidade, redaction, paginacao e grants reais.')
 }
 
+async function runAdminDiagnosticsAndCleanupChecks(
+  status,
+  accessToken,
+  authUserId,
+  courseId,
+  studentId,
+) {
+  const errorId = '00000000-0000-4000-8000-000000000935'
+  await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+  await deleteRows(
+    status,
+    'user_moodle_reauth_credentials',
+    { user_id: authUserId },
+    'user_id',
+  )
+  await deleteRows(status, 'app_error_logs', { id: errorId })
+
+  try {
+    const forbiddenDiagnostics = await callV1EdgeFunction(status, 'admin-diagnostics', {
+      action: 'list_grade_courses',
+    }, {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-admin-diagnostics-forbidden',
+    })
+    assertV1Response(forbiddenDiagnostics, {
+      code: 'forbidden',
+      correlationId: 'smoke-v1-admin-diagnostics-forbidden',
+      status: 403,
+    })
+
+    const forbiddenCleanup = await callV1EdgeFunction(status, 'data-cleanup', {
+      action: 'execute_cleanup',
+      confirmation: 'CONFIRM_OPERATIONAL_DATA_CLEANUP_V1',
+      mode: 'selected_cleanup',
+      selectionIds: ['error_logs'],
+    }, {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-data-cleanup-forbidden',
+    })
+    assertV1Response(forbiddenCleanup, {
+      code: 'forbidden',
+      correlationId: 'smoke-v1-data-cleanup-forbidden',
+      status: 403,
+    })
+
+    await upsertRows(status, 'admin_user_roles', 'user_id', {
+      user_id: authUserId,
+      role: 'admin',
+      permissions: ['admin'],
+      granted_by: null,
+    })
+
+    const spoofedDiagnostic = await callV1EdgeFunction(status, 'admin-diagnostics', {
+      action: 'run_grade_diagnostic',
+      courseId,
+      studentId,
+      moodleUrl: 'https://example.com',
+      token: 'browser-secret',
+    }, {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-admin-diagnostics-spoof',
+    })
+    assertV1Response(spoofedDiagnostic, {
+      code: 'validation_failed',
+      correlationId: 'smoke-v1-admin-diagnostics-spoof',
+      status: 422,
+    })
+
+    const courses = await callV1EdgeFunction(status, 'admin-diagnostics', {
+      action: 'list_grade_courses',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-admin-diagnostics-courses',
+    })
+    assertV1Response(courses, {
+      correlationId: 'smoke-v1-admin-diagnostics-courses',
+      status: 200,
+    })
+    const courseDto = courses.data?.data?.items?.find((item) => item.id === courseId)
+    if (
+      courses.data?.data?.contractVersion !== 1
+      || courseDto?.name !== seed.courseName
+      || Object.prototype.hasOwnProperty.call(courseDto ?? {}, 'moodleCourseId')
+    ) {
+      fail(`admin-diagnostics retornou cursos inseguros: ${JSON.stringify(courses.data)}`)
+    }
+
+    const students = await callV1EdgeFunction(status, 'admin-diagnostics', {
+      action: 'list_grade_students',
+      courseId,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-admin-diagnostics-students',
+    })
+    assertV1Response(students, {
+      correlationId: 'smoke-v1-admin-diagnostics-students',
+      status: 200,
+    })
+    const studentDto = students.data?.data?.items?.find((item) => item.id === studentId)
+    if (
+      studentDto?.fullName !== seed.studentFullName
+      || Object.prototype.hasOwnProperty.call(studentDto ?? {}, 'moodleUserId')
+    ) {
+      fail(`admin-diagnostics retornou alunos inseguros: ${JSON.stringify(students.data)}`)
+    }
+
+    const diagnostic = await callV1EdgeFunction(status, 'admin-diagnostics', {
+      action: 'run_grade_diagnostic',
+      courseId,
+      studentId,
+    }, {
+      acceptStatuses: [409],
+      accessToken,
+      correlationId: 'smoke-v1-admin-diagnostics-run',
+    })
+    assertV1Response(diagnostic, {
+      code: 'conflict',
+      correlationId: 'smoke-v1-admin-diagnostics-run',
+      status: 409,
+    })
+
+    const missingConfirmation = await callV1EdgeFunction(status, 'data-cleanup', {
+      action: 'execute_cleanup',
+      confirmation: 'NO_CONFIRMATION',
+      mode: 'selected_cleanup',
+      selectionIds: ['error_logs'],
+    }, {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-data-cleanup-confirmation',
+    })
+    assertV1Response(missingConfirmation, {
+      code: 'validation_failed',
+      correlationId: 'smoke-v1-data-cleanup-confirmation',
+      status: 422,
+    })
+
+    await upsertRows(status, 'app_error_logs', 'id', {
+      id: errorId,
+      user_id: authUserId,
+      severity: 'warning',
+      category: 'integration',
+      message: 'Smoke cleanup target',
+      payload: {},
+      context: {},
+    })
+
+    const cleanup = await callV1EdgeFunction(status, 'data-cleanup', {
+      action: 'execute_cleanup',
+      confirmation: 'CONFIRM_OPERATIONAL_DATA_CLEANUP_V1',
+      mode: 'selected_cleanup',
+      selectionIds: ['error_logs'],
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-data-cleanup-run',
+    })
+    assertV1Response(cleanup, {
+      correlationId: 'smoke-v1-data-cleanup-run',
+      status: 200,
+    })
+    if (
+      cleanup.data?.data?.contractVersion !== 1
+      || cleanup.data?.data?.success !== true
+      || !cleanup.data?.data?.completedSelectionIds?.includes('error_logs')
+      || !cleanup.data?.data?.operationId
+    ) {
+      fail(`data-cleanup retornou DTO invalido: ${JSON.stringify(cleanup.data)}`)
+    }
+
+    const remainingErrors = await selectRows(status, 'app_error_logs', { id: errorId })
+    if (remainingErrors.length !== 0) {
+      fail('data-cleanup nao removeu a tabela explicitamente confirmada.')
+    }
+
+    const diagnosticAudit = await selectRows(status, 'app_admin_operation_audit_log', {
+      correlation_id: 'smoke-v1-admin-diagnostics-run',
+    })
+    const cleanupAudit = await selectRows(status, 'app_admin_operation_audit_log', {
+      correlation_id: 'smoke-v1-data-cleanup-run',
+    })
+    if (
+      !diagnosticAudit.some((event) => (
+        event.actor_id === authUserId
+        && event.phase === 'requested'
+        && event.status === 'pending'
+      ))
+      || !diagnosticAudit.some((event) => event.phase === 'failed')
+      || !cleanupAudit.some((event) => (
+        event.actor_id === authUserId
+        && event.phase === 'requested'
+      ))
+      || !cleanupAudit.some((event) => (
+        event.phase === 'completed'
+        && event.status === 'success'
+      ))
+    ) {
+      fail(`Auditoria administrativa ausente: ${JSON.stringify({ diagnosticAudit, cleanupAudit })}`)
+    }
+
+    await requestJson(`${status.REST_URL}/app_admin_operation_audit_log?select=id&limit=1`, {
+      acceptStatuses: [401, 403],
+      headers: publishableHeaders(status, accessToken),
+    })
+  } finally {
+    await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+    await deleteRows(status, 'app_error_logs', { id: errorId })
+  }
+
+  log('Limpeza e diagnosticos admin validados com confirmacao, DTO seguro e auditoria imutavel.')
+}
+
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   await runAccessControlChecks(status, accessToken, authUserId)
   await runServiceIntegrationChecks(status, accessToken, authUserId)
   await runAppSettingsChecks(status, accessToken, authUserId)
   await runAdminObservabilityChecks(status, accessToken, authUserId)
+  await runAdminDiagnosticsAndCleanupChecks(status, accessToken, authUserId, courseId, studentId)
 
   const settings = await callV1EdgeFunction(
     status,
