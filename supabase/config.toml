@@ -57,6 +57,9 @@ verify_jwt = false
 [functions.task-tag-suggestions]
 verify_jwt = false
 
+[functions.dashboard-summary]
+verify_jwt = false
+
 [functions.moodle-sync-courses]
 verify_jwt = false
 

@@ -1,6 +1,6 @@
 # Supabase RLS Canônico
 
-Atualizado em `2026-04-01`.
+Atualizado em `2026-07-21`.
 
 Este documento resume o estado RLS efetivo do schema atual.
 
@@ -82,12 +82,15 @@ Migrations de referência:
 - `20260205183218_fix_rls_remove_null_auth.sql`
 - `20260211041244_0ef98547-ca60-4110-a1de-2cc1df4d6c1b.sql`
 - `20260326183000_add_dashboard_course_activity_aggregates.sql`
+- `20260721130000_harden_dashboard_backend_queries.sql`
 
 Observações:
 
 - O padrão correto aqui é sempre curso como unidade de autorização, nunca acesso amplo por aluno ou atividade isolada.
 - As Edge Functions de sync dependem explicitamente das policies `service_role` em atividades e notas.
 - `dashboard_course_activity_aggregates` materializa a fila do dashboard por curso para evitar recálculo completo de `student_activities` em toda abertura da tela.
+- `refresh_course_dashboard_aggregate(uuid)` e `SECURITY DEFINER`, mas seu `EXECUTE` foi revogado de `PUBLIC`, `anon` e `authenticated`; apenas `service_role` pode recalcular agregados.
+- `dashboard-summary` usa `service_role` internamente e, por isso, reaplica em todas as consultas o escopo de cursos `tutor` derivado do usuario autenticado.
 
 ## Tarefas E Automação
 

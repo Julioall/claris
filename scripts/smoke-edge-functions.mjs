@@ -514,6 +514,12 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'task-tag-suggestions',
     },
     {
+      body: { action: 'get_summary', week: 'current' },
+      expectedStatus: 401,
+      name: 'dashboard-summary valid-no-auth',
+      path: 'dashboard-summary',
+    },
+    {
       body: {},
       expectedStatus: 401,
       name: 'process-scheduled-messages no-secret',
@@ -637,6 +643,7 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
     short_name: 'SMOKE-HIDDEN',
   })
   const [hiddenStudent] = await upsertRows(status, 'students', 'moodle_user_id', {
+    current_risk_level: 'critico',
     full_name: 'Aluno Smoke Edge Oculto',
     moodle_user_id: 'smoke-hidden-student-001',
   })
@@ -668,6 +675,48 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
     fail('task-tag-suggestions vazou um aluno de curso sem acesso.')
   }
 
+  const invalidDashboard = await callV1EdgeFunction(
+    status,
+    'dashboard-summary',
+    { action: 'get_summary', userId: authUserId, week: 'current' },
+    {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-dashboard-invalid-scope',
+    },
+  )
+  assertV1Response(invalidDashboard, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-dashboard-invalid-scope',
+    status: 422,
+  })
+
+  const dashboard = await callV1EdgeFunction(
+    status,
+    'dashboard-summary',
+    { action: 'get_summary', week: 'current' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-dashboard',
+    },
+  )
+  assertV1Response(dashboard, { correlationId: 'smoke-v1-dashboard', status: 200 })
+  const dashboardData = dashboard.data?.data
+  if (
+    dashboardData?.metadata?.contractVersion !== 1
+    || dashboardData?.metadata?.appliedCourseCount !== 1
+    || dashboardData?.indicators?.studentsAtRisk !== 1
+  ) {
+    fail(`dashboard-summary retornou DTO ou indicadores invalidos: ${JSON.stringify(dashboard.data)}`)
+  }
+  if (!dashboardData.criticalStudents?.some((student) => student.id === studentId)) {
+    fail(`dashboard-summary nao retornou o aluno acessivel em risco: ${JSON.stringify(dashboard.data)}`)
+  }
+  if (dashboardData.criticalStudents.some((student) => student.id === hiddenStudent.id)) {
+    fail('dashboard-summary vazou um aluno de curso sem acesso.')
+  }
+
   await deleteRows(status, 'student_courses', {
     course_id: hiddenCourse.id,
     student_id: hiddenStudent.id,
@@ -675,6 +724,7 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
   await deleteRows(status, 'students', { id: hiddenStudent.id })
   await deleteRows(status, 'courses', { id: hiddenCourse.id })
   log('task-tag-suggestions validado com escopo de curso e isolamento entre usuarios.')
+  log('dashboard-summary validado com contrato V1, identidade e isolamento entre cursos.')
 
   await cleanupAutomatedTaskArtifacts(status, authUserId, studentId)
 

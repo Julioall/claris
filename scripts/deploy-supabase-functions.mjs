@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 const DEFAULT_FUNCTIONS = [
   'app-telemetry',
+  'dashboard-summary',
   'moodle-auth',
   'moodle-reauth-settings',
   'moodle-sync-courses',

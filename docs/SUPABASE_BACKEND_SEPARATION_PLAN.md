@@ -214,10 +214,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: contrato nao referencia tabelas ou tipos Supabase.
   - Implementado como contrato HTTP V1 em `camelCase`, espelhado nas duas bordas e protegido por teste de compatibilidade; identidade e nomes de persistencia nao fazem parte do DTO.
 
-- [ ] `SB-0302` Implementar endpoint `dashboard-summary`
+- [x] `SB-0302` Implementar endpoint `dashboard-summary`
   - Mover consultas e composicao de `dashboard.repository.ts` para service/repositories backend.
   - Reutilizar agregados existentes e medir necessidade de nova RPC.
   - AC: uma chamada frontend retorna o dashboard completo ou secoes explicitamente versionadas.
+  - Implementado como Edge Function autenticada e autorizada por `dashboard.view`, com handler fino, service testavel, repository exclusivo para Supabase, escopo tutor por token e uma resposta V1 completa.
 
 - [x] `SB-0303` Centralizar regras de pendencia, correcao e risco
   - Garantir uma unica implementacao backend das regras usadas pelo dashboard.
