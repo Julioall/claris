@@ -2,8 +2,10 @@
 /// <reference path="../edge-runtime.d.ts" />
 
 import {
+  apiSuccessResponse,
   createHandler,
   expectBodyObject,
+  isApiV1Request,
   jsonResponse,
   RequestBodyValidationError,
 } from '../_shared/http/mod.ts'
@@ -18,6 +20,20 @@ interface MoodleReauthSettingsPayload {
   enabled: boolean
 }
 
+interface MoodleReauthSettingsResult {
+  credentialActive: boolean
+  message: string
+  preferenceEnabled: boolean
+  requiresLogin: boolean
+}
+
+function settingsResponse(req: Request, result: MoodleReauthSettingsResult): Response {
+  if (!isApiV1Request(req)) return jsonResponse(result)
+
+  const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID()
+  return apiSuccessResponse(result, correlationId)
+}
+
 function parseBody(rawBody: unknown): MoodleReauthSettingsPayload {
   const body = expectBodyObject(rawBody)
 
@@ -28,7 +44,7 @@ function parseBody(rawBody: unknown): MoodleReauthSettingsPayload {
   return { enabled: body.enabled }
 }
 
-Deno.serve(createHandler(async ({ body, user }) => {
+Deno.serve(createHandler(async ({ body, req, user }) => {
   const supabase = createServiceClient()
 
   const { error: userUpdateError } = await supabase
@@ -45,7 +61,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
       await disableMoodleReauthCredential(supabase, user.id)
     }
 
-    return jsonResponse({
+    return settingsResponse(req, {
       credentialActive: false,
       message: 'Reautorizacao automatica desativada para esta conta.',
       preferenceEnabled: false,
@@ -54,7 +70,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
   }
 
   if (!existingCredential?.credential_ciphertext) {
-    return jsonResponse({
+    return settingsResponse(req, {
       credentialActive: false,
       message: 'Preferencia salva. Faca logout e login novamente para registrar a credencial do Moodle nesta conta.',
       preferenceEnabled: true,
@@ -74,7 +90,7 @@ Deno.serve(createHandler(async ({ body, user }) => {
     lastTokenIssuedAt: existingCredential.last_token_issued_at,
   })
 
-  return jsonResponse({
+  return settingsResponse(req, {
     credentialActive: true,
     message: 'Reautorizacao automatica ativada para esta conta.',
     preferenceEnabled: true,

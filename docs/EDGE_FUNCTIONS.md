@@ -41,6 +41,63 @@ Para functions novas ou refatoradas, o padrao preferencial e:
 
 Nem toda function precisa de todos os arquivos, mas `index.ts` deve continuar pequeno.
 
+## Contrato HTTP V1
+
+As APIs chamadas pelo frontend usam a rota do gateway Supabase:
+
+```text
+{SUPABASE_URL}/functions/v1/<function-name>
+```
+
+Functions usam nomes `kebab-case`. Quando uma function oferece mais de uma operacao, o campo `action` usa `snake_case` e representa uma intencao de dominio, nunca uma operacao generica sobre tabela. Campos JSON usam `camelCase`; datas sao strings ISO-8601 em UTC.
+
+Durante a migracao, o contrato V1 e solicitado pelo header `x-claris-api-version: 1`. Endpoints legados podem manter temporariamente a resposta anterior quando o header nao estiver presente. Codigo novo deve usar exclusivamente V1.
+
+### Respostas
+
+Sucesso:
+
+```json
+{
+  "data": { "preferenceEnabled": true },
+  "correlationId": "4db3732d-67d5-4746-b213-381c46641912"
+}
+```
+
+Erro:
+
+```json
+{
+  "error": {
+    "code": "validation_failed",
+    "message": "Payload invalido.",
+    "details": { "field": "enabled" },
+    "correlationId": "4db3732d-67d5-4746-b213-381c46641912"
+  }
+}
+```
+
+O mesmo `correlationId` e retornado no header `x-correlation-id`. Codigos HTTP representam a classe do resultado; erros funcionais nao devem retornar HTTP 200.
+
+### Paginacao
+
+Requests paginados usam `page` (iniciando em 1), `pageSize` e um objeto opcional `filters`. Respostas usam:
+
+```json
+{
+  "data": {
+    "items": [],
+    "page": 1,
+    "pageSize": 25,
+    "totalCount": 0,
+    "totalPages": 0
+  },
+  "correlationId": "4db3732d-67d5-4746-b213-381c46641912"
+}
+```
+
+Os tipos compartilhados e helpers opt-in ficam em `_shared/http/contract.ts` e `_shared/http/response.ts`. `moodle-reauth-settings` e o endpoint piloto: clientes legados continuam recebendo o payload antigo, enquanto requests V1 recebem o envelope padronizado.
+
 ## Runtime compartilhado
 
 ### HTTP

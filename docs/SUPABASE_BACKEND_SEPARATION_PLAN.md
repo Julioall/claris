@@ -133,10 +133,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** criar um padrao unico antes de migrar os dominios.
 
-- [ ] `SB-0101` Versionar contratos HTTP
+- [x] `SB-0101` Versionar contratos HTTP
   - Definir convencao `/v1`, nomes de actions, paginacao, filtros e datas ISO-8601.
   - Definir envelope de sucesso e `ApiError` com `code`, `message`, `details` e `correlationId`.
   - AC: exemplos documentados e usados por uma function piloto.
+  - Implementado de forma opt-in em `_shared/http/contract.ts`; `moodle-reauth-settings` preserva o payload legado e responde no envelope V1 quando solicitado.
 
 - [ ] `SB-0102` Completar o runtime HTTP compartilhado
   - Consolidar CORS, parse de body, autenticacao, autorizacao, correlation ID, logs e mapeamento de erros em `_shared/http`.
