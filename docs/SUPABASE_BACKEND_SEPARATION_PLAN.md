@@ -156,10 +156,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: template documentado em `EDGE_FUNCTIONS.md`.
   - Implementado e aplicado no piloto `moodle-reauth-settings`, com service testavel por repository injetado.
 
-- [ ] `SB-0105` Criar client HTTP unico no frontend
+- [x] `SB-0105` Criar client HTTP unico no frontend
   - Encapsular `functions.invoke`, normalizacao de erro, timeout, abort signal e correlation ID.
   - Nenhuma feature deve invocar Edge Function diretamente apos ser migrada.
   - AC: client testado para sucesso, erro funcional, erro HTTP, timeout e sessao expirada.
+  - Implementado em `src/integrations/http/edge-function-client.ts`; o piloto de reautorizacao ja usa exclusivamente esse client.
 
 - [ ] `SB-0106` Separar DTOs de tipos do banco
   - Criar convencao de contratos por feature; impedir import de `integrations/supabase/types` em UI e hooks.

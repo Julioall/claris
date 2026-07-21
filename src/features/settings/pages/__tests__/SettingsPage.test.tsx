@@ -23,10 +23,11 @@ vi.mock('@/contexts/AuthContext', () => ({
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     from: (...args: unknown[]) => fromMock(...args),
-    functions: {
-      invoke: (...args: unknown[]) => invokeMock(...args),
-    },
   },
+}));
+
+vi.mock('@/integrations/http/edge-function-client', () => ({
+  invokeEdgeFunction: (...args: unknown[]) => invokeMock(...args),
 }));
 
 const setAuthUser = () => {
@@ -68,12 +69,11 @@ describe('Settings page', () => {
 
     logoutMock.mockResolvedValue(undefined);
     invokeMock.mockResolvedValue({
-      data: {
-        preferenceEnabled: false,
-        credentialActive: false,
-        requiresLogin: false,
-      },
-      error: null,
+      preferenceEnabled: true,
+      credentialActive: false,
+      lastError: null,
+      lastReauthAt: null,
+      requiresLogin: false,
     });
     setAuthUser();
 
@@ -122,6 +122,7 @@ describe('Settings page', () => {
 
     expect(invokeMock).toHaveBeenCalledWith('moodle-reauth-settings', {
       body: {
+        action: 'update_settings',
         enabled: false,
       },
     });

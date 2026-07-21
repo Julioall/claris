@@ -6,10 +6,10 @@
     "filesWithSupabaseAccess": 48,
     "totals": {
       "clientImports": 48,
-      "from": 146,
+      "from": 144,
       "rpc": 15,
       "functionsInvoke": 15,
-      "auth": 12,
+      "auth": 14,
       "storage": 0,
       "channel": 1
     }
@@ -1089,39 +1089,6 @@
       }
     },
     {
-      "file": "src/features/settings/api/moodleReauth.ts",
-      "feature": "settings",
-      "categories": [
-        "edge-function",
-        "query"
-      ],
-      "useCases": [
-        "Gerenciar configuracoes globais"
-      ],
-      "resources": {
-        "tables": [
-          "user_moodle_reauth_credentials",
-          "users"
-        ],
-        "rpcs": [],
-        "functions": [
-          "moodle-reauth-settings"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0902"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/students/api/gradeSuggestions.ts",
       "feature": "students",
       "categories": [
@@ -1425,6 +1392,36 @@
         "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/integrations/http/edge-function-client.ts",
+      "feature": "app",
+      "categories": [
+        "auth",
+        "edge-function"
+      ],
+      "useCases": [
+        "Encapsular sessao e autenticacao no AuthGateway",
+        "Manter invocacoes de Edge Functions somente no client HTTP aprovado"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0202",
+        "SB-1002"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 2,
         "storage": 0,
         "channel": 0
       }

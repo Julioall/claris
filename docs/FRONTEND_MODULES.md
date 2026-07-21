@@ -48,6 +48,8 @@ src/
 - tipos gerados do banco nao devem fazer parte dos DTOs ou view models da apresentacao.
 - Supabase Auth e Realtime sao excecoes temporarias apenas por adapters dedicados; elas nao autorizam acesso ao banco.
 
+Chamadas a Edge Functions passam por `src/integrations/http/edge-function-client.ts`, que aplica contrato V1, correlation ID, timeout, cancelamento, normalizacao de erros e uma unica tentativa de renovacao da sessao. Features migradas nao usam `supabase.functions.invoke` diretamente.
+
 Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md). A validacao client-side existe para UX; regras de permissao, elegibilidade e estado persistido sempre sao revalidadas no backend.
 
 ## Estado Atual (Resumo)
