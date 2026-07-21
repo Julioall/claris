@@ -14,9 +14,10 @@ export async function getAuthenticatedUser(
   supabase: AppSupabaseClient
 ): Promise<AuthUser | null> {
   const authHeader = req.headers.get('Authorization')
-  if (!authHeader) return null
+  const bearer = authHeader?.match(/^Bearer\s+(\S+)$/i)
+  if (!bearer) return null
 
-  const token = authHeader.replace('Bearer ', '')
+  const token = bearer[1]
   const {
     data: { user },
     error,

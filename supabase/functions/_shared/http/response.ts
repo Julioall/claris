@@ -6,9 +6,13 @@ import { API_CONTRACT_VERSION, API_VERSION_HEADER, CORRELATION_ID_HEADER } from 
  * Returns a JSON response with CORS headers.
  */
 export function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
+  const responseHeaders = new Headers(corsHeaders)
+  responseHeaders.set('Content-Type', 'application/json')
+  new Headers(headers).forEach((value, key) => responseHeaders.set(key, value))
+
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json', ...Object.fromEntries(new Headers(headers)) },
+    headers: responseHeaders,
   })
 }
 

@@ -109,6 +109,11 @@ Os tipos compartilhados e helpers opt-in ficam em `_shared/http/contract.ts` e `
 - parsing de body
 - respostas padronizadas
 - validacao de autenticacao com `requireAuth`
+- `correlationId` e logger estruturado por request
+- erros tipados com mapeamento consistente de status
+- hook opcional de autorizacao do caso de uso
+
+Erros inesperados retornam uma mensagem generica e nunca incluem stack trace ou a mensagem interna. O logger compartilhado filtra metadados com nomes sensiveis e handlers nao devem registrar body, `Authorization`, tokens ou credenciais.
 
 ### Banco
 

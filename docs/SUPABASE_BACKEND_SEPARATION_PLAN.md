@@ -139,10 +139,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: exemplos documentados e usados por uma function piloto.
   - Implementado de forma opt-in em `_shared/http/contract.ts`; `moodle-reauth-settings` preserva o payload legado e responde no envelope V1 quando solicitado.
 
-- [ ] `SB-0102` Completar o runtime HTTP compartilhado
+- [x] `SB-0102` Completar o runtime HTTP compartilhado
   - Consolidar CORS, parse de body, autenticacao, autorizacao, correlation ID, logs e mapeamento de erros em `_shared/http`.
   - Garantir que logs nao exponham token, credenciais ou dados pessoais desnecessarios.
   - AC: testes para `OPTIONS`, 400, 401, 403, 404, 409, 422 e 500.
+  - Implementado em `_shared/http` com correlation ID, logger seguro, `ApiError`, autorizacao e seams de teste; cobertura em `edge-http-handler.test.ts`.
 
 - [ ] `SB-0103` Padronizar validacao de payload
   - Expandir `_shared/validation` com parsers reutilizaveis e limites de payload.
