@@ -1,69 +1,119 @@
-import { supabase } from '@/integrations/supabase/client';
-import { CLARIS_CONFIGURED_STORAGE_KEY, parseClarisLlmSettings } from '@/lib/claris-settings';
-import { GLOBAL_APP_SETTINGS_ID } from '@/lib/global-app-settings';
+import { invokeEdgeFunction } from '@/integrations/http/edge-function-client';
+import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
 
-export type ClarisAvailabilityStatus = 'ready' | 'not_configured' | 'invalid';
+import type {
+  ClarisAvailabilityDto,
+  ClarisAvailabilityStatus,
+  ClarisChatResponseDto,
+  ClarisRichBlockDto,
+  ClarisUiActionDto,
+} from './contracts/claris-chat.contract';
+
+export type { ClarisAvailabilityStatus } from './contracts/claris-chat.contract';
+
+const FUNCTION_NAME = 'claris-chat';
 
 export interface ClarisChatInvokePayload {
-  message: string;
-  history: Array<{ role: 'assistant' | 'user'; content: string }>;
-  moodleUrl?: string | null;
-  moodleToken?: string | null;
   action?: {
     kind: 'quick_reply';
     value: string;
     jobId?: string;
   };
+  history: Array<{ role: 'assistant' | 'user'; content: string }>;
+  message: string;
 }
 
-export interface ClarisChatFunctionResponse {
-  reply?: unknown;
-  uiActions?: unknown;
-  richBlocks?: unknown;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isUiAction(value: unknown): value is ClarisUiActionDto {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && (value.jobId === null || typeof value.jobId === 'string')
+    && value.kind === 'quick_reply'
+    && typeof value.label === 'string'
+    && typeof value.value === 'string';
+}
+
+function hasStringRows(value: unknown): value is Array<Record<string, string>> {
+  return Array.isArray(value) && value.every((row) => (
+    isRecord(row) && Object.values(row).every((cell) => typeof cell === 'string')
+  ));
+}
+
+function isRichBlock(value: unknown): value is ClarisRichBlockDto {
+  if (!isRecord(value) || typeof value.title !== 'string') return false;
+
+  if (value.type === 'data_table') {
+    return typeof value.tool === 'string'
+      && typeof value.emptyMessage === 'string'
+      && Array.isArray(value.columns)
+      && value.columns.every((column) => (
+        isRecord(column) && typeof column.key === 'string' && typeof column.label === 'string'
+      ))
+      && hasStringRows(value.rows);
+  }
+
+  return value.type === 'stat_cards'
+    && Array.isArray(value.stats)
+    && value.stats.every((stat) => (
+      isRecord(stat)
+      && typeof stat.label === 'string'
+      && typeof stat.value === 'string'
+      && (stat.variant === 'default' || stat.variant === 'warning' || stat.variant === 'danger')
+    ));
+}
+
+function invalidResponse(): never {
+  throw new Error('A API de chat da Claris retornou uma resposta invalida.');
 }
 
 export async function fetchClarisAvailability(): Promise<ClarisAvailabilityStatus> {
   try {
-    const { data, error } = await supabase
-      .from('app_settings')
-      .select('claris_llm_settings')
-      .eq('singleton_id', GLOBAL_APP_SETTINGS_ID)
-      .maybeSingle();
-
-    if (error) {
-      throw error;
+    const response = await invokeEdgeFunction<ClarisAvailabilityDto>(FUNCTION_NAME, {
+      body: { operation: 'get_availability' },
+    });
+    if (
+      !isRecord(response)
+      || response.contractVersion !== 1
+      || (response.status !== 'ready' && response.status !== 'not_configured' && response.status !== 'invalid')
+    ) {
+      invalidResponse();
     }
 
-    const rawSettings = (data?.claris_llm_settings ?? null) as unknown;
-    const parsed = parseClarisLlmSettings(rawSettings);
-    const rawConfiguredFlag = Boolean(
-      rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)
-        ? (rawSettings as { configured?: unknown }).configured
-        : false,
-    );
-
-    const status: ClarisAvailabilityStatus = parsed.configured
-      ? 'ready'
-      : rawConfiguredFlag
-        ? 'invalid'
-        : 'not_configured';
-
-    localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(status === 'ready'));
-    return status;
+    localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(response.status === 'ready'));
+    return response.status;
   } catch {
     localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, 'false');
     return 'not_configured';
   }
 }
 
-export async function invokeClarisChat(payload: ClarisChatInvokePayload): Promise<ClarisChatFunctionResponse> {
-  const { data, error } = await supabase.functions.invoke('claris-chat', {
-    body: payload,
+export async function invokeClarisChat(
+  payload: ClarisChatInvokePayload,
+): Promise<ClarisChatResponseDto> {
+  const response = await invokeEdgeFunction<ClarisChatResponseDto>(FUNCTION_NAME, {
+    body: {
+      operation: 'send_message',
+      message: payload.message,
+      history: payload.history,
+      ...(payload.action ? { action: payload.action } : {}),
+    },
+    timeoutMs: 125_000,
   });
 
-  if (error) {
-    throw error;
+  if (
+    !isRecord(response)
+    || response.contractVersion !== 1
+    || typeof response.reply !== 'string'
+    || !Array.isArray(response.uiActions)
+    || !response.uiActions.every(isUiAction)
+    || !Array.isArray(response.richBlocks)
+    || !response.richBlocks.every(isRichBlock)
+  ) {
+    invalidResponse();
   }
 
-  return (data ?? {}) as ClarisChatFunctionResponse;
+  return response;
 }

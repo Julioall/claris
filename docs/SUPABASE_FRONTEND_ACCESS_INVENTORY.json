@@ -3,12 +3,12 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 19,
+    "filesWithSupabaseAccess": 18,
     "totals": {
-      "clientImports": 19,
-      "from": 25,
+      "clientImports": 18,
+      "from": 24,
       "rpc": 9,
-      "functionsInvoke": 7,
+      "functionsInvoke": 6,
       "auth": 5,
       "storage": 0,
       "channel": 1
@@ -285,38 +285,6 @@
       "counts": {
         "clientImports": 1,
         "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/claris/api/chat.ts",
-      "feature": "claris",
-      "categories": [
-        "edge-function",
-        "query"
-      ],
-      "useCases": [
-        "Gerenciar conversas e sugestoes da Claris"
-      ],
-      "resources": {
-        "tables": [
-          "app_settings"
-        ],
-        "rpcs": [],
-        "functions": [
-          "claris-chat"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0901"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
         "rpc": 0,
         "functionsInvoke": 1,
         "auth": 0,

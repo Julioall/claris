@@ -403,10 +403,10 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
 
 **Objetivo:** concluir os dominios administrativos e remover acessos fora de `api`.
 
-- [ ] `SB-0901` Migrar conversas e sugestoes da Claris
+- [x] `SB-0901` Migrar conversas e sugestoes da Claris
   - Remover `fromAny`, queries em hooks e acesso direto ao historico.
   - AC: hooks usam clients tipados e nao importam Supabase.
-  - Historico e sugestoes ja foram migrados para `claris-conversations` e `claris-suggestions`; aceite/dispensa usam RPC service-only atomica e o feed nao expoe `action_payload`/`trigger_context`. Mensagens Moodle agora usam client HTTP tipado, credencial renovada no servidor e associacao de aluno limitada aos cursos acessiveis. O recorte permanece aberto apenas pelo client legado de disponibilidade/chat principal da Claris.
+  - Historico e sugestoes usam `claris-conversations` e `claris-suggestions`; aceite/dispensa usam RPC service-only atomica e o feed nao expoe `action_payload`/`trigger_context`. Mensagens Moodle usam client HTTP tipado, credencial renovada no servidor e associacao de aluno limitada aos cursos acessiveis. Disponibilidade e chat principal usam contrato V1, nao leem `app_settings` no navegador e resolvem credencial Moodle no servidor apenas durante confirmacao explicita de envio.
 
 - [ ] `SB-0902` Migrar configuracoes globais
   - Leitura e alteracao via endpoints com permissao administrativa.

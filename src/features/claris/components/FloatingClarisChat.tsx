@@ -10,7 +10,6 @@ import { cn } from '@/lib/utils';
 import { CLARIS_CONFIGURED_STORAGE_KEY } from '@/lib/claris-settings';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
-import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import {
   fetchClarisAvailability,
   invokeClarisChat,
@@ -49,7 +48,7 @@ interface DataTableBlock {
   type: 'data_table';
   tool: string;
   title: string;
-  empty_message: string;
+  emptyMessage: string;
   columns: RichColumn[];
   rows: Record<string, string>[];
 }
@@ -201,7 +200,8 @@ function parseUiActions(raw: unknown): ChatAction[] {
     const label = typeof r.label === 'string' ? r.label.trim() : '';
     const value = typeof r.value === 'string' ? r.value.trim() : '';
     const kind: ChatActionKind | null = r.kind === 'quick_reply' ? 'quick_reply' : null;
-    const jobId = typeof r.job_id === 'string' && r.job_id.trim().length > 0 ? r.job_id.trim() : undefined;
+    const rawJobId = r.jobId ?? r.job_id;
+    const jobId = typeof rawJobId === 'string' && rawJobId.trim().length > 0 ? rawJobId.trim() : undefined;
     if (!label || !value || !kind) continue;
     parsed.push({ id, label, value, kind, jobId });
     if (parsed.length >= 6) break;
@@ -218,7 +218,12 @@ function parseRichBlocks(raw: unknown): ChatRichBlock[] {
     if (r.type === 'data_table') {
       const columns = Array.isArray(r.columns) ? r.columns.filter((c): c is RichColumn => c !== null && typeof c === 'object' && typeof c.key === 'string' && typeof c.label === 'string') : [];
       const rows = Array.isArray(r.rows) ? r.rows.filter((row): row is Record<string, string> => row !== null && typeof row === 'object' && !Array.isArray(row)) : [];
-      result.push({ type: 'data_table', tool: typeof r.tool === 'string' ? r.tool : '', title: typeof r.title === 'string' ? r.title : '', empty_message: typeof r.empty_message === 'string' ? r.empty_message : 'Nenhum resultado.', columns, rows });
+      const emptyMessage = typeof r.emptyMessage === 'string'
+        ? r.emptyMessage
+        : typeof r.empty_message === 'string'
+          ? r.empty_message
+          : 'Nenhum resultado.';
+      result.push({ type: 'data_table', tool: typeof r.tool === 'string' ? r.tool : '', title: typeof r.title === 'string' ? r.title : '', emptyMessage, columns, rows });
     } else if (r.type === 'stat_cards') {
       const stats = Array.isArray(r.stats) ? r.stats.filter((s): s is StatCard => s !== null && typeof s === 'object' && typeof s.label === 'string' && typeof s.value === 'string') : [];
       result.push({ type: 'stat_cards', title: typeof r.title === 'string' ? r.title : '', stats });
@@ -253,7 +258,7 @@ function DataTableBlockView({ block }: { block: DataTableBlock }) {
     return (
       <div className="mt-2 rounded-lg border border-border/60 text-xs overflow-hidden">
         <div className="bg-muted/60 px-3 py-2 font-semibold text-foreground">{block.title}</div>
-        <div className="px-3 py-2 text-muted-foreground">{block.empty_message}</div>
+        <div className="px-3 py-2 text-muted-foreground">{block.emptyMessage}</div>
       </div>
     );
   }
@@ -377,7 +382,6 @@ export interface FloatingClarisChatProps { variant?: 'floating' | 'page'; }
 
 export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatProps) {
   const auth = useAuth() as { user?: { id: string } | null };
-  const moodleSession = useMoodleSession();
   const { isAdmin } = usePermissions();
   const navigate = useNavigate();
   const location = useLocation();
@@ -635,8 +639,6 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       const typedData = await invokeClarisChat({
         message: trimmed,
         history,
-        moodleUrl: moodleSession?.moodleUrl,
-        moodleToken: moodleSession?.moodleToken,
         action: action ? { kind: action.kind, value: action.value, jobId: action.jobId } : undefined,
       });
       const reply = typeof typedData.reply === 'string' && typedData.reply.trim().length > 0 ? typedData.reply : CLARIS_PLACEHOLDER_REPLY;

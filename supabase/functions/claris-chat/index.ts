@@ -1,147 +1,98 @@
-import { createHandler, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
-import { userHasPermission } from '../_shared/auth/mod.ts'
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="../edge-runtime.d.ts" />
+
 import { createServiceClient } from '../_shared/db/mod.ts'
-import { buildClarisSystemPrompt, selectClarisToolsForMessage } from '../_shared/claris/chat-config.ts'
-import { runClarisLoop } from '../_shared/claris/loop.ts'
+import { resolveMoodleAccess, type MoodleAccess } from '../_shared/domain/moodle-reauth/access.ts'
+import {
+  ApiError,
+  apiSuccessResponse,
+  createHandler,
+  errorResponse,
+  jsonResponse,
+} from '../_shared/http/mod.ts'
 import { parseClarisChatPayload } from './payload.ts'
+import { createClarisChatRepository } from './repository.ts'
+import { executeClarisChat } from './service.ts'
+import {
+  getClarisAvailabilityStatus,
+  shouldResolveMoodleAccess,
+  toClarisAvailabilityDto,
+  toClarisChatResponseDto,
+} from './rules.ts'
 
-type SettingsJson = {
-  provider?: string
-  model?: string
-  baseUrl?: string
-  apiKey?: string
-  customInstructions?: string
-  configured?: boolean
-}
+const supabase = createServiceClient()
+const repository = createClarisChatRepository(supabase)
 
-const DEFAULT_PROVIDER = 'openai'
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
+Deno.serve(createHandler(async ({ body, correlationId, logger, user }) => {
+  const settings = await repository.readSettings()
 
-const asObject = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? value as Record<string, unknown>
-    : {}
-
-const asTrimmedString = (value: unknown): string =>
-  typeof value === 'string' ? value.trim() : ''
-
-const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '')
-
-// Cache only confirmed, usable settings. Caching an empty setup makes a freshly
-// saved Claris IA configuration look unavailable until the Edge isolate restarts.
-let _settingsCache: { value: SettingsJson; expiresAt: number } | null = null
-const SETTINGS_CACHE_TTL_MS = 30 * 1000
-
-const shouldCacheSettings = (settings: SettingsJson): boolean =>
-  Boolean(settings.configured) &&
-  Boolean(settings.model) &&
-  Boolean(settings.baseUrl) &&
-  Boolean(settings.apiKey)
-
-async function readStoredSettings(): Promise<SettingsJson> {
-  const now = Date.now()
-  if (_settingsCache && now < _settingsCache.expiresAt) {
-    return _settingsCache.value
+  if (body.operation === 'get_availability') {
+    return apiSuccessResponse(toClarisAvailabilityDto(settings), correlationId)
   }
 
-  const supabase = createServiceClient()
-  const { data, error } = await supabase
-    .from('app_settings')
-    .select('claris_llm_settings')
-    .eq('singleton_id', 'global')
-    .maybeSingle()
-
-  if (error || !data) return {}
-
-  const rawSettings = asObject(data.claris_llm_settings)
-
-  const settings: SettingsJson = {
-    provider: asTrimmedString(rawSettings.provider),
-    model: asTrimmedString(rawSettings.model),
-    baseUrl: asTrimmedString(rawSettings.baseUrl),
-    apiKey: asTrimmedString(rawSettings.apiKey),
-    customInstructions: typeof rawSettings.customInstructions === 'string' ? rawSettings.customInstructions.trim() : '',
-    configured: Boolean(rawSettings.configured),
-  }
-
-  _settingsCache = shouldCacheSettings(settings)
-    ? { value: settings, expiresAt: now + SETTINGS_CACHE_TTL_MS }
-    : null
-  return settings
-}
-
-Deno.serve(createHandler(async ({ body, user }) => {
-  const supabase = createServiceClient()
-  const canUseClaris = await userHasPermission(supabase, user.id, 'claris.view')
-
-  if (!canUseClaris) {
-    return errorResponse('Permission denied for Claris IA.', 403)
-  }
-
-  const storedSettings = await readStoredSettings()
-
-  const provider = (storedSettings.provider || DEFAULT_PROVIDER).toLowerCase()
-  const model = storedSettings.model || ''
-  const baseUrl = normalizeBaseUrl(storedSettings.baseUrl || DEFAULT_BASE_URL)
-  const apiKey = storedSettings.apiKey || ''
-
-  const isConfigured = Boolean(storedSettings.configured) && Boolean(model) && Boolean(baseUrl) && Boolean(apiKey)
-
-  if (!isConfigured) {
+  const availability = getClarisAvailabilityStatus(settings)
+  if (availability !== 'ready') {
+    if (body.requestVersion === 'v1') {
+      throw ApiError.conflict('Claris IA not configured globally.', { availability })
+    }
     return errorResponse('Claris IA not configured globally.', 400)
   }
 
-  const userMessage = body.action?.value?.trim() || body.message
-  const activeTools = selectClarisToolsForMessage({
-    latestUserMessage: userMessage,
-    history: body.history,
-    actionKind: body.action?.kind,
-    actionJobId: body.action?.jobId,
-  })
-
-  const messages = [
-    { role: 'system' as const, content: buildClarisSystemPrompt(activeTools, storedSettings.customInstructions) },
-    ...body.history.map(({ role, content }) => ({ role, content })),
-    { role: 'user' as const, content: userMessage },
-  ]
+  let moodleAccess: MoodleAccess | undefined
+  if (body.requestVersion === 'legacy' && body.moodleUrl && body.moodleToken) {
+    moodleAccess = { moodleUrl: body.moodleUrl, token: body.moodleToken }
+  } else if (body.requestVersion === 'v1' && shouldResolveMoodleAccess(body)) {
+    try {
+      moodleAccess = await resolveMoodleAccess(supabase, user.id)
+    } catch {
+      logger.info('moodle_access_unavailable', { actorId: user.id })
+    }
+  }
 
   try {
-    const { reply, latencyMs, uiActions, richBlocks } = await runClarisLoop(
-      { model, baseUrl, apiKey, provider },
-      messages,
-      user.id,
-      {
-        latestUserMessage: userMessage,
-        moodleUrl: body.moodleUrl,
-        moodleToken: body.moodleToken,
-        actionKind: body.action?.kind,
-        actionJobId: body.action?.jobId,
-      },
-      120000,
-      activeTools,
-    )
-
-    if (!reply) {
+    const result = await executeClarisChat(settings, body, user.id, moodleAccess)
+    if (!result.reply) {
+      if (body.requestVersion === 'v1') {
+        throw new ApiError('upstream_empty_response', 'LLM returned an empty response.', 502)
+      }
       return errorResponse('LLM returned an empty response.', 502)
+    }
+
+    if (body.requestVersion === 'v1') {
+      return apiSuccessResponse(toClarisChatResponseDto(result), correlationId)
     }
 
     return jsonResponse({
       success: true,
-      provider,
-      model,
-      latencyMs,
-      reply,
-      uiActions,
-      richBlocks,
+      provider: result.provider,
+      model: result.model,
+      latencyMs: result.latencyMs,
+      reply: result.reply,
+      uiActions: result.uiActions,
+      richBlocks: result.richBlocks,
     })
   } catch (error) {
+    if (error instanceof ApiError) throw error
+
     if (error instanceof Error && error.name === 'AbortError') {
+      if (body.requestVersion === 'v1') {
+        throw new ApiError('upstream_timeout', 'LLM chat request timeout.', 408)
+      }
       return errorResponse('LLM chat request timeout.', 408)
     }
 
+    if (body.requestVersion === 'v1') {
+      logger.error('claris_chat_upstream_error', error)
+      throw new ApiError('upstream_error', 'LLM chat request failed.', 502)
+    }
     return errorResponse(
       error instanceof Error ? `LLM chat request failed: ${error.message}` : 'LLM chat request failed.',
       500,
     )
   }
-}, { requireAuth: true, parseBody: parseClarisChatPayload }))
+}, {
+  authorize: ({ user }) => repository.userCanUseClaris(user.id),
+  maxBodyBytes: 128 * 1024,
+  parseBody: parseClarisChatPayload,
+  requireAuth: true,
+}))

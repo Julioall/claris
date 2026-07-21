@@ -16,7 +16,6 @@ vi.mock('@/components/ui/scroll-area', () => ({
 
 const invokeMock = vi.fn();
 const invokeEdgeFunctionMock = vi.fn();
-const fromMock = vi.fn();
 const usePermissionsMock = vi.fn();
 const WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
 let clarisAvailabilityState: 'ready' | 'not_configured' | 'invalid' = 'not_configured';
@@ -30,15 +29,6 @@ let conversationsStore: Array<{
   created_at: string;
 }> = [];
 
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: {
-      invoke: (...args: unknown[]) => invokeMock(...args),
-    },
-    from: (...args: unknown[]) => fromMock(...args),
-  },
-}));
-
 vi.mock('@/integrations/http/edge-function-client', () => ({
   invokeEdgeFunction: (...args: unknown[]) => invokeEdgeFunctionMock(...args),
 }));
@@ -46,13 +36,6 @@ vi.mock('@/integrations/http/edge-function-client', () => ({
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 'user-1' },
-  }),
-}));
-
-vi.mock('@/features/auth/context/MoodleSessionContext', () => ({
-  useMoodleSession: () => ({
-    moodleUrl: 'https://moodle.example.com',
-    moodleToken: 'token-123',
   }),
 }));
 
@@ -70,7 +53,6 @@ const HISTORY_STORAGE_KEY = 'claris_chat_history:user-1';
 beforeEach(() => {
   invokeMock.mockReset();
   invokeEdgeFunctionMock.mockReset();
-  fromMock.mockReset();
   localStorage.clear();
   clarisAvailabilityState = 'not_configured';
   usePermissionsMock.mockReturnValue({
@@ -85,6 +67,37 @@ beforeEach(() => {
     functionName: string,
     options: { body: Record<string, unknown> },
   ) => {
+    if (functionName === 'claris-chat') {
+      if (options.body.operation === 'get_availability') {
+        return { contractVersion: 1, status: clarisAvailabilityState };
+      }
+
+      const result = await invokeMock(functionName, options) as {
+        data?: {
+          reply?: string;
+          richBlocks?: Array<Record<string, unknown>>;
+          uiActions?: Array<Record<string, unknown>>;
+        };
+      } | undefined;
+      const data = result?.data ?? {};
+      return {
+        contractVersion: 1,
+        reply: data.reply ?? '',
+        uiActions: (data.uiActions ?? []).map((action) => ({
+          ...action,
+          jobId: typeof action.job_id === 'string' ? action.job_id : null,
+        })),
+        richBlocks: (data.richBlocks ?? []).map((block) => block.type === 'data_table'
+          ? {
+              ...block,
+              emptyMessage: typeof block.empty_message === 'string'
+                ? block.empty_message
+                : block.emptyMessage,
+            }
+          : block),
+      };
+    }
+
     if (functionName !== 'claris-conversations') {
       throw new Error(`Unexpected Edge Function: ${functionName}`);
     }
@@ -142,44 +155,6 @@ beforeEach(() => {
     throw new Error(`Unexpected action: ${String(body.action)}`);
   });
 
-  fromMock.mockImplementation((table: string) => {
-    if (table === 'app_settings') {
-      return {
-        select: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({
-              data: {
-                singleton_id: 'global',
-                moodle_connection_url: 'https://moodle.example.com',
-                moodle_connection_service: 'moodle_mobile_app',
-                risk_threshold_days: { atencao: 7, risco: 14, critico: 30 },
-                claris_llm_settings: clarisAvailabilityState === 'ready'
-                  ? {
-                      provider: 'openai',
-                      model: 'gpt-4o-mini',
-                      baseUrl: 'https://api.openai.com/v1',
-                      apiKey: 'sk-test',
-                      configured: true,
-                    }
-                  : clarisAvailabilityState === 'invalid'
-                    ? {
-                        provider: 'openai',
-                        model: '',
-                        baseUrl: 'https://api.openai.com/v1',
-                        apiKey: '',
-                        configured: true,
-                      }
-                    : {},
-              },
-              error: null,
-            }),
-          }),
-        }),
-      };
-    }
-
-    throw new Error(`Unexpected table: ${table}`);
-  });
 });
 
 function renderFloatingClarisChat() {
@@ -275,12 +250,11 @@ describe('FloatingClarisChat', () => {
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith('claris-chat', {
         body: {
+          operation: 'send_message',
           message: 'Tudo certo?',
           history: [],
-          moodleUrl: 'https://moodle.example.com',
-          moodleToken: 'token-123',
-          action: undefined,
         },
+        timeoutMs: 125_000,
       });
     });
 
@@ -383,19 +357,19 @@ describe('FloatingClarisChat', () => {
     await waitFor(() => {
       expect(invokeMock).toHaveBeenNthCalledWith(2, 'claris-chat', {
         body: {
+          operation: 'send_message',
           message: 'Confirmo o envio do job job-123.',
           history: [
             { role: 'user', content: 'Enviar lembrete para Steffany' },
             { role: 'assistant', content: 'Prévia pronta. Deseja confirmar o envio?' },
           ],
-          moodleUrl: 'https://moodle.example.com',
-          moodleToken: 'token-123',
           action: {
             kind: 'quick_reply',
             value: 'Confirmo o envio do job job-123.',
             jobId: 'job-123',
           },
         },
+        timeoutMs: 125_000,
       });
     });
 

@@ -778,6 +778,7 @@ async function runUnauthenticatedContractChecks(status) {
     ['activity-feed', { action: 'list', limit: 20 }],
     ['claris-conversations', { action: 'list', limit: 30 }],
     ['claris-suggestions', { action: 'list_pending', limit: 10 }],
+    ['claris-chat', { operation: 'get_availability' }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -797,6 +798,18 @@ async function runUnauthenticatedContractChecks(status) {
   assertV1Response(whatsappPersistencePayload, {
     code: 'validation_failed',
     correlationId: 'smoke-v1-whatsapp-persistence-field',
+    status: 422,
+  })
+
+  const clarisCredentialPayload = await callV1EdgeFunction(
+    status,
+    'claris-chat',
+    { operation: 'send_message', message: 'Oi', history: [], moodleToken: 'browser-token' },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-claris-browser-credential' },
+  )
+  assertV1Response(clarisCredentialPayload, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-claris-browser-credential',
     status: 422,
   })
 
@@ -3053,6 +3066,32 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
   if (typeof settings.data?.data?.preferenceEnabled !== 'boolean') {
     fail(`moodle-reauth-settings retornou DTO invalido: ${JSON.stringify(settings.data)}`)
   }
+
+  const clarisAvailability = await callV1EdgeFunction(
+    status,
+    'claris-chat',
+    { operation: 'get_availability' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-claris-availability',
+    },
+  )
+  assertV1Response(clarisAvailability, {
+    correlationId: 'smoke-v1-claris-availability',
+    status: 200,
+  })
+  const availabilityDto = clarisAvailability.data?.data
+  if (
+    availabilityDto?.contractVersion !== 1
+    || !['ready', 'not_configured', 'invalid'].includes(availabilityDto.status)
+    || Object.keys(availabilityDto).some((key) => (
+      ['apiKey', 'baseUrl', 'model', 'provider', 'customInstructions'].includes(key)
+    ))
+  ) {
+    fail(`claris-chat availability retornou DTO inseguro: ${JSON.stringify(availabilityDto)}`)
+  }
+  log('Disponibilidade da Claris validada sem expor configuracao ou segredo do provedor.')
 
   await runClarisConversationChecks(status, accessToken, authUserId)
   await runClarisSuggestionChecks(status, accessToken, authUserId)

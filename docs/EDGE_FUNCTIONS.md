@@ -181,11 +181,11 @@ Antes de publicar mudancas em functions ou migrations:
 3. atualizar [SUPABASE_RLS.md](./SUPABASE_RLS.md) se houve mudanca de policy
 4. manter contratos do payload versionados quando uma function for consumida por mais de um cliente
 
-O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas, listagem segura de instancias WhatsApp, historico actor-scoped da Claris, sugestoes atomicas com rollback/retry e a fronteira de sync/jobs (preferencias, risco, polling, feed, autorizacao admin e cancelamento condicional).
+O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas, listagem segura de instancias WhatsApp, historico actor-scoped da Claris, sugestoes atomicas com rollback/retry, disponibilidade sem segredo de provedor e a fronteira de sync/jobs (preferencias, risco, polling, feed, autorizacao admin e cancelamento condicional).
 
 ## Functions chave
 
-- `claris-chat`: loop de IA e ferramentas da Claris
+- `claris-chat`: disponibilidade publica ao ator e loop de IA em DTO V1; configuracao do provedor e credenciais Moodle permanecem no backend
 - `claris-conversations`: CRUD actor-scoped do historico da Claris, com DTO V1 e identidade derivada do token
 - `claris-suggestions`: lista o feed actor-scoped e aceita/dispensa sugestoes em uma transacao que tambem cria tarefa/evento e cooldown
 - `generate-proactive-suggestions`: executa os motores proativos e oferece DTO V1 para o client HTTP, preservando temporariamente o contrato legado
