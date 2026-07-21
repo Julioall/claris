@@ -408,10 +408,11 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
   - AC: hooks usam clients tipados e nao importam Supabase.
   - Historico e sugestoes usam `claris-conversations` e `claris-suggestions`; aceite/dispensa usam RPC service-only atomica e o feed nao expoe `action_payload`/`trigger_context`. Mensagens Moodle usam client HTTP tipado, credencial renovada no servidor e associacao de aluno limitada aos cursos acessiveis. Disponibilidade e chat principal usam contrato V1, nao leem `app_settings` no navegador e resolvem credencial Moodle no servidor apenas durante confirmacao explicita de envio.
 
-- [ ] `SB-0902` Migrar configuracoes globais
+- [x] `SB-0902` Migrar configuracoes globais
   - Leitura e alteracao via endpoints com permissao administrativa.
   - Separar configuracoes publicas, privadas e segredos.
   - AC: frontend nunca recebe credenciais de provedores.
+  - `app-settings` oferece DTO publico autenticado e DTO administrativo autorizado; gravacoes de risco, Claris e correcao com IA sao validadas no backend. A chave do provedor e preservada no servidor quando omitida, a resposta expoe apenas `apiKeyConfigured` e o browser perdeu todos os grants diretos sobre `app_settings`. O teste de conexao tambem usa contrato V1 estrito e nao devolve configuracao ou resposta do provedor.
 
 - [ ] `SB-0903` Migrar suporte e metricas administrativas
   - Tickets, logs, contagens e resolucao de erros.

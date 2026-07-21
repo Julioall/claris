@@ -34,6 +34,7 @@ const DEFAULT_FUNCTIONS = [
   'generate-proactive-suggestions',
   'process-scheduled-messages',
   'task-tag-suggestions',
+  'app-settings',
   'claris-llm-test',
   'claris-chat',
   'claris-conversations',

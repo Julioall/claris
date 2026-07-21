@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Bot, HelpCircle, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -116,7 +116,6 @@ export default function AdminConfiguracoes() {
   const [isSavingClaris, setIsSavingClaris] = useState(false);
   const [isTestingClaris, setIsTestingClaris] = useState(false);
   const [selectedClarisModelPreset, setSelectedClarisModelPreset] = useState<string>(CUSTOM_MODEL_PRESET_ID);
-  const storedClarisApiKeyRef = useRef('');
   const [aiGradingSettings, setAiGradingSettings] = useState<AiGradingSettings>(DEFAULT_AI_GRADING_SETTINGS);
   const [isSavingAiGrading, setIsSavingAiGrading] = useState(false);
   const clarisModelPresetsForProvider = CLARIS_LLM_MODEL_PRESETS.filter((preset) => (
@@ -132,9 +131,16 @@ export default function AdminConfiguracoes() {
         const normalized = normalizeRiskThresholdDays(data.riskThresholdDays);
         setRiskThresholdDays(normalized);
         setLastSavedRiskThresholdDays(normalized);
-        storedClarisApiKeyRef.current = data.clarisSettings.apiKey;
-        setHasStoredClarisApiKey(data.clarisSettings.apiKey.trim().length > 0);
-        setClarisSettings({ ...data.clarisSettings, apiKey: '' });
+        setHasStoredClarisApiKey(data.clarisSettings.apiKeyConfigured);
+        setClarisSettings({
+          provider: data.clarisSettings.provider,
+          model: data.clarisSettings.model,
+          baseUrl: data.clarisSettings.baseUrl,
+          apiKey: '',
+          customInstructions: data.clarisSettings.customInstructions,
+          configured: data.clarisSettings.configured,
+          updatedAt: data.clarisSettings.updatedAt ?? undefined,
+        });
         const matchedPreset = findClarisModelPresetBySettings(data.clarisSettings);
         setSelectedClarisModelPreset(matchedPreset?.id ?? CUSTOM_MODEL_PRESET_ID);
         setAiGradingSettings(data.aiGradingSettings);
@@ -142,7 +148,6 @@ export default function AdminConfiguracoes() {
       } catch {
         setRiskThresholdDays(DEFAULT_GLOBAL_APP_SETTINGS.riskThresholdDays);
         setLastSavedRiskThresholdDays(DEFAULT_GLOBAL_APP_SETTINGS.riskThresholdDays);
-        storedClarisApiKeyRef.current = '';
         setHasStoredClarisApiKey(false);
         setClarisSettings(DEFAULT_CLARIS_LLM_SETTINGS);
         setSelectedClarisModelPreset(CUSTOM_MODEL_PRESET_ID);
@@ -248,10 +253,9 @@ export default function AdminConfiguracoes() {
     }
     setIsSavingRisk(true);
     try {
-      const { error } = await saveRiskThresholdSettings(normalized);
-      if (error) throw error;
-      setLastSavedRiskThresholdDays(normalized);
-      setRiskThresholdDays(normalized);
+      const saved = await saveRiskThresholdSettings(normalized);
+      setLastSavedRiskThresholdDays(saved.riskThresholdDays);
+      setRiskThresholdDays(saved.riskThresholdDays);
       toast({ title: 'Configuracoes de risco salvas', description: 'Parametros de risco atualizados com sucesso.' });
     } catch {
       toast({ title: 'Erro ao salvar', description: 'Nao foi possivel salvar os parametros de risco.', variant: 'destructive' });
@@ -261,41 +265,33 @@ export default function AdminConfiguracoes() {
   };
 
   const saveClarisSettings = async () => {
-    const effectiveApiKey = clarisSettings.apiKey.trim().length > 0
-      ? clarisSettings.apiKey.trim()
-      : storedClarisApiKeyRef.current;
-
+    const replacementApiKey = clarisSettings.apiKey.trim();
     const payload = {
       provider: clarisSettings.provider.trim() || DEFAULT_CLARIS_LLM_SETTINGS.provider,
       model: clarisSettings.model.trim(),
       baseUrl: normalizeBaseUrl(clarisSettings.baseUrl),
-      apiKey: effectiveApiKey,
       customInstructions: clarisSettings.customInstructions.trim(),
-      configured: isClarisSettingsConfigured({
-        provider: clarisSettings.provider,
-        model: clarisSettings.model,
-        baseUrl: clarisSettings.baseUrl,
-        apiKey: effectiveApiKey,
-      }),
-      updatedAt: new Date().toISOString(),
+      ...(replacementApiKey ? { apiKey: replacementApiKey } : {}),
     };
 
     setIsSavingClaris(true);
     try {
-      const { error } = await saveClarisConnectionSettings(payload);
-      if (error) throw error;
-      storedClarisApiKeyRef.current = effectiveApiKey;
-      setHasStoredClarisApiKey(effectiveApiKey.length > 0);
-      setClarisSettings(prev => ({
-        ...prev,
+      const saved = await saveClarisConnectionSettings(payload);
+      const savedClaris = saved.clarisSettings;
+      setHasStoredClarisApiKey(savedClaris.apiKeyConfigured);
+      setClarisSettings({
+        provider: savedClaris.provider,
+        model: savedClaris.model,
+        baseUrl: savedClaris.baseUrl,
         apiKey: '',
-        customInstructions: payload.customInstructions,
-        configured: payload.configured,
-      }));
-      localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(payload.configured));
+        customInstructions: savedClaris.customInstructions,
+        configured: savedClaris.configured,
+        updatedAt: savedClaris.updatedAt ?? undefined,
+      });
+      localStorage.setItem(CLARIS_CONFIGURED_STORAGE_KEY, String(savedClaris.configured));
       toast({
         title: 'Configuracao da Claris IA salva',
-        description: payload.configured
+        description: savedClaris.configured
           ? 'Conexao global registrada para todos os usuarios.'
           : 'Dados globais salvos. Complete os campos para ativar a Claris IA.',
       });
@@ -311,9 +307,8 @@ export default function AdminConfiguracoes() {
 
     setIsSavingAiGrading(true);
     try {
-      const { error } = await saveAiGradingSettings(normalized);
-      if (error) throw error;
-      setAiGradingSettings(normalized);
+      const saved = await saveAiGradingSettings(normalized);
+      setAiGradingSettings(saved.aiGradingSettings);
       toast({
         title: 'Correcao com IA salva',
         description: 'As configuracoes operacionais da sugestao de notas foram atualizadas.',
@@ -330,25 +325,28 @@ export default function AdminConfiguracoes() {
   };
 
   const testClarisConnection = async () => {
-    const effectiveApiKey = clarisSettings.apiKey.trim().length > 0
-      ? clarisSettings.apiKey.trim()
-      : storedClarisApiKeyRef.current;
+    const replacementApiKey = clarisSettings.apiKey.trim();
+    const keyAvailable = replacementApiKey.length > 0 || hasStoredClarisApiKey;
 
-    if (!isClarisSettingsConfigured({ provider: clarisSettings.provider, model: clarisSettings.model, baseUrl: clarisSettings.baseUrl, apiKey: effectiveApiKey })) {
+    if (!isClarisSettingsConfigured({
+      provider: clarisSettings.provider,
+      model: clarisSettings.model,
+      baseUrl: clarisSettings.baseUrl,
+      apiKey: keyAvailable ? 'server-managed-key' : '',
+    })) {
       toast({ title: 'Dados incompletos para teste', description: 'Preencha provider, modelo, base URL e chave API para testar.', variant: 'destructive' });
       return;
     }
 
     setIsTestingClaris(true);
     try {
-      const { data, error } = await testClarisLLM({
+      const data = await testClarisLLM({
         provider: clarisSettings.provider,
         model: clarisSettings.model,
         baseUrl: clarisSettings.baseUrl,
-        apiKey: effectiveApiKey,
+        ...(replacementApiKey ? { apiKey: replacementApiKey } : {}),
       });
-      if (error) throw error;
-      const latencyLabel = typeof data?.latencyMs === 'number' ? ` (${Math.round(data.latencyMs)} ms)` : '';
+      const latencyLabel = ` (${Math.round(data.latencyMs)} ms)`;
       toast({ title: 'Conexao validada', description: `Conexao com o provedor LLM validada com sucesso${latencyLabel}.` });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Nao foi possivel testar a conexao com o provedor LLM.';

@@ -3,12 +3,12 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 18,
+    "filesWithSupabaseAccess": 15,
     "totals": {
-      "clientImports": 18,
-      "from": 24,
+      "clientImports": 15,
+      "from": 20,
       "rpc": 9,
-      "functionsInvoke": 6,
+      "functionsInvoke": 5,
       "auth": 5,
       "storage": 0,
       "channel": 1
@@ -173,40 +173,6 @@
       }
     },
     {
-      "file": "src/features/admin/api/settings.ts",
-      "feature": "admin",
-      "categories": [
-        "command",
-        "edge-function"
-      ],
-      "useCases": [
-        "Gerenciar configuracoes globais",
-        "Executar ferramentas administrativas e diagnosticos"
-      ],
-      "resources": {
-        "tables": [
-          "app_settings"
-        ],
-        "rpcs": [],
-        "functions": [
-          "claris-llm-test"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0902",
-        "SB-0906"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 4,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/admin/api/support.ts",
       "feature": "admin",
       "categories": [
@@ -229,33 +195,6 @@
       "counts": {
         "clientImports": 1,
         "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/auth/api/login.ts",
-      "feature": "auth",
-      "categories": [
-        "legacy"
-      ],
-      "useCases": [
-        "Encapsular sessao e autenticacao no AuthGateway"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0202"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
         "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
@@ -346,33 +285,6 @@
         "from": 0,
         "rpc": 0,
         "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/settings/api/globalSettings.ts",
-      "feature": "settings",
-      "categories": [
-        "legacy"
-      ],
-      "useCases": [
-        "Gerenciar configuracoes globais"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0902"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,
         "channel": 0

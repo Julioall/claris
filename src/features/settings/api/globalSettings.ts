@@ -1,6 +1,10 @@
-import { supabase } from '@/integrations/supabase/client';
-import { fetchGlobalAppSettings } from '@/lib/global-app-settings';
+import { invokeEdgeFunction } from '@/integrations/http/edge-function-client';
+
+import { parsePublicAppSettingsDto } from './mappers/app-settings.mapper';
 
 export async function fetchGlobalSettings() {
-  return fetchGlobalAppSettings(supabase);
+  const response = await invokeEdgeFunction<unknown>('app-settings', {
+    body: { action: 'get_public' },
+  });
+  return parsePublicAppSettingsDto(response);
 }

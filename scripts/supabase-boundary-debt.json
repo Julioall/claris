@@ -63,34 +63,10 @@
       }
     },
     {
-      "path": "src/features/admin/api/settings.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 4,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/admin/api/support.ts",
       "counts": {
         "clientImports": 1,
         "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/auth/api/login.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
         "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
@@ -129,18 +105,6 @@
         "from": 0,
         "rpc": 0,
         "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/settings/api/globalSettings.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,
         "channel": 0

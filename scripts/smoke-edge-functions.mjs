@@ -779,6 +779,7 @@ async function runUnauthenticatedContractChecks(status) {
     ['claris-conversations', { action: 'list', limit: 30 }],
     ['claris-suggestions', { action: 'list_pending', limit: 10 }],
     ['claris-chat', { operation: 'get_availability' }],
+    ['app-settings', { action: 'get_public' }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -810,6 +811,30 @@ async function runUnauthenticatedContractChecks(status) {
   assertV1Response(clarisCredentialPayload, {
     code: 'validation_failed',
     correlationId: 'smoke-v1-claris-browser-credential',
+    status: 422,
+  })
+
+  const appSettingsIdentityPayload = await callV1EdgeFunction(
+    status,
+    'app-settings',
+    { action: 'get_admin', userId: 'browser-controlled' },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-app-settings-identity' },
+  )
+  assertV1Response(appSettingsIdentityPayload, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-app-settings-identity',
+    status: 422,
+  })
+
+  const clarisTestIdentityPayload = await callV1EdgeFunction(
+    status,
+    'claris-llm-test',
+    { action: 'test_connection', userId: 'browser-controlled' },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-claris-test-identity' },
+  )
+  assertV1Response(clarisTestIdentityPayload, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-claris-test-identity',
     status: 422,
   })
 
@@ -873,7 +898,8 @@ function runCourseManagementGrantChecks() {
           ('background_job_items'::TEXT),
           ('background_job_events'::TEXT),
           ('activity_feed'::TEXT),
-          ('user_sync_preferences'::TEXT)
+          ('user_sync_preferences'::TEXT),
+          ('app_settings'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -902,7 +928,8 @@ function runCourseManagementGrantChecks() {
           ('public.backend_list_tasks_page(uuid,text,text,date,date,boolean,text,integer,integer)'::TEXT),
           ('public.backend_add_task_tag(uuid,uuid,text,text,text,text)'::TEXT),
           ('public.backend_act_on_claris_suggestion(uuid,uuid,text)'::TEXT),
-          ('public.backend_seed_message_templates(uuid,jsonb)'::TEXT)
+          ('public.backend_seed_message_templates(uuid,jsonb)'::TEXT),
+          ('public.backend_update_claris_llm_settings(text,text,text,text,text)'::TEXT)
       )
     SELECT json_build_object(
       'browserTableGrants', COALESCE((
@@ -3051,7 +3078,159 @@ async function runClarisSuggestionChecks(status, accessToken, authUserId) {
   log('Sugestoes da Claris validadas com DTO V1 e aceite/dispensa atomicos actor-scoped.')
 }
 
+async function runAppSettingsChecks(status, accessToken, authUserId) {
+  const publicSettings = await callV1EdgeFunction(
+    status,
+    'app-settings',
+    { action: 'get_public' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-app-settings-public',
+    },
+  )
+  assertV1Response(publicSettings, {
+    correlationId: 'smoke-v1-app-settings-public',
+    status: 200,
+  })
+  const publicDto = publicSettings.data?.data
+  if (
+    publicDto?.contractVersion !== 1
+    || typeof publicDto.moodleConnectionUrl !== 'string'
+    || typeof publicDto.moodleConnectionService !== 'string'
+    || Object.keys(publicDto).some((key) => ![
+      'contractVersion',
+      'moodleConnectionUrl',
+      'moodleConnectionService',
+    ].includes(key))
+  ) {
+    fail(`app-settings retornou DTO publico inseguro: ${JSON.stringify(publicDto)}`)
+  }
+
+  const forbiddenAdmin = await callV1EdgeFunction(
+    status,
+    'app-settings',
+    { action: 'get_admin' },
+    {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-app-settings-admin-forbidden',
+    },
+  )
+  assertV1Response(forbiddenAdmin, {
+    code: 'forbidden',
+    correlationId: 'smoke-v1-app-settings-admin-forbidden',
+    status: 403,
+  })
+
+  await requestJson(`${status.REST_URL}/app_settings?select=*`, {
+    acceptStatuses: [401, 403],
+    headers: publishableHeaders(status, accessToken),
+  })
+
+  await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+  await upsertRows(status, 'admin_user_roles', 'user_id', {
+    user_id: authUserId,
+    role: 'admin',
+    permissions: ['admin'],
+    granted_by: null,
+  })
+
+  const [originalSettingsRow] = await selectRows(status, 'app_settings', { singleton_id: 'global' })
+  const originalClarisSettings = originalSettingsRow?.claris_llm_settings ?? {}
+
+  try {
+    const adminSettings = await callV1EdgeFunction(
+      status,
+      'app-settings',
+      { action: 'get_admin' },
+      {
+        acceptStatuses: [200],
+        accessToken,
+        correlationId: 'smoke-v1-app-settings-admin',
+      },
+    )
+    assertV1Response(adminSettings, {
+      correlationId: 'smoke-v1-app-settings-admin',
+      status: 200,
+    })
+    const adminDto = adminSettings.data?.data
+    const clarisSettings = adminDto?.clarisSettings
+    if (
+      adminDto?.contractVersion !== 1
+      || typeof clarisSettings?.apiKeyConfigured !== 'boolean'
+      || Object.prototype.hasOwnProperty.call(clarisSettings ?? {}, 'apiKey')
+      || Object.keys(clarisSettings ?? {}).some((key) => ![
+        'provider',
+        'model',
+        'baseUrl',
+        'customInstructions',
+        'configured',
+        'apiKeyConfigured',
+        'updatedAt',
+      ].includes(key))
+    ) {
+      fail(`app-settings retornou DTO administrativo inseguro: ${JSON.stringify(adminDto)}`)
+    }
+
+    await upsertRows(status, 'app_settings', 'singleton_id', {
+      singleton_id: 'global',
+      claris_llm_settings: {
+        provider: 'openai',
+        model: 'gpt-5-mini',
+        baseUrl: 'https://api.openai.com/v1',
+        apiKey: 'smoke-server-secret',
+        customInstructions: '',
+        configured: true,
+      },
+    })
+
+    const updatedSettings = await callV1EdgeFunction(
+      status,
+      'app-settings',
+      {
+        action: 'update_claris',
+        settings: {
+          provider: 'openai',
+          model: 'gpt-5.4-mini',
+          baseUrl: 'https://api.openai.com/v1/',
+          customInstructions: 'Smoke sem chave no payload.',
+        },
+      },
+      {
+        acceptStatuses: [200],
+        accessToken,
+        correlationId: 'smoke-v1-app-settings-preserve-key',
+      },
+    )
+    assertV1Response(updatedSettings, {
+      correlationId: 'smoke-v1-app-settings-preserve-key',
+      status: 200,
+    })
+    const updatedDto = updatedSettings.data?.data
+    const [updatedSettingsRow] = await selectRows(status, 'app_settings', { singleton_id: 'global' })
+    if (
+      updatedDto?.clarisSettings?.apiKeyConfigured !== true
+      || Object.prototype.hasOwnProperty.call(updatedDto?.clarisSettings ?? {}, 'apiKey')
+      || updatedSettingsRow?.claris_llm_settings?.apiKey !== 'smoke-server-secret'
+      || updatedSettingsRow?.claris_llm_settings?.model !== 'gpt-5.4-mini'
+    ) {
+      fail('app-settings nao preservou atomicamente a chave ou expos o segredo no DTO.')
+    }
+  } finally {
+    await upsertRows(status, 'app_settings', 'singleton_id', {
+      singleton_id: 'global',
+      claris_llm_settings: originalClarisSettings,
+    })
+    await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+  }
+
+  log('Configuracoes globais validadas por DTO publico/admin, sem segredo e sem acesso REST do browser.')
+}
+
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
+  await runAppSettingsChecks(status, accessToken, authUserId)
+
   const settings = await callV1EdgeFunction(
     status,
     'moodle-reauth-settings',

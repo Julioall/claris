@@ -1,5 +1,4 @@
-import { supabase } from '@/integrations/supabase/client';
-import { fetchGlobalAppSettings } from '@/lib/global-app-settings';
+import { DEFAULT_MOODLE_SERVICE, DEFAULT_MOODLE_URL } from '@/lib/global-app-settings';
 
 export interface LoginDefaults {
   moodleUrl: string;
@@ -7,10 +6,8 @@ export interface LoginDefaults {
 }
 
 export async function fetchLoginDefaults(): Promise<LoginDefaults> {
-  const appSettings = await fetchGlobalAppSettings(supabase);
-
   return {
-    moodleUrl: appSettings.moodleConnectionUrl,
-    moodleService: appSettings.moodleConnectionService,
+    moodleUrl: DEFAULT_MOODLE_URL,
+    moodleService: DEFAULT_MOODLE_SERVICE,
   };
 }

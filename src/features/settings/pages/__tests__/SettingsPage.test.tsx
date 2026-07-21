@@ -7,23 +7,12 @@ import SettingsPage from '@/features/settings/pages/SettingsPage';
 import { MESSAGE_PREFERENCES_STORAGE_KEY } from '@/features/messages/lib/message-preferences';
 
 const useAuthMock = vi.fn();
-const fromMock = vi.fn();
 const invokeMock = vi.fn();
 const logoutMock = vi.fn();
 const syncDataMock = vi.fn();
 
-const selectMock = vi.fn();
-const eqMock = vi.fn();
-const maybeSingleMock = vi.fn();
-
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
-}));
-
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
 }));
 
 vi.mock('@/integrations/http/edge-function-client', () => ({
@@ -68,21 +57,23 @@ describe('Settings page', () => {
     window.localStorage.clear();
 
     logoutMock.mockResolvedValue(undefined);
-    invokeMock.mockResolvedValue({
-      preferenceEnabled: true,
-      credentialActive: false,
-      lastError: null,
-      lastReauthAt: null,
-      requiresLogin: false,
+    invokeMock.mockImplementation(async (functionName: string) => {
+      if (functionName === 'app-settings') {
+        return {
+          contractVersion: 1,
+          moodleConnectionUrl: 'https://ead.fieg.com.br',
+          moodleConnectionService: 'moodle_mobile_app',
+        };
+      }
+      return {
+        preferenceEnabled: true,
+        credentialActive: false,
+        lastError: null,
+        lastReauthAt: null,
+        requiresLogin: false,
+      };
     });
     setAuthUser();
-
-    maybeSingleMock.mockResolvedValue({ data: null, error: null });
-    eqMock.mockReturnValue({ maybeSingle: maybeSingleMock });
-    selectMock.mockReturnValue({ eq: eqMock });
-    fromMock.mockImplementation(() => ({
-      select: selectMock,
-    }));
   });
 
   it('shows profile, theme and sync for all users', async () => {
@@ -96,7 +87,9 @@ describe('Settings page', () => {
     expect(screen.queryByRole('heading', { name: /limpeza operacional do banco/i })).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fromMock).toHaveBeenCalledWith('app_settings');
+      expect(invokeMock).toHaveBeenCalledWith('app-settings', {
+        body: { action: 'get_public' },
+      });
     });
   });
 

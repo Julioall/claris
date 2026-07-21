@@ -2,31 +2,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import AdminConfiguracoes from "@/features/admin/pages/AdminConfiguracoes";
+import { DEFAULT_AI_GRADING_SETTINGS } from "@/lib/ai-grading-settings";
 import type { ReactNode } from "react";
 
-const fromMock = vi.fn();
 const toastMock = vi.fn();
 const useAuthMock = vi.fn();
-
-const selectMock = vi.fn();
-const eqMock = vi.fn();
-const maybeSingleMock = vi.fn();
-const upsertMock = vi.fn();
-const invokeMock = vi.fn();
-const getUserMock = vi.fn();
-const signOutMock = vi.fn();
+const edgeInvokeMock = vi.fn();
+const cleanupInvokeMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
     functions: {
-      invoke: (...args: unknown[]) => invokeMock(...args),
-    },
-    auth: {
-      getUser: (...args: unknown[]) => getUserMock(...args),
-      signOut: (...args: unknown[]) => signOutMock(...args),
+      invoke: (...args: unknown[]) => cleanupInvokeMock(...args),
     },
   },
+}));
+
+vi.mock("@/integrations/http/edge-function-client", () => ({
+  invokeEdgeFunction: (...args: unknown[]) => edgeInvokeMock(...args),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -44,30 +37,69 @@ vi.mock("@/components/ui/tooltip", () => ({
 }));
 
 describe("AdminConfiguracoes page", () => {
+  const adminSettingsResponse = {
+    contractVersion: 1,
+    publicSettings: {
+      contractVersion: 1,
+      moodleConnectionUrl: "https://ead.fieg.com.br",
+      moodleConnectionService: "moodle_mobile_app",
+    },
+    riskThresholdDays: { atencao: 7, risco: 14, critico: 30 },
+    clarisSettings: {
+      provider: "openai",
+      model: "",
+      baseUrl: "https://api.openai.com/v1",
+      customInstructions: "",
+      configured: false,
+      apiKeyConfigured: false,
+      updatedAt: null,
+    },
+    aiGradingSettings: DEFAULT_AI_GRADING_SETTINGS,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
 
     useAuthMock.mockReturnValue({
       setCourses: vi.fn(),
     });
-    maybeSingleMock.mockResolvedValue({ data: null, error: null });
-    upsertMock.mockResolvedValue({ error: null });
-    invokeMock.mockResolvedValue({ data: { latencyMs: 123 }, error: null });
-    getUserMock.mockResolvedValue({ data: { user: { id: "u-1" } }, error: null });
-    signOutMock.mockResolvedValue({ error: null });
-    eqMock.mockReturnValue({ maybeSingle: maybeSingleMock });
-    selectMock.mockReturnValue({ eq: eqMock });
-    fromMock.mockImplementation(() => ({
-      select: selectMock,
-      upsert: upsertMock,
-    }));
+    edgeInvokeMock.mockImplementation(async (functionName: string, options: { body?: Record<string, unknown> }) => {
+      if (functionName === "claris-llm-test") {
+        return { contractVersion: 1, latencyMs: 123 };
+      }
+
+      const body = options.body ?? {};
+      if (body.action === "update_risk_thresholds") {
+        return { ...adminSettingsResponse, riskThresholdDays: body.riskThresholdDays };
+      }
+      if (body.action === "update_claris") {
+        const settings = body.settings as Record<string, unknown>;
+        const { apiKey, ...publicSettings } = settings;
+        return {
+          ...adminSettingsResponse,
+          clarisSettings: {
+            ...adminSettingsResponse.clarisSettings,
+            ...publicSettings,
+            apiKeyConfigured: Boolean(apiKey),
+            configured: Boolean(settings.model && settings.baseUrl && apiKey),
+            updatedAt: "2026-07-21T13:00:00.000Z",
+          },
+        };
+      }
+      if (body.action === "update_ai_grading") {
+        return { ...adminSettingsResponse, aiGradingSettings: body.settings };
+      }
+      return adminSettingsResponse;
+    });
   });
 
   it("shows admin configuration cards", async () => {
     render(<AdminConfiguracoes />);
 
     await waitFor(() => {
-      expect(fromMock).toHaveBeenCalledWith("app_settings");
+      expect(edgeInvokeMock).toHaveBeenCalledWith("app-settings", {
+        body: { action: "get_admin" },
+      });
     });
 
     expect(screen.getByRole("heading", { name: /conexao moodle/i })).toBeInTheDocument();
@@ -111,7 +143,10 @@ describe("AdminConfiguracoes page", () => {
         variant: "destructive",
       }),
     );
-    expect(upsertMock).not.toHaveBeenCalled();
+    expect(edgeInvokeMock).not.toHaveBeenCalledWith(
+      "app-settings",
+      expect.objectContaining({ body: expect.objectContaining({ action: "update_risk_thresholds" }) }),
+    );
   });
 
   it("saves risk threshold settings", async () => {
@@ -125,7 +160,12 @@ describe("AdminConfiguracoes page", () => {
     await user.click(screen.getByRole("button", { name: /salvar limiares de risco/i }));
 
     await waitFor(() => {
-      expect(upsertMock).toHaveBeenCalledTimes(1);
+      expect(edgeInvokeMock).toHaveBeenCalledWith("app-settings", {
+        body: {
+          action: "update_risk_thresholds",
+          riskThresholdDays: { atencao: 7, risco: 14, critico: 30 },
+        },
+      });
     });
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -159,10 +199,11 @@ describe("AdminConfiguracoes page", () => {
     await user.click(screen.getByRole("button", { name: /testar conexao/i }));
 
     await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith(
+      expect(edgeInvokeMock).toHaveBeenCalledWith(
         "claris-llm-test",
         expect.objectContaining({
           body: expect.objectContaining({
+            action: "test_connection",
             provider: "openai",
             model: "gpt-4o-mini",
           }),
@@ -202,15 +243,17 @@ describe("AdminConfiguracoes page", () => {
     await user.click(screen.getByRole("button", { name: /salvar claris ia/i }));
 
     await waitFor(() => {
-      expect(upsertMock).toHaveBeenCalledWith(
+      expect(edgeInvokeMock).toHaveBeenCalledWith(
+        "app-settings",
         expect.objectContaining({
-          singleton_id: "global",
-          claris_llm_settings: expect.objectContaining({
+          body: expect.objectContaining({
+            action: "update_claris",
+            settings: expect.objectContaining({
             model: "gpt-4o-mini",
             customInstructions: "Priorize proximos passos e responda de forma mais consultiva.",
           }),
         }),
-        expect.objectContaining({ onConflict: "singleton_id" }),
+        }),
       );
     });
   });
@@ -232,16 +275,18 @@ describe("AdminConfiguracoes page", () => {
     await user.click(screen.getByRole("button", { name: /salvar correcao com ia/i }));
 
     await waitFor(() => {
-      expect(upsertMock).toHaveBeenCalledWith(
+      expect(edgeInvokeMock).toHaveBeenCalledWith(
+        "app-settings",
         expect.objectContaining({
-          singleton_id: "global",
-          ai_grading_settings: expect.objectContaining({
+          body: expect.objectContaining({
+            action: "update_ai_grading",
+            settings: expect.objectContaining({
             enabled: true,
             timeoutMs: 45000,
             customInstructions: "Comece pelos pontos fortes e use linguagem mais acolhedora.",
           }),
         }),
-        expect.objectContaining({ onConflict: "singleton_id" }),
+        }),
       );
     });
 
