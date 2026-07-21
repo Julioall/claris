@@ -335,6 +335,47 @@ async function callEdgeFunction(status, functionName, body, accessToken) {
   return { data, status: response.status }
 }
 
+async function callV1EdgeFunction(status, functionName, body, {
+  accessToken,
+  acceptStatuses,
+  correlationId,
+}) {
+  return requestJson(`${status.FUNCTIONS_URL}/${functionName}`, {
+    acceptStatuses,
+    body,
+    headers: {
+      ...publishableHeaders(status, accessToken),
+      'x-claris-api-version': '1',
+      'x-correlation-id': correlationId,
+    },
+    method: 'POST',
+  })
+}
+
+function assertV1Response(result, { code, correlationId, status }) {
+  if (result.response.status !== status) {
+    fail(`Contrato V1 esperava HTTP ${status}, recebeu ${result.response.status}: ${JSON.stringify(result.data)}`)
+  }
+
+  const contentType = result.response.headers.get('content-type') || ''
+  if (!contentType.includes('application/json')) {
+    fail(`Contrato V1 retornou Content-Type inesperado: ${contentType}`)
+  }
+
+  if (result.response.headers.get('x-correlation-id') !== correlationId) {
+    fail('Contrato V1 nao propagou x-correlation-id no header.')
+  }
+
+  const bodyCorrelationId = code ? result.data?.error?.correlationId : result.data?.correlationId
+  if (bodyCorrelationId !== correlationId) {
+    fail(`Contrato V1 nao propagou correlationId no body: ${JSON.stringify(result.data)}`)
+  }
+
+  if (code && result.data?.error?.code !== code) {
+    fail(`Contrato V1 esperava erro ${code}: ${JSON.stringify(result.data)}`)
+  }
+}
+
 async function callScheduledMessageProcessor(status, body, secret) {
   const headers = {
     apikey: status.PUBLISHABLE_KEY,
@@ -484,9 +525,50 @@ async function runUnauthenticatedContractChecks(status) {
   if (failures.length > 0) {
     fail(`Falhas nos contratos HTTP sem auth: ${JSON.stringify(failures)}`)
   }
+
+  const unauthorized = await callV1EdgeFunction(
+    status,
+    'moodle-reauth-settings',
+    { action: 'get_settings' },
+    { acceptStatuses: [401], correlationId: 'smoke-v1-unauthorized' },
+  )
+  assertV1Response(unauthorized, {
+    code: 'unauthorized',
+    correlationId: 'smoke-v1-unauthorized',
+    status: 401,
+  })
+
+  const invalid = await callV1EdgeFunction(
+    status,
+    'moodle-reauth-settings',
+    { action: 'update_settings', enabled: 'invalid' },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-validation' },
+  )
+  assertV1Response(invalid, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-validation',
+    status: 422,
+  })
+
+  log('Envelope V1 validado para 401 e 422.')
 }
 
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, studentId) {
+  const settings = await callV1EdgeFunction(
+    status,
+    'moodle-reauth-settings',
+    { action: 'get_settings' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-settings',
+    },
+  )
+  assertV1Response(settings, { correlationId: 'smoke-v1-settings', status: 200 })
+  if (typeof settings.data?.data?.preferenceEnabled !== 'boolean') {
+    fail(`moodle-reauth-settings retornou DTO invalido: ${JSON.stringify(settings.data)}`)
+  }
+
   await cleanupAutomatedTaskArtifacts(status, authUserId, studentId)
 
   const firstRun = await callEdgeFunction(

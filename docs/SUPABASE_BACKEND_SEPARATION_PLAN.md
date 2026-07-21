@@ -167,10 +167,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: endpoint piloto faz mapping banco -> DTO -> view model sem cast `any/never`.
   - Implementado no piloto com contracts e mappers explicitos nos dois lados; `guard:frontend-contracts` impede novas dependencias e controla duas dividas versionadas.
 
-- [ ] `SB-0107` Criar testes de contrato
+- [x] `SB-0107` Criar testes de contrato
   - Cobrir request/response das Edge Functions e seus clients frontend.
   - Preferir fixtures pequenas e estaveis.
   - AC: alteracao incompativel de contrato quebra teste antes do deploy.
+  - Implementado com testes do runtime/backend/client e smoke V1 real cobrindo headers, envelopes, autenticacao e validacao.
 
 ## Epic 2 — Guardrails e adaptadores permitidos
 

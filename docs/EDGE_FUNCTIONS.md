@@ -179,6 +179,8 @@ Antes de publicar mudancas em functions ou migrations:
 3. atualizar [SUPABASE_RLS.md](./SUPABASE_RLS.md) se houve mudanca de policy
 4. manter contratos do payload versionados quando uma function for consumida por mais de um cliente
 
+O smoke de Edge Functions valida o piloto V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422 e leitura autenticada. Testes unitarios adicionais cobrem o runtime, payload, service, mapper e client frontend sem depender do banco.
+
 ## Functions chave
 
 - `claris-chat`: loop de IA e ferramentas da Claris
