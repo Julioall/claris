@@ -177,10 +177,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** impedir crescimento do acoplamento enquanto a migracao acontece.
 
-- [ ] `SB-0201` Endurecer `check-supabase-boundary.mjs`
+- [x] `SB-0201` Endurecer `check-supabase-boundary.mjs`
   - Bloquear import do client fora de uma allowlist explicita.
   - Bloquear `.from()` e `.rpc()` em todo `src/`, inicialmente com snapshot de divida decrescente.
   - AC: acesso novo falha no CI; remocao de acesso reduz o snapshot.
+  - Implementado com budget exato em `scripts/supabase-boundary-debt.json` e allowlist explicita apenas para adapters aprovados.
 
 - [ ] `SB-0202` Criar `AuthGateway`
   - Encapsular `getSession`, `refreshSession`, eventos e logout.

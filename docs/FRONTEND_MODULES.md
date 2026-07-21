@@ -76,6 +76,7 @@ Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-bou
   - `whatsapp`
 - A migracao dos acessos diretos existentes e incremental e esta controlada por [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md).
 - O guardrail de fronteira de dados segue em `scripts/check-supabase-boundary.mjs` (`npm run guard:supabase-boundary`) e sera ampliado conforme o legado for removido.
+- `scripts/supabase-boundary-debt.json` congela contagens exatas por arquivo: novas dependencias falham, e cada migracao deve reduzir o snapshot com `node scripts/check-supabase-boundary.mjs --write-debt` apos revisao.
 
 ## Sequencia Recomendada Para Evolucao
 
