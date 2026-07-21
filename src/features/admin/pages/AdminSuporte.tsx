@@ -2,10 +2,9 @@ import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   listSupportTickets,
-  subscribeToSupportTickets,
-  unsubscribeFromSupportTickets,
   updateSupportTicket,
 } from '../api/support';
+import { realtimeGateway } from '@/integrations/realtime/realtime-gateway';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -67,15 +66,13 @@ export default function AdminSuporte() {
 
   // Realtime subscription for new tickets
   useEffect(() => {
-    const channel = subscribeToSupportTickets(() => {
+    const stop = realtimeGateway.onSupportTicketCreated(() => {
       void queryClient.invalidateQueries({ queryKey: ['admin-support-tickets'] });
       setNewTicketCount((prev) => prev + 1);
       toast({ title: 'Novo ticket de suporte recebido!' });
     });
 
-    return () => {
-      void unsubscribeFromSupportTickets(channel);
-    };
+    return stop;
   }, [queryClient]);
 
   const { data, isLoading } = useQuery({

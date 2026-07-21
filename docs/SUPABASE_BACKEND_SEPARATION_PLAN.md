@@ -189,9 +189,10 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: apenas o gateway importa Supabase Auth diretamente.
   - Implementado em `src/integrations/auth/auth-gateway.ts`, com contrato estavel, renovacao de token, eventos, escrita de sessao e logout; o guardrail permite Auth apenas nesse adapter.
 
-- [ ] `SB-0203` Criar `RealtimeGateway`, se necessario
+- [x] `SB-0203` Criar `RealtimeGateway`, se necessario
   - Inventariar channels/subscriptions e expor eventos de dominio.
   - AC: nenhuma feature conhece nomes de canais/tabelas.
+  - Implementado para o unico channel existente: o gateway traduz INSERT de suporte em evento de dominio, controla cleanup e a migration habilita `support_tickets` na publication Realtime.
 
 - [ ] `SB-0204` Migrar telemetria
   - Substituir inserts diretos de `useTrackEvent`, `useErrorLog` e `lib/tracking` por endpoint de telemetria ou coletor apropriado.

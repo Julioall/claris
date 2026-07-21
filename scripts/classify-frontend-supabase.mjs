@@ -45,12 +45,14 @@ const destinationRules = [
   [/hooks\/usePermissions/, ['SB-0904']],
   [/integrations\/auth\/auth-gateway/, ['SB-0202', 'SB-1003']],
   [/integrations\/http\/edge-function-client/, ['SB-1002']],
+  [/integrations\/realtime\/realtime-gateway/, ['SB-0203', 'SB-1003']],
   [/lib\/course-access/, ['SB-0401']],
   [/lib\/message-template-seeding/, ['SB-0701']],
 ];
 
 const taskUseCases = {
   'SB-0202': 'Encapsular sessao e autenticacao no AuthGateway',
+  'SB-0203': 'Encapsular subscriptions Supabase no RealtimeGateway',
   'SB-0204': 'Persistir telemetria por endpoint backend',
   'SB-0205': 'Mover lookups de UI para clients de dominio',
   'SB-0302': 'Obter resumo agregado do dashboard',

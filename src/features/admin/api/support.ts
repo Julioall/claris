@@ -1,4 +1,3 @@
-import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface SupportTicketFilters {
@@ -78,19 +77,4 @@ export async function updateSupportTicket(id: string, update: SupportTicketUpdat
 
 export async function createSupportTicket(input: CreateSupportTicketInput) {
   return supabase.from('support_tickets').insert(input);
-}
-
-export function subscribeToSupportTickets(onInsert: () => void): RealtimeChannel {
-  return supabase
-    .channel('admin-support-tickets-realtime')
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'support_tickets' },
-      onInsert,
-    )
-    .subscribe();
-}
-
-export async function unsubscribeFromSupportTickets(channel: RealtimeChannel) {
-  return supabase.removeChannel(channel);
 }

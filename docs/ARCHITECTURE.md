@@ -36,10 +36,10 @@ Os slices ativos hoje incluem `auth`, `courses`, `students`, `tasks`, `agenda`, 
 
 O estado-alvo nao permite `supabase.from()` nem `supabase.rpc()` no frontend. Os slices consomem contratos HTTP independentes do schema do banco, e `api/` representa clientes desses contratos, nao repositories executados no navegador.
 
-As excecoes temporarias sao:
+As excecoes temporarias, ambas protegidas por allowlist explicita, sao:
 
-- Supabase Auth encapsulado pelo adapter do dominio de autenticacao
-- Realtime encapsulado por um gateway dedicado, sem consultas ou mutacoes no banco
+- Supabase Auth encapsulado por `src/integrations/auth/auth-gateway.ts`
+- Realtime encapsulado por `src/integrations/realtime/realtime-gateway.ts`, sem consultas ou mutacoes no banco
 
 Os acessos diretos existentes sao legado em migracao conforme [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md), e nao precedente para codigo novo. O guardrail automatizado atual fica em `scripts/check-supabase-boundary.mjs` e sera endurecido ao longo dessa migracao.
 

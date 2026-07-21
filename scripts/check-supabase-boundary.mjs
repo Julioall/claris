@@ -28,6 +28,15 @@ const permanentAdapters = new Map([
     storage: 0,
     channel: 0,
   }],
+  ['src/integrations/realtime/realtime-gateway.ts', {
+    clientImports: 1,
+    from: 0,
+    rpc: 0,
+    functionsInvoke: 0,
+    auth: 0,
+    storage: 0,
+    channel: 1,
+  }],
 ]);
 
 function normalizeCounts(counts) {
