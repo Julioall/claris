@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { listAdminLogs, resolveAdminLog } from '../api/logs';
+import type { AdminErrorLogDto } from '../api/contracts/admin-observability.contract';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -12,19 +13,6 @@ import { ptBR } from 'date-fns/locale';
 import { Search, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { exportToCsv } from '@/lib/csv';
-
-interface ErrorLog {
-  id: string;
-  user_id: string | null;
-  severity: string;
-  category: string;
-  message: string;
-  payload: Record<string, unknown>;
-  context: Record<string, unknown>;
-  resolved: boolean;
-  resolved_at: string | null;
-  created_at: string;
-}
 
 const SEVERITY_COLORS: Record<string, string> = {
   info: 'bg-blue-100 text-blue-800',
@@ -66,15 +54,12 @@ export default function AdminLogsErros() {
     },
   });
 
-  const logs = (data?.items ?? []) as ErrorLog[];
+  const logs: AdminErrorLogDto[] = data?.items ?? [];
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const resolveMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await resolveAdminLog(id);
-      if (error) throw error;
-    },
+    mutationFn: resolveAdminLog,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-error-logs'] });
       toast({ title: 'Erro marcado como resolvido' });
@@ -86,13 +71,13 @@ export default function AdminLogsErros() {
       `logs-erros-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`,
       logs.map((l) => ({
         id: l.id,
-        user_id: l.user_id ?? '',
+        user_id: l.userId ?? '',
         severity: l.severity,
         category: l.category,
         message: l.message,
         resolved: String(l.resolved),
-        resolved_at: l.resolved_at ?? '',
-        created_at: l.created_at,
+        resolved_at: l.resolvedAt ?? '',
+        created_at: l.createdAt,
       })),
     );
   };
@@ -219,7 +204,7 @@ export default function AdminLogsErros() {
                       <TableCell className="text-sm text-muted-foreground">{log.category}</TableCell>
                       <TableCell className="text-sm max-w-xs truncate">{log.message}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {format(new Date(log.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                        {format(new Date(log.createdAt), "dd/MM/yy HH:mm", { locale: ptBR })}
                       </TableCell>
                       <TableCell>
                         <Badge variant={log.resolved ? 'secondary' : 'destructive'}>

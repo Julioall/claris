@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listUsageEvents } from '../api/metrics';
+import type { AdminUsageEventDto } from '../api/contracts/admin-observability.contract';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,16 +12,6 @@ import { ptBR } from 'date-fns/locale';
 import { Search, ChevronDown, ChevronUp, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 import { exportToCsv } from '@/lib/csv';
-
-interface UsageEvent {
-  id: string;
-  user_id: string | null;
-  event_type: string;
-  route: string | null;
-  resource: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
-}
 
 const PAGE_SIZE = 50;
 
@@ -52,13 +43,13 @@ export default function AdminMetricas() {
     },
   });
 
-  const events = (data?.items ?? []) as UsageEvent[];
+  const events: AdminUsageEventDto[] = data?.items ?? [];
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   // Aggregate events by type for bar chart
   const eventsByType = events.reduce<Record<string, number>>((acc, event) => {
-    acc[event.event_type] = (acc[event.event_type] ?? 0) + 1;
+    acc[event.eventType] = (acc[event.eventType] ?? 0) + 1;
     return acc;
   }, {});
 
@@ -77,24 +68,24 @@ export default function AdminMetricas() {
     const d = startOfDay(subDays(new Date(), 6 - i));
     const nextD = startOfDay(subDays(new Date(), 5 - i));
     const count = events.filter((e) => {
-      const t = new Date(e.created_at);
+      const t = new Date(e.createdAt);
       return t >= d && t < nextD;
     }).length;
     return { date: label, eventos: count };
   });
 
-  const uniqueTypes = Array.from(new Set(events.map((e) => e.event_type)));
+  const uniqueTypes = Array.from(new Set(events.map((e) => e.eventType)));
 
   const handleExport = () => {
     exportToCsv(
       `metricas-${format(new Date(), 'yyyyMMdd-HHmm')}.csv`,
       events.map((e) => ({
         id: e.id,
-        user_id: e.user_id ?? '',
-        event_type: e.event_type,
+        user_id: e.userId ?? '',
+        event_type: e.eventType,
         route: e.route ?? '',
         resource: e.resource ?? '',
-        created_at: e.created_at,
+        created_at: e.createdAt,
       })),
     );
   };
@@ -230,11 +221,11 @@ export default function AdminMetricas() {
                       className="cursor-pointer"
                       onClick={() => setExpandedId(expandedId === event.id ? null : event.id)}
                     >
-                      <TableCell className="text-sm font-medium">{event.event_type}</TableCell>
+                      <TableCell className="text-sm font-medium">{event.eventType}</TableCell>
                       <TableCell className="text-xs text-muted-foreground font-mono">{event.route ?? '—'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{event.resource ?? '—'}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {format(new Date(event.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                        {format(new Date(event.createdAt), "dd/MM/yy HH:mm", { locale: ptBR })}
                       </TableCell>
                       <TableCell>
                         {expandedId === event.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}

@@ -414,9 +414,11 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
   - AC: frontend nunca recebe credenciais de provedores.
   - `app-settings` oferece DTO publico autenticado e DTO administrativo autorizado; gravacoes de risco, Claris e correcao com IA sao validadas no backend. A chave do provedor e preservada no servidor quando omitida, a resposta expoe apenas `apiKeyConfigured` e o browser perdeu todos os grants diretos sobre `app_settings`. O teste de conexao tambem usa contrato V1 estrito e nao devolve configuracao ou resposta do provedor.
 
-- [ ] `SB-0903` Migrar suporte e metricas administrativas
+- [x] `SB-0903` Migrar suporte e metricas administrativas
   - Tickets, logs, contagens e resolucao de erros.
   - AC: filtros, paginacao e permissoes executados no backend.
+  - `support-tickets` deriva o solicitante do token e reserva listagem/atualizacao a administradores; atribuicao, contexto e resolucao sao server-side. `admin-observability` entrega dashboard agregado, eventos, logs e conversas em DTOs paginados, registra o admin que resolveu cada erro, redige atributos sensiveis e limita o historico retornado. O Realtime de novos tickets permanece encapsulado e somente administradores conservam `SELECT` para a subscription; escritas e as demais tabelas sao service-only.
+  - O inventario caiu de 15 para 11 arquivos com acesso Supabase e de 20 para 7 chamadas `.from()`; as quatro APIs administrativas agora dependem apenas do client HTTP compartilhado.
 
 - [ ] `SB-0904` Migrar controle de acesso
   - Encapsular RPCs administrativos e contexto de autorizacao.

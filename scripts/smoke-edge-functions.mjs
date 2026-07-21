@@ -780,6 +780,14 @@ async function runUnauthenticatedContractChecks(status) {
     ['claris-suggestions', { action: 'list_pending', limit: 10 }],
     ['claris-chat', { operation: 'get_availability' }],
     ['app-settings', { action: 'get_public' }],
+    ['support-tickets', {
+      action: 'create_ticket',
+      type: 'problema',
+      title: 'Smoke sem auth',
+      description: 'Deve ser bloqueado.',
+      route: '/smoke',
+    }],
+    ['admin-observability', { action: 'get_dashboard' }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -823,6 +831,41 @@ async function runUnauthenticatedContractChecks(status) {
   assertV1Response(appSettingsIdentityPayload, {
     code: 'validation_failed',
     correlationId: 'smoke-v1-app-settings-identity',
+    status: 422,
+  })
+
+  const supportIdentityPayload = await callV1EdgeFunction(
+    status,
+    'support-tickets',
+    {
+      action: 'create_ticket',
+      type: 'problema',
+      title: 'Smoke identity',
+      description: 'Payload controlado pelo browser.',
+      route: '/smoke',
+      userId: '00000000-0000-4000-8000-000000000001',
+    },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-support-identity' },
+  )
+  assertV1Response(supportIdentityPayload, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-support-identity',
+    status: 422,
+  })
+
+  const observabilityResolutionPayload = await callV1EdgeFunction(
+    status,
+    'admin-observability',
+    {
+      action: 'resolve_error_log',
+      logId: '00000000-0000-4000-8000-000000000001',
+      resolvedBy: '00000000-0000-4000-8000-000000000001',
+    },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-observability-identity' },
+  )
+  assertV1Response(observabilityResolutionPayload, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-observability-identity',
     status: 422,
   })
 
@@ -875,7 +918,8 @@ function runCourseManagementGrantChecks() {
           ('user_sync_preferences'::TEXT),
           ('user_course_catalog_eligibility'::TEXT),
           ('user_courses'::TEXT),
-          ('user_ignored_courses'::TEXT)
+          ('user_ignored_courses'::TEXT),
+          ('support_tickets'::TEXT)
       ),
       private_tables(table_name) AS (
         VALUES
@@ -899,7 +943,10 @@ function runCourseManagementGrantChecks() {
           ('background_job_events'::TEXT),
           ('activity_feed'::TEXT),
           ('user_sync_preferences'::TEXT),
-          ('app_settings'::TEXT)
+          ('app_settings'::TEXT),
+          ('app_usage_events'::TEXT),
+          ('app_error_logs'::TEXT),
+          ('claris_conversations'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -3228,8 +3275,301 @@ async function runAppSettingsChecks(status, accessToken, authUserId) {
   log('Configuracoes globais validadas por DTO publico/admin, sem segredo e sem acesso REST do browser.')
 }
 
+async function runAdminObservabilityChecks(status, accessToken, authUserId) {
+  const usageId = '00000000-0000-4000-8000-000000000932'
+  const errorId = '00000000-0000-4000-8000-000000000933'
+  const conversationId = '00000000-0000-4000-8000-000000000934'
+  const eventType = 'smoke_admin_observability'
+  const errorMessage = 'Smoke admin observability error'
+  const conversationTitle = 'Smoke Admin Conversation'
+  const ticketTitle = 'Smoke Support Backend'
+  let createdTicketId = null
+
+  await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+  await deleteRows(status, 'support_tickets', { title: ticketTitle })
+  await deleteRows(status, 'app_usage_events', { id: usageId })
+  await deleteRows(status, 'app_error_logs', { id: errorId })
+  await deleteRows(status, 'claris_conversations', { id: conversationId })
+
+  try {
+    const created = await callV1EdgeFunction(status, 'support-tickets', {
+      action: 'create_ticket',
+      type: 'problema',
+      title: ticketTitle,
+      description: 'Ticket criado pelo caso de uso autenticado.',
+      route: '/smoke/admin',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-support-create',
+    })
+    assertV1Response(created, {
+      correlationId: 'smoke-v1-support-create',
+      status: 200,
+    })
+    const createdTicket = created.data?.data?.ticket
+    if (
+      createdTicket?.userId !== authUserId
+      || createdTicket.status !== 'aberto'
+      || createdTicket.priority !== 'normal'
+      || createdTicket.context?.correlationId !== 'smoke-v1-support-create'
+    ) {
+      fail(`support-tickets nao derivou identidade/contexto: ${JSON.stringify(createdTicket)}`)
+    }
+
+    createdTicketId = createdTicket.id
+    if (typeof createdTicketId !== 'string') fail('support-tickets nao retornou o ticket criado.')
+
+    const forbiddenSupportList = await callV1EdgeFunction(status, 'support-tickets', {
+      action: 'list_tickets',
+      page: 1,
+      pageSize: 30,
+    }, {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-support-list-forbidden',
+    })
+    assertV1Response(forbiddenSupportList, {
+      code: 'forbidden',
+      correlationId: 'smoke-v1-support-list-forbidden',
+      status: 403,
+    })
+
+    const forbiddenDashboard = await callV1EdgeFunction(status, 'admin-observability', {
+      action: 'get_dashboard',
+    }, {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-observability-forbidden',
+    })
+    assertV1Response(forbiddenDashboard, {
+      code: 'forbidden',
+      correlationId: 'smoke-v1-observability-forbidden',
+      status: 403,
+    })
+
+    const nonAdminRestTickets = await selectRows(
+      status,
+      'support_tickets',
+      { id: createdTicketId },
+      publishableHeaders(status, accessToken),
+    )
+    if (nonAdminRestTickets.length !== 0) {
+      fail('Policy Realtime de support_tickets permitiu SELECT a usuario nao administrador.')
+    }
+
+    await requestJson(`${status.REST_URL}/support_tickets`, {
+      acceptStatuses: [401, 403],
+      body: {
+        user_id: authUserId,
+        type: 'problema',
+        title: 'Browser write',
+        description: 'Deve falhar.',
+      },
+      headers: publishableHeaders(status, accessToken),
+      method: 'POST',
+    })
+
+    for (const table of ['app_usage_events', 'app_error_logs', 'claris_conversations']) {
+      await requestJson(`${status.REST_URL}/${table}?select=id&limit=1`, {
+        acceptStatuses: [401, 403],
+        headers: publishableHeaders(status, accessToken),
+      })
+    }
+
+    await upsertRows(status, 'app_usage_events', 'id', {
+      id: usageId,
+      user_id: authUserId,
+      event_type: eventType,
+      route: '/smoke/admin',
+      metadata: { apiKey: 'usage-secret', visible: 'ok' },
+    })
+    await upsertRows(status, 'app_error_logs', 'id', {
+      id: errorId,
+      user_id: authUserId,
+      severity: 'critical',
+      category: 'integration',
+      message: errorMessage,
+      payload: { authorization: 'Bearer error-secret', status: 500 },
+      context: { password: 'context-secret', visible: 'ok' },
+    })
+    await upsertRows(status, 'claris_conversations', 'id', {
+      id: conversationId,
+      user_id: authUserId,
+      title: conversationTitle,
+      last_context_route: '/smoke/admin',
+      messages: Array.from({ length: 105 }, (_, index) => ({
+        role: index % 2 === 0 ? 'user' : 'assistant',
+        content: `Mensagem smoke ${index}`,
+        internal: 'ignored',
+      })),
+    })
+
+    await upsertRows(status, 'admin_user_roles', 'user_id', {
+      user_id: authUserId,
+      role: 'admin',
+      permissions: ['admin'],
+      granted_by: null,
+    })
+
+    const listedTickets = await callV1EdgeFunction(status, 'support-tickets', {
+      action: 'list_tickets',
+      search: ticketTitle,
+      page: 1,
+      pageSize: 10,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-support-list-admin',
+    })
+    assertV1Response(listedTickets, {
+      correlationId: 'smoke-v1-support-list-admin',
+      status: 200,
+    })
+    if (!listedTickets.data?.data?.items?.some((ticket) => ticket.id === createdTicketId)) {
+      fail(`support-tickets nao paginou o ticket para admin: ${JSON.stringify(listedTickets.data)}`)
+    }
+
+    const updated = await callV1EdgeFunction(status, 'support-tickets', {
+      action: 'update_ticket',
+      ticketId: createdTicketId,
+      status: 'resolvido',
+      adminNotes: 'Resolvido pelo smoke.',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-support-update-admin',
+    })
+    assertV1Response(updated, {
+      correlationId: 'smoke-v1-support-update-admin',
+      status: 200,
+    })
+    const updatedTicket = updated.data?.data?.ticket
+    if (updatedTicket?.assignedTo !== authUserId || typeof updatedTicket.resolvedAt !== 'string') {
+      fail(`support-tickets nao atribuiu/resolviu no backend: ${JSON.stringify(updatedTicket)}`)
+    }
+
+    const dashboard = await callV1EdgeFunction(status, 'admin-observability', {
+      action: 'get_dashboard',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-observability-dashboard',
+    })
+    assertV1Response(dashboard, {
+      correlationId: 'smoke-v1-observability-dashboard',
+      status: 200,
+    })
+    const dashboardDto = dashboard.data?.data
+    if (
+      dashboardDto?.contractVersion !== 1
+      || dashboardDto.timeZone !== 'America/Sao_Paulo'
+      || !Array.isArray(dashboardDto.usageTrend)
+      || dashboardDto.usageTrend.length !== 7
+      || typeof dashboardDto.counts?.users !== 'number'
+    ) {
+      fail(`admin-observability retornou dashboard invalido: ${JSON.stringify(dashboardDto)}`)
+    }
+
+    const usage = await callV1EdgeFunction(status, 'admin-observability', {
+      action: 'list_usage_events',
+      eventType,
+      page: 1,
+      pageSize: 10,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-observability-usage',
+    })
+    assertV1Response(usage, {
+      correlationId: 'smoke-v1-observability-usage',
+      status: 200,
+    })
+    const usageDto = usage.data?.data?.items?.find((item) => item.id === usageId)
+    if (usageDto?.metadata?.apiKey !== '[REDACTED]' || usageDto.metadata.visible !== 'ok') {
+      fail(`admin-observability nao redigiu metadados: ${JSON.stringify(usageDto)}`)
+    }
+
+    const logs = await callV1EdgeFunction(status, 'admin-observability', {
+      action: 'list_error_logs',
+      search: errorMessage,
+      page: 1,
+      pageSize: 10,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-observability-logs',
+    })
+    assertV1Response(logs, {
+      correlationId: 'smoke-v1-observability-logs',
+      status: 200,
+    })
+    const errorDto = logs.data?.data?.items?.find((item) => item.id === errorId)
+    if (
+      errorDto?.payload?.authorization !== '[REDACTED]'
+      || errorDto.context?.password !== '[REDACTED]'
+    ) {
+      fail(`admin-observability nao redigiu o log: ${JSON.stringify(errorDto)}`)
+    }
+
+    const resolved = await callV1EdgeFunction(status, 'admin-observability', {
+      action: 'resolve_error_log',
+      logId: errorId,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-observability-resolve',
+    })
+    assertV1Response(resolved, {
+      correlationId: 'smoke-v1-observability-resolve',
+      status: 200,
+    })
+    if (
+      resolved.data?.data?.log?.resolved !== true
+      || resolved.data?.data?.log?.resolvedBy !== authUserId
+    ) {
+      fail(`admin-observability nao derivou resolvedBy: ${JSON.stringify(resolved.data)}`)
+    }
+
+    const conversations = await callV1EdgeFunction(status, 'admin-observability', {
+      action: 'list_claris_conversations',
+      search: conversationTitle,
+      page: 1,
+      pageSize: 10,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-observability-conversations',
+    })
+    assertV1Response(conversations, {
+      correlationId: 'smoke-v1-observability-conversations',
+      status: 200,
+    })
+    const conversationDto = conversations.data?.data?.items?.find((item) => item.id === conversationId)
+    if (
+      conversationDto?.messageCount !== 105
+      || conversationDto.messages?.length !== 100
+      || conversationDto.messagesTruncated !== true
+      || Object.prototype.hasOwnProperty.call(conversationDto.messages[0] ?? {}, 'internal')
+    ) {
+      fail(`admin-observability nao limitou a conversa: ${JSON.stringify(conversationDto)}`)
+    }
+
+  } finally {
+    if (createdTicketId) await deleteRows(status, 'support_tickets', { id: createdTicketId })
+    await deleteRows(status, 'support_tickets', { title: ticketTitle })
+    await deleteRows(status, 'app_usage_events', { id: usageId })
+    await deleteRows(status, 'app_error_logs', { id: errorId })
+    await deleteRows(status, 'claris_conversations', { id: conversationId })
+    await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+  }
+
+  log('Suporte e observabilidade admin validados com identidade, redaction, paginacao e grants reais.')
+}
+
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   await runAppSettingsChecks(status, accessToken, authUserId)
+  await runAdminObservabilityChecks(status, accessToken, authUserId)
 
   const settings = await callV1EdgeFunction(
     status,

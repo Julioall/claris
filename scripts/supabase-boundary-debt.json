@@ -15,58 +15,10 @@
       }
     },
     {
-      "path": "src/features/admin/api/conversations.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/admin/api/logs.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/admin/api/metrics.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 7,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/admin/api/services.ts",
       "counts": {
         "clientImports": 1,
         "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/admin/api/support.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 3,
         "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,

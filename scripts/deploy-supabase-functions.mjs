@@ -35,6 +35,8 @@ const DEFAULT_FUNCTIONS = [
   'process-scheduled-messages',
   'task-tag-suggestions',
   'app-settings',
+  'support-tickets',
+  'admin-observability',
   'claris-llm-test',
   'claris-chat',
   'claris-conversations',

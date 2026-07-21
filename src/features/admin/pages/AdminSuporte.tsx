@@ -4,6 +4,7 @@ import {
   listSupportTickets,
   updateSupportTicket,
 } from '../api/support';
+import type { SupportTicketDto } from '../api/contracts/support-tickets.contract';
 import { realtimeGateway } from '@/integrations/realtime/realtime-gateway';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,22 +18,6 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Search, ChevronDown, ChevronUp, Bell, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-
-interface SupportTicket {
-  id: string;
-  user_id: string | null;
-  type: string;
-  title: string;
-  description: string;
-  route: string | null;
-  context: Record<string, unknown>;
-  status: string;
-  priority: string;
-  admin_notes: string | null;
-  resolved_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 const STATUS_COLORS: Record<string, string> = {
   aberto: 'bg-blue-100 text-blue-800',
@@ -88,17 +73,14 @@ export default function AdminSuporte() {
     },
   });
 
-  const tickets = (data?.items ?? []) as SupportTicket[];
+  const tickets: SupportTicketDto[] = data?.items ?? [];
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const updateTicketMutation = useMutation({
-    mutationFn: async ({ id, status, notes }: { id: string; status: string; notes: string }) => {
-      const update: Record<string, unknown> = { status, admin_notes: notes };
-      if (status === 'resolvido') update.resolved_at = new Date().toISOString();
-      const { error } = await updateSupportTicket(id, update);
-      if (error) throw error;
-    },
+    mutationFn: ({ id, status, notes }: { id: string; status: string; notes: string }) => (
+      updateSupportTicket(id, { status, adminNotes: notes })
+    ),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-support-tickets'] });
       toast({ title: 'Ticket atualizado com sucesso' });
@@ -212,7 +194,7 @@ export default function AdminSuporte() {
                         </span>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {format(new Date(ticket.created_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                        {format(new Date(ticket.createdAt), "dd/MM/yy HH:mm", { locale: ptBR })}
                       </TableCell>
                       <TableCell>
                         {expandedId === ticket.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -232,17 +214,17 @@ export default function AdminSuporte() {
                                 <p className="text-sm font-mono">{ticket.route}</p>
                               </div>
                             )}
-                            {ticket.admin_notes && (
+                            {ticket.adminNotes && (
                               <div>
                                 <p className="text-xs font-medium text-muted-foreground mb-1">Notas do admin</p>
-                                <p className="text-sm">{ticket.admin_notes}</p>
+                                <p className="text-sm">{ticket.adminNotes}</p>
                               </div>
                             )}
                             <div className="space-y-2">
                               <Label className="text-xs">Notas internas</Label>
                               <Textarea
                                 placeholder="Adicione notas sobre o andamento..."
-                                value={adminNotes[ticket.id] ?? ticket.admin_notes ?? ''}
+                                value={adminNotes[ticket.id] ?? ticket.adminNotes ?? ''}
                                 onChange={(e) => setAdminNotes((prev) => ({ ...prev, [ticket.id]: e.target.value }))}
                                 rows={3}
                               />
@@ -258,7 +240,7 @@ export default function AdminSuporte() {
                                     updateTicketMutation.mutate({
                                       id: ticket.id,
                                       status,
-                                      notes: adminNotes[ticket.id] ?? ticket.admin_notes ?? '',
+                                      notes: adminNotes[ticket.id] ?? ticket.adminNotes ?? '',
                                     });
                                   }}
                                   disabled={updateTicketMutation.isPending}

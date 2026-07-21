@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { createSupportTicket } from '@/features/admin/api/support';
-import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 interface SupportButtonProps {
@@ -29,7 +28,6 @@ export function SupportButton({ className, size = 'icon', showLabel = false }: S
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { user } = useAuth();
   const location = useLocation();
 
   const handleSubmit = async () => {
@@ -44,19 +42,12 @@ export function SupportButton({ className, size = 'icon', showLabel = false }: S
 
     setIsSubmitting(true);
     try {
-      const { error } = await createSupportTicket({
-        user_id: user?.id ?? null,
+      await createSupportTicket({
         type,
         title: title.trim(),
         description: description.trim(),
         route: location.pathname,
-        context: {
-          userAgent: navigator.userAgent,
-          url: window.location.href,
-        },
       });
-
-      if (error) throw error;
 
       toast({ title: 'Ticket enviado com sucesso', description: 'Entraremos em contato em breve.' });
       setOpen(false);

@@ -4,13 +4,11 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import AdminLogsErros from "@/features/admin/pages/AdminLogsErros";
 
-const fromMock = vi.fn();
+const invokeMock = vi.fn();
 const toastMock = vi.fn();
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
+vi.mock("@/integrations/http/edge-function-client", () => ({
+  invokeEdgeFunction: (...args: unknown[]) => invokeMock(...args),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -27,25 +25,13 @@ function renderWithClient(ui: React.ReactElement) {
 }
 
 function mockLogsQuery(logs: unknown[]) {
-  fromMock.mockImplementation(() => {
-    const query = {
-      data: logs,
-      error: null,
-      count: logs.length,
-      order: vi.fn(() => query),
-      range: vi.fn(() => query),
-      eq: vi.fn(() => query),
-      gte: vi.fn(() => query),
-      lte: vi.fn(() => query),
-      or: vi.fn(() => query),
-    };
-
-    return {
-      select: vi.fn(() => query),
-      update: vi.fn(() => ({
-        eq: vi.fn().mockResolvedValue({ error: null }),
-      })),
-    };
+  invokeMock.mockResolvedValue({
+    contractVersion: 1,
+    items: logs,
+    page: 1,
+    pageSize: 30,
+    totalCount: logs.length,
+    totalPages: 1,
   });
 }
 
@@ -68,15 +54,16 @@ describe("AdminLogsErros page", () => {
     const fakeLogs = [
       {
         id: "log-1",
-        user_id: "user-1",
+        userId: "user-1",
         severity: "error",
         category: "ui",
         message: "Test error message",
         payload: {},
         context: {},
         resolved: false,
-        resolved_at: null,
-        created_at: new Date().toISOString(),
+        resolvedAt: null,
+        resolvedBy: null,
+        createdAt: new Date().toISOString(),
       },
     ];
 

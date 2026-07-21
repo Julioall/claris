@@ -181,7 +181,7 @@ Antes de publicar mudancas em functions ou migrations:
 3. atualizar [SUPABASE_RLS.md](./SUPABASE_RLS.md) se houve mudanca de policy
 4. manter contratos do payload versionados quando uma function for consumida por mais de um cliente
 
-O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas, listagem segura de instancias WhatsApp, historico actor-scoped da Claris, sugestoes atomicas com rollback/retry, disponibilidade sem segredo de provedor e a fronteira de sync/jobs (preferencias, risco, polling, feed, autorizacao admin e cancelamento condicional).
+O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas, listagem segura de instancias WhatsApp, historico actor-scoped da Claris, sugestoes atomicas com rollback/retry, disponibilidade sem segredo de provedor, suporte com identidade derivada do token, observabilidade administrativa e a fronteira de sync/jobs (preferencias, risco, polling, feed, autorizacao admin e cancelamento condicional).
 
 ## Functions chave
 
@@ -200,6 +200,8 @@ O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e
 - `data-cleanup`: limpeza operacional admin-only, com ordenacao server-side e cobertura ampliada do banco
 - `moodle-reauth-settings`: referencia de handler fino com payload, contrato, service, repository e mapper separados
 - `app-telemetry`: coleta autenticada e best-effort de uso/erros, sem permitir identidade fornecida pelo frontend
+- `support-tickets`: abre tickets para o ator autenticado e concentra listagem/atualizacao administrativa; atribuicao, contexto e data de resolucao sao definidos no servidor
+- `admin-observability`: agrega o dashboard e pagina metricas, logs e conversas Claris; exige administrador, redige campos sensiveis e limita conversas às 100 mensagens mais recentes
 - `task-tag-suggestions`: busca course-scoped de entidades para tags de tarefas, sem expor tabelas ou aceitar escopo do browser
 - `dashboard-summary`: compoe indicadores, prioridades, fila de correcao e feed em uma unica chamada autenticada, com escopo tutor derivado do token
 - `courses-catalog`: entrega o catalogo do ator autenticado e executa comandos atomicos de associacao, ignorar/designorar e configuracao de frequencia

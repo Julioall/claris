@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listAdminConversations } from '../api/conversations';
+import type { AdminClarisConversationDto } from '../api/contracts/admin-observability.contract';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,16 +9,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Search, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
-
-interface Conversation {
-  id: string;
-  user_id: string;
-  title: string;
-  messages: unknown[];
-  last_context_route: string | null;
-  created_at: string;
-  updated_at: string;
-}
 
 const PAGE_SIZE = 30;
 
@@ -41,7 +32,7 @@ export default function AdminConversasClaris() {
     },
   });
 
-  const conversations = (data?.items ?? []) as Conversation[];
+  const conversations: AdminClarisConversationDto[] = data?.items ?? [];
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
@@ -98,10 +89,10 @@ export default function AdminConversasClaris() {
                         onClick={() => setExpandedId(expandedId === conv.id ? null : conv.id)}
                       >
                         <TableCell className="text-sm font-medium">{conv.title}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">{conv.last_context_route ?? '—'}</TableCell>
-                        <TableCell className="text-sm">{messages.length}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-mono">{conv.lastContextRoute ?? '—'}</TableCell>
+                        <TableCell className="text-sm">{conv.messageCount}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">
-                          {format(new Date(conv.updated_at), "dd/MM/yy HH:mm", { locale: ptBR })}
+                          {format(new Date(conv.updatedAt), "dd/MM/yy HH:mm", { locale: ptBR })}
                         </TableCell>
                         <TableCell>
                           {expandedId === conv.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -111,18 +102,22 @@ export default function AdminConversasClaris() {
                         <TableRow>
                           <TableCell colSpan={5} className="bg-muted/30 p-4">
                             <div className="space-y-2 max-h-64 overflow-auto">
+                              {conv.messagesTruncated && (
+                                <p className="text-xs text-muted-foreground">
+                                  Exibindo as 100 mensagens mais recentes de {conv.messageCount}.
+                                </p>
+                              )}
                               {messages.length === 0 ? (
                                 <p className="text-xs text-muted-foreground">Nenhuma mensagem.</p>
                               ) : (
-                                messages.map((msg: unknown, idx) => {
-                                  const m = msg as Record<string, unknown>;
+                                messages.map((msg, idx) => {
                                   return (
                                     <div
                                       key={idx}
-                                      className={`text-xs p-2 rounded ${m.role === 'user' ? 'bg-primary/10' : 'bg-muted'}`}
+                                      className={`text-xs p-2 rounded ${msg.role === 'user' ? 'bg-primary/10' : 'bg-muted'}`}
                                     >
-                                      <span className="font-medium capitalize">{String(m.role ?? 'unknown')}: </span>
-                                      <span>{String(m.content ?? '')}</span>
+                                      <span className="font-medium capitalize">{msg.role}: </span>
+                                      <span>{msg.content}</span>
                                     </div>
                                   );
                                 })

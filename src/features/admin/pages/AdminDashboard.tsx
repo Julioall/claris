@@ -1,15 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import {
-  fetchAppErrorLogsCount,
-  fetchAppUsageEventsCount,
-  fetchClarisConversationsCount,
-  fetchOpenSupportTicketsCount,
-  fetchUsersCount,
-  listRecentUsageEvents,
-} from '../api/metrics';
+import { fetchAdminDashboardSummary } from '../api/metrics';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Activity, AlertTriangle, LifeBuoy, MessageSquare, Users } from 'lucide-react';
-import { format, subDays, startOfDay } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
@@ -36,66 +29,15 @@ function StatCard({ title, value, icon: Icon, description }: StatCardProps) {
 }
 
 export default function AdminDashboard() {
-  const { data: usageCount } = useQuery({
-    queryKey: ['admin-usage-count'],
-    queryFn: async () => {
-      const { count } = await fetchAppUsageEventsCount();
-      return count ?? 0;
-    },
+  const { data: summary } = useQuery({
+    queryKey: ['admin-dashboard-summary'],
+    queryFn: fetchAdminDashboardSummary,
   });
 
-  const { data: errorCount } = useQuery({
-    queryKey: ['admin-error-count'],
-    queryFn: async () => {
-      const { count } = await fetchAppErrorLogsCount({ resolved: false });
-      return count ?? 0;
-    },
-  });
-
-  const { data: ticketCount } = useQuery({
-    queryKey: ['admin-ticket-count'],
-    queryFn: async () => {
-      const { count } = await fetchOpenSupportTicketsCount();
-      return count ?? 0;
-    },
-  });
-
-  const { data: conversationCount } = useQuery({
-    queryKey: ['admin-conversation-count'],
-    queryFn: async () => {
-      const { count } = await fetchClarisConversationsCount();
-      return count ?? 0;
-    },
-  });
-
-  const { data: userCount } = useQuery({
-    queryKey: ['admin-user-count'],
-    queryFn: async () => {
-      const { count } = await fetchUsersCount();
-      return count ?? 0;
-    },
-  });
-
-  // Trend: events per day for the last 7 days
-  const { data: recentEvents = [] } = useQuery({
-    queryKey: ['admin-recent-events-trend'],
-    queryFn: async () => {
-      const since = subDays(new Date(), 6);
-      since.setHours(0, 0, 0, 0);
-      const { data } = await listRecentUsageEvents(since.toISOString());
-      return (data ?? []) as { created_at: string }[];
-    },
-  });
-
-  const trendData = Array.from({ length: 7 }, (_, i) => {
-    const d = startOfDay(subDays(new Date(), 6 - i));
-    const nextD = startOfDay(subDays(new Date(), 5 - i));
-    const count = recentEvents.filter((e) => {
-      const t = new Date(e.created_at);
-      return t >= d && t < nextD;
-    }).length;
-    return { date: format(d, 'dd/MM', { locale: ptBR }), eventos: count };
-  });
+  const trendData = (summary?.usageTrend ?? []).map(({ day, count }) => ({
+    date: format(new Date(`${day}T12:00:00`), 'dd/MM', { locale: ptBR }),
+    eventos: count,
+  }));
 
   return (
     <div className="space-y-6">
@@ -107,31 +49,31 @@ export default function AdminDashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           title="Usuários"
-          value={userCount ?? '—'}
+          value={summary?.counts.users ?? '—'}
           icon={Users}
           description="Total de usuários cadastrados"
         />
         <StatCard
           title="Eventos de Uso"
-          value={usageCount ?? '—'}
+          value={summary?.counts.usageEvents ?? '—'}
           icon={Activity}
           description="Eventos registrados no total"
         />
         <StatCard
           title="Erros Abertos"
-          value={errorCount ?? '—'}
+          value={summary?.counts.openErrorLogs ?? '—'}
           icon={AlertTriangle}
           description="Erros não resolvidos"
         />
         <StatCard
           title="Tickets Abertos"
-          value={ticketCount ?? '—'}
+          value={summary?.counts.openSupportTickets ?? '—'}
           icon={LifeBuoy}
           description="Tickets de suporte abertos"
         />
         <StatCard
           title="Conversas Claris"
-          value={conversationCount ?? '—'}
+          value={summary?.counts.clarisConversations ?? '—'}
           icon={MessageSquare}
           description="Total de conversas com a IA"
         />
