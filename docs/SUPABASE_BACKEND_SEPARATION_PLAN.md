@@ -17,14 +17,15 @@ Ao final, o frontend deve depender apenas de contratos HTTP orientados a casos d
 
 Baseline levantada em `2026-07-21`:
 
-- cerca de 50 arquivos de runtime importam o cliente Supabase;
-- 181 ocorrencias de `.from()`;
+- 48 arquivos de runtime importam o cliente Supabase;
+- 146 chamadas diretas de `supabase.from()`;
 - 15 ocorrencias de `.rpc()`;
-- 14 invocacoes de Edge Functions;
+- 15 invocacoes de Edge Functions;
+- 12 acessos a Auth e 1 criacao de channel Realtime;
 - 73 escapes de tipagem relacionados a `any`, `never` ou cast de `SupabaseClient`;
 - guardrail, typecheck e 491 testes passando.
 
-Esses numeros devem ser recalculados no inicio e no final de cada epic.
+Esses numeros sao produzidos por `npm run audit:supabase-frontend` e devem ser recalculados no inicio e no final de cada epic. O inventario contabiliza apenas chamadas vinculadas ao objeto `supabase`; por isso nao inclui metodos `.from()` de outras APIs JavaScript.
 
 ## Arquitetura alvo desta etapa
 
@@ -109,11 +110,12 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** transformar o levantamento inicial em uma lista verificavel e impedir perda de escopo.
 
-- [ ] `SB-0001` Criar script de inventario de dependencias Supabase no frontend
+- [x] `SB-0001` Criar script de inventario de dependencias Supabase no frontend
   - Contabilizar por arquivo: `from`, `rpc`, `functions.invoke`, `auth`, `storage`, `channel` e imports do client.
   - Ignorar testes, mocks e o adaptador oficial.
   - Produzir saida deterministica apropriada para CI.
   - AC: baseline reproduzivel e diferencas visiveis em cada PR.
+  - Implementado por `scripts/inventory-frontend-supabase.mjs` e executado com `npm run audit:supabase-frontend` (`-- --json` para integracao automatizada).
 
 - [ ] `SB-0002` Classificar cada acesso em inventario versionado
   - Categorias: `auth`, `realtime`, `query`, `command`, `telemetry`, `edge-function` e `legacy`.
