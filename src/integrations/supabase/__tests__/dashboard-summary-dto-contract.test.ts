@@ -3,12 +3,14 @@ import { describe, expect, it } from 'vitest';
 import {
   DASHBOARD_RISK_LEVELS as backendRiskLevels,
   DASHBOARD_SUMMARY_CONTRACT_VERSION as backendVersion,
+  DASHBOARD_SUMMARY_TIME_ZONE as backendTimeZone,
   DASHBOARD_WEEK_FILTERS as backendWeekFilters,
   type DashboardSummaryDto as BackendDashboardSummaryDto,
 } from '../../../../supabase/functions/dashboard-summary/contract.ts';
 import {
   DASHBOARD_RISK_LEVELS as frontendRiskLevels,
   DASHBOARD_SUMMARY_CONTRACT_VERSION as frontendVersion,
+  DASHBOARD_SUMMARY_TIME_ZONE as frontendTimeZone,
   DASHBOARD_WEEK_FILTERS as frontendWeekFilters,
   type DashboardSummaryDto as FrontendDashboardSummaryDto,
 } from '@/features/dashboard/api/dashboard-summary.contract';
@@ -49,16 +51,21 @@ const contractExample = {
   },
   metadata: {
     contractVersion: 1 as const,
+    appliedCourseCount: 2,
     courseId: null,
     dataUpdatedAt: '2026-07-21T15:00:00.000Z',
     generatedAt: '2026-07-21T15:01:00.000Z',
+    timeZone: 'America/Sao_Paulo' as const,
     week: 'current' as const,
+    weekEndsAt: '2026-07-27T03:00:00.000Z',
+    weekStartsAt: '2026-07-20T03:00:00.000Z',
   },
 } satisfies BackendDashboardSummaryDto & FrontendDashboardSummaryDto;
 
 describe('DashboardSummaryDto contract', () => {
   it('keeps versioned enum values aligned across the HTTP boundary', () => {
     expect(frontendVersion).toBe(backendVersion);
+    expect(frontendTimeZone).toBe(backendTimeZone);
     expect(frontendWeekFilters).toEqual(backendWeekFilters);
     expect(frontendRiskLevels).toEqual(backendRiskLevels);
   });

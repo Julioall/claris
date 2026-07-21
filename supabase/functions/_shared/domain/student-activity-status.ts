@@ -60,11 +60,17 @@ export function getStudentActivityWorkflowStatus(
   }
 
   const hasCompletionEvidence = Boolean(activity.completed_at) || COMPLETED_STATUSES.has(normalizedStatus)
-  const hasSubmittedEvidence = (
-    Boolean(activity.submitted_at) ||
-    SUBMITTED_STATUSES.has(normalizedStatus) ||
-    (isAssignmentLike(activity.activity_type) && hasCompletionEvidence)
-  )
+
+  // Moodle may mark an assignment as completed before there is an actual
+  // submission. Completion alone must not put it in the tutor review queue.
+  if (isAssignmentLike(activity.activity_type)) {
+    const hasSubmitted = Boolean(activity.submitted_at) || SUBMITTED_STATUSES.has(normalizedStatus)
+    if (hasSubmitted) return 'pending_correction'
+    if (hasCompletionEvidence) return 'completed'
+    return 'pending_submission'
+  }
+
+  const hasSubmittedEvidence = Boolean(activity.submitted_at) || SUBMITTED_STATUSES.has(normalizedStatus)
 
   if (hasSubmittedEvidence) {
     return 'pending_correction'

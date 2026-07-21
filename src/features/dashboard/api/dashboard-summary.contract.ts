@@ -1,4 +1,5 @@
 export const DASHBOARD_SUMMARY_CONTRACT_VERSION = 1 as const;
+export const DASHBOARD_SUMMARY_TIME_ZONE = 'America/Sao_Paulo' as const;
 
 export const DASHBOARD_WEEK_FILTERS = ['current', 'last'] as const;
 export const DASHBOARD_RISK_LEVELS = [
@@ -74,9 +75,13 @@ export interface DashboardSummaryDto {
   indicators: DashboardIndicatorsDto;
   metadata: {
     contractVersion: typeof DASHBOARD_SUMMARY_CONTRACT_VERSION;
+    appliedCourseCount: number;
     courseId: string | null;
     dataUpdatedAt: string | null;
     generatedAt: string;
+    timeZone: typeof DASHBOARD_SUMMARY_TIME_ZONE;
     week: DashboardWeekFilterDto;
+    weekEndsAt: string;
+    weekStartsAt: string;
   };
 }

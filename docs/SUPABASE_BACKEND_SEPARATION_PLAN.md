@@ -219,10 +219,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - Reutilizar agregados existentes e medir necessidade de nova RPC.
   - AC: uma chamada frontend retorna o dashboard completo ou secoes explicitamente versionadas.
 
-- [ ] `SB-0303` Centralizar regras de pendencia, correcao e risco
+- [x] `SB-0303` Centralizar regras de pendencia, correcao e risco
   - Garantir uma unica implementacao backend das regras usadas pelo dashboard.
   - Adicionar testes de fronteira para status, notas, datas e atividades ocultas.
   - AC: frontend nao recalcula KPIs.
+  - Implementado no dominio backend com escopo por matricula ativa aluno-curso, submissao real, ocultacao, deduplicacao de risco e semanas civis em `America/Sao_Paulo`; testes cobrem as fronteiras e corrigem a divergencia entre conclusao e submissao de assignments.
 
 - [ ] `SB-0304` Migrar `useDashboardData`
   - Consumir o novo client e preservar query keys, loading, erro e invalidacoes.
