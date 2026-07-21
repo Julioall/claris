@@ -194,10 +194,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: nenhuma feature conhece nomes de canais/tabelas.
   - Implementado para o unico channel existente: o gateway traduz INSERT de suporte em evento de dominio, controla cleanup e a migration habilita `support_tickets` na publication Realtime.
 
-- [ ] `SB-0204` Migrar telemetria
+- [x] `SB-0204` Migrar telemetria
   - Substituir inserts diretos de `useTrackEvent`, `useErrorLog` e `lib/tracking` por endpoint de telemetria ou coletor apropriado.
   - Tornar falhas de telemetria nao bloqueantes e aplicar limites.
   - AC: frontend nao grava `app_usage_events` nem `app_error_logs` diretamente.
+  - Implementado com `app-telemetry`: auth obrigatoria, identidade derivada do token, body de 64 KiB, limites estruturais, redacao de segredos e client best-effort com timeout curto.
 
 - [ ] `SB-0205` Remover lookup Supabase de primitive UI
   - Migrar `components/ui/api/tagInput.ts` para clients de busca dos dominios.

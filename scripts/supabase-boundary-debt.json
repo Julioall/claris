@@ -471,18 +471,6 @@
       }
     },
     {
-      "path": "src/hooks/useErrorLog.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/hooks/useMoodleApi.ts",
       "counts": {
         "clientImports": 1,
@@ -507,18 +495,6 @@
       }
     },
     {
-      "path": "src/hooks/useTrackEvent.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/lib/course-access.ts",
       "counts": {
         "clientImports": 1,
@@ -532,18 +508,6 @@
     },
     {
       "path": "src/lib/message-template-seeding.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/lib/tracking.ts",
       "counts": {
         "clientImports": 1,
         "from": 2,

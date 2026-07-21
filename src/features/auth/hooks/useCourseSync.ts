@@ -289,7 +289,7 @@ export function useCourseSync(params: {
         isComplete: false,
       });
 
-      void trackEvent(context.user.id, 'sync_start', {
+      void trackEvent('sync_start', {
         metadata: { courseIds, courseCount: courseIds.length },
       });
 
@@ -377,7 +377,7 @@ export function useCourseSync(params: {
           description: `${syncedCourses.length} cursos e ${totalStudents} alunos sincronizados. Atividades e notas serao atualizadas automaticamente ao abrir cada UC.${riskUpdateResult && !riskUpdateResult.missingRpc && riskUpdateResult.failedCount === 0 ? ` Risco recalculado automaticamente para ${riskUpdateResult.updatedCount} alunos.` : ''}`,
         });
 
-        void trackEvent(context.user.id, 'sync_finish', {
+        void trackEvent('sync_finish', {
           metadata: {
             courses: syncedCourses.length,
             students: totalStudents,
@@ -684,8 +684,8 @@ export function useCourseSync(params: {
           description: 'Ocorreu um erro durante a sincronizacao. Tente novamente.',
           variant: 'destructive',
         });
-        void trackEvent(context.user.id, 'sync_error');
-        void logError(context.user.id, 'Erro na sincronizacao com Moodle', {
+        void trackEvent('sync_error');
+        void logError('Erro na sincronizacao com Moodle', {
           category: 'integration',
           payload: { message: error instanceof Error ? error.message : String(error) },
         });

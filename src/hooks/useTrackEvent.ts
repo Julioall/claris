@@ -1,7 +1,6 @@
 import { useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { telemetryClient } from '@/integrations/telemetry/telemetry-client';
 
 export type UsageEventType =
   | 'page_view'
@@ -22,25 +21,19 @@ interface TrackEventOptions {
 }
 
 export function useTrackEvent() {
-  const { user } = useAuth();
   const location = useLocation();
 
   const track = useCallback(
     async (eventType: UsageEventType, options: TrackEventOptions = {}) => {
-      try {
-        const { route, resource, metadata = {} } = options;
-        await supabase.from('app_usage_events' as never).insert({
-          user_id: user?.id ?? null,
-          event_type: eventType,
-          route: route ?? location.pathname,
-          resource: resource ?? null,
-          metadata,
-        } as never);
-      } catch {
-        // Tracking failures are silent to avoid disrupting the user experience
-      }
+      const { route, resource, metadata = {} } = options;
+      await telemetryClient.trackUsage({
+        eventType,
+        route: route ?? location.pathname,
+        resource,
+        metadata,
+      });
     },
-    [user, location.pathname],
+    [location.pathname],
   );
 
   return { track };

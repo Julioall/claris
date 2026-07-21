@@ -502,6 +502,12 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'generate-proactive-suggestions',
     },
     {
+      body: { action: 'track_usage', eventType: 'smoke_unauthenticated' },
+      expectedStatus: 401,
+      name: 'app-telemetry valid-no-auth',
+      path: 'app-telemetry',
+    },
+    {
       body: {},
       expectedStatus: 401,
       name: 'process-scheduled-messages no-secret',
@@ -568,6 +574,56 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
   if (typeof settings.data?.data?.preferenceEnabled !== 'boolean') {
     fail(`moodle-reauth-settings retornou DTO invalido: ${JSON.stringify(settings.data)}`)
   }
+
+  const telemetryEventType = 'smoke_edge_telemetry'
+  const telemetryErrorMessage = 'Smoke Edge telemetry error'
+  await deleteRows(status, 'app_usage_events', { event_type: telemetryEventType })
+  await deleteRows(status, 'app_error_logs', { message: telemetryErrorMessage })
+
+  const usageResult = await callV1EdgeFunction(
+    status,
+    'app-telemetry',
+    {
+      action: 'track_usage',
+      eventType: telemetryEventType,
+      metadata: { source: 'edge-smoke' },
+      route: '/smoke/edge',
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-telemetry-usage',
+    },
+  )
+  assertV1Response(usageResult, { correlationId: 'smoke-v1-telemetry-usage', status: 200 })
+
+  const errorResult = await callV1EdgeFunction(
+    status,
+    'app-telemetry',
+    {
+      action: 'log_error',
+      category: 'integration',
+      context: { source: 'edge-smoke' },
+      message: telemetryErrorMessage,
+      severity: 'warning',
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-telemetry-error',
+    },
+  )
+  assertV1Response(errorResult, { correlationId: 'smoke-v1-telemetry-error', status: 200 })
+
+  const [usageRow] = await selectRows(status, 'app_usage_events', { event_type: telemetryEventType })
+  const [errorRow] = await selectRows(status, 'app_error_logs', { message: telemetryErrorMessage })
+  if (usageRow?.user_id !== authUserId || errorRow?.user_id !== authUserId) {
+    fail('app-telemetry nao derivou a identidade do usuario autenticado.')
+  }
+
+  await deleteRows(status, 'app_usage_events', { event_type: telemetryEventType })
+  await deleteRows(status, 'app_error_logs', { message: telemetryErrorMessage })
+  log('app-telemetry validado com identidade autenticada e persistencia real.')
 
   await cleanupAutomatedTaskArtifacts(status, authUserId, studentId)
 

@@ -1,9 +1,12 @@
 import { useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import {
+  telemetryClient,
+  type TelemetryErrorCategory,
+  type TelemetryErrorSeverity,
+} from '@/integrations/telemetry/telemetry-client';
 
-export type ErrorSeverity = 'info' | 'warning' | 'error' | 'critical';
-export type ErrorCategory = 'ui' | 'import' | 'integration' | 'edge_function' | 'ai' | 'auth' | 'other';
+export type ErrorSeverity = TelemetryErrorSeverity;
+export type ErrorCategory = TelemetryErrorCategory;
 
 interface LogErrorOptions {
   severity?: ErrorSeverity;
@@ -13,29 +16,22 @@ interface LogErrorOptions {
 }
 
 export function useErrorLog() {
-  const { user } = useAuth();
-
   const logError = useCallback(
     async (message: string, options: LogErrorOptions = {}) => {
-      try {
-        const { severity = 'error', category = 'ui', payload = {}, context = {} } = options;
-        await supabase.from('app_error_logs' as never).insert({
-          user_id: user?.id ?? null,
-          severity,
-          category,
-          message,
-          payload,
-          context: {
-            ...context,
-            url: window.location.pathname,
-            userAgent: navigator.userAgent,
-          },
-        } as never);
-      } catch {
-        // Error logging failures are silent
-      }
+      const { severity = 'error', category = 'ui', payload = {}, context = {} } = options;
+      await telemetryClient.logError({
+        severity,
+        category,
+        message,
+        payload,
+        context: {
+          ...context,
+          url: window.location.pathname,
+          userAgent: navigator.userAgent,
+        },
+      });
     },
-    [user],
+    [],
   );
 
   return { logError };

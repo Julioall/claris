@@ -167,7 +167,7 @@ export function useAuthSession(): UseAuthSessionResult {
           : `Bem-vindo, ${result.user.full_name}!${offlineNote}`,
       });
 
-      void trackEvent(result.user.id, 'login');
+      void trackEvent('login');
       return true;
     } catch (error) {
       console.error('Login error:', error);
@@ -185,7 +185,7 @@ export function useAuthSession(): UseAuthSessionResult {
   const logout = useCallback(async () => {
     const userId = user?.id;
 
-    await trackEvent(userId, 'logout');
+    await trackEvent('logout');
     await authGateway.signOut();
     resetAuthState();
 

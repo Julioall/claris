@@ -1,6 +1,6 @@
 # Edge Functions
 
-Atualizado em `2026-04-01`.
+Atualizado em `2026-07-21`.
 
 ## Objetivo
 
@@ -131,6 +131,8 @@ Erros inesperados retornam uma mensagem generica e nunca incluem stack trace ou 
 
 O runtime limita bodies JSON a 10 MiB por padrao antes do parser. Endpoints que transportam midia podem declarar um limite maior explicitamente. `_shared/http/body.ts` oferece leitores estritos para boolean, inteiros com faixa, UUID, data ISO, objetos, arrays, enums e paginacao; JSON malformado ou com shape invalido retorna 400, enquanto campos semanticamente invalidos em contratos V1 retornam 422.
 
+Endpoints de coleta devem declarar limites menores e nunca confiar em identidade enviada no body. `app-telemetry`, por exemplo, limita a request a 64 KiB, restringe profundidade, cardinalidade e tamanho de atributos, redige chaves sensiveis recursivamente e deriva `userId` exclusivamente do token autenticado.
+
 ### Banco
 
 `_shared/db/` oferece:
@@ -189,6 +191,7 @@ O smoke de Edge Functions valida o piloto V1 de ponta a ponta: `Content-Type`, h
 - `moodle-*`: autenticacao e sincronizacao incremental com Moodle
 - `data-cleanup`: limpeza operacional admin-only, com ordenacao server-side e cobertura ampliada do banco
 - `moodle-reauth-settings`: referencia de handler fino com payload, contrato, service, repository e mapper separados
+- `app-telemetry`: coleta autenticada e best-effort de uso/erros, sem permitir identidade fornecida pelo frontend
 
 ## Nova function: `moodle-grade-suggestions`
 

@@ -87,7 +87,16 @@ describe("useClarisSuggestions", () => {
     vi.clearAllMocks();
 
     useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-    getSessionMock.mockResolvedValue({ data: { session: { access_token: "tok" } } });
+    getSessionMock.mockResolvedValue({
+      data: {
+        session: {
+          access_token: "tok",
+          refresh_token: "refresh",
+          user: { id: "user-1", email: "user@example.test" },
+        },
+      },
+      error: null,
+    });
     invokeMock.mockResolvedValue({ error: null });
   });
 
@@ -301,4 +310,3 @@ describe("useClarisSuggestions", () => {
     expect(eqAcceptMock).toHaveBeenCalledWith("id", "sug-1");
   });
 });
-

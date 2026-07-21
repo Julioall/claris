@@ -1,48 +1,41 @@
-import { supabase } from '@/integrations/supabase/client';
+import {
+  telemetryClient,
+  type TelemetryErrorCategory,
+} from '@/integrations/telemetry/telemetry-client';
 
 /**
- * Tracks a usage event directly in Supabase without relying on React hooks.
+ * Tracks a usage event without relying on React hooks.
  * Use this from non-hook contexts such as AuthContext.
  * For React components and hooks, prefer `useTrackEvent` instead.
  */
 export async function trackEvent(
-  userId: string | null | undefined,
   eventType: string,
-  options: { route?: string; metadata?: Record<string, unknown> } = {},
+  options: { route?: string; resource?: string; metadata?: Record<string, unknown> } = {},
 ): Promise<void> {
-  try {
-    await supabase.from('app_usage_events' as never).insert({
-      user_id: userId ?? null,
-      event_type: eventType,
-      route: options.route ?? (typeof window !== 'undefined' ? window.location.pathname : null),
-      metadata: options.metadata ?? {},
-    } as never);
-  } catch {
-    // Tracking failures are silent
-  }
+  await telemetryClient.trackUsage({
+    eventType,
+    route: options.route ?? (typeof window !== 'undefined' ? window.location.pathname : undefined),
+    resource: options.resource,
+    metadata: options.metadata,
+  });
 }
 
 /**
- * Logs an error directly in Supabase without relying on React hooks.
+ * Logs an error without relying on React hooks.
  * Use this from non-hook contexts such as AuthContext.
  * For React components and hooks, prefer `useErrorLog` instead.
  */
 export async function logError(
-  userId: string | null | undefined,
   message: string,
-  options: { category?: string; payload?: Record<string, unknown> } = {},
+  options: { category?: TelemetryErrorCategory; payload?: Record<string, unknown> } = {},
 ): Promise<void> {
-  try {
-    await supabase.from('app_error_logs' as never).insert({
-      user_id: userId ?? null,
-      severity: 'error',
-      category: options.category ?? 'integration',
-      message,
-      payload: options.payload ?? {},
-      context: { url: typeof window !== 'undefined' ? window.location.pathname : null },
-      resolved: false,
-    } as never);
-  } catch {
-    // Logging failures are silent
-  }
+  await telemetryClient.logError({
+    severity: 'error',
+    category: options.category ?? 'integration',
+    message,
+    payload: options.payload,
+    context: {
+      url: typeof window !== 'undefined' ? window.location.pathname : null,
+    },
+  });
 }

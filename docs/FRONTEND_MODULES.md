@@ -54,6 +54,8 @@ O acesso ao Supabase Auth passa exclusivamente por `src/integrations/auth/auth-g
 
 Subscriptions passam exclusivamente por `src/integrations/realtime/realtime-gateway.ts`. O adapter esconde channels, tabelas e payloads do provedor e entrega eventos de dominio com uma funcao de cleanup; o Realtime permanece apenas como sinal para invalidar dados obtidos pela API.
 
+Telemetria passa por `src/integrations/telemetry/telemetry-client.ts`. O client nao recebe identidade, usa timeout curto e trata a operacao como best-effort; hooks e helpers nao gravam tabelas nem bloqueiam o fluxo do usuario quando a coleta falha.
+
 DTOs de transporte vivem em `src/features/<dominio>/api/contracts/` e descrevem somente o JSON da API. View models permanecem no `types.ts` da feature, e mappers em `api/mappers/` convertem entre os dois quando necessario. Contratos, hooks, pages e components nao importam tipos gerados do banco. `npm run guard:frontend-contracts` protege essa regra e mantem uma allowlist decrescente para duas dividas anteriores.
 
 Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md). A validacao client-side existe para UX; regras de permissao, elegibilidade e estado persistido sempre sao revalidadas no backend.

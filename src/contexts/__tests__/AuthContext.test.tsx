@@ -17,6 +17,8 @@ const decryptSessionDataMock = vi.fn();
 const fetchMock = vi.fn();
 const fromMock = vi.fn();
 const fromInsertMock = vi.fn();
+const trackUsageMock = vi.fn();
+const telemetryLogErrorMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -32,6 +34,13 @@ vi.mock("@/integrations/supabase/client", () => ({
     },
     rpc: (...args: unknown[]) => rpcMock(...args),
     from: (...args: unknown[]) => fromMock(...args),
+  },
+}));
+
+vi.mock("@/integrations/telemetry/telemetry-client", () => ({
+  telemetryClient: {
+    trackUsage: (...args: unknown[]) => trackUsageMock(...args),
+    logError: (...args: unknown[]) => telemetryLogErrorMock(...args),
   },
 }));
 
@@ -93,6 +102,8 @@ describe("AuthContext", () => {
     encryptSessionDataMock.mockResolvedValue("encrypted-session");
     decryptSessionDataMock.mockResolvedValue(null);
     fromInsertMock.mockResolvedValue({ error: null });
+    trackUsageMock.mockResolvedValue(undefined);
+    telemetryLogErrorMock.mockResolvedValue(undefined);
     fromMock.mockImplementation(() => ({
       select: vi.fn(() => ({
         eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })),

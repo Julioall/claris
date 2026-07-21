@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const DEFAULT_FUNCTIONS = [
+  'app-telemetry',
   'moodle-auth',
   'moodle-reauth-settings',
   'moodle-sync-courses',
