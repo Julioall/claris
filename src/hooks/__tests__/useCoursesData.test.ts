@@ -5,14 +5,14 @@ import { useCoursesData } from '@/features/courses/hooks/useCoursesData';
 import { createQueryClientWrapper } from '@/test/query-client';
 
 const useAuthMock = vi.fn();
-const listCatalogCoursesForUserMock = vi.fn();
+const listCatalogCoursesMock = vi.fn();
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock('@/features/courses/api/courses.repository', () => ({
-  listCatalogCoursesForUser: (...args: unknown[]) => listCatalogCoursesForUserMock(...args),
+vi.mock('@/features/courses/api/courses-catalog', () => ({
+  listCatalogCourses: (...args: unknown[]) => listCatalogCoursesMock(...args),
 }));
 
 describe('useCoursesData', () => {
@@ -20,7 +20,7 @@ describe('useCoursesData', () => {
     vi.clearAllMocks();
 
     useAuthMock.mockReturnValue({ user: { id: 'user-1' } });
-    listCatalogCoursesForUserMock.mockResolvedValue([
+    listCatalogCoursesMock.mockResolvedValue([
       {
         id: 'c-1',
         name: 'Matematica',
@@ -69,11 +69,11 @@ describe('useCoursesData', () => {
         at_risk_count: 2,
       }),
     ]);
-    expect(listCatalogCoursesForUserMock).toHaveBeenCalledWith('user-1');
+    expect(listCatalogCoursesMock).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
 
   it('stores an error when the catalog query fails', async () => {
-    listCatalogCoursesForUserMock.mockRejectedValueOnce(new Error('query failed'));
+    listCatalogCoursesMock.mockRejectedValueOnce(new Error('query failed'));
 
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useCoursesData(), { wrapper });
@@ -94,6 +94,6 @@ describe('useCoursesData', () => {
     });
 
     expect(result.current.courses).toEqual([]);
-    expect(listCatalogCoursesForUserMock).not.toHaveBeenCalled();
+    expect(listCatalogCoursesMock).not.toHaveBeenCalled();
   });
 });

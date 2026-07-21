@@ -26,48 +26,60 @@ interface CourseWithStats {
 
 interface SchoolCourseCardProps {
   course: CourseWithStats;
-  onToggleFollow?: (courseId: string) => void;
-  onToggleIgnore?: (courseId: string) => void;
-  onToggleAttendance?: (courseId: string) => void;
+  onToggleFollow?: (courseId: string) => Promise<void> | void;
+  onToggleIgnore?: (courseId: string) => Promise<void> | void;
+  onToggleAttendance?: (courseId: string) => Promise<void> | void;
 }
 
 export function SchoolCourseCard({ course, onToggleFollow, onToggleIgnore, onToggleAttendance }: SchoolCourseCardProps) {
   const effectiveEndDate = getCourseEffectiveEndDate(course);
   const isExpired = isCourseEffectivelyFinished(course);
 
-  const handleToggleFollow = (e: React.MouseEvent) => {
+  const handleToggleFollow = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!onToggleFollow) return;
-    onToggleFollow(course.id);
-    if (course.is_following) {
-      toast.success('Removido dos Meus Cursos');
-    } else {
-      toast.success('Adicionado aos Meus Cursos');
+    try {
+      await onToggleFollow(course.id);
+      if (course.is_following) {
+        toast.success('Removido dos Meus Cursos');
+      } else {
+        toast.success('Adicionado aos Meus Cursos');
+      }
+    } catch {
+      toast.error('Nao foi possivel atualizar o acompanhamento do curso.');
     }
   };
 
-  const handleToggleIgnore = (e: React.MouseEvent) => {
+  const handleToggleIgnore = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!onToggleIgnore) return;
-    onToggleIgnore(course.id);
-    if (course.is_ignored) {
-      toast.success('Curso será sincronizado');
-    } else {
-      toast.success('Curso ignorado na sincronização');
+    try {
+      await onToggleIgnore(course.id);
+      if (course.is_ignored) {
+        toast.success('Curso será sincronizado');
+      } else {
+        toast.success('Curso ignorado na sincronização');
+      }
+    } catch {
+      toast.error('Nao foi possivel atualizar a preferencia de sincronizacao.');
     }
   };
 
-  const handleToggleAttendance = (e: React.MouseEvent) => {
+  const handleToggleAttendance = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!onToggleAttendance) return;
-    onToggleAttendance(course.id);
-    if (course.is_attendance_enabled) {
-      toast.success('Presenca desativada para este curso');
-    } else {
-      toast.success('Presenca ativada para este curso');
+    try {
+      await onToggleAttendance(course.id);
+      if (course.is_attendance_enabled) {
+        toast.success('Presenca desativada para este curso');
+      } else {
+        toast.success('Presenca ativada para este curso');
+      }
+    } catch {
+      toast.error('Nao foi possivel atualizar a presenca deste curso.');
     }
   };
 

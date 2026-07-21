@@ -64,9 +64,9 @@ type HierarchyTree = Record<string, SchoolNode>;
 interface CategoryHierarchyProps {
   courses: CourseWithStats[];
   onUnfollow?: (courseId: string) => void;
-  onUnfollowMultiple?: (courseIds: string[]) => void;
+  onUnfollowMultiple?: (courseIds: string[]) => Promise<void> | void;
   onToggleAttendance?: (courseId: string) => void;
-  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => void;
+  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => Promise<void> | void;
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
@@ -111,18 +111,20 @@ function RemoveAllButton({
   level 
 }: { 
   courses: CourseWithStats[]; 
-  onUnfollowMultiple?: (courseIds: string[]) => void;
+  onUnfollowMultiple?: (courseIds: string[]) => Promise<void> | void;
   level: 'escola' | 'curso' | 'turma';
 }) {
   if (!onUnfollowMultiple) return null;
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const courseIds = courses.map(c => c.id);
-    onUnfollowMultiple(courseIds);
-    
-    const levelName = level === 'escola' ? 'escola' : level === 'curso' ? 'curso' : 'turma';
-    toast.success(`${courses.length} curso${courses.length !== 1 ? 's' : ''} removido${courses.length !== 1 ? 's' : ''} de Meus Cursos`);
+    try {
+      await onUnfollowMultiple(courseIds);
+      toast.success(`${courses.length} curso${courses.length !== 1 ? 's' : ''} removido${courses.length !== 1 ? 's' : ''} de Meus Cursos`);
+    } catch {
+      toast.error(`Nao foi possivel remover os cursos da ${level}.`);
+    }
   };
 
   return (

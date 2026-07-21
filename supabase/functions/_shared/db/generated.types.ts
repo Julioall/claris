@@ -1674,6 +1674,48 @@ export type Database = {
         }
         Relationships: []
       }
+      course_activity_visibility_overrides: {
+        Row: {
+          course_id: string
+          created_at: string
+          hidden: boolean
+          moodle_activity_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          hidden: boolean
+          moodle_activity_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          hidden?: boolean
+          moodle_activity_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "course_activity_visibility_overrides_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "course_activity_visibility_overrides_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           category: string | null
@@ -2984,26 +3026,59 @@ export type Database = {
         }
         Relationships: []
       }
+      user_course_catalog_eligibility: {
+        Row: {
+          course_id: string
+          discovered_at: string
+          user_id: string
+        }
+        Insert: {
+          course_id: string
+          discovered_at?: string
+          user_id: string
+        }
+        Update: {
+          course_id?: string
+          discovered_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_course_catalog_eligibility_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_course_catalog_eligibility_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_courses: {
         Row: {
           course_id: string
           created_at: string | null
           id: string
-          role: string | null
+          role: string
           user_id: string
         }
         Insert: {
           course_id: string
           created_at?: string | null
           id?: string
-          role?: string | null
+          role?: string
           user_id: string
         }
         Update: {
           course_id?: string
           created_at?: string | null
           id?: string
-          role?: string | null
+          role?: string
           user_id?: string
         }
         Relationships: [
@@ -3318,6 +3393,54 @@ export type Database = {
         }
         Returns: string
       }
+      backend_get_attendance_date_summaries: {
+        Args: { p_course_id: string; p_user_id: string }
+        Returns: {
+          ausente: number
+          date: string
+          justificado: number
+          presente: number
+          total: number
+        }[]
+      }
+      backend_link_eligible_user_courses: {
+        Args: { p_course_ids: string[]; p_user_id: string }
+        Returns: number
+      }
+      backend_replace_user_course_eligibility: {
+        Args: { p_course_ids: string[]; p_user_id: string }
+        Returns: number
+      }
+      backend_save_attendance_sheet: {
+        Args: {
+          p_attendance_date: string
+          p_course_id: string
+          p_entries: Json
+          p_user_id: string
+        }
+        Returns: number
+      }
+      backend_set_course_activity_visibility: {
+        Args: {
+          p_course_id: string
+          p_hidden: boolean
+          p_moodle_activity_id: string
+          p_user_id: string
+        }
+        Returns: number
+      }
+      backend_set_course_attendance_enabled: {
+        Args: { p_course_ids: string[]; p_enabled: boolean; p_user_id: string }
+        Returns: number
+      }
+      backend_set_user_course_roles: {
+        Args: { p_course_ids: string[]; p_role: string; p_user_id: string }
+        Returns: number
+      }
+      backend_set_user_courses_ignored: {
+        Args: { p_course_ids: string[]; p_ignored: boolean; p_user_id: string }
+        Returns: number
+      }
       calculate_next_recurrence_date: {
         Args: {
           current_ts: string
@@ -3449,6 +3572,18 @@ export type Database = {
         Returns: undefined
       }
       resolve_current_app_user_id: { Args: never; Returns: string }
+      search_task_tag_suggestions: {
+        Args: {
+          p_limit?: number
+          p_prefix: string
+          p_query?: string
+          p_user_id: string
+        }
+        Returns: {
+          entity_id: string
+          label: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       slugify_app_group_name: { Args: { p_name: string }; Returns: string }

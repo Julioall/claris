@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { listCatalogCoursesForUser } from '@/features/courses/api/courses.repository';
+import { listCatalogCourses } from '@/features/courses/api/courses-catalog';
 
 export interface TutorCourse {
   id: string;
@@ -85,8 +85,8 @@ async function paginateRows<T>(fetchPage: (page: number) => Promise<{ data: T[] 
   return rows;
 }
 
-export async function fetchTutorCourses(userId: string): Promise<TutorCourse[]> {
-  const followedCourses = (await listCatalogCoursesForUser(userId))
+export async function fetchTutorCourses(_userId: string): Promise<TutorCourse[]> {
+  const followedCourses = (await listCatalogCourses())
     .filter((course) => course.is_following)
     .map((course) => ({
       id: course.id,

@@ -32,8 +32,8 @@ interface CourseWithStats {
 
 interface MyCourseCardProps {
   course: CourseWithStats;
-  onUnfollow?: (courseId: string) => void;
-  onToggleAttendance?: (courseId: string) => void;
+  onUnfollow?: (courseId: string) => Promise<void> | void;
+  onToggleAttendance?: (courseId: string) => Promise<void> | void;
 }
 
 export function MyCourseCard({ course, onUnfollow, onToggleAttendance }: MyCourseCardProps) {
@@ -47,24 +47,32 @@ export function MyCourseCard({ course, onUnfollow, onToggleAttendance }: MyCours
     return format(new Date(date), "dd/MM 'às' HH:mm", { locale: ptBR });
   };
 
-  const handleUnfollow = (e: React.MouseEvent) => {
+  const handleUnfollow = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (onUnfollow) {
-      onUnfollow(course.id);
-      toast.success('Curso removido de Meus Cursos');
+      try {
+        await onUnfollow(course.id);
+        toast.success('Curso removido de Meus Cursos');
+      } catch {
+        toast.error('Nao foi possivel remover o curso de Meus Cursos.');
+      }
     }
   };
 
-  const handleToggleAttendance = (e: React.MouseEvent) => {
+  const handleToggleAttendance = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (!onToggleAttendance) return;
-    onToggleAttendance(course.id);
-    if (course.is_attendance_enabled) {
-      toast.success('Presenca desativada para o curso');
-    } else {
-      toast.success('Presenca ativada para o curso');
+    try {
+      await onToggleAttendance(course.id);
+      if (course.is_attendance_enabled) {
+        toast.success('Presenca desativada para o curso');
+      } else {
+        toast.success('Presenca ativada para o curso');
+      }
+    } catch {
+      toast.error('Nao foi possivel atualizar a presenca do curso.');
     }
   };
 

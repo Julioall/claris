@@ -513,6 +513,19 @@ describe("AuthContext", () => {
 
     expect(authRef?.courses.map((course) => course.id)).toEqual(["c-1", "c-2"]);
 
+    const linkCoursesCall = fetchMock.mock.calls.find(([input, init]) => {
+      if (!String(input).endsWith("/moodle-sync-courses")) return false;
+      const body = JSON.parse(String((init as RequestInit | undefined)?.body ?? "{}"));
+      return body.action === "link_selected_courses";
+    });
+    const linkCoursesBody = JSON.parse(
+      String((linkCoursesCall?.[1] as RequestInit | undefined)?.body ?? "{}"),
+    );
+    expect(linkCoursesBody).toEqual({
+      action: "link_selected_courses",
+      selectedCourseIds: ["c-1"],
+    });
+
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringMatching(/moodle-sync-courses$/),
       expect.anything(),

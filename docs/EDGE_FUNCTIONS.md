@@ -194,6 +194,15 @@ O smoke de Edge Functions valida o piloto V1 de ponta a ponta: `Content-Type`, h
 - `app-telemetry`: coleta autenticada e best-effort de uso/erros, sem permitir identidade fornecida pelo frontend
 - `task-tag-suggestions`: busca course-scoped de entidades para tags de tarefas, sem expor tabelas ou aceitar escopo do browser
 - `dashboard-summary`: compoe indicadores, prioridades, fila de correcao e feed em uma unica chamada autenticada, com escopo tutor derivado do token
+- `courses-catalog`: entrega o catalogo do ator autenticado e executa comandos atomicos de associacao, ignorar/designorar e configuracao de frequencia
+- `course-panel`: consolida curso, alunos, atividades, submissoes e estatisticas com metadados canonicos independentes da ordem; tambem persiste a intencao de ocultar ou exibir uma atividade
+- `course-attendance`: consulta detalhes paginados, totais completos por data e folha por curso, e salva lotes de presenca com validacao course-scoped e transacao unica
+
+As functions de cursos usam DTOs V1 em `camelCase`, rejeitam identidade enviada no payload e reaplicam autorizacao e acesso ao curso no backend. Os comandos multi-registro chamam RPCs `SECURITY DEFINER` exclusivas de `service_role`; o navegador nao recebe permissao de execucao nem de escrita direta nas tabelas envolvidas.
+
+No `courses-catalog`, a leitura aceita as permissoes das tres rotas consumidoras (`courses.catalog.view`, `schools.view` ou `reports.view`). Associacao e preferencia de curso aceitam somente os fluxos de Cursos/Escolas, enquanto frequencia exige `courses.attendance.manage`. Para nao transformar o comando de associacao em autoelevacao, um ator nao administrador so pode alternar o papel de cursos aos quais ja possui acesso. A cada sincronizacao, `moodle-sync-courses` substitui atomicamente a elegibilidade do ator pelos cursos efetivamente retornados por sua sessao Moodle; a selecao posterior aceita ate 500 UUIDs unicos e os vincula em uma unica RPC que rejeita o lote inteiro quando qualquer curso estiver fora dessa elegibilidade.
+
+Em frequencia, `records` e paginado para limitar o payload, enquanto `dateSummaries` e agregado no banco sobre todo o historico. A UI cancela folhas obsoletas quando a data muda e so habilita o salvamento depois de correlacionar curso e data da resposta.
 
 ## Nova function: `moodle-grade-suggestions`
 

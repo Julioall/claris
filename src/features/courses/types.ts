@@ -1,5 +1,3 @@
-import type { Student } from '@/features/students/types';
-
 export interface Course {
   id: string;
   moodle_course_id: string;
@@ -10,8 +8,8 @@ export interface Course {
   end_date?: string;
   effective_end_date?: string;
   last_sync?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
   students_count?: number;
   at_risk_count?: number;
 }
@@ -25,24 +23,6 @@ export interface CourseWithStats extends Course {
   student_ids: string[];
 }
 
-export interface StudentActivity {
-  id: string;
-  student_id: string;
-  course_id: string;
-  moodle_activity_id: string;
-  activity_name: string;
-  activity_type: string | null;
-  grade: number | null;
-  grade_max: number | null;
-  percentage: number | null;
-  status: string | null;
-  completed_at: string | null;
-  submitted_at?: string | null;
-  graded_at?: string | null;
-  due_date: string | null;
-  hidden: boolean;
-}
-
 export interface CoursePanelStats {
   totalStudents: number;
   atRiskStudents: number;
@@ -54,14 +34,6 @@ export interface CoursePanelStats {
     risco: number;
     critico: number;
   };
-}
-
-export interface CoursePanelData {
-  course: Course | null;
-  students: Student[];
-  activities: StudentActivity[];
-  activitySubmissions: StudentActivity[];
-  stats: CoursePanelStats;
 }
 
 export const EMPTY_COURSE_PANEL_STATS: CoursePanelStats = {

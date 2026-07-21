@@ -1,17 +1,23 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AttendanceBulkToggleButton } from "@/components/attendance/AttendanceBulkToggleButton";
 
 const toastSuccessMock = vi.fn();
+const toastErrorMock = vi.fn();
 
 vi.mock("sonner", () => ({
   toast: {
+    error: (...args: unknown[]) => toastErrorMock(...args),
     success: (...args: unknown[]) => toastSuccessMock(...args),
   },
 }));
 
 describe("AttendanceBulkToggleButton", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("returns null when callback is not provided", () => {
     const { container } = render(
       <AttendanceBulkToggleButton
@@ -76,5 +82,26 @@ describe("AttendanceBulkToggleButton", () => {
 
     expect(onToggle).toHaveBeenCalledWith(["c-1", "c-2"], true);
     expect(toastSuccessMock).toHaveBeenCalledWith("Presenca ativada para escola");
+  });
+
+  it("does not report success when the backend command fails", async () => {
+    const user = userEvent.setup();
+    const onToggle = vi.fn().mockRejectedValue(new Error("command failed"));
+    render(
+      <AttendanceBulkToggleButton
+        courses={[{ id: "c-1", is_attendance_enabled: false }]}
+        level="curso"
+        onToggleAttendanceMultiple={onToggle}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /marcar presenca/i }));
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith(
+        "Nao foi possivel atualizar a presenca para curso.",
+      );
+    });
+    expect(toastSuccessMock).not.toHaveBeenCalled();
   });
 });

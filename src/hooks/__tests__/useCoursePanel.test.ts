@@ -1,117 +1,85 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { CoursePanelDto } from '@/features/courses/api/contracts/course-panel.contract';
 import { useCoursePanel } from '@/features/courses/hooks/useCoursePanel';
+import { courseKeys } from '@/features/courses/query-keys';
 import { createQueryClientWrapper } from '@/test/query-client';
 
 const useAuthMock = vi.fn();
 const getCoursePanelMock = vi.fn();
-const getCourseAttendanceEnabledMock = vi.fn();
 const setCourseActivityVisibilityMock = vi.fn();
-const enableAttendanceForCoursesMock = vi.fn();
-const disableAttendanceForCoursesMock = vi.fn();
+const setCourseAttendanceEnabledMock = vi.fn();
 const toastMock = vi.fn();
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock('@/features/courses/api/courses.repository', () => ({
+vi.mock('@/features/courses/api/course-panel', () => ({
   getCoursePanel: (...args: unknown[]) => getCoursePanelMock(...args),
-  getCourseAttendanceEnabled: (...args: unknown[]) => getCourseAttendanceEnabledMock(...args),
   setCourseActivityVisibility: (...args: unknown[]) => setCourseActivityVisibilityMock(...args),
-  enableAttendanceForCourses: (...args: unknown[]) => enableAttendanceForCoursesMock(...args),
-  disableAttendanceForCourses: (...args: unknown[]) => disableAttendanceForCoursesMock(...args),
+}));
+
+vi.mock('@/features/courses/api/courses-catalog', () => ({
+  setCourseAttendanceEnabled: (...args: unknown[]) => setCourseAttendanceEnabledMock(...args),
 }));
 
 vi.mock('@/hooks/use-toast', () => ({
   toast: (...args: unknown[]) => toastMock(...args),
 }));
 
-const panelData = {
+const panelData: CoursePanelDto = {
+  activities: [{
+    courseId: 'c-1',
+    dueAt: '2026-02-21T00:00:00.000Z',
+    hidden: false,
+    id: 'a-1',
+    isAssignment: true,
+    moodleActivityId: 'm-1',
+    name: 'Atividade 1',
+    submissionCounts: {
+      completed: 0,
+      corrected: 1,
+      pendingCorrection: 0,
+      pendingSubmission: 0,
+      total: 1,
+    },
+    submissions: [{
+      completedAt: '2026-02-20T00:00:00.000Z',
+      grade: 8,
+      gradedAt: '2026-02-20T00:00:00.000Z',
+      gradeMax: 10,
+      id: 'a-1',
+      percentage: 80,
+      studentId: 's-1',
+      submittedAt: '2026-02-19T00:00:00.000Z',
+      workflowStatus: 'corrected',
+    }],
+    type: 'assignment',
+  }],
+  attendanceEnabled: false,
   course: {
-    id: 'c-1',
-    name: 'Matematica',
-    short_name: 'MAT',
-    moodle_course_id: '10',
     category: 'Senai > Escola A > Curso X > Turma 1',
-    start_date: '2026-01-01T00:00:00.000Z',
-    end_date: '2026-12-31T00:00:00.000Z',
-    effective_end_date: '2026-12-31T00:00:00.000Z',
+    effectiveEndsAt: '2026-12-31T00:00:00.000Z',
+    endsAt: '2026-12-31T00:00:00.000Z',
+    id: 'c-1',
+    lastSyncedAt: '2026-02-20T00:00:00.000Z',
+    lifecycle: 'inProgress',
+    moodleCourseId: '10',
+    name: 'Matematica',
+    shortName: 'MAT',
+    startsAt: '2026-01-01T00:00:00.000Z',
   },
-  students: [
-    {
-      id: 's-1',
-      moodle_user_id: '11',
-      full_name: 'Ana',
-      current_risk_level: 'risco',
-      created_at: '2026-02-01T00:00:00.000Z',
-      updated_at: '2026-02-01T00:00:00.000Z',
-      last_access: '2026-02-20T00:00:00.000Z',
-    },
-    {
-      id: 's-2',
-      moodle_user_id: '12',
-      full_name: 'Bruno',
-      current_risk_level: 'normal',
-      created_at: '2026-02-01T00:00:00.000Z',
-      updated_at: '2026-02-01T00:00:00.000Z',
-      last_access: null,
-    },
-  ],
-  activities: [
-    {
-      id: 'a-1',
-      student_id: 's-1',
-      course_id: 'c-1',
-      moodle_activity_id: 'm-1',
-      activity_name: 'Atividade 1',
-      activity_type: 'quiz',
-      grade: 8,
-      grade_max: 10,
-      percentage: 80,
-      status: 'completed',
-      completed_at: '2026-02-20T00:00:00.000Z',
-      due_date: '2026-02-21T00:00:00.000Z',
-      hidden: false,
-    },
-    {
-      id: 'a-4',
-      student_id: 's-2',
-      course_id: 'c-1',
-      moodle_activity_id: 'm-3',
-      activity_name: 'Atividade 3',
-      activity_type: 'assignment',
-      grade: 7,
-      grade_max: 10,
-      percentage: 70,
-      status: 'completed',
-      completed_at: '2026-02-20T00:00:00.000Z',
-      due_date: '2026-02-21T00:00:00.000Z',
-      hidden: false,
-    },
-  ],
-  activitySubmissions: [
-    {
-      id: 'a-1',
-      student_id: 's-1',
-      course_id: 'c-1',
-      moodle_activity_id: 'm-1',
-      activity_name: 'Atividade 1',
-      activity_type: 'quiz',
-      grade: 8,
-      grade_max: 10,
-      percentage: 80,
-      status: 'completed',
-      completed_at: '2026-02-20T00:00:00.000Z',
-      due_date: '2026-02-21T00:00:00.000Z',
-      hidden: false,
-    },
-  ],
+  metadata: {
+    contractVersion: 1,
+    dataUpdatedAt: '2026-02-20T00:00:00.000Z',
+    generatedAt: '2026-02-21T00:00:00.000Z',
+  },
   stats: {
     totalStudents: 2,
     atRiskStudents: 1,
-    totalActivities: 2,
+    totalActivities: 1,
     completionRate: 100,
     riskDistribution: {
       normal: 1,
@@ -120,133 +88,118 @@ const panelData = {
       critico: 0,
     },
   },
+  students: [{
+    avatarUrl: null,
+    email: 'ana@example.com',
+    enrollmentStatus: 'ativo',
+    id: 's-1',
+    lastAccessAt: '2026-02-20T00:00:00.000Z',
+    name: 'Ana',
+    riskLevel: 'risco',
+  }],
 };
 
 describe('useCoursePanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
     useAuthMock.mockReturnValue({ user: { id: 'user-1' } });
     getCoursePanelMock.mockResolvedValue(panelData);
-    getCourseAttendanceEnabledMock.mockResolvedValue(false);
-    setCourseActivityVisibilityMock.mockResolvedValue(undefined);
-    enableAttendanceForCoursesMock.mockResolvedValue(undefined);
-    disableAttendanceForCoursesMock.mockResolvedValue(undefined);
+    setCourseActivityVisibilityMock.mockResolvedValue({ updatedCount: 1 });
+    setCourseAttendanceEnabledMock.mockResolvedValue({ affectedCourseCount: 1 });
   });
 
-  it('loads course, students, activities, stats and attendance flag', async () => {
+  it('loads the complete panel with one user-scoped request', async () => {
+    const { wrapper, queryClient } = createQueryClientWrapper();
+    const { result } = renderHook(() => useCoursePanel('c-1'), { wrapper });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(getCoursePanelMock).toHaveBeenCalledTimes(1);
+    expect(getCoursePanelMock).toHaveBeenCalledWith('c-1', expect.any(AbortSignal));
+    expect(result.current.course).toMatchObject({ id: 'c-1', shortName: 'MAT' });
+    expect(result.current.activities[0]).toMatchObject({
+      moodleActivityId: 'm-1',
+      submissionCounts: { corrected: 1 },
+    });
+    expect(result.current.isAttendanceEnabled).toBe(false);
+    expect(queryClient.getQueryData(courseKeys.panel('user-1', 'c-1'))).toBe(panelData);
+  });
+
+  it('does not request a panel without authenticated identity', async () => {
+    useAuthMock.mockReturnValue({ user: null });
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useCoursePanel('c-1'), { wrapper });
 
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.error).toBeNull();
-    expect(result.current.course).toMatchObject({ id: 'c-1', short_name: 'MAT' });
-    expect(result.current.students).toHaveLength(2);
-    expect(result.current.activities).toHaveLength(2);
-    expect(result.current.stats).toEqual(panelData.stats);
-    await waitFor(() => {
-      expect(result.current.isAttendanceEnabled).toBe(false);
-    });
+    expect(getCoursePanelMock).not.toHaveBeenCalled();
   });
 
-  it('returns validation error when course id is not provided', async () => {
+  it('returns a validation error when course id is not provided', () => {
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useCoursePanel(undefined), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
 
     expect(result.current.error).toContain('não fornecido');
     expect(getCoursePanelMock).not.toHaveBeenCalled();
   });
 
-  it('handles fetch failures', async () => {
+  it('exposes transport failures', async () => {
     getCoursePanelMock.mockRejectedValueOnce(new Error('course failed'));
-
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useCoursePanel('c-1'), { wrapper });
 
-    await waitFor(() => {
-      expect(result.current.error).toContain('course failed');
-    });
+    await waitFor(() => expect(result.current.error).toContain('course failed'));
   });
 
-  it('toggles activity visibility and emits success toast', async () => {
+  it('sends a visibility intent and emits the success toast', async () => {
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useCoursePanel('c-1'), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => {
       await result.current.toggleActivityVisibility('m-1', true);
     });
 
     expect(setCourseActivityVisibilityMock).toHaveBeenCalledWith('c-1', 'm-1', true);
-    await waitFor(() => {
-      expect(toastMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          title: expect.stringMatching(/oculta/i),
-        }),
-      );
-    });
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: expect.stringMatching(/oculta/i),
+    }));
   });
 
-  it('shows destructive toast when visibility update fails', async () => {
+  it('shows a destructive toast when visibility update fails', async () => {
     setCourseActivityVisibilityMock.mockRejectedValueOnce(new Error('update failed'));
-
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useCoursePanel('c-1'), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => {
       await expect(result.current.toggleActivityVisibility('m-1', false)).rejects.toThrow('update failed');
     });
 
-    expect(toastMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        title: 'Erro',
-        variant: 'destructive',
-      }),
-    );
+    expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Erro',
+      variant: 'destructive',
+    }));
   });
 
-  it('toggles attendance and updates the cached flag', async () => {
-    const { wrapper } = createQueryClientWrapper();
+  it('toggles attendance through one desired-state command and updates panel cache', async () => {
+    const { wrapper, queryClient } = createQueryClientWrapper();
     const { result } = renderHook(() => useCoursePanel('c-1'), { wrapper });
-
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
-    await waitFor(() => {
-      expect(result.current.isAttendanceEnabled).toBe(false);
-    });
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => {
       await result.current.toggleAttendance();
     });
 
-    expect(enableAttendanceForCoursesMock).toHaveBeenCalledWith('user-1', ['c-1']);
-    await waitFor(() => {
-      expect(result.current.isAttendanceEnabled).toBe(true);
-    });
+    expect(setCourseAttendanceEnabledMock).toHaveBeenCalledWith(['c-1'], true);
+    await waitFor(() => expect(result.current.isAttendanceEnabled).toBe(true));
+    expect(queryClient.getQueryData(courseKeys.catalog('user-1'))).toBeUndefined();
 
     await act(async () => {
       await result.current.toggleAttendance();
     });
 
-    expect(disableAttendanceForCoursesMock).toHaveBeenCalledWith('user-1', ['c-1']);
-    await waitFor(() => {
-      expect(result.current.isAttendanceEnabled).toBe(false);
-    });
+    expect(setCourseAttendanceEnabledMock).toHaveBeenLastCalledWith(['c-1'], false);
+    await waitFor(() => expect(result.current.isAttendanceEnabled).toBe(false));
   });
 });

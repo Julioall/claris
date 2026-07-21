@@ -5,26 +5,20 @@ import { useAllCoursesData } from '@/features/courses/hooks/useAllCoursesData';
 import { createQueryClientWrapper } from '@/test/query-client';
 
 const useAuthMock = vi.fn();
-const listCatalogCoursesForUserMock = vi.fn();
+const listCatalogCoursesMock = vi.fn();
 const setCourseAssociationRoleMock = vi.fn();
-const setCoursesAssociationRoleMock = vi.fn();
-const ignoreCoursesMock = vi.fn();
-const unignoreCoursesMock = vi.fn();
-const enableAttendanceForCoursesMock = vi.fn();
-const disableAttendanceForCoursesMock = vi.fn();
+const setCoursesIgnoredMock = vi.fn();
+const setCourseAttendanceEnabledMock = vi.fn();
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock('@/features/courses/api/courses.repository', () => ({
-  listCatalogCoursesForUser: (...args: unknown[]) => listCatalogCoursesForUserMock(...args),
+vi.mock('@/features/courses/api/courses-catalog', () => ({
+  listCatalogCourses: (...args: unknown[]) => listCatalogCoursesMock(...args),
   setCourseAssociationRole: (...args: unknown[]) => setCourseAssociationRoleMock(...args),
-  setCoursesAssociationRole: (...args: unknown[]) => setCoursesAssociationRoleMock(...args),
-  ignoreCourses: (...args: unknown[]) => ignoreCoursesMock(...args),
-  unignoreCourses: (...args: unknown[]) => unignoreCoursesMock(...args),
-  enableAttendanceForCourses: (...args: unknown[]) => enableAttendanceForCoursesMock(...args),
-  disableAttendanceForCourses: (...args: unknown[]) => disableAttendanceForCoursesMock(...args),
+  setCoursesIgnored: (...args: unknown[]) => setCoursesIgnoredMock(...args),
+  setCourseAttendanceEnabled: (...args: unknown[]) => setCourseAttendanceEnabledMock(...args),
 }));
 
 const baseCourses = [
@@ -63,13 +57,10 @@ describe('useAllCoursesData', () => {
     vi.clearAllMocks();
 
     useAuthMock.mockReturnValue({ user: { id: 'user-1' } });
-    listCatalogCoursesForUserMock.mockResolvedValue(baseCourses);
+    listCatalogCoursesMock.mockResolvedValue(baseCourses);
     setCourseAssociationRoleMock.mockResolvedValue(undefined);
-    setCoursesAssociationRoleMock.mockResolvedValue(undefined);
-    ignoreCoursesMock.mockResolvedValue(undefined);
-    unignoreCoursesMock.mockResolvedValue(undefined);
-    enableAttendanceForCoursesMock.mockResolvedValue(undefined);
-    disableAttendanceForCoursesMock.mockResolvedValue(undefined);
+    setCoursesIgnoredMock.mockResolvedValue(undefined);
+    setCourseAttendanceEnabledMock.mockResolvedValue(undefined);
   });
 
   it('loads all courses with stats and flags', async () => {
@@ -113,7 +104,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleFollow('c-2');
     });
 
-    expect(setCourseAssociationRoleMock).toHaveBeenCalledWith('user-1', 'c-2', 'tutor');
+    expect(setCourseAssociationRoleMock).toHaveBeenCalledWith(['c-2'], 'tutor');
     await waitFor(() => {
       expect(result.current.courses.find((course) => course.id === 'c-2')?.is_following).toBe(true);
     });
@@ -122,7 +113,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleFollow('c-1');
     });
 
-    expect(setCourseAssociationRoleMock).toHaveBeenCalledWith('user-1', 'c-1', 'viewer');
+    expect(setCourseAssociationRoleMock).toHaveBeenCalledWith(['c-1'], 'viewer');
     await waitFor(() => {
       expect(result.current.courses.find((course) => course.id === 'c-1')?.is_following).toBe(false);
     });
@@ -142,7 +133,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleIgnore('c-1');
     });
 
-    expect(ignoreCoursesMock).toHaveBeenCalledWith('user-1', ['c-1']);
+    expect(setCoursesIgnoredMock).toHaveBeenCalledWith(['c-1'], true);
     await waitFor(() => {
       expect(result.current.courses.find((course) => course.id === 'c-1')?.is_ignored).toBe(true);
     });
@@ -151,7 +142,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleIgnore('c-2');
     });
 
-    expect(unignoreCoursesMock).toHaveBeenCalledWith('user-1', ['c-2']);
+    expect(setCoursesIgnoredMock).toHaveBeenCalledWith(['c-2'], false);
     await waitFor(() => {
       expect(result.current.courses.find((course) => course.id === 'c-2')?.is_ignored).toBe(false);
     });
@@ -169,7 +160,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleIgnoreMultiple(['c-1', 'c-2'], true);
     });
 
-    expect(ignoreCoursesMock).toHaveBeenCalledWith('user-1', ['c-1']);
+    expect(setCoursesIgnoredMock).toHaveBeenCalledWith(['c-1'], true);
     await waitFor(() => {
       expect(result.current.courses.every((course) => course.is_ignored)).toBe(true);
     });
@@ -178,9 +169,49 @@ describe('useAllCoursesData', () => {
       await result.current.toggleIgnoreMultiple(['c-1', 'c-2'], false);
     });
 
-    expect(unignoreCoursesMock).toHaveBeenCalledWith('user-1', ['c-1', 'c-2']);
+    expect(setCoursesIgnoredMock).toHaveBeenCalledWith(['c-1', 'c-2'], false);
     await waitFor(() => {
       expect(result.current.courses.every((course) => !course.is_ignored)).toBe(true);
+    });
+  });
+
+  it('updates the catalog only after a bulk command with more than 200 courses finishes', async () => {
+    const bulkCourses = Array.from({ length: 205 }, (_, index) => ({
+      ...baseCourses[0],
+      id: `c-${index + 1}`,
+      moodle_course_id: String(index + 1),
+      is_ignored: false,
+    }));
+    const courseIds = bulkCourses.map((course) => course.id);
+    listCatalogCoursesMock.mockResolvedValue(bulkCourses);
+
+    let resolveCommand!: () => void;
+    setCoursesIgnoredMock.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveCommand = resolve;
+    }));
+
+    const { wrapper } = createQueryClientWrapper();
+    const { result } = renderHook(() => useAllCoursesData(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.courses).toHaveLength(205);
+    });
+
+    let mutationPromise!: Promise<void>;
+    act(() => {
+      mutationPromise = result.current.toggleIgnoreMultiple(courseIds, true);
+    });
+
+    await waitFor(() => {
+      expect(setCoursesIgnoredMock).toHaveBeenCalledWith(courseIds, true);
+    });
+    expect(result.current.courses.every((course) => !course.is_ignored)).toBe(true);
+
+    resolveCommand();
+    await act(async () => mutationPromise);
+
+    await waitFor(() => {
+      expect(result.current.courses.every((course) => course.is_ignored)).toBe(true);
     });
   });
 
@@ -197,7 +228,7 @@ describe('useAllCoursesData', () => {
       await result.current.unfollowMultiple(['c-1', 'c-2']);
     });
 
-    expect(setCoursesAssociationRoleMock).toHaveBeenCalledWith('user-1', ['c-1', 'c-2'], 'viewer');
+    expect(setCourseAssociationRoleMock).toHaveBeenCalledWith(['c-1', 'c-2'], 'viewer');
     await waitFor(() => {
       expect(result.current.courses.every((course) => !course.is_following)).toBe(true);
     });
@@ -217,7 +248,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleAttendance('c-1');
     });
 
-    expect(enableAttendanceForCoursesMock).toHaveBeenCalledWith('user-1', ['c-1']);
+    expect(setCourseAttendanceEnabledMock).toHaveBeenCalledWith(['c-1'], true);
     await waitFor(() => {
       expect(result.current.courses.find((course) => course.id === 'c-1')?.is_attendance_enabled).toBe(true);
     });
@@ -226,7 +257,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleAttendance('c-2');
     });
 
-    expect(disableAttendanceForCoursesMock).toHaveBeenCalledWith('user-1', ['c-2']);
+    expect(setCourseAttendanceEnabledMock).toHaveBeenCalledWith(['c-2'], false);
     await waitFor(() => {
       expect(result.current.courses.find((course) => course.id === 'c-2')?.is_attendance_enabled).toBe(false);
     });
@@ -244,7 +275,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleAttendanceMultiple(['c-1', 'c-2'], true);
     });
 
-    expect(enableAttendanceForCoursesMock).toHaveBeenCalledWith('user-1', ['c-1']);
+    expect(setCourseAttendanceEnabledMock).toHaveBeenCalledWith(['c-1'], true);
     await waitFor(() => {
       expect(result.current.courses.every((course) => course.is_attendance_enabled)).toBe(true);
     });
@@ -253,7 +284,7 @@ describe('useAllCoursesData', () => {
       await result.current.toggleAttendanceMultiple(['c-1', 'c-2'], false);
     });
 
-    expect(disableAttendanceForCoursesMock).toHaveBeenCalledWith('user-1', ['c-1', 'c-2']);
+    expect(setCourseAttendanceEnabledMock).toHaveBeenCalledWith(['c-1', 'c-2'], false);
     await waitFor(() => {
       expect(result.current.courses.every((course) => !course.is_attendance_enabled)).toBe(true);
     });
@@ -270,6 +301,6 @@ describe('useAllCoursesData', () => {
     });
 
     expect(result.current.courses).toEqual([]);
-    expect(listCatalogCoursesForUserMock).not.toHaveBeenCalled();
+    expect(listCatalogCoursesMock).not.toHaveBeenCalled();
   });
 });

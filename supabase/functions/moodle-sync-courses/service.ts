@@ -1,10 +1,11 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
+  linkEligibleUserCourses,
   listCourseCategoriesByMoodleCourseIds,
   listLinkedCourseIds,
+  replaceUserCourseEligibility,
   upsertCourses,
-  upsertUserCourseLinks,
 } from '../_shared/domain/moodle-sync/repository.ts'
 import {
   findUserById,
@@ -19,6 +20,10 @@ import {
   getUserCourses,
   resolveCourseCategoryName,
 } from '../_shared/moodle/mod.ts'
+import {
+  executeEligibleCourseLink,
+  upsertCoursesAndReplaceEligibility,
+} from './eligibility.ts'
 
 const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
 const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor', 'monitor']
@@ -225,7 +230,15 @@ export async function syncCourses(
   }
 
   try {
-    const syncedCourses = await upsertCourses(supabase, coursesData)
+    const syncedCourses = await upsertCoursesAndReplaceEligibility(
+      supabase,
+      dbUser.id,
+      coursesData,
+      {
+        replaceUserCourseEligibility,
+        upsertCourses,
+      },
+    )
     const existingLinkedCourseIds = options.autoLinkTutorCourses
       ? new Set(await listLinkedCourseIds(supabase, dbUser.id))
       : new Set<string>()
@@ -247,20 +260,20 @@ export async function syncCourses(
       : new Set<string>()
 
     if (tutorCourseIds.size > 0) {
-      const links = (syncedCourses || [])
+      const eligibleCourseIds = (syncedCourses || [])
         .filter((course) => tutorCourseIds.has(course.moodle_course_id))
-        .map((course) => ({
-          user_id: dbUser.id,
-          course_id: course.id,
-          role: 'tutor',
-        }))
+        .map((course) => course.id)
 
-      const LINK_BATCH_SIZE = 100
-      for (let i = 0; i < links.length; i += LINK_BATCH_SIZE) {
-        await upsertUserCourseLinks(supabase, links.slice(i, i + LINK_BATCH_SIZE))
+      const LINK_BATCH_SIZE = 500
+      for (let i = 0; i < eligibleCourseIds.length; i += LINK_BATCH_SIZE) {
+        await linkEligibleUserCourses(
+          supabase,
+          dbUser.id,
+          eligibleCourseIds.slice(i, i + LINK_BATCH_SIZE),
+        )
       }
 
-      console.log(`[moodle-sync-courses] Auto-linked ${links.length} tutor course(s) for user ${dbUser.id}`)
+      console.log(`[moodle-sync-courses] Auto-linked ${eligibleCourseIds.length} tutor course(s) for user ${dbUser.id}`)
     } else if (!options.autoLinkTutorCourses) {
       console.log(
         `[moodle-sync-courses] Tutor role auto-link skipped for user ${dbUser.id}. Selected courses are linked explicitly.`,
@@ -284,28 +297,19 @@ export async function syncCourses(
   }
 }
 
-export async function linkSelectedCourses(userId: string, selectedCourseIds: string[]): Promise<Response> {
-  const supabase = createServiceClient()
-
-  const linkUser = await findUserById(supabase, userId)
-
-  if (!linkUser) return errorResponse('User not found', 404)
-
-  const existingLinks = await listLinkedCourseIds(supabase, linkUser.id)
-  const existingCourseIds = new Set<string>(existingLinks)
-
-  // Add newly selected
-  const toAdd = selectedCourseIds.filter((id) => !existingCourseIds.has(id))
-  if (toAdd.length > 0) {
-    const links = toAdd.map((course_id) => ({ user_id: linkUser.id, course_id, role: 'tutor' }))
-    const BATCH = 100
-    for (let i = 0; i < links.length; i += BATCH) {
-      await upsertUserCourseLinks(supabase, links.slice(i, i + BATCH))
-    }
-  }
-
-  await touchUserLastSync(supabase, linkUser.id, new Date().toISOString())
-
-  console.log(`Linked ${toAdd.length} courses for user ${linkUser.id}`)
-  return jsonResponse({ success: true, added: toAdd.length, removed: 0 })
+export async function linkSelectedCourses(
+  userId: string,
+  selectedCourseIds: string[],
+): Promise<Response> {
+  return executeEligibleCourseLink(
+    createServiceClient(),
+    userId,
+    selectedCourseIds,
+    {
+      findUserById,
+      linkEligibleUserCourses,
+      now: () => new Date(),
+      touchUserLastSync,
+    },
+  )
 }

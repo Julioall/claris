@@ -21,6 +21,7 @@ Ele existe para evitar que a leitura de segurança dependa de reconstruir toda a
 Posturas especiais válidas:
 
 - `student_activities`: leitura por escopo de curso, escrita automática por `service_role`.
+- `course_activity_visibility_overrides`: acesso exclusivo de `service_role`; o estado manual e reaplicado em sincronizacoes por trigger.
 - `student_course_grades`: leitura por escopo de curso, escrita automática por `service_role`.
 - `dashboard_course_activity_aggregates`: leitura por escopo de curso; escrita automática por `service_role`.
 - `task_action_history`: insert permitido para `service_role` e, no fluxo autenticado, somente com validação de ownership e integridade cruzada.
@@ -33,6 +34,7 @@ Tabelas:
 
 - `users`
 - `user_courses`
+- `user_course_catalog_eligibility`
 - `user_ignored_courses`
 - `user_sync_preferences`
 - `action_types`
@@ -40,7 +42,9 @@ Tabelas:
 Regra canônica:
 
 - `users`: o usuário só lê, insere e atualiza a própria linha por `id = auth.uid()`.
-- `user_courses`, `user_ignored_courses` e `action_types`: o usuário só opera linhas cujo `user_id = auth.uid()`.
+- `user_courses` e `user_ignored_courses`: leitura continua protegida por ownership; escritas de `authenticated` e `anon` foram revogadas e passam pelos comandos backend atomicos.
+- `user_course_catalog_eligibility`: sem acesso de browser; registra somente cursos descobertos pelo sync Moodle autenticado e limita a criacao de novos vinculos.
+- `action_types`: o usuário só opera linhas cujo `user_id = auth.uid()`.
 - `user_sync_preferences`: mesmo padrão de posse, com cast para `auth.uid()::text`.
 
 Migrations de referência:
@@ -48,11 +52,15 @@ Migrations de referência:
 - `20260210031713_1babdea9-fba0-4880-a900-6da75596b250.sql`
 - `20260211041244_0ef98547-ca60-4110-a1de-2cc1df4d6c1b.sql`
 - `20260205003909_72a4c7fd-cd18-4289-90ce-5a5a1c74050f.sql`
+- `20260721140000_secure_course_management.sql`
 
 Observações:
 
 - A migration `20260211041244...` é a consolidação que remove o estado mais permissivo anterior.
 - O cast em `user_sync_preferences` é aceito, mas deve ser revisitado se o tipo da coluna mudar.
+- `backend_set_user_course_roles` e `backend_set_user_courses_ignored` sao `SECURITY DEFINER`, executaveis apenas por `service_role`; recebem a identidade ja autenticada pela Edge Function, validam lotes de ate 200 cursos e executam cada comando em uma transacao.
+- `get_user_courses_catalog_with_stats` deixou de ser executavel por `PUBLIC`, `anon` e `authenticated`; seu nome e o parametro de usuario ficam restritos ao repository backend.
+- `backend_replace_user_course_eligibility` e `backend_link_eligible_user_courses` sao exclusivas de `service_role`; a segunda rejeita o lote completo quando qualquer UUID nao foi descoberto para o ator.
 
 ## Sync Acadêmico
 
@@ -62,6 +70,7 @@ Tabelas:
 - `students`
 - `student_courses`
 - `student_activities`
+- `course_activity_visibility_overrides`
 - `student_course_grades`
 - `dashboard_course_activity_aggregates`
 
@@ -71,6 +80,7 @@ Regra canônica:
 - `students`: leitura e update apenas se o aluno estiver em algum curso vinculado ao usuário.
 - `student_courses`: leitura e escrita validadas pelo `course_id` acessível em `user_courses`.
 - `student_activities`: leitura por escopo de curso; escrita automática por `service_role`.
+- `course_activity_visibility_overrides`: sem acesso direto de browser; leitura e escrita exclusivas de `service_role`.
 - `student_course_grades`: leitura por escopo de curso; escrita automática por `service_role`.
 - `dashboard_course_activity_aggregates`: leitura por escopo de curso; insert/update exclusivos de `service_role`.
 
@@ -83,6 +93,7 @@ Migrations de referência:
 - `20260211041244_0ef98547-ca60-4110-a1de-2cc1df4d6c1b.sql`
 - `20260326183000_add_dashboard_course_activity_aggregates.sql`
 - `20260721130000_harden_dashboard_backend_queries.sql`
+- `20260721140000_secure_course_management.sql`
 
 Observações:
 
@@ -91,6 +102,7 @@ Observações:
 - `dashboard_course_activity_aggregates` materializa a fila do dashboard por curso para evitar recálculo completo de `student_activities` em toda abertura da tela.
 - `refresh_course_dashboard_aggregate(uuid)` e `SECURITY DEFINER`, mas seu `EXECUTE` foi revogado de `PUBLIC`, `anon` e `authenticated`; apenas `service_role` pode recalcular agregados.
 - `dashboard-summary` usa `service_role` internamente e, por isso, reaplica em todas as consultas o escopo de cursos `tutor` derivado do usuario autenticado.
+- `backend_set_course_activity_visibility` valida o acesso ao curso e exclui atividades `scorm`; o override persistido e reaplicado por trigger para impedir que um sync reverta a escolha manual.
 
 ## Tarefas E Automação
 
@@ -228,20 +240,22 @@ Tabelas:
 
 Regra canônica:
 
-- `attendance_course_settings`: leitura, insert e delete apenas para o próprio `user_id = auth.uid()`.
-- `attendance_records`: leitura e delete por `user_id = auth.uid()`.
-- `attendance_records` insert e update: exigem `user_id = auth.uid()` e existência de configuração de frequência do mesmo curso para o mesmo usuário.
+- `attendance_course_settings`: leitura permanece limitada ao próprio `user_id`; insert e delete de `authenticated` e `anon` foram revogados e passam pelo backend.
+- `attendance_records`: leitura permanece limitada ao próprio `user_id`; insert, update e delete de `authenticated` e `anon` foram revogados e passam pelo backend.
 
 Migrations de referência:
 
 - `20260212120000_add_attendance_management.sql`
 - `20260313143000_reconcile_attendance_schema.sql`
 - `20260313133313_1467ce71-94c4-4fd8-86fa-c2a088adf784.sql`
+- `20260721140000_secure_course_management.sql`
 
 Observações:
 
 - `20260313133313...` deve permanecer como artefato no-op documentado; ela não define o estado final.
 - `20260313143000...` é a migration canônica para frequência: remove políticas permissivas duplicadas, reconstrói as policies e corrige FKs para `public.users`.
+- `backend_set_course_attendance_enabled` e `backend_save_attendance_sheet` sao exclusivas de `service_role`. A folha valida permissao, acesso ao curso, configuracao habilitada, alunos, status, duplicidade e tamanho do lote antes do unico upsert transacional.
+- `backend_get_attendance_date_summaries` tambem e exclusiva de `service_role` e agrega todo o historico por data, sem depender da pagina limitada de detalhes retornada ao frontend.
 
 ## Templates E Configurações Auxiliares
 

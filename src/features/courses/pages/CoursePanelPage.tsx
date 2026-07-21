@@ -29,8 +29,8 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { useAuth } from '@/contexts/AuthContext';
-import { getCourseEffectiveEndDate } from '@/lib/course-dates';
-import { getStudentActivityWorkflowStatus } from '@/lib/student-activity-status';
+import { usePermissions } from '@/hooks/usePermissions';
+import { APP_PERMISSIONS } from '@/lib/access-control';
 import { cn } from '@/lib/utils';
 
 import { AssignmentSuggestionPanel } from '../components/AssignmentSuggestionPanel';
@@ -70,7 +70,6 @@ export default function CoursePanelPage() {
     course,
     students,
     activities,
-    activitySubmissions = [],
     stats,
     isLoading,
     error,
@@ -81,6 +80,11 @@ export default function CoursePanelPage() {
     toggleAttendance,
   } = useCoursePanel(id);
   const { user, isEditMode, syncCourseIncremental, isSyncing, isOfflineMode } = useAuth();
+  const { can } = usePermissions();
+  const canManageActivityVisibility = can(
+    APP_PERMISSIONS.COURSES_ACTIVITIES_VISIBILITY_MANAGE,
+  );
+  const canManageAttendance = can(APP_PERMISSIONS.COURSES_ATTENDANCE_MANAGE);
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
   const [isSyncingSection, setIsSyncingSection] = useState<CoursePanelSyncSection | null>(null);
@@ -91,7 +95,6 @@ export default function CoursePanelPage() {
   const studentsPageSize = 25;
   const activitiesPageSize = 12;
 
-  const activeStudentIds = new Set(students.map((student) => student.id));
   const studentsById = new Map(students.map((student) => [student.id, student]));
   const visibleActivities = isEditMode
     ? activities
@@ -270,7 +273,7 @@ export default function CoursePanelPage() {
           <div className="mr-2 hidden text-right text-xs text-muted-foreground md:block">
             <span>Última sincronização:</span>
             <span className="ml-1 font-medium">
-              {isSyncingSection === 'course' ? 'Atualizando...' : formatDateTime(course.last_sync)}
+              {isSyncingSection === 'course' ? 'Atualizando...' : formatDateTime(course.lastSyncedAt)}
             </span>
           </div>
         </div>
@@ -376,7 +379,7 @@ export default function CoursePanelPage() {
               </Button>
             )}
 
-            {!isLoadingAttendanceFlag && (
+            {isEditMode && canManageAttendance && !isLoadingAttendanceFlag && (
               <>
                 <Switch
                   checked={isAttendanceEnabled}
@@ -404,24 +407,24 @@ export default function CoursePanelPage() {
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Início:</span>
-                  <span className="font-medium">{formatDate(course.start_date)}</span>
+                  <span className="font-medium">{formatDate(course.startsAt)}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Calendar className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Término:</span>
-                  <span className="font-medium">{formatDate(getCourseEffectiveEndDate(course))}</span>
+                  <span className="font-medium">{formatDate(course.effectiveEndsAt)}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Última sincronização:</span>
                   <span className="font-medium">
-                    {isSyncingSection === 'course' ? 'Atualizando...' : formatDateTime(course.last_sync)}
+                    {isSyncingSection === 'course' ? 'Atualizando...' : formatDateTime(course.lastSyncedAt)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
                   <MoodleIcon className="h-4 w-4" />
                   <span className="text-muted-foreground">ID Moodle:</span>
-                  <span className="font-medium">{course.moodle_course_id}</span>
+                  <span className="font-medium">{course.moodleCourseId}</span>
                 </div>
               </div>
             </CardContent>
@@ -491,24 +494,24 @@ export default function CoursePanelPage() {
                       >
                         <div className="flex items-center gap-3">
                           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted">
-                            {student.avatar_url ? (
-                              <img src={student.avatar_url} alt="" className="h-10 w-10 rounded-full" />
+                            {student.avatarUrl ? (
+                              <img src={student.avatarUrl} alt="" className="h-10 w-10 rounded-full" />
                             ) : (
                               <GraduationCap className="h-5 w-5 text-muted-foreground" />
                             )}
                           </div>
                           <div>
-                            <p className="font-medium">{student.full_name}</p>
+                            <p className="font-medium">{student.name}</p>
                             {student.email && (
                               <p className="text-xs text-muted-foreground">{student.email}</p>
                             )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <RiskBadge level={student.current_risk_level || 'normal'} />
-                          {student.last_access && (
+                          <RiskBadge level={student.riskLevel} />
+                          {student.lastAccessAt && (
                             <span className="hidden text-xs text-muted-foreground md:block">
-                              Último acesso: {formatDateTime(student.last_access)}
+                              Último acesso: {formatDateTime(student.lastAccessAt)}
                             </span>
                           )}
                         </div>
@@ -566,26 +569,11 @@ export default function CoursePanelPage() {
                   <>
                     <div className="divide-y">
                       {paginatedActivities.map((activity) => {
-                        const isAssignment = activity.activity_type === 'assign' || activity.activity_type === 'assignment';
+                        const isAssignment = activity.isAssignment;
                         const activitySubmissionsForAssign = isAssignment
-                          ? activitySubmissions
-                            .filter((submission) =>
-                              submission.moodle_activity_id === activity.moodle_activity_id
-                              && activeStudentIds.has(submission.student_id),
-                            )
-                            .sort((left, right) => {
-                              const studentA = studentsById.get(left.student_id)?.full_name || '';
-                              const studentB = studentsById.get(right.student_id)?.full_name || '';
-                              return studentA.localeCompare(studentB, 'pt-BR');
-                            })
+                          ? activity.submissions
                           : [];
-                        const pendingSubmissionCount = activitySubmissionsForAssign.filter(
-                          (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_submission',
-                        ).length;
-                        const pendingCorrectionCount = activitySubmissionsForAssign.filter(
-                          (submission) => getStudentActivityWorkflowStatus(submission) === 'pending_correction',
-                        ).length;
-                        const isExpanded = Boolean(expandedActivities[activity.moodle_activity_id]);
+                        const isExpanded = Boolean(expandedActivities[activity.moodleActivityId]);
 
                         return (
                           <div
@@ -605,7 +593,7 @@ export default function CoursePanelPage() {
                                       activity.hidden && 'line-through text-muted-foreground',
                                     )}
                                   >
-                                    {activity.activity_name}
+                                    {activity.name}
                                   </p>
                                   {activity.hidden && (
                                     <Badge variant="secondary" className="text-xs">
@@ -615,28 +603,28 @@ export default function CoursePanelPage() {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  {activity.activity_type && (
+                                  {activity.type && (
                                     <Badge variant="outline" className="text-xs">
-                                      {activity.activity_type}
+                                      {activity.type}
                                     </Badge>
                                   )}
-                                  {activity.due_date && (
-                                    <span>Prazo: {formatDate(activity.due_date)}</span>
+                                  {activity.dueAt && (
+                                    <span>Prazo: {formatDate(activity.dueAt)}</span>
                                   )}
                                 </div>
                                 {isAssignment && (
                                   <div className="text-xs text-muted-foreground">
-                                    <span>Entregas: {activitySubmissionsForAssign.length}</span>
+                                    <span>Entregas: {activity.submissionCounts.total}</span>
                                     <span className="mx-2">•</span>
-                                    <span>Pendente de Envio: {pendingSubmissionCount}</span>
+                                    <span>Pendente de Envio: {activity.submissionCounts.pendingSubmission}</span>
                                     <span className="mx-2">•</span>
-                                    <span>Pendente de Correção: {pendingCorrectionCount}</span>
+                                    <span>Pendente de Correção: {activity.submissionCounts.pendingCorrection}</span>
                                   </div>
                                 )}
                               </div>
 
                               <div className="flex items-center gap-3">
-                                {isEditMode && (
+                                {isEditMode && canManageActivityVisibility && (
                                   <div className="flex items-center gap-4">
                                     <TooltipProvider>
                                       <Tooltip>
@@ -645,7 +633,7 @@ export default function CoursePanelPage() {
                                             <Switch
                                               checked={!activity.hidden}
                                               onCheckedChange={(checked) => {
-                                                void toggleActivityVisibility(activity.moodle_activity_id, !checked);
+                                                void toggleActivityVisibility(activity.moodleActivityId, !checked);
                                               }}
                                             />
                                             {activity.hidden ? (
@@ -676,7 +664,7 @@ export default function CoursePanelPage() {
                                   submissions={activitySubmissionsForAssign}
                                   studentsById={studentsById}
                                   isExpanded={isExpanded}
-                                  onToggleExpand={() => toggleActivityExpansion(activity.moodle_activity_id)}
+                                  onToggleExpand={() => toggleActivityExpansion(activity.moodleActivityId)}
                                   onApproved={refetch}
                                 />
                               )}
@@ -723,7 +711,10 @@ export default function CoursePanelPage() {
 
         {isAttendanceEnabled && (
           <TabsContent value="attendance" className="mt-4">
-            <CourseAttendanceTab courseId={course.id} />
+            <CourseAttendanceTab
+              canManage={isEditMode && canManageAttendance}
+              courseId={course.id}
+            />
           </TabsContent>
         )}
       </Tabs>

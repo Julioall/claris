@@ -60,6 +60,15 @@ verify_jwt = false
 [functions.dashboard-summary]
 verify_jwt = false
 
+[functions.courses-catalog]
+verify_jwt = false
+
+[functions.course-panel]
+verify_jwt = false
+
+[functions.course-attendance]
+verify_jwt = false
+
 [functions.moodle-sync-courses]
 verify_jwt = false
 

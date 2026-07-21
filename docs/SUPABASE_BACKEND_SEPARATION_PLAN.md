@@ -240,31 +240,37 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** encapsular catalogo, painel de curso e comandos relacionados.
 
-- [ ] `SB-0401` Migrar catalogo de cursos
+- [x] `SB-0401` Migrar catalogo de cursos
   - Endpoint deve obter usuario do token e nao aceitar `p_user_id` do cliente.
   - Encapsular `get_user_courses_catalog_with_stats` no repository backend.
   - AC: frontend desconhece o nome da RPC.
+  - Implementado em `courses-catalog`: identidade derivada do token, payload estrito sem campos de ator, RPC restrita a `service_role`, regras de datas/status no backend, matriz explicita para as rotas Cursos/Escolas/Relatorios e DTO V1 independente do schema.
 
-- [ ] `SB-0402` Migrar painel de curso
+- [x] `SB-0402` Migrar painel de curso
   - Mover queries de curso, alunos e atividades, datas efetivas, deduplicacao e estatisticas.
   - AC: `getCoursePanel` vira uma unica chamada de caso de uso.
+  - Implementado em `course-panel`: uma chamada retorna curso, alunos deduplicados, atividades agrupadas deterministicamente, submissoes com workflow, estatisticas, configuracao de frequencia e metadados de atualizacao; overrides manuais prevalecem sobre divergencias do sync.
 
-- [ ] `SB-0403` Tornar associacao de curso atomica
+- [x] `SB-0403` Tornar associacao de curso atomica
   - Implementar seguir, visualizar, ignorar e designorar como comandos autenticados.
   - Substituir sequencias delete/insert por operacao transacional e idempotente.
   - AC: falha intermediaria nao remove estado anterior.
+  - Implementado por comandos `set_association_role` e `set_ignored`, com lotes limitados, roles validadas e RPCs PostgreSQL atomicas e idempotentes acessiveis somente pelo backend. O frontend particiona selecoes acima de 200 itens em chunks sequenciais e so atualiza o cache apos concluir todos; a associacao de nao administradores fica limitada a cursos ja acessiveis, sem criar acesso novo. Novos vinculos passam exclusivamente pela elegibilidade substituida pelo sync Moodle e falham atomicamente se a selecao contiver qualquer curso externo.
 
-- [ ] `SB-0404` Migrar configuracao de frequencia
+- [x] `SB-0404` Migrar configuracao de frequencia
   - Endpoints para habilitar/desabilitar e consultar configuracao por curso.
   - AC: autorizacao course-scoped testada.
+  - Implementado com leitura nos DTOs de catalogo/painel e comando `set_attendance_enabled`, protegido por `courses.attendance.manage`, acesso ao curso e transacao backend.
 
-- [ ] `SB-0405` Migrar visibilidade de atividades
+- [x] `SB-0405` Migrar visibilidade de atividades
   - Validar permissao, tipo de atividade e escopo do curso no backend.
   - AC: frontend envia apenas a intencao de ocultar/exibir.
+  - Implementado por `set_activity_visibility`, protegido por `courses.activities.visibility.manage`; o backend valida curso/atividade e persiste um override reaplicado pelas sincronizacoes posteriores.
 
-- [ ] `SB-0406` Migrar consultas e comandos de presenca
+- [x] `SB-0406` Migrar consultas e comandos de presenca
   - Remover acesso direto existente em `features/courses/api/index.ts`.
   - AC: operacoes em lote possuem validacao e comportamento transacional definido.
+  - Implementado em `course-attendance`: detalhes paginados, totais completos por data, folha correlacionada e salvamento atomico de ate 500 registros, com ordenacao estavel e validacao de status, alunos, curso, permissao e configuracao habilitada.
 
 ## Epic 5 — Alunos, historico e relatorios
 

@@ -4,37 +4,31 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
 
 import {
-  disableAttendanceForCourses,
-  enableAttendanceForCourses,
-  getCourseAttendanceEnabled,
   getCoursePanel,
   setCourseActivityVisibility,
-} from '../api/courses.repository';
+} from '../api/course-panel';
+import { setCourseAttendanceEnabled } from '../api/courses-catalog';
+import type { CoursePanelDto } from '../api/contracts/course-panel.contract';
 import { courseKeys } from '../query-keys';
-import { EMPTY_COURSE_PANEL_STATS, type CoursePanelData, type CourseWithStats } from '../types';
+import { EMPTY_COURSE_PANEL_STATS, type CourseWithStats } from '../types';
 
 export function useCoursePanel(courseId: string | undefined) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const hasCourseId = !!courseId;
+  const panelQueryKey = courseKeys.panel(user?.id, courseId);
 
-  const panelQuery = useQuery<CoursePanelData, Error>({
-    queryKey: courseKeys.panel(courseId),
-    enabled: hasCourseId,
-    queryFn: () => getCoursePanel(courseId!),
-  });
-
-  const attendanceQuery = useQuery<boolean, Error>({
-    queryKey: courseKeys.attendance(user?.id, courseId),
+  const panelQuery = useQuery<CoursePanelDto, Error>({
+    queryKey: panelQueryKey,
     enabled: hasCourseId && !!user,
-    queryFn: () => getCourseAttendanceEnabled(user!.id, courseId!),
+    queryFn: ({ signal }) => getCoursePanel(courseId!, signal),
   });
 
   const toggleActivityVisibilityMutation = useMutation({
     mutationFn: ({ moodleActivityId, hidden }: { moodleActivityId: string; hidden: boolean }) =>
       setCourseActivityVisibility(courseId!, moodleActivityId, hidden),
     onSuccess: async (_result, variables) => {
-      await queryClient.invalidateQueries({ queryKey: courseKeys.panel(courseId) });
+      await queryClient.invalidateQueries({ queryKey: panelQueryKey });
       toast({
         title: variables.hidden ? 'Atividade oculta' : 'Atividade visível',
         description: variables.hidden
@@ -54,20 +48,18 @@ export function useCoursePanel(courseId: string | undefined) {
 
   const toggleAttendanceMutation = useMutation({
     mutationFn: async (shouldEnable: boolean) => {
-      if (shouldEnable) {
-        await enableAttendanceForCourses(user!.id, [courseId!]);
-      } else {
-        await disableAttendanceForCourses(user!.id, [courseId!]);
-      }
-
+      await setCourseAttendanceEnabled([courseId!], shouldEnable);
       return shouldEnable;
     },
     onSuccess: (shouldEnable) => {
+      queryClient.setQueryData<CoursePanelDto>(panelQueryKey, (current) => (
+        current ? { ...current, attendanceEnabled: shouldEnable } : current
+      ));
       queryClient.setQueryData(courseKeys.attendance(user?.id, courseId), shouldEnable);
       queryClient.setQueryData<CourseWithStats[]>(
         courseKeys.catalog(user?.id),
-        (current = []) =>
-          current.map((course) =>
+        (current) =>
+          current?.map((course) =>
             course.id === courseId
               ? { ...course, is_attendance_enabled: shouldEnable }
               : course,
@@ -84,7 +76,6 @@ export function useCoursePanel(courseId: string | undefined) {
       course: null,
       students: [],
       activities: [],
-      activitySubmissions: [],
       stats: EMPTY_COURSE_PANEL_STATS,
       isLoading: false,
       error: 'ID do curso não fornecido',
@@ -100,24 +91,20 @@ export function useCoursePanel(courseId: string | undefined) {
     course: panelQuery.data?.course ?? null,
     students: panelQuery.data?.students ?? [],
     activities: panelQuery.data?.activities ?? [],
-    activitySubmissions: panelQuery.data?.activitySubmissions ?? [],
     stats: panelQuery.data?.stats ?? EMPTY_COURSE_PANEL_STATS,
     isLoading: panelQuery.isLoading,
     error: panelQuery.error?.message ?? null,
     refetch: async () => {
       await panelQuery.refetch();
-      if (user) {
-        await attendanceQuery.refetch();
-      }
     },
     toggleActivityVisibility: async (moodleActivityId: string, hidden: boolean) => {
       await toggleActivityVisibilityMutation.mutateAsync({ moodleActivityId, hidden });
     },
-    isAttendanceEnabled: attendanceQuery.data ?? false,
-    isLoadingAttendanceFlag: !!user && attendanceQuery.isLoading,
+    isAttendanceEnabled: panelQuery.data?.attendanceEnabled ?? false,
+    isLoadingAttendanceFlag: panelQuery.isLoading,
     toggleAttendance: async () => {
       if (!user) return;
-      await toggleAttendanceMutation.mutateAsync(!(attendanceQuery.data ?? false));
+      await toggleAttendanceMutation.mutateAsync(!(panelQuery.data?.attendanceEnabled ?? false));
     },
   };
 }

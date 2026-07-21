@@ -305,7 +305,6 @@ export function useCourseSync(params: {
           functionName: 'moodle-sync-courses',
           body: {
             action: 'link_selected_courses',
-            userId: context.session.moodleUserId,
             selectedCourseIds: courseIds,
           },
           timeoutMs: 30000,

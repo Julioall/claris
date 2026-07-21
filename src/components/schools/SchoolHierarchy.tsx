@@ -68,9 +68,9 @@ interface SchoolHierarchyProps {
   courses: CourseWithStats[];
   onToggleFollow?: (courseId: string) => void;
   onToggleIgnore?: (courseId: string) => void;
-  onToggleIgnoreMultiple?: (courseIds: string[], shouldIgnore: boolean) => void;
+  onToggleIgnoreMultiple?: (courseIds: string[], shouldIgnore: boolean) => Promise<void> | void;
   onToggleAttendance?: (courseId: string) => void;
-  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => void;
+  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => Promise<void> | void;
 }
 
 function calculateStats(courses: CourseWithStats[]): CategoryStats {
@@ -123,24 +123,27 @@ function IgnoreAllButton({
   level 
 }: { 
   courses: CourseWithStats[]; 
-  onToggleIgnoreMultiple?: (courseIds: string[], shouldIgnore: boolean) => void;
+  onToggleIgnoreMultiple?: (courseIds: string[], shouldIgnore: boolean) => Promise<void> | void;
   level: 'escola' | 'curso' | 'turma';
 }) {
   if (!onToggleIgnoreMultiple) return null;
   const allIgnored = courses.every(c => c.is_ignored);
   const someIgnored = courses.some(c => c.is_ignored) && !allIgnored;
   
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
     const courseIds = courses.map(c => c.id);
     const shouldIgnore = !allIgnored;
-    onToggleIgnoreMultiple(courseIds, shouldIgnore);
-    
     const levelName = level === 'escola' ? 'escola' : level === 'curso' ? 'curso' : 'turma';
-    if (shouldIgnore) {
-      toast.success(`${levelName.charAt(0).toUpperCase() + levelName.slice(1)} marcada como ignorada`);
-    } else {
-      toast.success(`${levelName.charAt(0).toUpperCase() + levelName.slice(1)} desmarcada`);
+    try {
+      await onToggleIgnoreMultiple(courseIds, shouldIgnore);
+      if (shouldIgnore) {
+        toast.success(`${levelName.charAt(0).toUpperCase() + levelName.slice(1)} marcada como ignorada`);
+      } else {
+        toast.success(`${levelName.charAt(0).toUpperCase() + levelName.slice(1)} desmarcada`);
+      }
+    } catch {
+      toast.error(`Nao foi possivel atualizar a ${levelName}.`);
     }
   };
 

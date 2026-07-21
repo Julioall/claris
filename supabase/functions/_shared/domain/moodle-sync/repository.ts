@@ -41,6 +41,47 @@ export async function upsertCourses(
   return data ?? []
 }
 
+function affectedRowCount(value: unknown, operation: string): number {
+  const count = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim().length > 0
+    ? Number(value)
+    : Number.NaN
+
+  if (!Number.isSafeInteger(count) || count < 0) {
+    throw new Error(`Invalid affected row count returned by ${operation}`)
+  }
+  return count
+}
+
+export async function replaceUserCourseEligibility(
+  supabase: AppSupabaseClient,
+  userId: string,
+  courseIds: string[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('backend_replace_user_course_eligibility', {
+    p_course_ids: courseIds,
+    p_user_id: userId,
+  })
+
+  if (error) throw error
+  return affectedRowCount(data, 'course eligibility replacement')
+}
+
+export async function linkEligibleUserCourses(
+  supabase: AppSupabaseClient,
+  userId: string,
+  courseIds: string[],
+): Promise<number> {
+  const { data, error } = await supabase.rpc('backend_link_eligible_user_courses', {
+    p_course_ids: courseIds,
+    p_user_id: userId,
+  })
+
+  if (error) throw error
+  return affectedRowCount(data, 'eligible course linking')
+}
+
 export async function listCourseCategoriesByMoodleCourseIds(
   supabase: AppSupabaseClient,
   moodleCourseIds: string[],

@@ -10,7 +10,7 @@ interface CourseWithAttendanceFlag {
 interface AttendanceBulkToggleButtonProps {
   courses: CourseWithAttendanceFlag[];
   level: 'escola' | 'curso' | 'turma';
-  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => void;
+  onToggleAttendanceMultiple?: (courseIds: string[], shouldEnable: boolean) => Promise<void> | void;
 }
 
 export function AttendanceBulkToggleButton({
@@ -24,14 +24,18 @@ export function AttendanceBulkToggleButton({
   const someEnabled = courses.some((course) => !!course.is_attendance_enabled) && !allEnabled;
   const shouldEnable = !allEnabled;
 
-  const handleClick = (e: React.MouseEvent) => {
+  const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    onToggleAttendanceMultiple(courses.map((course) => course.id), shouldEnable);
-    toast.success(
-      shouldEnable
-        ? `Presenca ativada para ${level}`
-        : `Presenca desativada para ${level}`,
-    );
+    try {
+      await onToggleAttendanceMultiple(courses.map((course) => course.id), shouldEnable);
+      toast.success(
+        shouldEnable
+          ? `Presenca ativada para ${level}`
+          : `Presenca desativada para ${level}`,
+      );
+    } catch {
+      toast.error(`Nao foi possivel atualizar a presenca para ${level}.`);
+    }
   };
 
   return (

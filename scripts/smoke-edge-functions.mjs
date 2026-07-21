@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 
 const RUNNER_CONTAINER = process.env.SUPABASE_RUNNER_CONTAINER || 'claris-supabase'
+const DATABASE_CONTAINER = process.env.SUPABASE_DATABASE_CONTAINER || 'supabase_db_local'
 const SCHEDULED_MESSAGES_SECRET =
   process.env.SCHEDULED_MESSAGES_CRON_SECRET || 'claris-scheduled-messages-local-secret'
 
@@ -228,8 +229,8 @@ async function upsertRows(status, table, onConflict, payload) {
   return Array.isArray(data) ? data : []
 }
 
-async function deleteRows(status, table, filters) {
-  const query = new URLSearchParams({ select: 'id' })
+async function deleteRows(status, table, filters, select = 'id') {
+  const query = new URLSearchParams({ select })
 
   for (const [column, value] of Object.entries(filters)) {
     query.set(column, `eq.${value}`)
@@ -243,6 +244,32 @@ async function deleteRows(status, table, filters) {
     },
     method: 'DELETE',
   })
+}
+
+function queryLocalDatabase(sql) {
+  const output = execFileSync(
+    'docker',
+    [
+      'exec',
+      DATABASE_CONTAINER,
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      'postgres',
+      '-X',
+      '-A',
+      '-t',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      sql,
+    ],
+    { encoding: 'utf8' },
+  ).trim()
+
+  if (!output) fail('A consulta de privilegios do banco local nao retornou dados.')
+  return output
 }
 
 async function selectRows(status, table, filters, headers = adminHeaders(status)) {
@@ -326,7 +353,7 @@ async function cleanupAutomatedTaskArtifacts(status, authUserId, studentId) {
 
 async function callEdgeFunction(status, functionName, body, accessToken) {
   const { data, response } = await requestJson(`${status.FUNCTIONS_URL}/${functionName}`, {
-    acceptStatuses: [200, 400, 401],
+    acceptStatuses: [200, 400, 401, 403, 404, 409, 422],
     body,
     headers: publishableHeaders(status, accessToken),
     method: 'POST',
@@ -455,12 +482,18 @@ async function runUnauthenticatedContractChecks(status) {
     },
     {
       body: { action: 'bad_action' },
-      expectedStatus: 400,
+      expectedStatus: 422,
       name: 'moodle-sync-courses invalid-action',
       path: 'moodle-sync-courses',
     },
     {
-      body: { action: 'link_selected_courses', selectedCourseIds: ['course-a', 'course-b'] },
+      body: {
+        action: 'link_selected_courses',
+        selectedCourseIds: [
+          '00000000-0000-4000-8000-000000000001',
+          '00000000-0000-4000-8000-000000000002',
+        ],
+      },
       expectedStatus: 401,
       name: 'moodle-sync-courses valid-no-auth',
       path: 'moodle-sync-courses',
@@ -520,6 +553,27 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'dashboard-summary',
     },
     {
+      body: { action: 'get_catalog' },
+      expectedStatus: 401,
+      name: 'courses-catalog valid-no-auth',
+      path: 'courses-catalog',
+    },
+    {
+      body: { action: 'get_panel', courseId: '00000000-0000-4000-8000-000000000001' },
+      expectedStatus: 401,
+      name: 'course-panel valid-no-auth',
+      path: 'course-panel',
+    },
+    {
+      body: {
+        action: 'get_overview',
+        courseId: '00000000-0000-4000-8000-000000000001',
+      },
+      expectedStatus: 401,
+      name: 'course-attendance valid-no-auth',
+      path: 'course-attendance',
+    },
+    {
       body: {},
       expectedStatus: 401,
       name: 'process-scheduled-messages no-secret',
@@ -571,7 +625,509 @@ async function runUnauthenticatedContractChecks(status) {
   log('Envelope V1 validado para 401 e 422.')
 }
 
-async function runAuthenticatedServiceCheck(status, accessToken, authUserId, studentId) {
+function runCourseManagementGrantChecks() {
+  const result = JSON.parse(queryLocalDatabase(`
+    WITH
+      browser_roles(role_name) AS (
+        VALUES ('anon'::TEXT), ('authenticated'::TEXT)
+      ),
+      protected_tables(table_name) AS (
+        VALUES
+          ('attendance_course_settings'::TEXT),
+          ('attendance_records'::TEXT),
+          ('course_activity_visibility_overrides'::TEXT),
+          ('student_activities'::TEXT),
+          ('user_course_catalog_eligibility'::TEXT),
+          ('user_courses'::TEXT),
+          ('user_ignored_courses'::TEXT)
+      ),
+      protected_privileges(privilege_name) AS (
+        VALUES
+          ('INSERT'::TEXT),
+          ('UPDATE'::TEXT),
+          ('DELETE'::TEXT),
+          ('TRUNCATE'::TEXT),
+          ('REFERENCES'::TEXT),
+          ('TRIGGER'::TEXT)
+      ),
+      protected_functions(signature) AS (
+        VALUES
+          ('public.get_user_courses_catalog_with_stats(uuid)'::TEXT),
+          ('public.backend_replace_user_course_eligibility(uuid,uuid[])'::TEXT),
+          ('public.backend_link_eligible_user_courses(uuid,uuid[])'::TEXT),
+          ('public.backend_set_user_course_roles(uuid,uuid[],text)'::TEXT),
+          ('public.backend_set_user_courses_ignored(uuid,uuid[],boolean)'::TEXT),
+          ('public.backend_set_course_attendance_enabled(uuid,uuid[],boolean)'::TEXT),
+          ('public.backend_set_course_activity_visibility(uuid,uuid,text,boolean)'::TEXT),
+          ('public.backend_save_attendance_sheet(uuid,uuid,date,jsonb)'::TEXT),
+          ('public.backend_get_attendance_date_summaries(uuid,uuid)'::TEXT)
+      )
+    SELECT json_build_object(
+      'browserTableGrants', COALESCE((
+        SELECT json_agg(grant_row)
+        FROM (
+          SELECT role_name, table_name, privilege_name
+          FROM browser_roles
+          CROSS JOIN protected_tables
+          CROSS JOIN protected_privileges
+          WHERE has_table_privilege(
+            role_name,
+            format('public.%I', table_name),
+            privilege_name
+          )
+          ORDER BY role_name, table_name, privilege_name
+        ) AS grant_row
+      ), '[]'::JSON),
+      'browserFunctionGrants', COALESCE((
+        SELECT json_agg(grant_row)
+        FROM (
+          SELECT role_name, signature
+          FROM browser_roles
+          CROSS JOIN protected_functions
+          WHERE has_function_privilege(role_name, signature, 'EXECUTE')
+          ORDER BY role_name, signature
+        ) AS grant_row
+      ), '[]'::JSON),
+      'missingServiceFunctionGrants', COALESCE((
+        SELECT json_agg(signature ORDER BY signature)
+        FROM protected_functions
+        WHERE NOT has_function_privilege('service_role', signature, 'EXECUTE')
+      ), '[]'::JSON)
+    )::TEXT;
+  `))
+
+  if (result.browserTableGrants?.length > 0) {
+    fail(`Roles de browser ainda possuem grants privilegiados: ${JSON.stringify(result.browserTableGrants)}`)
+  }
+  if (result.browserFunctionGrants?.length > 0) {
+    fail(`Roles de browser ainda executam RPCs internas: ${JSON.stringify(result.browserFunctionGrants)}`)
+  }
+  if (result.missingServiceFunctionGrants?.length > 0) {
+    fail(`service_role nao executa RPCs internas: ${JSON.stringify(result.missingServiceFunctionGrants)}`)
+  }
+
+  log('Grants internos de cursos bloqueados para roles de browser e liberados para service_role.')
+}
+
+async function runCourseManagementChecks(
+  status,
+  accessToken,
+  authUserId,
+  courseId,
+  studentId,
+  hiddenCourseId,
+  hiddenStudentId,
+) {
+  const activityMoodleId = 'smoke-activity-001'
+  const attendanceDate = '2026-07-21'
+
+  const spoofCases = [
+    {
+      body: { action: 'get_catalog', userId: authUserId },
+      correlationId: 'smoke-v1-courses-catalog-spoof',
+      functionName: 'courses-catalog',
+    },
+    {
+      body: { action: 'get_panel', courseId, userId: authUserId },
+      correlationId: 'smoke-v1-course-panel-spoof',
+      functionName: 'course-panel',
+    },
+    {
+      body: { action: 'get_overview', courseId, userId: authUserId },
+      correlationId: 'smoke-v1-course-attendance-spoof',
+      functionName: 'course-attendance',
+    },
+  ]
+
+  for (const spoofCase of spoofCases) {
+    const spoofResult = await callV1EdgeFunction(
+      status,
+      spoofCase.functionName,
+      spoofCase.body,
+      {
+        acceptStatuses: [422],
+        accessToken,
+        correlationId: spoofCase.correlationId,
+      },
+    )
+    assertV1Response(spoofResult, {
+      code: 'validation_failed',
+      correlationId: spoofCase.correlationId,
+      status: 422,
+    })
+  }
+  log('Spoof de identidade rejeitado pelos tres contratos de cursos.')
+
+  const catalog = await callV1EdgeFunction(
+    status,
+    'courses-catalog',
+    { action: 'get_catalog' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-courses-catalog',
+    },
+  )
+  assertV1Response(catalog, { correlationId: 'smoke-v1-courses-catalog', status: 200 })
+  const catalogData = catalog.data?.data
+  const catalogCourse = catalogData?.items?.find((item) => item.id === courseId)
+  if (
+    catalogData?.metadata?.contractVersion !== 1
+    || !catalogCourse
+    || catalogCourse.isFollowing !== true
+    || !catalogCourse.studentIds?.includes(studentId)
+  ) {
+    fail(`courses-catalog retornou DTO inesperado: ${JSON.stringify(catalog.data)}`)
+  }
+  if (catalogData.items.some((item) => item.id === hiddenCourseId)) {
+    fail('courses-catalog vazou um curso sem associacao do usuario autenticado.')
+  }
+
+  const forbiddenAssociation = await callV1EdgeFunction(
+    status,
+    'courses-catalog',
+    { action: 'set_association_role', courseIds: [hiddenCourseId], role: 'tutor' },
+    {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-course-association-forbidden',
+    },
+  )
+  assertV1Response(forbiddenAssociation, {
+    code: 'forbidden',
+    correlationId: 'smoke-v1-course-association-forbidden',
+    status: 403,
+  })
+  const unauthorizedLinks = await selectRows(status, 'user_courses', {
+    course_id: hiddenCourseId,
+    user_id: authUserId,
+  })
+  if (unauthorizedLinks.length > 0) {
+    fail('courses-catalog criou associacao fora do escopo do usuario.')
+  }
+
+  const ineligibleMoodleLink = await requestJson(
+    `${status.FUNCTIONS_URL}/moodle-sync-courses`,
+    {
+      acceptStatuses: [403],
+      body: {
+        action: 'link_selected_courses',
+        selectedCourseIds: [hiddenCourseId],
+      },
+      headers: publishableHeaders(status, accessToken),
+      method: 'POST',
+    },
+  )
+  if (!/eligibility/i.test(String(ineligibleMoodleLink.data?.error ?? ''))) {
+    fail(`moodle-sync-courses nao rejeitou selecao inelegivel: ${JSON.stringify(ineligibleMoodleLink.data)}`)
+  }
+
+  await upsertRows(status, 'user_course_catalog_eligibility', 'user_id,course_id', {
+    course_id: courseId,
+    user_id: authUserId,
+  })
+  const eligibleMoodleLink = await requestJson(
+    `${status.FUNCTIONS_URL}/moodle-sync-courses`,
+    {
+      acceptStatuses: [200],
+      body: {
+        action: 'link_selected_courses',
+        selectedCourseIds: [courseId],
+      },
+      headers: publishableHeaders(status, accessToken),
+      method: 'POST',
+    },
+  )
+  if (eligibleMoodleLink.data?.success !== true || eligibleMoodleLink.data?.added !== 1) {
+    fail(`moodle-sync-courses nao vinculou selecao elegivel: ${JSON.stringify(eligibleMoodleLink.data)}`)
+  }
+  log('Catalogo e vinculo Moodle bloquearam autoassociacao fora da elegibilidade.')
+
+  await deleteRows(status, 'course_activity_visibility_overrides', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+  }, 'course_id')
+  await deleteRows(status, 'student_activities', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+    student_id: studentId,
+  })
+  await deleteRows(status, 'attendance_records', {
+    course_id: courseId,
+    user_id: authUserId,
+  })
+
+  await upsertRows(status, 'student_activities', 'student_id,course_id,moodle_activity_id', {
+    activity_name: 'Atividade Smoke Edge',
+    activity_type: 'assign',
+    course_id: courseId,
+    hidden: false,
+    moodle_activity_id: activityMoodleId,
+    status: 'pending',
+    student_id: studentId,
+  })
+
+  const attendanceSetting = await callV1EdgeFunction(
+    status,
+    'courses-catalog',
+    { action: 'set_attendance_enabled', courseIds: [courseId], enabled: true },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-course-attendance-enable',
+    },
+  )
+  assertV1Response(attendanceSetting, {
+    correlationId: 'smoke-v1-course-attendance-enable',
+    status: 200,
+  })
+  if (attendanceSetting.data?.data?.affectedCourseCount !== 1) {
+    fail(`courses-catalog nao habilitou frequencia: ${JSON.stringify(attendanceSetting.data)}`)
+  }
+
+  const panel = await callV1EdgeFunction(
+    status,
+    'course-panel',
+    { action: 'get_panel', courseId },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-course-panel',
+    },
+  )
+  assertV1Response(panel, { correlationId: 'smoke-v1-course-panel', status: 200 })
+  const panelData = panel.data?.data
+  if (
+    panelData?.metadata?.contractVersion !== 1
+    || panelData?.course?.id !== courseId
+    || panelData?.attendanceEnabled !== true
+    || !panelData?.students?.some((student) => student.id === studentId)
+    || panelData?.students?.some((student) => student.id === hiddenStudentId)
+    || !panelData?.activities?.some((activity) => activity.moodleActivityId === activityMoodleId)
+  ) {
+    fail(`course-panel retornou DTO ou escopo inesperado: ${JSON.stringify(panel.data)}`)
+  }
+
+  const forbiddenPanel = await callV1EdgeFunction(
+    status,
+    'course-panel',
+    { action: 'get_panel', courseId: hiddenCourseId },
+    {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-course-panel-forbidden',
+    },
+  )
+  assertV1Response(forbiddenPanel, {
+    code: 'forbidden',
+    correlationId: 'smoke-v1-course-panel-forbidden',
+    status: 403,
+  })
+  log('Catalogo autenticado e painel restrito ao curso associado validados.')
+
+  const invalidAttendance = await callV1EdgeFunction(
+    status,
+    'course-attendance',
+    {
+      action: 'save_sheet',
+      courseId,
+      date: attendanceDate,
+      entries: [
+        { notes: 'entrada valida do lote', status: 'presente', studentId },
+        { notes: 'aluno de outro curso', status: 'ausente', studentId: hiddenStudentId },
+      ],
+    },
+    {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-course-attendance-atomic',
+    },
+  )
+  assertV1Response(invalidAttendance, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-course-attendance-atomic',
+    status: 422,
+  })
+  const recordsAfterRejectedBatch = await selectRows(status, 'attendance_records', {
+    attendance_date: attendanceDate,
+    course_id: courseId,
+    user_id: authUserId,
+  })
+  if (recordsAfterRejectedBatch.length !== 0) {
+    fail(`Lote invalido de frequencia foi persistido parcialmente: ${JSON.stringify(recordsAfterRejectedBatch)}`)
+  }
+
+  const validAttendance = await callV1EdgeFunction(
+    status,
+    'course-attendance',
+    {
+      action: 'save_sheet',
+      courseId,
+      date: attendanceDate,
+      entries: [{ notes: 'registro valido', status: 'presente', studentId }],
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-course-attendance-save',
+    },
+  )
+  assertV1Response(validAttendance, {
+    correlationId: 'smoke-v1-course-attendance-save',
+    status: 200,
+  })
+  if (validAttendance.data?.data?.savedCount !== 1) {
+    fail(`course-attendance nao salvou o lote valido: ${JSON.stringify(validAttendance.data)}`)
+  }
+
+  const historicalAttendanceCount = Number(queryLocalDatabase(`
+    WITH inserted_rows AS (
+      INSERT INTO public.attendance_records (
+        user_id,
+        course_id,
+        student_id,
+        attendance_date,
+        status,
+        notes
+      )
+      SELECT
+        '${authUserId}'::UUID,
+        '${courseId}'::UUID,
+        '${studentId}'::UUID,
+        DATE '2025-01-01' + day_offset,
+        CASE (day_offset % 3)
+          WHEN 0 THEN 'presente'
+          WHEN 1 THEN 'ausente'
+          ELSE 'justificado'
+        END,
+        'historico smoke'
+      FROM generate_series(0, 120) AS series_row(day_offset)
+      ON CONFLICT (user_id, course_id, student_id, attendance_date) DO UPDATE
+      SET status = EXCLUDED.status, notes = EXCLUDED.notes, updated_at = now()
+      RETURNING 1
+    )
+    SELECT count(*) FROM inserted_rows;
+  `))
+  if (historicalAttendanceCount !== 121) {
+    fail(`Nao foi possivel seedar o historico paginado de frequencia: ${historicalAttendanceCount}`)
+  }
+
+  const attendanceOverview = await callV1EdgeFunction(
+    status,
+    'course-attendance',
+    { action: 'get_overview', courseId, limit: 10, offset: 0 },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-course-attendance-overview',
+    },
+  )
+  assertV1Response(attendanceOverview, {
+    correlationId: 'smoke-v1-course-attendance-overview',
+    status: 200,
+  })
+  const savedAttendance = attendanceOverview.data?.data?.records?.find((record) => (
+    record.date === attendanceDate && record.student?.id === studentId
+  ))
+  if (
+    attendanceOverview.data?.data?.metadata?.contractVersion !== 1
+    || savedAttendance?.status !== 'presente'
+  ) {
+    fail(`course-attendance retornou historico inesperado: ${JSON.stringify(attendanceOverview.data)}`)
+  }
+  const dateSummaries = attendanceOverview.data?.data?.dateSummaries
+  if (
+    attendanceOverview.data?.data?.metadata?.hasMore !== true
+    || !Array.isArray(dateSummaries)
+    || dateSummaries.length !== 122
+    || !dateSummaries.some((summary) => (
+      summary.date === attendanceDate
+      && summary.presente === 1
+      && summary.total === 1
+    ))
+  ) {
+    fail(`course-attendance truncou os totais por data: ${JSON.stringify(attendanceOverview.data)}`)
+  }
+  log('Frequencia validou atomicidade e totais completos alem da pagina de detalhes.')
+
+  const visibility = await callV1EdgeFunction(
+    status,
+    'course-panel',
+    {
+      action: 'set_activity_visibility',
+      courseId,
+      hidden: true,
+      moodleActivityId: activityMoodleId,
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-course-activity-visibility',
+    },
+  )
+  assertV1Response(visibility, {
+    correlationId: 'smoke-v1-course-activity-visibility',
+    status: 200,
+  })
+  if (visibility.data?.data?.updatedCount !== 1 || visibility.data?.data?.hidden !== true) {
+    fail(`course-panel nao persistiu visibilidade: ${JSON.stringify(visibility.data)}`)
+  }
+
+  await upsertRows(status, 'student_activities', 'student_id,course_id,moodle_activity_id', {
+    activity_name: 'Atividade Smoke Edge sincronizada',
+    activity_type: 'assign',
+    course_id: courseId,
+    hidden: false,
+    moodle_activity_id: activityMoodleId,
+    status: 'pending',
+    student_id: studentId,
+  })
+  const [syncedActivity] = await selectRows(status, 'student_activities', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+    student_id: studentId,
+  })
+  const [visibilityOverride] = await selectRows(status, 'course_activity_visibility_overrides', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+  })
+  if (syncedActivity?.hidden !== true || visibilityOverride?.hidden !== true) {
+    fail(`Sync sobrescreveu o override de visibilidade: ${JSON.stringify({ syncedActivity, visibilityOverride })}`)
+  }
+  log('Override manual de visibilidade sobreviveu a um upsert equivalente ao sync.')
+
+  await deleteRows(status, 'attendance_records', {
+    course_id: courseId,
+    user_id: authUserId,
+  })
+  await deleteRows(status, 'course_activity_visibility_overrides', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+  }, 'course_id')
+  await deleteRows(status, 'student_activities', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+    student_id: studentId,
+  })
+  const disabledAttendance = await callV1EdgeFunction(
+    status,
+    'courses-catalog',
+    { action: 'set_attendance_enabled', courseIds: [courseId], enabled: false },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-course-attendance-disable',
+    },
+  )
+  assertV1Response(disabledAttendance, {
+    correlationId: 'smoke-v1-course-attendance-disable',
+    status: 200,
+  })
+
+  runCourseManagementGrantChecks()
+}
+
+async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   const settings = await callV1EdgeFunction(
     status,
     'moodle-reauth-settings',
@@ -716,6 +1272,16 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
   if (dashboardData.criticalStudents.some((student) => student.id === hiddenStudent.id)) {
     fail('dashboard-summary vazou um aluno de curso sem acesso.')
   }
+
+  await runCourseManagementChecks(
+    status,
+    accessToken,
+    authUserId,
+    courseId,
+    studentId,
+    hiddenCourse.id,
+    hiddenStudent.id,
+  )
 
   await deleteRows(status, 'student_courses', {
     course_id: hiddenCourse.id,
@@ -873,10 +1439,10 @@ async function main() {
   log('Seedando usuario local autenticado e dados minimos de dominio...')
   const authUserId = await ensureAuthUser(status)
   const accessToken = await signInSeedUser(status)
-  const { studentId } = await seedGenerateAutomatedTasksScenario(status, authUserId)
+  const { courseId, studentId } = await seedGenerateAutomatedTasksScenario(status, authUserId)
 
   log('Executando smoke autenticado ate a camada de servico...')
-  await runAuthenticatedServiceCheck(status, accessToken, authUserId, studentId)
+  await runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId)
 
   log('Smoke test de Edge Functions concluido com sucesso.')
 }

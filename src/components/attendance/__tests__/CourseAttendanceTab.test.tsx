@@ -1,197 +1,222 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { CourseAttendanceTab } from "@/components/attendance/CourseAttendanceTab";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
-const useAuthMock = vi.fn();
-const fromMock = vi.fn();
-const recordsOrderMock = vi.fn();
-const dateRecordsOrderMock = vi.fn();
-const studentsEqMock = vi.fn();
-const upsertMock = vi.fn();
+import { CourseAttendanceTab } from '@/components/attendance/CourseAttendanceTab';
+
+const getOverviewMock = vi.fn();
+const getSheetMock = vi.fn();
+const saveAttendanceMock = vi.fn();
 const toastMock = vi.fn();
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => useAuthMock(),
+vi.mock('@/features/courses/api/course-attendance', () => ({
+  getCourseAttendanceOverview: (...args: unknown[]) => getOverviewMock(...args),
+  getCourseAttendanceSheet: (...args: unknown[]) => getSheetMock(...args),
+  saveCourseAttendance: (...args: unknown[]) => saveAttendanceMock(...args),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
-}));
-
-vi.mock("@/hooks/use-toast", () => ({
+vi.mock('@/hooks/use-toast', () => ({
   toast: (...args: unknown[]) => toastMock(...args),
 }));
 
-describe("CourseAttendanceTab", () => {
+const emptyOverview = {
+  dateSummaries: [],
+  metadata: {
+    contractVersion: 1,
+    generatedAt: '2026-07-21T15:00:00.000Z',
+    hasMore: false,
+    limit: 120,
+    offset: 0,
+  },
+  records: [],
+  students: [],
+};
+
+describe('CourseAttendanceTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    useAuthMock.mockReturnValue({ user: { id: "u-1" } });
-
-    recordsOrderMock.mockResolvedValue({ data: [], error: null });
-    dateRecordsOrderMock.mockResolvedValue({ data: [], error: null });
-    studentsEqMock.mockResolvedValue({ data: [], error: null });
-    upsertMock.mockResolvedValue({ error: null });
-
-    fromMock.mockImplementation((table: string) => {
-      if (table === "attendance_records") {
-        return {
-          select: (columns: string) => {
-            if (columns.includes("students")) {
-              return {
-                eq: () => ({
-                  eq: () => ({ order: recordsOrderMock }),
-                }),
-              };
-            }
-
-            return {
-              eq: () => ({
-                eq: () => ({
-                  eq: () => ({ order: dateRecordsOrderMock }),
-                }),
-              }),
-            };
-          },
-          upsert: upsertMock,
-        };
-      }
-
-      if (table === "student_courses") {
-        return {
-          select: () => ({ eq: studentsEqMock }),
-        };
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
+    getOverviewMock.mockResolvedValue(emptyOverview);
+    getSheetMock.mockImplementation(async (courseId: string, date: string) => ({
+      courseId,
+      date,
+      entries: [],
+      metadata: { contractVersion: 1, generatedAt: '2026-07-21T15:00:00.000Z' },
+    }));
+    saveAttendanceMock.mockResolvedValue({
+      courseId: 'c-1',
+      date: '2026-02-23',
+      savedCount: 1,
+      metadata: { contractVersion: 1, generatedAt: '2026-07-21T15:00:00.000Z' },
     });
   });
 
-  it("renders grouped attendance stats and latest details without Teams actions", async () => {
-    recordsOrderMock.mockResolvedValueOnce({
-      data: [
+  it('renders grouped attendance stats and latest details without Teams actions', async () => {
+    getOverviewMock.mockResolvedValueOnce({
+      ...emptyOverview,
+      dateSummaries: [{
+        date: '2026-02-23',
+        presente: 200,
+        ausente: 99,
+        justificado: 1,
+        total: 300,
+      }],
+      records: [
         {
-          id: "r-1",
-          attendance_date: "2026-02-23",
-          status: "presente",
-          notes: "Participativo",
-          students: { id: "s-1", full_name: "Ana Silva" },
+          id: 'r-1',
+          date: '2026-02-23',
+          status: 'presente',
+          notes: 'Participativo',
+          student: { id: 's-1', name: 'Ana Silva' },
+          updatedAt: '2026-02-23T14:00:00.000Z',
         },
         {
-          id: "r-2",
-          attendance_date: "2026-02-23",
-          status: "ausente",
+          id: 'r-2',
+          date: '2026-02-23',
+          status: 'ausente',
           notes: null,
-          students: { id: "s-2", full_name: "Bruno Lima" },
+          student: { id: 's-2', name: 'Bruno Lima' },
+          updatedAt: '2026-02-23T14:00:00.000Z',
         },
       ],
-      error: null,
-    });
-
-    studentsEqMock.mockResolvedValueOnce({
-      data: [
-        { students: { id: "s-1", full_name: "Ana Silva", email: "ana@example.com" } },
-        { students: { id: "s-2", full_name: "Bruno Lima", email: "bruno@example.com" } },
+      students: [
+        { id: 's-1', name: 'Ana Silva', email: 'ana@example.com' },
+        { id: 's-2', name: 'Bruno Lima', email: 'bruno@example.com' },
       ],
-      error: null,
     });
 
-    render(<CourseAttendanceTab courseId="c-1" />);
+    render(<CourseAttendanceTab canManage courseId="c-1" />);
 
     await waitFor(() => {
       expect(screen.getByText(/registros de presença/i)).toBeInTheDocument();
     });
 
+    expect(getOverviewMock).toHaveBeenCalledWith('c-1', expect.any(AbortSignal));
     expect(screen.getAllByText(/23\/02\/2026/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/Presente:\s*1/i)).toBeInTheDocument();
-    expect(screen.getByText(/Ausente:\s*1/i)).toBeInTheDocument();
-    expect(screen.getByText("Ana Silva")).toBeInTheDocument();
-    expect(screen.getByText("Bruno Lima")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /importar do teams/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/300 registro/i)).toBeInTheDocument();
+    expect(screen.getByText(/Presente:\s*200/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ausente:\s*99/i)).toBeInTheDocument();
+    expect(screen.getByText('Ana Silva')).toBeInTheDocument();
+    expect(screen.getByText('Bruno Lima')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /importar do teams/i })).not.toBeInTheDocument();
   });
 
-  it("shows warning toast when trying to save without selecting any status", async () => {
+  it('shows warning toast when trying to save without selecting any status', async () => {
     const user = userEvent.setup();
-
-    studentsEqMock.mockResolvedValueOnce({
-      data: [{ students: { id: "s-1", full_name: "Ana Silva", email: null } }],
-      error: null,
+    getOverviewMock.mockResolvedValueOnce({
+      ...emptyOverview,
+      students: [{ id: 's-1', name: 'Ana Silva', email: null }],
     });
 
-    render(<CourseAttendanceTab courseId="c-1" />);
+    render(<CourseAttendanceTab canManage courseId="c-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /nova presença/i })).toBeInTheDocument();
-    });
+    await user.click(await screen.findByRole('button', { name: /nova presença/i }));
+    const saveButton = screen.getByRole('button', { name: /^salvar$/i });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
 
-    await user.click(screen.getByRole("button", { name: /nova presença/i }));
-    await user.click(screen.getByRole("button", { name: /^salvar$/i }));
-
-    expect(upsertMock).not.toHaveBeenCalled();
+    expect(saveAttendanceMock).not.toHaveBeenCalled();
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: expect.stringMatching(/nenhum registro para salvar/i) }),
     );
   });
 
-  it("saves attendance with selected status and note", async () => {
+  it('loads the selected date and saves attendance through the use-case client', async () => {
     const user = userEvent.setup();
-
-    studentsEqMock.mockResolvedValueOnce({
-      data: [{ students: { id: "s-1", full_name: "Ana Silva", email: null } }],
-      error: null,
-    });
-
-    recordsOrderMock
-      .mockResolvedValueOnce({ data: [], error: null })
+    getOverviewMock
       .mockResolvedValueOnce({
-        data: [
-          {
-            id: "r-1",
-            attendance_date: "2026-02-23",
-            status: "presente",
-            notes: "Chegou no horario",
-            students: { id: "s-1", full_name: "Ana Silva" },
-          },
-        ],
-        error: null,
+        ...emptyOverview,
+        students: [{ id: 's-1', name: 'Ana Silva', email: null }],
+      })
+      .mockResolvedValueOnce({
+        ...emptyOverview,
+        records: [{
+          id: 'r-1',
+          date: '2026-02-23',
+          status: 'presente',
+          notes: 'Chegou no horario',
+          student: { id: 's-1', name: 'Ana Silva' },
+          updatedAt: '2026-02-23T14:00:00.000Z',
+        }],
+        students: [{ id: 's-1', name: 'Ana Silva', email: null }],
       });
 
-    render(<CourseAttendanceTab courseId="c-1" />);
+    render(<CourseAttendanceTab canManage courseId="c-1" />);
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: /nova presença/i })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: /nova presença/i }));
+    await waitFor(() => expect(getSheetMock).toHaveBeenCalledWith(
+      'c-1',
+      expect.any(String),
+      expect.any(AbortSignal),
+    ));
+
+    await user.click(screen.getByRole('combobox'));
+    await user.click(await screen.findByRole('option', { name: /^Presente$/i }));
+    await user.type(screen.getByPlaceholderText(/observação \(opcional\)/i), 'Chegou no horario');
+    await user.click(screen.getByRole('button', { name: /^salvar$/i }));
+
+    await waitFor(() => expect(saveAttendanceMock).toHaveBeenCalledTimes(1));
+    expect(saveAttendanceMock).toHaveBeenCalledWith({
+      courseId: 'c-1',
+      date: expect.any(String),
+      entries: [{
+        studentId: 's-1',
+        status: 'presente',
+        notes: 'Chegou no horario',
+      }],
     });
-
-    await user.click(screen.getByRole("button", { name: /nova presença/i }));
-
-    await user.click(screen.getByRole("combobox"));
-    await user.click(await screen.findByRole("option", { name: /^Presente$/i }));
-
-    await user.type(screen.getByPlaceholderText(/observação \(opcional\)/i), "Chegou no horario");
-    await user.click(screen.getByRole("button", { name: /^salvar$/i }));
-
-    await waitFor(() => {
-      expect(upsertMock).toHaveBeenCalledTimes(1);
-    });
-
-    expect(upsertMock).toHaveBeenCalledWith(
-      [
-        expect.objectContaining({
-          user_id: "u-1",
-          course_id: "c-1",
-          student_id: "s-1",
-          status: "presente",
-          notes: "Chegou no horario",
-        }),
-      ],
-      { onConflict: "user_id,course_id,student_id,attendance_date" },
-    );
-
+    expect(getOverviewMock).toHaveBeenCalledTimes(2);
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: expect.stringMatching(/presenças salvas/i) }),
     );
+  });
+
+  it('ignores a stale sheet response and blocks saving until the selected date is loaded', async () => {
+    const user = userEvent.setup();
+    const pending = new Map<string, (value: unknown) => void>();
+    getOverviewMock.mockResolvedValueOnce({
+      ...emptyOverview,
+      students: [{ id: 's-1', name: 'Ana Silva', email: null }],
+    });
+    getSheetMock.mockImplementation((_courseId: string, date: string) => (
+      new Promise((resolve) => pending.set(date, resolve))
+    ));
+
+    render(<CourseAttendanceTab canManage courseId="c-1" />);
+
+    await user.click(await screen.findByRole('button', { name: /nova presença/i }));
+    await waitFor(() => expect(getSheetMock).toHaveBeenCalledTimes(1));
+    const initialDate = getSheetMock.mock.calls[0][1] as string;
+    const initialSignal = getSheetMock.mock.calls[0][2] as AbortSignal;
+    const dateInput = screen.getByLabelText(/data da chamada/i);
+    const nextDate = initialDate === '2026-02-23' ? '2026-02-24' : '2026-02-23';
+
+    fireEvent.change(dateInput, { target: { value: nextDate } });
+
+    await waitFor(() => expect(getSheetMock).toHaveBeenCalledTimes(2));
+    expect(initialSignal.aborted).toBe(true);
+    expect(screen.getByRole('button', { name: /^salvar$/i })).toBeDisabled();
+
+    pending.get(nextDate)?.({
+      courseId: 'c-1',
+      date: nextDate,
+      entries: [{ studentId: 's-1', status: 'ausente', notes: null, updatedAt: null }],
+      metadata: { contractVersion: 1, generatedAt: '2026-07-21T15:00:00.000Z' },
+    });
+    pending.get(initialDate)?.({
+      courseId: 'c-1',
+      date: initialDate,
+      entries: [{ studentId: 's-1', status: 'presente', notes: null, updatedAt: null }],
+      metadata: { contractVersion: 1, generatedAt: '2026-07-21T15:00:00.000Z' },
+    });
+
+    const saveButton = screen.getByRole('button', { name: /^salvar$/i });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
+
+    await waitFor(() => expect(saveAttendanceMock).toHaveBeenCalledWith({
+      courseId: 'c-1',
+      date: nextDate,
+      entries: [{ studentId: 's-1', status: 'ausente', notes: null }],
+    }));
   });
 });

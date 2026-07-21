@@ -5,12 +5,15 @@ import { SchoolHierarchy } from '@/components/schools/SchoolHierarchy';
 import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/usePermissions';
+import { APP_PERMISSIONS } from '@/lib/access-control';
 
 import { useAllCoursesData } from '../hooks/useAllCoursesData';
 
 export default function SchoolsPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const { isEditMode } = useAuth();
+  const { can } = usePermissions();
   const {
     courses,
     isLoading,
@@ -21,6 +24,7 @@ export default function SchoolsPage() {
     toggleAttendance,
     toggleAttendanceMultiple,
   } = useAllCoursesData();
+  const canManageAttendance = isEditMode && can(APP_PERMISSIONS.COURSES_ATTENDANCE_MANAGE);
 
   const syncedCourses = courses.filter((course) => course.is_following);
 
@@ -74,8 +78,8 @@ export default function SchoolsPage() {
           onToggleFollow={isEditMode ? toggleFollow : undefined}
           onToggleIgnore={isEditMode ? toggleIgnore : undefined}
           onToggleIgnoreMultiple={isEditMode ? toggleIgnoreMultiple : undefined}
-          onToggleAttendance={isEditMode ? toggleAttendance : undefined}
-          onToggleAttendanceMultiple={isEditMode ? toggleAttendanceMultiple : undefined}
+          onToggleAttendance={canManageAttendance ? toggleAttendance : undefined}
+          onToggleAttendanceMultiple={canManageAttendance ? toggleAttendanceMultiple : undefined}
         />
       ) : (
         <div className="py-12 text-center">

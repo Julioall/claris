@@ -2,15 +2,15 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { fetchTutorCourses } from '@/features/reports/api';
 
-const listCatalogCoursesForUserMock = vi.fn();
+const listCatalogCoursesMock = vi.fn();
 
-vi.mock('@/features/courses/api/courses.repository', () => ({
-  listCatalogCoursesForUser: (...args: unknown[]) => listCatalogCoursesForUserMock(...args),
+vi.mock('@/features/courses/api/courses-catalog', () => ({
+  listCatalogCourses: (...args: unknown[]) => listCatalogCoursesMock(...args),
 }));
 
 describe('reports api', () => {
   it('lists only courses followed in My Courses for report selection', async () => {
-    listCatalogCoursesForUserMock.mockResolvedValueOnce([
+    listCatalogCoursesMock.mockResolvedValueOnce([
       {
         id: 'course-unfollowed',
         name: 'Z Curso fora de meus cursos',
@@ -58,6 +58,6 @@ describe('reports api', () => {
         end_date: '2026-03-01T00:00:00.000Z',
       },
     ]);
-    expect(listCatalogCoursesForUserMock).toHaveBeenCalledWith('user-1');
+    expect(listCatalogCoursesMock).toHaveBeenCalledWith();
   });
 });

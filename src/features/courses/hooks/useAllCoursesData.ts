@@ -3,13 +3,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 
 import {
-  disableAttendanceForCourses,
-  enableAttendanceForCourses,
-  ignoreCourses,
+  setCourseAttendanceEnabled,
   setCourseAssociationRole,
-  setCoursesAssociationRole,
-  unignoreCourses,
-} from '../api/courses.repository';
+  setCoursesIgnored,
+} from '../api/courses-catalog';
 import { courseKeys } from '../query-keys';
 import type { CourseWithStats } from '../types';
 import { useCoursesCatalogQuery } from './useCoursesCatalogQuery';
@@ -34,7 +31,7 @@ export function useAllCoursesData() {
 
   const toggleFollowMutation = useMutation({
     mutationFn: async ({ courseId, nextFollowing }: { courseId: string; nextFollowing: boolean }) => {
-      await setCourseAssociationRole(user!.id, courseId, nextFollowing ? 'tutor' : 'viewer');
+      await setCourseAssociationRole([courseId], nextFollowing ? 'tutor' : 'viewer');
       return { courseId, nextFollowing };
     },
     onSuccess: ({ courseId, nextFollowing }) => {
@@ -51,11 +48,7 @@ export function useAllCoursesData() {
 
   const toggleIgnoreMutation = useMutation({
     mutationFn: async ({ courseId, nextIgnored }: { courseId: string; nextIgnored: boolean }) => {
-      if (nextIgnored) {
-        await ignoreCourses(user!.id, [courseId]);
-      } else {
-        await unignoreCourses(user!.id, [courseId]);
-      }
+      await setCoursesIgnored([courseId], nextIgnored);
 
       return { courseId, nextIgnored };
     },
@@ -82,12 +75,17 @@ export function useAllCoursesData() {
     }) => {
       if (shouldIgnore) {
         const courseIdsToIgnore = courseIds.filter((courseId) => !existingIgnoredIds.includes(courseId));
-        await ignoreCourses(user!.id, courseIdsToIgnore);
+        if (courseIdsToIgnore.length > 0) {
+          await setCoursesIgnored(courseIdsToIgnore, true);
+        }
       } else {
-        await unignoreCourses(user!.id, courseIds);
+        await setCoursesIgnored(courseIds, false);
       }
 
       return { courseIds, shouldIgnore };
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: courseKeys.catalog(user?.id) });
     },
     onSuccess: ({ courseIds, shouldIgnore }) => {
       queryClient.setQueryData<CourseWithStats[]>(
@@ -102,8 +100,11 @@ export function useAllCoursesData() {
 
   const unfollowMultipleMutation = useMutation({
     mutationFn: async (courseIds: string[]) => {
-      await setCoursesAssociationRole(user!.id, courseIds, 'viewer');
+      await setCourseAssociationRole(courseIds, 'viewer');
       return courseIds;
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: courseKeys.catalog(user?.id) });
     },
     onSuccess: (courseIds) => {
       queryClient.setQueryData<CourseWithStats[]>(
@@ -119,11 +120,7 @@ export function useAllCoursesData() {
 
   const toggleAttendanceMutation = useMutation({
     mutationFn: async ({ courseId, shouldEnable }: { courseId: string; shouldEnable: boolean }) => {
-      if (shouldEnable) {
-        await enableAttendanceForCourses(user!.id, [courseId]);
-      } else {
-        await disableAttendanceForCourses(user!.id, [courseId]);
-      }
+      await setCourseAttendanceEnabled([courseId], shouldEnable);
 
       return { courseId, shouldEnable };
     },
@@ -153,12 +150,17 @@ export function useAllCoursesData() {
     }) => {
       if (shouldEnable) {
         const courseIdsToEnable = courseIds.filter((courseId) => !existingEnabledIds.includes(courseId));
-        await enableAttendanceForCourses(user!.id, courseIdsToEnable);
+        if (courseIdsToEnable.length > 0) {
+          await setCourseAttendanceEnabled(courseIdsToEnable, true);
+        }
       } else {
-        await disableAttendanceForCourses(user!.id, courseIds);
+        await setCourseAttendanceEnabled(courseIds, false);
       }
 
       return { courseIds, shouldEnable };
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: courseKeys.catalog(user?.id) });
     },
     onSuccess: ({ courseIds, shouldEnable }) => {
       queryClient.setQueryData<CourseWithStats[]>(

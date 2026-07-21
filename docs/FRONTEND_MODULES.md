@@ -60,6 +60,8 @@ Componentes com semantica de dominio permanecem dentro da feature correspondente
 
 O dashboard consome uma unica API de caso de uso em `features/dashboard/api/dashboard-summary.ts`. O hook preserva cache e invalidacao do React Query, enquanto indicadores, prioridades, fila e feed recebem DTOs enxutos; nenhuma parte da feature conhece tabelas, RPCs ou tipos gerados do Supabase.
 
+O dominio de cursos consome os casos de uso `courses-catalog`, `course-panel` e `course-attendance` por clients HTTP em `features/courses/api/`. Catalogo, associacoes, configuracao de frequencia, painel consolidado, visibilidade de atividades e folhas de presenca usam DTOs proprios; a UI envia intencoes e preserva somente responsabilidades de apresentacao, cache e invalidacao.
+
 DTOs de transporte vivem em `src/features/<dominio>/api/contracts/` e descrevem somente o JSON da API. View models permanecem no `types.ts` da feature, e mappers em `api/mappers/` convertem entre os dois quando necessario. Contratos, hooks, pages e components nao importam tipos gerados do banco. `npm run guard:frontend-contracts` protege essa regra e mantem uma allowlist decrescente para duas dividas anteriores.
 
 Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md). A validacao client-side existe para UX; regras de permissao, elegibilidade e estado persistido sempre sao revalidadas no backend.

@@ -26,12 +26,14 @@ import type {
   ActivityGradeSuggestionJobItem,
   ActivityGradeSuggestionJobStatus,
   ActivityGradeSuggestionResponse,
-  Student,
   StudentGradeSuggestionResult,
 } from '@/features/students/types';
 import { useToast } from '@/hooks/use-toast';
-import { getStudentActivityWorkflowStatus } from '@/lib/student-activity-status';
-import type { StudentActivity } from '../types';
+import type {
+  CoursePanelActivityDto,
+  CoursePanelStudentDto,
+  CoursePanelSubmissionDto,
+} from '../api/contracts/course-panel.contract';
 
 interface SuggestionRowState {
   auditId: string | null;
@@ -52,9 +54,9 @@ interface AssignmentSuggestionJobState {
 }
 
 interface AssignmentSuggestionPanelProps {
-  activity: StudentActivity;
-  submissions: StudentActivity[];
-  studentsById: Map<string, Student>;
+  activity: CoursePanelActivityDto;
+  submissions: CoursePanelSubmissionDto[];
+  studentsById: Map<string, CoursePanelStudentDto>;
   isExpanded: boolean;
   onToggleExpand: () => void;
   onApproved?: () => Promise<void> | void;
@@ -67,11 +69,9 @@ const SUGGESTION_STATUS_CLASS_NAMES: Record<StudentGradeSuggestionResult['status
   error: 'border-destructive/30 bg-destructive/10 text-destructive',
 };
 
-function getSubmissionStatus(submission: StudentActivity) {
-  const workflowStatus = getStudentActivityWorkflowStatus(submission);
-
-  if (workflowStatus === 'corrected') return 'corrigido';
-  if (workflowStatus === 'pending_correction') return 'pendente-correcao';
+function getSubmissionStatus(submission: CoursePanelSubmissionDto) {
+  if (submission.workflowStatus === 'corrected') return 'corrigido';
+  if (submission.workflowStatus === 'pendingCorrection') return 'pendente-correcao';
   return 'pendente-envio';
 }
 
@@ -143,7 +143,7 @@ export function AssignmentSuggestionPanel({
       }
     };
   const pendingCorrectionSubmissions = useMemo(
-    () => submissions.filter((submission) => getStudentActivityWorkflowStatus(submission) === 'pending_correction'),
+    () => submissions.filter((submission) => submission.workflowStatus === 'pendingCorrection'),
     [submissions],
   );
 
@@ -171,8 +171,8 @@ export function AssignmentSuggestionPanel({
         ? 'Correcoes por IA em lote'
         : 'Gerando correcoes por IA',
     description: hasActiveBatchJob && jobState
-      ? `${activity.activity_name} (${jobState.processedItems}/${jobState.totalItems})`
-      : `${activity.activity_name}`,
+      ? `${activity.name} (${jobState.processedItems}/${jobState.totalItems})`
+      : `${activity.name}`,
     source: 'ai-grading',
     cleanupOnUnmount: !hasActiveBatchJob || !persistentActivityId,
   });
@@ -326,7 +326,7 @@ export function AssignmentSuggestionPanel({
   }, [applyJobResponse, toast]);
 
   const handleGenerateSuggestions = async () => {
-    if (!moodleSession || !activity.moodle_activity_id) {
+    if (!moodleSession || !activity.moodleActivityId) {
       setBatchError('A sessao Moodle nao esta disponivel para gerar as sugestoes.');
       return;
     }
@@ -346,8 +346,8 @@ export function AssignmentSuggestionPanel({
     try {
       const { data, error } = await generateActivityGradeSuggestions({
         session: moodleSession,
-        courseId: activity.course_id,
-        moodleActivityId: activity.moodle_activity_id,
+        courseId: activity.courseId,
+        moodleActivityId: activity.moodleActivityId,
       });
 
       if (error) {
@@ -378,7 +378,7 @@ export function AssignmentSuggestionPanel({
   };
 
   useEffect(() => {
-    if (!isExpanded || activeJobId || !user?.id || !activity.moodle_activity_id) {
+    if (!isExpanded || activeJobId || !user?.id || !activity.moodleActivityId) {
       return;
     }
 
@@ -388,8 +388,8 @@ export function AssignmentSuggestionPanel({
       try {
         const existingJob = await findLatestRelevantActivityGradeSuggestionJob({
           userId: user.id,
-          courseId: activity.course_id,
-          moodleActivityId: activity.moodle_activity_id,
+          courseId: activity.courseId,
+          moodleActivityId: activity.moodleActivityId,
         });
 
         if (!existingJob || cancelled) {
@@ -416,7 +416,7 @@ export function AssignmentSuggestionPanel({
     return () => {
       cancelled = true;
     };
-  }, [activity.course_id, activity.moodle_activity_id, activeJobId, isExpanded, user?.id]);
+  }, [activity.courseId, activity.moodleActivityId, activeJobId, isExpanded, user?.id]);
 
   useEffect(() => {
     if (!activeJobId) {
@@ -516,7 +516,7 @@ export function AssignmentSuggestionPanel({
   );
 
   const approveSubmission = async (
-    submission: StudentActivity,
+    submission: CoursePanelSubmissionDto,
     options?: { toastOnSuccess?: boolean; toastOnError?: boolean; triggerRefresh?: boolean },
   ): Promise<{ success: boolean; message?: string }> => {
     const row = rows[submission.id];
@@ -581,7 +581,7 @@ export function AssignmentSuggestionPanel({
       if (options?.toastOnSuccess !== false) {
         toast({
           title: 'Nota lancada',
-          description: `${studentsById.get(submission.student_id)?.full_name || 'Aluno'} atualizado no Moodle.`,
+          description: `${studentsById.get(submission.studentId)?.name || 'Aluno'} atualizado no Moodle.`,
         });
       }
 
@@ -611,7 +611,7 @@ export function AssignmentSuggestionPanel({
     }
   };
 
-  const handleApprove = async (submission: StudentActivity) => {
+  const handleApprove = async (submission: CoursePanelSubmissionDto) => {
     await approveSubmission(submission);
   };
 
@@ -728,7 +728,7 @@ export function AssignmentSuggestionPanel({
             variant="outline"
             size="sm"
             onClick={() => void handleGenerateSuggestions()}
-            disabled={!moodleSession || !activity.moodle_activity_id || isGenerating || isResumingJob || isApprovingAll || isCancellingJob}
+            disabled={!moodleSession || !activity.moodleActivityId || isGenerating || isResumingJob || isApprovingAll || isCancellingJob}
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Corrigir
@@ -797,8 +797,8 @@ export function AssignmentSuggestionPanel({
             <div className="divide-y">
               {submissions.map((submission) => {
                 const submissionStatus = getSubmissionStatus(submission);
-                const student = studentsById.get(submission.student_id);
-                const studentName = student?.full_name || 'Aluno nao identificado';
+                const student = studentsById.get(submission.studentId);
+                const studentName = student?.name || 'Aluno nao identificado';
                 const suggestionClosed = submissionStatus === 'corrigido' || Boolean(closedSuggestionIds[submission.id]);
                 const row = suggestionClosed ? undefined : rows[submission.id];
                 const jobItem = jobItems[submission.id];
@@ -842,7 +842,7 @@ export function AssignmentSuggestionPanel({
                         {submissionStatus === 'corrigido' && submission.grade !== null && (
                           <span>
                             Nota: {submission.grade.toFixed(1)}
-                            {submission.grade_max !== null ? ` / ${submission.grade_max}` : ''}
+                            {submission.gradeMax !== null ? ` / ${submission.gradeMax}` : ''}
                           </span>
                         )}
 

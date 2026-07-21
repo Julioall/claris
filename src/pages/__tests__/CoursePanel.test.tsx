@@ -7,6 +7,7 @@ import CoursePanel from "@/features/courses/pages/CoursePanelPage";
 
 const useCoursePanelMock = vi.fn();
 const useAuthMock = vi.fn();
+const usePermissionsMock = vi.fn();
 const toggleActivityVisibilityMock = vi.fn();
 const generateActivityGradeSuggestionsMock = vi.fn();
 const findLatestRelevantActivityGradeSuggestionJobMock = vi.fn();
@@ -18,11 +19,15 @@ const syncCourseIncrementalMock = vi.fn();
 const refetchCoursePanelMock = vi.fn();
 
 vi.mock("@/features/courses/hooks/useCoursePanel", () => ({
-  useCoursePanel: (...args: unknown[]) => useCoursePanelMock(...args),
+  useCoursePanel: (...args: unknown[]) => adaptCoursePanelMock(useCoursePanelMock(...args)),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
+}));
+
+vi.mock("@/hooks/usePermissions", () => ({
+  usePermissions: () => usePermissionsMock(),
 }));
 
 vi.mock("@/features/auth/context/MoodleSessionContext", () => ({
@@ -38,10 +43,152 @@ vi.mock("@/features/students/api/gradeSuggestions", () => ({
 }));
 
 vi.mock("@/components/attendance/CourseAttendanceTab", () => ({
-  CourseAttendanceTab: ({ courseId }: { courseId: string }) => (
-    <div data-testid="attendance-tab">{courseId}</div>
+  CourseAttendanceTab: ({ canManage, courseId }: { canManage: boolean; courseId: string }) => (
+    <div data-can-manage={String(canManage)} data-testid="attendance-tab">{courseId}</div>
   ),
 }));
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function adaptSubmission(value: unknown) {
+  const submission = asRecord(value) ?? {};
+  if (typeof submission.workflowStatus === "string") return submission;
+
+  const normalizedStatus = typeof submission.status === "string"
+    ? submission.status.toLowerCase()
+    : "";
+  const workflowStatus = (
+    typeof submission.grade === "number"
+    || Boolean(submission.graded_at)
+    || normalizedStatus === "graded"
+  )
+    ? "corrected"
+    : Boolean(submission.submitted_at) || normalizedStatus === "submitted"
+      ? "pendingCorrection"
+      : Boolean(submission.completed_at) || normalizedStatus === "completed"
+        ? "completed"
+        : "pendingSubmission";
+
+  return {
+    completedAt: submission.completedAt ?? submission.completed_at ?? null,
+    grade: submission.grade ?? null,
+    gradedAt: submission.gradedAt ?? submission.graded_at ?? null,
+    gradeMax: submission.gradeMax ?? submission.grade_max ?? null,
+    id: submission.id,
+    moodleActivityId: submission.moodleActivityId ?? submission.moodle_activity_id ?? "",
+    percentage: submission.percentage ?? null,
+    studentId: submission.studentId ?? submission.student_id,
+    submittedAt: submission.submittedAt ?? submission.submitted_at ?? null,
+    workflowStatus,
+  };
+}
+
+function buildSubmissionCounts(submissions: Array<Record<string, unknown>>) {
+  const counts = {
+    completed: 0,
+    corrected: 0,
+    pendingCorrection: 0,
+    pendingSubmission: 0,
+    total: submissions.length,
+  };
+
+  submissions.forEach((submission) => {
+    switch (submission.workflowStatus) {
+      case "corrected":
+        counts.corrected += 1;
+        break;
+      case "pendingCorrection":
+        counts.pendingCorrection += 1;
+        break;
+      case "completed":
+        counts.completed += 1;
+        break;
+      default:
+        counts.pendingSubmission += 1;
+    }
+  });
+
+  return counts;
+}
+
+// Keep the large UI scenarios readable while translating their historical
+// fixtures to the versioned camelCase DTO now returned by the hook.
+function adaptCoursePanelMock(value: unknown) {
+  const result = asRecord(value);
+  if (!result) return value;
+
+  const rawCourse = asRecord(result.course);
+  const course = rawCourse
+    ? {
+        ...rawCourse,
+        effectiveEndsAt: rawCourse.effectiveEndsAt ?? rawCourse.effective_end_date ?? null,
+        endsAt: rawCourse.endsAt ?? rawCourse.end_date ?? null,
+        lastSyncedAt: rawCourse.lastSyncedAt ?? rawCourse.last_sync ?? null,
+        lifecycle: rawCourse.lifecycle ?? "inProgress",
+        moodleCourseId: rawCourse.moodleCourseId ?? rawCourse.moodle_course_id ?? "",
+        shortName: rawCourse.shortName ?? rawCourse.short_name ?? null,
+        startsAt: rawCourse.startsAt ?? rawCourse.start_date ?? null,
+      }
+    : result.course;
+
+  const students = (Array.isArray(result.students) ? result.students : []).map((value) => {
+    const student = asRecord(value) ?? {};
+    if (typeof student.name === "string" && typeof student.riskLevel === "string") {
+      return student;
+    }
+    return {
+      avatarUrl: student.avatarUrl ?? student.avatar_url ?? null,
+      email: student.email ?? null,
+      enrollmentStatus: student.enrollmentStatus ?? null,
+      id: student.id,
+      lastAccessAt: student.lastAccessAt ?? student.last_access ?? null,
+      name: student.name ?? student.full_name ?? "",
+      riskLevel: student.riskLevel ?? student.current_risk_level ?? "normal",
+    };
+  });
+  const studentIds = new Set(
+    students
+      .map((student) => student.id)
+      .filter((studentId): studentId is string => typeof studentId === "string"),
+  );
+  const legacySubmissions = (Array.isArray(result.activitySubmissions)
+    ? result.activitySubmissions
+    : [])
+    .map(adaptSubmission)
+    .filter((submission) => studentIds.has(String(submission.studentId)));
+
+  const activities = (Array.isArray(result.activities) ? result.activities : []).map((value) => {
+    const activity = asRecord(value) ?? {};
+    const moodleActivityId = String(
+      activity.moodleActivityId ?? activity.moodle_activity_id ?? "",
+    );
+    const ownSubmissions = Array.isArray(activity.submissions)
+      ? activity.submissions.map(adaptSubmission)
+      : legacySubmissions.filter((submission) => (
+          String(submission.moodleActivityId) === moodleActivityId
+          && String(submission.studentId).length > 0
+        ));
+    const type = activity.type ?? activity.activity_type ?? null;
+    return {
+      courseId: activity.courseId ?? activity.course_id ?? "",
+      dueAt: activity.dueAt ?? activity.due_date ?? null,
+      hidden: activity.hidden === true,
+      id: activity.id,
+      isAssignment: activity.isAssignment ?? (type === "assign" || type === "assignment"),
+      moodleActivityId,
+      name: activity.name ?? activity.activity_name ?? "",
+      submissionCounts: activity.submissionCounts ?? buildSubmissionCounts(ownSubmissions),
+      submissions: ownSubmissions,
+      type,
+    };
+  });
+
+  return { ...result, activities, course, students };
+}
 
 function renderPage() {
   return render(
@@ -139,6 +286,7 @@ describe("CoursePanel page", () => {
       isSyncing: false,
       isOfflineMode: false,
     });
+    usePermissionsMock.mockReturnValue({ can: () => true });
     syncCourseIncrementalMock.mockResolvedValue(undefined);
     refetchCoursePanelMock.mockResolvedValue(undefined);
 
@@ -305,6 +453,74 @@ describe("CoursePanel page", () => {
     expect(screen.getByText(/alunos matriculados/i)).toBeInTheDocument();
     expect(screen.getByText(/distribui/i)).toBeInTheDocument();
     expect(screen.getByText("15/03/2026")).toBeInTheDocument();
+  });
+
+  it("keeps course commands read-only without their explicit permissions", async () => {
+    const user = userEvent.setup();
+    useAuthMock.mockReturnValue({
+      user: { id: "u-1" },
+      isEditMode: true,
+      syncCourseIncremental: syncCourseIncrementalMock,
+      isSyncing: false,
+      isOfflineMode: false,
+    });
+    usePermissionsMock.mockReturnValue({ can: () => false });
+    useCoursePanelMock.mockReturnValue({
+      course: {
+        category: "Exatas",
+        effectiveEndsAt: "2026-12-31T00:00:00.000Z",
+        endsAt: "2026-12-31T00:00:00.000Z",
+        id: "c-1",
+        lastSyncedAt: "2026-02-20T00:00:00.000Z",
+        lifecycle: "inProgress",
+        moodleCourseId: "123",
+        name: "Curso de Matematica",
+        shortName: "MAT",
+        startsAt: "2026-01-01T00:00:00.000Z",
+      },
+      students: [],
+      activities: [{
+        courseId: "c-1",
+        dueAt: null,
+        hidden: false,
+        id: "act-1",
+        isAssignment: false,
+        moodleActivityId: "321",
+        name: "Atividade 1",
+        submissionCounts: {
+          completed: 0,
+          corrected: 0,
+          pendingCorrection: 0,
+          pendingSubmission: 0,
+          total: 0,
+        },
+        submissions: [],
+        type: "quiz",
+      }],
+      stats: {
+        totalStudents: 0,
+        atRiskStudents: 0,
+        totalActivities: 1,
+        completionRate: 0,
+        riskDistribution: { normal: 0, atencao: 0, risco: 0, critico: 0 },
+      },
+      isLoading: false,
+      error: null,
+      refetch: refetchCoursePanelMock,
+      toggleActivityVisibility: toggleActivityVisibilityMock,
+      isAttendanceEnabled: true,
+      isLoadingAttendanceFlag: false,
+      toggleAttendance: vi.fn(),
+    });
+
+    renderPage();
+
+    expect(screen.queryByText("Controle de presença")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("tab", { name: /atividades \(1\)/i }));
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /presenças/i }));
+    expect(screen.getByTestId("attendance-tab")).toHaveAttribute("data-can-manage", "false");
   });
 
   it("starts a silent course refresh when opening the course", async () => {

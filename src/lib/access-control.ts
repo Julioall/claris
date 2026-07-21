@@ -2,6 +2,8 @@ export const APP_PERMISSIONS = {
   DASHBOARD_VIEW: 'dashboard.view',
   COURSES_CATALOG_VIEW: 'courses.catalog.view',
   COURSES_PANEL_VIEW: 'courses.panel.view',
+  COURSES_ACTIVITIES_VISIBILITY_MANAGE: 'courses.activities.visibility.manage',
+  COURSES_ATTENDANCE_MANAGE: 'courses.attendance.manage',
   SCHOOLS_VIEW: 'schools.view',
   STUDENTS_VIEW: 'students.view',
   TASKS_VIEW: 'tasks.view',
