@@ -1,40 +1,18 @@
-import { supabase } from '@/integrations/supabase/client';
-import { SUPABASE_URL } from '@/integrations/supabase/url';
-import { authGateway } from '@/integrations/auth/auth-gateway';
+export {
+  connectServiceInstance,
+  createSharedWhatsAppInstance,
+  deactivateServiceInstance,
+  deleteServiceInstance,
+  getServiceInstanceQrCode,
+  listSharedServiceInstances,
+  setServiceInstanceActive,
+  setServiceInstanceBlocked,
+  syncServiceInstanceStatus,
+  updateServiceInstance,
+} from '@/features/services/api/serviceInstances';
 
-async function getAccessToken() {
-  const accessToken = await authGateway.getAccessToken(false, true);
-  if (!accessToken) throw new Error('Nao autenticado');
-  return accessToken;
-}
-
-export async function listSharedServiceInstances() {
-  return supabase
-    .from('app_service_instances')
-    .select('id, name, description, service_type, scope, connection_status, operational_status, health_status, is_active, is_blocked, evolution_instance_name, last_activity_at, last_sync_at, created_at')
-    .eq('scope', 'shared')
-    .order('created_at', { ascending: false });
-}
-
-export async function callAdminInstanceManager(action: string, params: Record<string, unknown> = {}) {
-  const accessToken = await getAccessToken();
-  const response = await fetch(
-    `${SUPABASE_URL}/functions/v1/whatsapp-instance-manager`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-      },
-      body: JSON.stringify({ action, ...params }),
-    },
-  );
-
-  const payload = await response.json() as Record<string, unknown>;
-
-  if (!response.ok) {
-    throw new Error((payload.error as string) ?? 'Erro desconhecido');
-  }
-
-  return payload;
-}
+export type {
+  AdminServiceInstanceDto,
+  ServiceInstanceQrDto,
+  ServiceInstanceStatusDto,
+} from '@/features/services/api/serviceInstances';

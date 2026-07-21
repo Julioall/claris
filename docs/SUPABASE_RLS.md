@@ -31,6 +31,7 @@ Posturas especiais válidas:
 - `user_sync_preferences`, `activity_feed`, `background_jobs`, `background_job_items` e `background_job_events`: policies contextuais permanecem como defesa, mas os grants de browser foram revogados e o acesso da aplicacao passa por Edge Functions service-only.
 - `claris_suggestions` e `claris_suggestion_cooldowns`: policies de dono permanecem como defesa, mas os grants de browser foram revogados; feed e comandos passam por `claris-suggestions`.
 - `app_permission_definitions`, `app_groups`, `app_group_permissions`, `user_group_memberships` e `admin_user_roles`: policies permanecem como defesa, mas os grants de browser foram revogados; contexto e administracao passam por `access-control`.
+- As sete tabelas `app_service_*` de instancias, eventos, jobs, limites, saude, webhooks e permissoes de grupo sao exclusivas de `service_role`; a aplicacao usa `whatsapp-instance-manager`.
 
 ## Usuários E Preferências
 
@@ -283,6 +284,29 @@ Regra canônica:
 Migration de referência:
 
 - `20260721240000_secure_access_control.sql`
+
+### Integrações de serviços
+
+Tabelas:
+
+- `app_service_instances`
+- `app_service_instance_events`
+- `app_service_instance_jobs`
+- `app_service_instance_limits`
+- `app_service_instance_health_logs`
+- `app_service_webhook_events`
+- `app_service_instance_group_permissions`
+
+Regra canônica:
+
+- `anon` e `authenticated` nao possuem grants de leitura ou escrita nessas tabelas; policies historicas permanecem como defesa em profundidade.
+- `whatsapp-instance-manager` usa `service_role`, deriva a instancia pessoal do ator autenticado e exige application admin para instancias compartilhadas.
+- O DTO publico omite `external_id`, ownership, metadados livres, contexto/correlation de eventos e respostas brutas da Evolution. Somente o telefone normalizado necessario a UI e projetado explicitamente.
+- Eventos de comandos registram ator e correlation ID definidos pelo backend. Health details e payloads operacionais permanecem internos.
+
+Migration de referência:
+
+- `20260721250000_secure_service_integrations.sql`
 
 ## Referencias
 

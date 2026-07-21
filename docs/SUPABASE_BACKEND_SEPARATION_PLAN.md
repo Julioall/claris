@@ -426,9 +426,12 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
   - `access-control` deriva o ator do token, entrega contexto e DTOs administrativos em `camelCase` e reserva comandos a application admins. Papel administrativo e grupo agora mudam em uma unica transacao; auto-rebaixamento e administradores protegidos sao bloqueados, e cada alteracao efetiva gera evento imutavel em `app_access_audit_log`.
   - As cinco tabelas de autorizacao e as oito RPCs legadas perderam os grants de browser. O inventario caiu de 11 para 9 arquivos com acesso Supabase (6 legados + 3 adapters aprovados) e de 9 para 1 RPC; permanecem 7 chamadas `.from()` nas tasks seguintes.
 
-- [ ] `SB-0905` Migrar servicos e integracoes
+- [x] `SB-0905` Migrar servicos e integracoes
   - Listagem, saude, configuracao e eventos operacionais.
   - AC: paginas nao chamam `getSession`; o client injeta autenticacao.
+  - `whatsapp-instance-manager` agora expoe um contrato V1 estrito: overview pessoal deriva o proprietario do token, enquanto listagem e operacoes compartilhadas exigem application admin. O handler foi dividido em payload, contrato, service, repository, mapper e gateway da Evolution; respostas omitem IDs externos, metadados livres, contexto bruto de eventos e payloads do provedor.
+  - As telas pessoal e administrativa usam comandos tipados pelo client HTTP compartilhado, sem `getSession`, `fetch`, URL Supabase, linha de banco ou action generica. As sete tabelas operacionais de integracoes sao service-only; ownership, ator e correlation ID foram validados no smoke real.
+  - O inventario caiu de 9 para 7 arquivos com acesso Supabase (4 legados + 3 adapters aprovados) e de 7 para 4 chamadas `.from()`. Os dois clients migrados sairam do budget de divida.
 
 - [ ] `SB-0906` Migrar limpeza e ferramentas de diagnostico
   - `data-cleanup`, grade debug e testes de integracao apenas por endpoints admin.

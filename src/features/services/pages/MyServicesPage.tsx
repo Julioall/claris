@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  callPersonalInstanceManager,
-  fetchPersonalInstanceEvents,
-  fetchPersonalWhatsAppInstance,
+  connectServiceInstance,
+  createPersonalWhatsAppInstance,
+  deactivateServiceInstance,
+  deleteServiceInstance,
+  getMyServiceOverview,
+  getServiceInstanceQrCode,
+  syncServiceInstanceStatus,
+  updateServiceInstance,
+  type ServiceInstanceDto,
 } from '../api/myServices';
 import { useAuth } from '@/contexts/AuthContext';
 import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
@@ -22,72 +28,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-interface ServiceInstance {
-  id: string;
-  name: string;
-  description: string | null;
-  service_type: string;
-  scope: 'personal' | 'shared';
-  connection_status: string;
-  operational_status: string;
-  health_status: string;
-  is_active: boolean;
-  is_blocked: boolean;
-  evolution_instance_name: string | null;
-  last_activity_at: string | null;
-  last_sync_at: string | null;
-  created_at: string;
-  owner_user_id: string | null;
-  metadata: Record<string, unknown> | null;
-}
-
-interface InstanceEvent {
-  id: string;
-  event_type: string;
-  origin: string;
-  status: string;
-  context: Record<string, unknown>;
-  error_summary: string | null;
-  created_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// API helper
-// ---------------------------------------------------------------------------
-
-async function callInstanceManager(action: string, params: Record<string, unknown> = {}) {
-  return callPersonalInstanceManager(action, params);
-}
-
-function parseQrResponse(res: Record<string, unknown>) {
-  const payload = ((res.qrcode as Record<string, unknown>) ?? {});
-  const qrData = (typeof payload.base64 === 'string' && payload.base64)
-    || (typeof payload.code === 'string' && payload.code)
-    || null;
-  const pairingCode = typeof payload.pairingCode === 'string' && payload.pairingCode
-    ? payload.pairingCode
-    : null;
-
-  let statusMessage: string | null = null;
-  if (!qrData) {
-    if (pairingCode) {
-      statusMessage = 'CÃ³digo de pareamento disponÃ­vel abaixo.';
-    } else if (res.pending === true || payload.count === 0) {
-      statusMessage =
-        'A conexÃ£o foi iniciada, mas a Evolution ainda nÃ£o liberou o QR Code. Aguarde alguns segundos e atualize.';
-    } else if (typeof res.message === 'string' && res.message) {
-      statusMessage = res.message;
-    } else {
-      statusMessage = 'Nenhum QR Code foi retornado pela Evolution API.';
-    }
-  }
-
-  return { qrData, pairingCode, statusMessage };
-}
+type ServiceInstance = ServiceInstanceDto;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -157,20 +98,15 @@ function QrCodeDialog({
   const [loading, setLoading] = useState(false);
   const completedRef = useRef(false);
   const instanceId = instance?.id ?? null;
-  const instanceConnectionStatus = instance?.connection_status ?? null;
+  const instanceConnectionStatus = instance?.connectionStatus ?? null;
 
   const fetchQr = useCallback(async () => {
     if (!instanceId) return;
     setLoading(true);
     try {
-      const res = await callInstanceManager('qrcode', { instance_id: instanceId });
-      const payload = ((res.qrcode as Record<string, unknown>) ?? {});
-      const qr = (typeof payload.base64 === 'string' && payload.base64)
-        || (typeof payload.code === 'string' && payload.code)
-        || null;
-      const pairing = typeof payload.pairingCode === 'string' && payload.pairingCode
-        ? payload.pairingCode
-        : null;
+      const res = await getServiceInstanceQrCode(instanceId);
+      const qr = res.qrCode;
+      const pairing = res.pairingCode;
 
       setQrData(qr);
       setPairingCode(pairing);
@@ -179,11 +115,7 @@ function QrCodeDialog({
         setStatusMessage('QR exibido. Aguardando confirmação da conexão...');
       } else if (pairing) {
         setStatusMessage('Código de pareamento disponível abaixo. Aguardando conexão...');
-      } else if (res.pending === true || payload.count === 0) {
-        setStatusMessage(
-          'A conexão foi iniciada, mas a Evolution ainda não liberou o QR Code. Aguarde alguns segundos e atualize.'
-        );
-      } else if (typeof res.message === 'string' && res.message) {
+      } else if (res.message) {
         setStatusMessage(res.message);
       } else {
         setStatusMessage('Nenhum QR Code foi retornado pela Evolution API.');
@@ -215,14 +147,13 @@ function QrCodeDialog({
       if (disposed || completedRef.current) return;
 
       try {
-        const res = await callInstanceManager('status', { instance_id: instanceId, silent: true });
+        const res = await syncServiceInstanceStatus(instanceId, { silent: true });
         if (disposed || completedRef.current) return;
 
-        if (res.connection_status === 'connected') {
+        if (res.connectionStatus === 'connected') {
           completedRef.current = true;
           setStatusMessage('WhatsApp conectado. Fechando...');
-          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
-          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', instanceId] });
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] });
           closeTimer = window.setTimeout(() => {
             if (!disposed) onClose();
           }, 900);
@@ -332,10 +263,10 @@ function EditNameDialog({
     if (!instance || !name.trim()) return;
     setSaving(true);
     try {
-      await callInstanceManager('update', {
-        instance_id: instance.id,
+      await updateServiceInstance({
+        instanceId: instance.id,
         name: name.trim(),
-        description: description.trim() || undefined,
+        description: description.trim() || null,
       });
       toast({ title: 'Nome atualizado' });
       onSaved();
@@ -401,37 +332,22 @@ export default function MyServicesPage() {
   const [createPhone, setCreatePhone] = useState('');
   const [createName, setCreateName] = useState('');
 
-  const { data: myInstance, isLoading } = useQuery({
-    queryKey: ['my-whatsapp-instance'],
-    queryFn: async () => {
-      if (!user) return null;
-      const { data, error } = await fetchPersonalWhatsAppInstance(user.id);
-      if (error) throw error;
-      return data as unknown as ServiceInstance | null;
-    },
+  const { data: overview, isLoading } = useQuery({
+    queryKey: ['my-whatsapp-overview'],
+    queryFn: getMyServiceOverview,
     enabled: !!user,
   });
-
-  const { data: events = [] } = useQuery({
-    queryKey: ['my-whatsapp-events', myInstance?.id],
-    queryFn: async () => {
-      if (!myInstance) return [];
-      const { data, error } = await fetchPersonalInstanceEvents(myInstance.id);
-      if (error) throw error;
-      return (data ?? []) as unknown as InstanceEvent[];
-    },
-    enabled: !!myInstance,
-  });
+  const myInstance = overview?.instance ?? null;
+  const events = overview?.events ?? [];
 
   const createMutation = useMutation({
     mutationFn: async ({ phone, name }: { phone: string; name: string }) =>
-      callInstanceManager('create', {
-        scope: 'personal',
+      createPersonalWhatsAppInstance({
         name: name.trim() || 'WhatsApp Pessoal',
-        phone_number: phone.trim(),
+        phoneNumber: phone.trim(),
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] });
       setCreateDialogOpen(false);
       setCreatePhone('');
       setCreateName('');
@@ -447,9 +363,9 @@ export default function MyServicesPage() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('delete', { instance_id: id }),
+    mutationFn: deleteServiceInstance,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] });
       toast({ title: 'Instância removida' });
     },
     onError: (err) => {
@@ -462,9 +378,9 @@ export default function MyServicesPage() {
   });
 
   const connectMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('connect', { instance_id: id }),
+    mutationFn: connectServiceInstance,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] });
       setQrOpen(true);
     },
     onError: (err) => {
@@ -477,9 +393,9 @@ export default function MyServicesPage() {
   });
 
   const disconnectMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('deactivate', { instance_id: id }),
+    mutationFn: deactivateServiceInstance,
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] });
       toast({ title: 'WhatsApp desconectado' });
     },
     onError: (err) => {
@@ -492,9 +408,9 @@ export default function MyServicesPage() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('status', { instance_id: id }),
+    mutationFn: async (id: string) => syncServiceInstanceStatus(id),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
+      void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] });
       toast({ title: 'Status atualizado' });
     },
     onError: (err) => {
@@ -509,7 +425,7 @@ export default function MyServicesPage() {
   const handleConnectClick = () => {
     if (!myInstance) return;
 
-    if (myInstance.connection_status === 'pending_connection') {
+    if (myInstance.connectionStatus === 'pending_connection') {
       setQrOpen(true);
       return;
     }
@@ -517,7 +433,7 @@ export default function MyServicesPage() {
     connectMutation.mutate(myInstance.id);
   };
 
-  const pendingInstanceId = myInstance?.connection_status === 'pending_connection'
+  const pendingInstanceId = myInstance?.connectionStatus === 'pending_connection'
     ? myInstance.id
     : null;
 
@@ -535,10 +451,9 @@ export default function MyServicesPage() {
     let disposed = false;
     const syncStatus = async () => {
       try {
-        await callInstanceManager('status', { instance_id: pendingInstanceId, silent: true });
+        await syncServiceInstanceStatus(pendingInstanceId, { silent: true });
         if (!disposed) {
-          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] });
-          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-events', pendingInstanceId] });
+          void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] });
         }
       } catch {
         // Silent background sync while the instance is pairing.
@@ -585,8 +500,8 @@ export default function MyServicesPage() {
               </div>
               {myInstance && (
                 <div className="flex items-center gap-2">
-                  {healthIcon(myInstance.health_status)}
-                  {statusBadge(myInstance.connection_status)}
+                  {healthIcon(myInstance.healthStatus)}
+                  {statusBadge(myInstance.connectionStatus)}
                 </div>
               )}
             </div>
@@ -638,46 +553,46 @@ export default function MyServicesPage() {
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Status operacional</p>
-                    <p className="font-medium capitalize">{myInstance.operational_status}</p>
+                    <p className="font-medium capitalize">{myInstance.operationalStatus}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Saúde</p>
                     <div className="flex items-center gap-1">
-                      {healthIcon(myInstance.health_status)}
-                      <span className="capitalize">{myInstance.health_status}</span>
+                      {healthIcon(myInstance.healthStatus)}
+                      <span className="capitalize">{myInstance.healthStatus}</span>
                     </div>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Última atividade</p>
                     <p>
-                      {myInstance.last_activity_at
-                        ? format(new Date(myInstance.last_activity_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                      {myInstance.lastActivityAt
+                        ? format(new Date(myInstance.lastActivityAt), "dd/MM/yyyy HH:mm", { locale: ptBR })
                         : '—'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Criado em</p>
-                    <p>{format(new Date(myInstance.created_at), "dd/MM/yyyy", { locale: ptBR })}</p>
+                    <p>{format(new Date(myInstance.createdAt), "dd/MM/yyyy", { locale: ptBR })}</p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Telefone</p>
                     <p className="font-medium">
-                      {typeof myInstance.metadata?.phone_number === 'string' && myInstance.metadata.phone_number
-                        ? `+${myInstance.metadata.phone_number}`
+                      {myInstance.phoneNumber
+                        ? `+${myInstance.phoneNumber}`
                         : <span className="text-muted-foreground">Não informado</span>}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-muted-foreground">Última sincronização</p>
                     <p>
-                      {myInstance.last_sync_at
-                        ? format(new Date(myInstance.last_sync_at), "dd/MM HH:mm", { locale: ptBR })
+                      {myInstance.lastSyncAt
+                        ? format(new Date(myInstance.lastSyncAt), "dd/MM HH:mm", { locale: ptBR })
                         : '—'}
                     </p>
                   </div>
                 </div>
 
-                {myInstance.is_blocked && (
+                {myInstance.isBlocked && (
                   <div className="flex items-start gap-2 rounded-lg bg-red-50 dark:bg-red-950 p-3">
                     <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
                     <p className="text-xs text-red-700 dark:text-red-300">
@@ -705,12 +620,12 @@ export default function MyServicesPage() {
                 Sincronizar status
               </Button>
 
-              {myInstance.connection_status !== 'connected' ? (
+              {myInstance.connectionStatus !== 'connected' ? (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={handleConnectClick}
-                  disabled={connectMutation.isPending || myInstance.is_blocked}
+                  disabled={connectMutation.isPending || myInstance.isBlocked}
                 >
                   <Wifi className="h-4 w-4 mr-2" />
                   Conectar
@@ -762,13 +677,13 @@ export default function MyServicesPage() {
                         : <Clock className="h-3.5 w-3.5 text-muted-foreground" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium">{eventLabel(ev.event_type)}</p>
-                      {ev.error_summary && (
-                        <p className="text-xs text-destructive mt-0.5">{ev.error_summary}</p>
+                      <p className="text-sm font-medium">{eventLabel(ev.eventType)}</p>
+                      {ev.errorSummary && (
+                        <p className="text-xs text-destructive mt-0.5">{ev.errorSummary}</p>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground shrink-0">
-                      {format(new Date(ev.created_at), "dd/MM HH:mm", { locale: ptBR })}
+                      {format(new Date(ev.createdAt), "dd/MM HH:mm", { locale: ptBR })}
                     </p>
                   </div>
                 ))}
@@ -805,7 +720,7 @@ export default function MyServicesPage() {
         instance={myInstance ?? null}
         open={editOpen}
         onClose={() => setEditOpen(false)}
-        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-instance'] })}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ['my-whatsapp-overview'] })}
       />
 
       {/* Create Instance Dialog */}

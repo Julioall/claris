@@ -789,6 +789,7 @@ async function runUnauthenticatedContractChecks(status) {
     }],
     ['admin-observability', { action: 'get_dashboard' }],
     ['access-control', { action: 'get_context' }],
+    ['whatsapp-instance-manager', { action: 'get_my_overview' }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -965,7 +966,14 @@ function runCourseManagementGrantChecks() {
           ('app_group_permissions'::TEXT),
           ('user_group_memberships'::TEXT),
           ('admin_user_roles'::TEXT),
-          ('app_access_audit_log'::TEXT)
+          ('app_access_audit_log'::TEXT),
+          ('app_service_instances'::TEXT),
+          ('app_service_instance_events'::TEXT),
+          ('app_service_instance_jobs'::TEXT),
+          ('app_service_instance_limits'::TEXT),
+          ('app_service_instance_health_logs'::TEXT),
+          ('app_service_webhook_events'::TEXT),
+          ('app_service_instance_group_permissions'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -3166,6 +3174,219 @@ async function runClarisSuggestionChecks(status, accessToken, authUserId) {
   log('Sugestoes da Claris validadas com DTO V1 e aceite/dispensa atomicos actor-scoped.')
 }
 
+async function runServiceIntegrationChecks(status, accessToken, authUserId) {
+  const personalInstanceId = '00000000-0000-4000-8000-000000000941'
+  const sharedInstanceId = '00000000-0000-4000-8000-000000000942'
+  const personalEventId = '00000000-0000-4000-8000-000000000943'
+
+  await deleteRows(status, 'app_service_instances', { id: personalInstanceId })
+  await deleteRows(status, 'app_service_instances', { id: sharedInstanceId })
+  await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+
+  try {
+    await upsertRows(status, 'app_service_instances', 'id', [
+      {
+        id: personalInstanceId,
+        name: 'WhatsApp Pessoal Smoke',
+        description: 'Instancia pessoal isolada',
+        service_type: 'whatsapp',
+        provider: 'evolution_api',
+        scope: 'personal',
+        owner_user_id: authUserId,
+        evolution_instance_name: 'claris-personal-smoke',
+        external_id: 'provider-personal-secret',
+        connection_status: 'connected',
+        operational_status: 'connected',
+        health_status: 'healthy',
+        is_active: true,
+        is_blocked: false,
+        metadata: { phone_number: '5562999991111', secret: 'metadata-secret' },
+        admin_notes: 'nota interna pessoal',
+        created_by_user_id: authUserId,
+        updated_by_user_id: authUserId,
+      },
+      {
+        id: sharedInstanceId,
+        name: 'WhatsApp Compartilhado Smoke',
+        description: 'Instancia compartilhada isolada',
+        service_type: 'whatsapp',
+        provider: 'evolution_api',
+        scope: 'shared',
+        owner_user_id: null,
+        evolution_instance_name: 'claris-shared-smoke',
+        external_id: 'provider-shared-secret',
+        connection_status: 'draft',
+        operational_status: 'draft',
+        health_status: 'healthy',
+        is_active: true,
+        is_blocked: false,
+        metadata: {},
+        admin_notes: 'nota administrativa smoke',
+        created_by_user_id: authUserId,
+        updated_by_user_id: authUserId,
+      },
+    ])
+    await upsertRows(status, 'app_service_instance_events', 'id', {
+      id: personalEventId,
+      instance_id: personalInstanceId,
+      instance_scope: 'personal',
+      event_type: 'status_synced',
+      origin: 'system',
+      context: { rawProviderPayload: 'event-secret' },
+      status: 'success',
+      actor_user_id: authUserId,
+      correlation_id: 'seed-correlation-secret',
+    })
+
+    const overview = await callV1EdgeFunction(status, 'whatsapp-instance-manager', {
+      action: 'get_my_overview',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-service-overview',
+    })
+    assertV1Response(overview, {
+      correlationId: 'smoke-v1-service-overview',
+      status: 200,
+    })
+    const overviewDto = overview.data?.data
+    const overviewSerialized = JSON.stringify(overviewDto)
+    if (
+      overviewDto?.contractVersion !== 1
+      || overviewDto.instance?.id !== personalInstanceId
+      || overviewDto.instance?.phoneNumber !== '5562999991111'
+      || overviewDto.events?.[0]?.id !== personalEventId
+      || overviewSerialized.includes('owner_user_id')
+      || overviewSerialized.includes('provider-personal-secret')
+      || overviewSerialized.includes('metadata-secret')
+      || overviewSerialized.includes('event-secret')
+      || overviewSerialized.includes('seed-correlation-secret')
+      || overviewSerialized.includes('nota interna pessoal')
+    ) {
+      fail(`whatsapp-instance-manager vazou persistencia no overview: ${JSON.stringify(overviewDto)}`)
+    }
+
+    const forbiddenSharedList = await callV1EdgeFunction(status, 'whatsapp-instance-manager', {
+      action: 'list_shared_instances',
+    }, {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-service-shared-forbidden',
+    })
+    assertV1Response(forbiddenSharedList, {
+      code: 'forbidden',
+      correlationId: 'smoke-v1-service-shared-forbidden',
+      status: 403,
+    })
+
+    const spoofedActor = await callV1EdgeFunction(status, 'whatsapp-instance-manager', {
+      action: 'get_my_overview',
+      ownerUserId: authUserId,
+    }, {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-service-identity-spoof',
+    })
+    assertV1Response(spoofedActor, {
+      code: 'validation_failed',
+      correlationId: 'smoke-v1-service-identity-spoof',
+      status: 422,
+    })
+
+    for (const table of ['app_service_instances', 'app_service_instance_events']) {
+      await requestJson(`${status.REST_URL}/${table}?select=*&limit=1`, {
+        acceptStatuses: [401, 403],
+        headers: publishableHeaders(status, accessToken),
+      })
+    }
+
+    await upsertRows(status, 'admin_user_roles', 'user_id', {
+      user_id: authUserId,
+      role: 'admin',
+      permissions: ['admin'],
+      granted_by: null,
+    })
+
+    const sharedList = await callV1EdgeFunction(status, 'whatsapp-instance-manager', {
+      action: 'list_shared_instances',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-service-shared-list',
+    })
+    assertV1Response(sharedList, {
+      correlationId: 'smoke-v1-service-shared-list',
+      status: 200,
+    })
+    const sharedDto = sharedList.data?.data?.items?.find((item) => item.id === sharedInstanceId)
+    if (
+      sharedDto?.adminNotes !== 'nota administrativa smoke'
+      || Object.prototype.hasOwnProperty.call(sharedDto ?? {}, 'external_id')
+      || Object.prototype.hasOwnProperty.call(sharedDto ?? {}, 'metadata')
+    ) {
+      fail(`whatsapp-instance-manager retornou DTO admin invalido: ${JSON.stringify(sharedList.data)}`)
+    }
+
+    const updated = await callV1EdgeFunction(status, 'whatsapp-instance-manager', {
+      action: 'update_instance',
+      instanceId: sharedInstanceId,
+      name: 'WhatsApp Compartilhado Atualizado',
+      description: null,
+      adminNotes: 'nota atualizada',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-service-shared-update',
+    })
+    assertV1Response(updated, {
+      correlationId: 'smoke-v1-service-shared-update',
+      status: 200,
+    })
+    if (
+      updated.data?.data?.instance?.name !== 'WhatsApp Compartilhado Atualizado'
+      || updated.data?.data?.instance?.description !== null
+    ) {
+      fail(`whatsapp-instance-manager nao atualizou a instancia: ${JSON.stringify(updated.data)}`)
+    }
+
+    const blocked = await callV1EdgeFunction(status, 'whatsapp-instance-manager', {
+      action: 'set_instance_blocked',
+      instanceId: sharedInstanceId,
+      blocked: true,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-service-shared-block',
+    })
+    assertV1Response(blocked, {
+      correlationId: 'smoke-v1-service-shared-block',
+      status: 200,
+    })
+    const [persistedShared] = await selectRows(status, 'app_service_instances', { id: sharedInstanceId })
+    const blockEvents = await selectRows(status, 'app_service_instance_events', {
+      instance_id: sharedInstanceId,
+      event_type: 'preventive_blocked',
+    })
+    if (
+      persistedShared?.is_blocked !== true
+      || persistedShared?.updated_by_user_id !== authUserId
+      || !blockEvents.some((event) => (
+        event.actor_user_id === authUserId
+        && event.correlation_id === 'smoke-v1-service-shared-block'
+      ))
+    ) {
+      fail(`whatsapp-instance-manager nao derivou ator/correlacao no comando: ${JSON.stringify({ persistedShared, blockEvents })}`)
+    }
+  } finally {
+    await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+    await deleteRows(status, 'app_service_instances', { id: personalInstanceId })
+    await deleteRows(status, 'app_service_instances', { id: sharedInstanceId })
+  }
+
+  runCourseManagementGrantChecks()
+  log('Instancias e eventos de servico validados com DTO V1, ownership, admin e grants reais.')
+}
+
 async function runAccessControlChecks(status, accessToken, authUserId) {
   const targetUserId = '00000000-0000-4000-8000-000000000940'
   const targetMoodleUserId = 'smoke-access-target-001'
@@ -3423,7 +3644,9 @@ async function runAccessControlChecks(status, accessToken, authUserId) {
       .filter((row) => row.target_group_id === createdGroupId)
       .map((row) => row.action))
     const userAudit = auditRows.find((row) => (
-      row.target_user_id === targetUserId && row.action === 'user_access_updated'
+      row.target_user_id === targetUserId
+      && row.action === 'user_access_updated'
+      && row.details?.groupId === createdGroupId
     ))
     if (
       !groupAuditActions.has('group_created')
@@ -3886,6 +4109,7 @@ async function runAdminObservabilityChecks(status, accessToken, authUserId) {
 
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   await runAccessControlChecks(status, accessToken, authUserId)
+  await runServiceIntegrationChecks(status, accessToken, authUserId)
   await runAppSettingsChecks(status, accessToken, authUserId)
   await runAdminObservabilityChecks(status, accessToken, authUserId)
 

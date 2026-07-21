@@ -5,20 +5,30 @@ import MyServicesPage from "@/features/services/pages/MyServicesPage";
 import { BackgroundActivityProvider } from "@/contexts/BackgroundActivityContext";
 
 const useAuthMock = vi.fn();
-const fromMock = vi.fn();
-const getSessionMock = vi.fn();
+const serviceApiMocks = vi.hoisted(() => ({
+  connect: vi.fn(),
+  create: vi.fn(),
+  deactivate: vi.fn(),
+  delete: vi.fn(),
+  getOverview: vi.fn(),
+  getQrCode: vi.fn(),
+  syncStatus: vi.fn(),
+  update: vi.fn(),
+}));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-    auth: {
-      getSession: () => getSessionMock(),
-    },
-  },
+vi.mock("@/features/services/api/myServices", () => ({
+  connectServiceInstance: serviceApiMocks.connect,
+  createPersonalWhatsAppInstance: serviceApiMocks.create,
+  deactivateServiceInstance: serviceApiMocks.deactivate,
+  deleteServiceInstance: serviceApiMocks.delete,
+  getMyServiceOverview: serviceApiMocks.getOverview,
+  getServiceInstanceQrCode: serviceApiMocks.getQrCode,
+  syncServiceInstanceStatus: serviceApiMocks.syncStatus,
+  updateServiceInstance: serviceApiMocks.update,
 }));
 
 const mockUser = {
@@ -42,17 +52,11 @@ function renderWithClient(ui: React.ReactElement) {
 }
 
 function setupNoInstance() {
-  fromMock.mockImplementation(() => ({
-    select: vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
-          }),
-        }),
-      }),
-    }),
-  }));
+  serviceApiMocks.getOverview.mockResolvedValue({
+    contractVersion: 1,
+    instance: null,
+    events: [],
+  });
 }
 
 function setupWithInstance() {
@@ -60,43 +64,24 @@ function setupWithInstance() {
     id: "inst-1",
     name: "WhatsApp Pessoal",
     description: null,
-    service_type: "whatsapp",
+    serviceType: "whatsapp",
     scope: "personal",
-    connection_status: "connected",
-    operational_status: "connected",
-    health_status: "healthy",
-    is_active: true,
-    is_blocked: false,
-    evolution_instance_name: "claris-user1",
-    last_activity_at: null,
-    last_sync_at: null,
-    created_at: new Date().toISOString(),
-    owner_user_id: "user-1",
+    connectionStatus: "connected",
+    operationalStatus: "connected",
+    healthStatus: "healthy",
+    isActive: true,
+    isBlocked: false,
+    evolutionInstanceName: "claris-user1",
+    lastActivityAt: null,
+    lastSyncAt: null,
+    createdAt: new Date().toISOString(),
+    phoneNumber: null,
   };
 
-  fromMock.mockImplementation((table: string) => {
-    if (table === "app_service_instances") {
-      return {
-        select: vi.fn().mockReturnValue({
-          eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockReturnValue({
-              eq: vi.fn().mockReturnValue({
-                maybeSingle: vi.fn().mockResolvedValue({ data: instance, error: null }),
-              }),
-            }),
-          }),
-        }),
-      };
-    }
-    return {
-      select: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          order: vi.fn().mockReturnValue({
-            limit: vi.fn().mockResolvedValue({ data: [], error: null }),
-          }),
-        }),
-      }),
-    };
+  serviceApiMocks.getOverview.mockResolvedValue({
+    contractVersion: 1,
+    instance,
+    events: [],
   });
 }
 
@@ -104,7 +89,23 @@ describe("MeusServicos page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setAuthUser();
-    getSessionMock.mockResolvedValue({ data: { session: null } });
+    serviceApiMocks.connect.mockResolvedValue({ contractVersion: 1, success: true });
+    serviceApiMocks.create.mockResolvedValue({ contractVersion: 1 });
+    serviceApiMocks.deactivate.mockResolvedValue({ contractVersion: 1, success: true });
+    serviceApiMocks.delete.mockResolvedValue({ contractVersion: 1, success: true });
+    serviceApiMocks.getQrCode.mockResolvedValue({
+      contractVersion: 1,
+      qrCode: null,
+      pairingCode: null,
+      pending: true,
+      message: "Aguardando QR Code",
+    });
+    serviceApiMocks.syncStatus.mockResolvedValue({
+      contractVersion: 1,
+      connectionStatus: "connected",
+      healthStatus: "healthy",
+    });
+    serviceApiMocks.update.mockResolvedValue({ contractVersion: 1 });
   });
 
   it("renders the page title", async () => {

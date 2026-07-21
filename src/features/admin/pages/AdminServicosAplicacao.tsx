@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { callAdminInstanceManager, listSharedServiceInstances } from '../api/services';
+import {
+  connectServiceInstance,
+  createSharedWhatsAppInstance,
+  deactivateServiceInstance,
+  deleteServiceInstance,
+  getServiceInstanceQrCode,
+  listSharedServiceInstances,
+  setServiceInstanceActive,
+  setServiceInstanceBlocked,
+  syncServiceInstanceStatus,
+  updateServiceInstance,
+  type AdminServiceInstanceDto,
+} from '../api/services';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,35 +35,20 @@ import { toast } from '@/hooks/use-toast';
 // Types
 // ---------------------------------------------------------------------------
 
-interface ServiceInstance {
-  id: string;
-  name: string;
-  description: string | null;
-  service_type: string;
-  scope: 'personal' | 'shared';
-  connection_status: string;
-  operational_status: string;
-  health_status: string;
-  is_active: boolean;
-  is_blocked: boolean;
-  evolution_instance_name: string | null;
-  last_activity_at: string | null;
-  last_sync_at: string | null;
-  created_at: string;
-}
+type ServiceInstance = AdminServiceInstanceDto;
 
 interface InstanceFormState {
   name: string;
   description: string;
-  evolution_instance_name: string;
-  admin_notes: string;
+  evolutionInstanceName: string;
+  adminNotes: string;
 }
 
 const emptyForm: InstanceFormState = {
   name: '',
   description: '',
-  evolution_instance_name: '',
-  admin_notes: '',
+  evolutionInstanceName: '',
+  adminNotes: '',
 };
 
 // ---------------------------------------------------------------------------
@@ -80,10 +77,6 @@ function healthIcon(health: string) {
   return <AlertTriangle className="h-4 w-4 text-red-500" />;
 }
 
-async function callInstanceManager(action: string, params: Record<string, unknown> = {}) {
-  return callAdminInstanceManager(action, params);
-}
-
 // ---------------------------------------------------------------------------
 // QR Code Dialog
 // ---------------------------------------------------------------------------
@@ -104,20 +97,15 @@ function QrCodeDialog({
   const [loading, setLoading] = useState(false);
   const completedRef = useRef(false);
   const instanceId = instance?.id ?? null;
-  const instanceConnectionStatus = instance?.connection_status ?? null;
+  const instanceConnectionStatus = instance?.connectionStatus ?? null;
 
   const fetchQr = useCallback(async () => {
     if (!instanceId) return;
     setLoading(true);
     try {
-      const res = await callInstanceManager('qrcode', { instance_id: instanceId });
-      const payload = ((res.qrcode as Record<string, unknown>) ?? {});
-      const qr = (typeof payload.base64 === 'string' && payload.base64)
-        || (typeof payload.code === 'string' && payload.code)
-        || null;
-      const pairing = typeof payload.pairingCode === 'string' && payload.pairingCode
-        ? payload.pairingCode
-        : null;
+      const res = await getServiceInstanceQrCode(instanceId);
+      const qr = res.qrCode;
+      const pairing = res.pairingCode;
 
       setQrData(qr);
       setPairingCode(pairing);
@@ -126,11 +114,7 @@ function QrCodeDialog({
         setStatusMessage('QR exibido. Aguardando confirmação da conexão...');
       } else if (pairing) {
         setStatusMessage('Código de pareamento disponível abaixo. Aguardando conexão...');
-      } else if (res.pending === true || payload.count === 0) {
-        setStatusMessage(
-          'A conexão foi iniciada, mas a Evolution ainda não liberou o QR Code. Aguarde alguns segundos e atualize.'
-        );
-      } else if (typeof res.message === 'string' && res.message) {
+      } else if (res.message) {
         setStatusMessage(res.message);
       } else {
         setStatusMessage('Nenhum QR Code foi retornado pela Evolution API.');
@@ -162,10 +146,10 @@ function QrCodeDialog({
       if (disposed || completedRef.current) return;
 
       try {
-        const res = await callInstanceManager('status', { instance_id: instanceId, silent: true });
+        const res = await syncServiceInstanceStatus(instanceId, { silent: true });
         if (disposed || completedRef.current) return;
 
-        if (res.connection_status === 'connected') {
+        if (res.connectionStatus === 'connected') {
           completedRef.current = true;
           setStatusMessage('WhatsApp conectado. Fechando...');
           void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
@@ -265,20 +249,18 @@ export default function AdminServicosAplicacao() {
   const { data: instances = [], isLoading } = useQuery({
     queryKey: ['admin-service-instances'],
     queryFn: async () => {
-      const { data, error } = await listSharedServiceInstances();
-      if (error) throw error;
-      return (data ?? []) as ServiceInstance[];
+      const response = await listSharedServiceInstances();
+      return response.items;
     },
   });
 
   const createMutation = useMutation({
     mutationFn: async (values: InstanceFormState) => {
-      return callInstanceManager('create', {
-        scope: 'shared',
-        name: values.name,
-        description: values.description || undefined,
-        evolution_instance_name: values.evolution_instance_name || undefined,
-        admin_notes: values.admin_notes || undefined,
+      return createSharedWhatsAppInstance({
+        name: values.name.trim(),
+        description: values.description.trim() || null,
+        evolutionInstanceName: values.evolutionInstanceName.trim() || undefined,
+        adminNotes: values.adminNotes.trim() || null,
       });
     },
     onSuccess: () => {
@@ -298,11 +280,11 @@ export default function AdminServicosAplicacao() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, values }: { id: string; values: InstanceFormState }) => {
-      return callInstanceManager('update', {
-        instance_id: id,
-        name: values.name,
-        description: values.description || undefined,
-        admin_notes: values.admin_notes || undefined,
+      return updateServiceInstance({
+        instanceId: id,
+        name: values.name.trim(),
+        description: values.description.trim() || null,
+        adminNotes: values.adminNotes.trim() || null,
       });
     },
     onSuccess: () => {
@@ -322,7 +304,7 @@ export default function AdminServicosAplicacao() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('delete', { instance_id: id }),
+    mutationFn: deleteServiceInstance,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
       toast({ title: 'Instância removida' });
@@ -337,7 +319,7 @@ export default function AdminServicosAplicacao() {
   });
 
   const connectMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('connect', { instance_id: id }),
+    mutationFn: connectServiceInstance,
     onSuccess: (_, id) => {
       void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
       toast({ title: 'Conexão iniciada' });
@@ -353,7 +335,7 @@ export default function AdminServicosAplicacao() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('deactivate', { instance_id: id }),
+    mutationFn: deactivateServiceInstance,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
       toast({ title: 'Instância desconectada' });
@@ -369,7 +351,7 @@ export default function AdminServicosAplicacao() {
 
   const blockMutation = useMutation({
     mutationFn: async ({ id, blocked }: { id: string; blocked: boolean }) =>
-      callInstanceManager(blocked ? 'block' : 'unblock', { instance_id: id }),
+      setServiceInstanceBlocked(id, blocked),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
       toast({ title: 'Status atualizado' });
@@ -385,7 +367,7 @@ export default function AdminServicosAplicacao() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, active }: { id: string; active: boolean }) =>
-      callInstanceManager(active ? 'activate' : 'deactivate', { instance_id: id }),
+      setServiceInstanceActive(id, active),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
     },
@@ -395,7 +377,7 @@ export default function AdminServicosAplicacao() {
   });
 
   const statusMutation = useMutation({
-    mutationFn: async (id: string) => callInstanceManager('status', { instance_id: id }),
+    mutationFn: async (id: string) => syncServiceInstanceStatus(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
       toast({ title: 'Status sincronizado' });
@@ -410,7 +392,7 @@ export default function AdminServicosAplicacao() {
   });
 
   const handleConnectClick = (inst: ServiceInstance) => {
-    if (inst.connection_status === 'pending_connection') {
+    if (inst.connectionStatus === 'pending_connection') {
       setQrInstance(inst);
       return;
     }
@@ -420,7 +402,7 @@ export default function AdminServicosAplicacao() {
 
   useEffect(() => {
     const pendingInstanceIds = instances
-      .filter((inst) => inst.connection_status === 'pending_connection')
+      .filter((inst) => inst.connectionStatus === 'pending_connection')
       .map((inst) => inst.id);
 
     if (pendingInstanceIds.length === 0) return;
@@ -429,7 +411,7 @@ export default function AdminServicosAplicacao() {
     const syncStatuses = async () => {
       try {
         await Promise.all(
-          pendingInstanceIds.map((id) => callInstanceManager('status', { instance_id: id, silent: true }))
+          pendingInstanceIds.map((id) => syncServiceInstanceStatus(id, { silent: true }))
         );
         if (!disposed) {
           void queryClient.invalidateQueries({ queryKey: ['admin-service-instances'] });
@@ -450,7 +432,7 @@ export default function AdminServicosAplicacao() {
     };
   }, [instances, queryClient]);
 
-  const pendingPairingCount = instances.filter((inst) => inst.connection_status === 'pending_connection').length;
+  const pendingPairingCount = instances.filter((inst) => inst.connectionStatus === 'pending_connection').length;
 
   useBackgroundActivityFlag({
     id: 'whatsapp:pairing:shared',
@@ -473,8 +455,8 @@ export default function AdminServicosAplicacao() {
     setForm({
       name: inst.name,
       description: inst.description ?? '',
-      evolution_instance_name: inst.evolution_instance_name ?? '',
-      admin_notes: '',
+      evolutionInstanceName: inst.evolutionInstanceName ?? '',
+      adminNotes: inst.adminNotes ?? '',
     });
     setIsDialogOpen(true);
   };
@@ -552,24 +534,24 @@ export default function AdminServicosAplicacao() {
                         {inst.description && (
                           <p className="text-xs text-muted-foreground">{inst.description}</p>
                         )}
-                        {inst.is_blocked && (
+                        {inst.isBlocked && (
                           <Badge variant="destructive" className="text-xs mt-1">Bloqueado</Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
-                      {inst.evolution_instance_name ?? '—'}
+                      {inst.evolutionInstanceName ?? '—'}
                     </TableCell>
-                    <TableCell>{statusBadge(inst.connection_status)}</TableCell>
+                    <TableCell>{statusBadge(inst.connectionStatus)}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
-                        {healthIcon(inst.health_status)}
-                        <span className="text-xs text-muted-foreground capitalize">{inst.health_status}</span>
+                        {healthIcon(inst.healthStatus)}
+                        <span className="text-xs text-muted-foreground capitalize">{inst.healthStatus}</span>
                       </div>
                     </TableCell>
                     <TableCell>
                       <Switch
-                        checked={inst.is_active}
+                        checked={inst.isActive}
                         onCheckedChange={(checked) =>
                           toggleActiveMutation.mutate({ id: inst.id, active: checked })
                         }
@@ -577,8 +559,8 @@ export default function AdminServicosAplicacao() {
                       />
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">
-                      {inst.last_activity_at
-                        ? format(new Date(inst.last_activity_at), "dd/MM HH:mm", { locale: ptBR })
+                      {inst.lastActivityAt
+                        ? format(new Date(inst.lastActivityAt), "dd/MM HH:mm", { locale: ptBR })
                         : '—'}
                     </TableCell>
                     <TableCell>
@@ -593,7 +575,7 @@ export default function AdminServicosAplicacao() {
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                         </Button>
-                        {inst.connection_status === 'connected' ? (
+                        {inst.connectionStatus === 'connected' ? (
                           <Button
                             size="icon"
                             variant="ghost"
@@ -620,11 +602,11 @@ export default function AdminServicosAplicacao() {
                           size="icon"
                           variant="ghost"
                           className="h-7 w-7"
-                          title={inst.is_blocked ? 'Desbloquear' : 'Bloquear preventivamente'}
-                          onClick={() => blockMutation.mutate({ id: inst.id, blocked: !inst.is_blocked })}
+                          title={inst.isBlocked ? 'Desbloquear' : 'Bloquear preventivamente'}
+                          onClick={() => blockMutation.mutate({ id: inst.id, blocked: !inst.isBlocked })}
                           disabled={blockMutation.isPending}
                         >
-                          {inst.is_blocked ? (
+                          {inst.isBlocked ? (
                             <Unlock className="h-3.5 w-3.5 text-green-500" />
                           ) : (
                             <Lock className="h-3.5 w-3.5 text-yellow-500" />
@@ -707,8 +689,8 @@ export default function AdminServicosAplicacao() {
                 <Input
                   id="inst-evolution-name"
                   placeholder="ex: claris-secretaria (gerado automaticamente se vazio)"
-                  value={form.evolution_instance_name}
-                  onChange={(e) => setForm((p) => ({ ...p, evolution_instance_name: e.target.value }))}
+                  value={form.evolutionInstanceName}
+                  onChange={(e) => setForm((p) => ({ ...p, evolutionInstanceName: e.target.value }))}
                   className="font-mono"
                 />
               </div>
@@ -718,8 +700,8 @@ export default function AdminServicosAplicacao() {
               <Textarea
                 id="inst-notes"
                 placeholder="Notas internas sobre esta instância"
-                value={form.admin_notes}
-                onChange={(e) => setForm((p) => ({ ...p, admin_notes: e.target.value }))}
+                value={form.adminNotes}
+                onChange={(e) => setForm((p) => ({ ...p, adminNotes: e.target.value }))}
                 rows={3}
               />
             </div>
