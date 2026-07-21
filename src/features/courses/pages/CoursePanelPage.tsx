@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Progress } from '@/components/ui/progress';
-import { RiskBadge } from '@/components/ui/RiskBadge';
+import { RiskBadge } from '@/features/students/components/RiskBadge';
 import { Spinner } from '@/components/ui/spinner';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';

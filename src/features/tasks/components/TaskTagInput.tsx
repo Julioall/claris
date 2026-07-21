@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type ChangeEvent,
@@ -9,17 +10,21 @@ import { X } from 'lucide-react';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
-import { searchCategories, searchCourses, searchStudents } from './api/tagInput';
+import {
+  searchTaskTagSuggestions,
+  type TaskTagPrefix,
+  type TaskTagSuggestion,
+} from '@/features/tasks/api/task-tag-suggestions';
 import type { Tag } from '@/features/tasks/types';
 
-interface TagSuggestion {
+interface AddableTagSuggestion {
   label: string;
   prefix: string;
   entityId?: string;
   entityType: string;
 }
 
-const PREFIX_HINTS = [
+const PREFIX_HINTS: Array<{ prefix: TaskTagPrefix; label: string; entityType: TaskTagPrefix }> = [
   { prefix: 'aluno', label: '/aluno - Aluno', entityType: 'aluno' },
   { prefix: 'uc', label: '/uc - Unidade Curricular', entityType: 'uc' },
   { prefix: 'turma', label: '/turma - Turma', entityType: 'turma' },
@@ -46,79 +51,7 @@ function getDisplayLabel(tag: Tag): string {
   return label;
 }
 
-function mapCategorySuggestions(
-  rows: Array<{ category: string | null }>,
-  prefix: 'curso' | 'escola',
-  query: string,
-) {
-  const normalizedQuery = query.toLowerCase();
-  const seen = new Set<string>();
-  const results: TagSuggestion[] = [];
-
-  rows.forEach((row) => {
-    if (!row.category) return;
-
-    const parts = row.category.split(' > ').map((part) => part.trim());
-    const name = prefix === 'escola' ? parts[1] : parts[2];
-
-    if (!name) return;
-    if (normalizedQuery && !name.toLowerCase().includes(normalizedQuery)) return;
-    if (seen.has(name)) return;
-
-    seen.add(name);
-    results.push({
-      label: name,
-      prefix,
-      entityId: name,
-      entityType: prefix,
-    });
-  });
-
-  return results.slice(0, 10);
-}
-
-async function fetchEntitySuggestions(prefix: string, search: string): Promise<TagSuggestion[]> {
-  const normalizedSearch = search.trim();
-
-  if (prefix === 'aluno') {
-    const { data } = await searchStudents(normalizedSearch);
-    return (data ?? []).map((student) => ({
-      label: student.full_name,
-      prefix: 'aluno',
-      entityId: student.id,
-      entityType: 'aluno',
-    }));
-  }
-
-  if (prefix === 'uc') {
-    const { data } = await searchCourses(normalizedSearch);
-    return (data ?? []).map((course) => ({
-      label: course.short_name ?? course.name,
-      prefix: 'uc',
-      entityId: course.id,
-      entityType: 'uc',
-    }));
-  }
-
-  if (prefix === 'turma') {
-    const { data } = await searchCourses(normalizedSearch);
-    return (data ?? []).map((course) => ({
-      label: course.short_name ?? course.name,
-      prefix: 'turma',
-      entityId: course.id,
-      entityType: 'turma',
-    }));
-  }
-
-  if (prefix === 'curso' || prefix === 'escola') {
-    const { data } = await searchCategories(normalizedSearch);
-    return mapCategorySuggestions(data ?? [], prefix, normalizedSearch);
-  }
-
-  return [];
-}
-
-interface TagInputProps {
+interface TaskTagInputProps {
   tags: Tag[];
   onAdd: (params: { label: string; prefix?: string; entityId?: string; entityType?: string }) => void;
   onRemove: (tagId: string) => void;
@@ -127,34 +60,39 @@ interface TagInputProps {
   className?: string;
 }
 
-export function TagInput({
+export function TaskTagInput({
   tags,
   onAdd,
   onRemove,
   placeholder = 'Adicionar tag... (/ para entidades)',
   disabled,
   className,
-}: TagInputProps) {
+}: TaskTagInputProps) {
   const [value, setValue] = useState('');
   const [showMenu, setShowMenu] = useState(false);
-  const [suggestions, setSuggestions] = useState<TagSuggestion[]>([]);
+  const [suggestions, setSuggestions] = useState<TaskTagSuggestion[]>([]);
   const [prefixHints, setPrefixHints] = useState<typeof PREFIX_HINTS>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const requestIdRef = useRef(0);
+  const requestAbortRef = useRef<AbortController | null>(null);
 
   const closeMenu = useCallback(() => {
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
     setShowMenu(false);
     setSuggestions([]);
     setPrefixHints([]);
     setSelectedIndex(0);
   }, []);
 
+  useEffect(() => () => requestAbortRef.current?.abort(), []);
+
   const resetComposer = useCallback(() => {
     setValue('');
     closeMenu();
   }, [closeMenu]);
 
-  const addTag = useCallback((suggestion: TagSuggestion) => {
+  const addTag = useCallback((suggestion: AddableTagSuggestion) => {
     onAdd({
       label: suggestion.label,
       prefix: suggestion.prefix,
@@ -193,6 +131,8 @@ export function TagInput({
 
   const loadSuggestions = useCallback(async (nextValue: string) => {
     const requestId = ++requestIdRef.current;
+    requestAbortRef.current?.abort();
+    requestAbortRef.current = null;
     const trimmed = nextValue.trimStart();
 
     if (!trimmed) {
@@ -232,8 +172,22 @@ export function TagInput({
       return;
     }
 
-    const nextSuggestions = await fetchEntitySuggestions(matchedHint.prefix, rawSearch);
+    const controller = new AbortController();
+    requestAbortRef.current = controller;
+    let nextSuggestions: TaskTagSuggestion[] = [];
+
+    try {
+      nextSuggestions = await searchTaskTagSuggestions(
+        matchedHint.prefix,
+        rawSearch.trim(),
+        controller.signal,
+      );
+    } catch {
+      nextSuggestions = [];
+    }
+
     if (requestId !== requestIdRef.current) return;
+    if (requestAbortRef.current === controller) requestAbortRef.current = null;
 
     setPrefixHints([]);
     setSuggestions(nextSuggestions);

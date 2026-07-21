@@ -18,7 +18,7 @@ import { useCoursesData } from '@/features/courses/hooks/useCoursesData';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { RiskBadge } from '@/components/ui/RiskBadge';
+import { RiskBadge } from '@/features/students/components/RiskBadge';
 import {
   Select,
   SelectContent,

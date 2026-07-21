@@ -20,7 +20,7 @@ import { StudentHistoryTab } from '@/components/student/StudentHistoryTab';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { RiskBadge } from '@/components/ui/RiskBadge';
+import { RiskBadge } from '@/features/students/components/RiskBadge';
 import { Spinner } from '@/components/ui/spinner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ChatWindow } from '@/features/claris/components/ChatWindow';

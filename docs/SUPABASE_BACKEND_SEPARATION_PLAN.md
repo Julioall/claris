@@ -200,9 +200,10 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: frontend nao grava `app_usage_events` nem `app_error_logs` diretamente.
   - Implementado com `app-telemetry`: auth obrigatoria, identidade derivada do token, body de 64 KiB, limites estruturais, redacao de segredos e client best-effort com timeout curto.
 
-- [ ] `SB-0205` Remover lookup Supabase de primitive UI
+- [x] `SB-0205` Remover lookup Supabase de primitive UI
   - Migrar `components/ui/api/tagInput.ts` para clients de busca dos dominios.
   - AC: `components/ui` volta a ser independente de dados e dominio.
+  - Implementado com `task-tag-suggestions`, busca autenticada e course-scoped; o componente foi movido para a feature de tasks e a API antiga de `components/ui` foi removida.
 
 ## Epic 3 — Dashboard e consultas agregadas
 

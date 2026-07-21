@@ -192,6 +192,7 @@ O smoke de Edge Functions valida o piloto V1 de ponta a ponta: `Content-Type`, h
 - `data-cleanup`: limpeza operacional admin-only, com ordenacao server-side e cobertura ampliada do banco
 - `moodle-reauth-settings`: referencia de handler fino com payload, contrato, service, repository e mapper separados
 - `app-telemetry`: coleta autenticada e best-effort de uso/erros, sem permitir identidade fornecida pelo frontend
+- `task-tag-suggestions`: busca course-scoped de entidades para tags de tarefas, sem expor tabelas ou aceitar escopo do browser
 
 ## Nova function: `moodle-grade-suggestions`
 

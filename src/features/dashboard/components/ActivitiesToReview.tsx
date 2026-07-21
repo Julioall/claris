@@ -10,7 +10,7 @@ import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RiskBadge } from '@/components/ui/RiskBadge';
+import { RiskBadge } from '@/features/students/components/RiskBadge';
 
 import type { DashboardReviewActivity } from '../types';
 

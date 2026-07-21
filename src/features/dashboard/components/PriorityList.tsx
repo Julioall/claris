@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RiskBadge } from '@/components/ui/RiskBadge';
+import { RiskBadge } from '@/features/students/components/RiskBadge';
 import type { Student } from '@/features/students/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';

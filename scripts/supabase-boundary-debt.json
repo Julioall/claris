@@ -3,18 +3,6 @@
   "description": "Exact, decreasing budget for legacy Supabase access in frontend runtime files.",
   "files": [
     {
-      "path": "src/components/ui/api/tagInput.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/admin/api/access.ts",
       "counts": {
         "clientImports": 1,

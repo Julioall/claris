@@ -2,7 +2,7 @@ import { cn } from '@/lib/utils';
 import type { RiskLevel } from '@/features/students/types';
 import { getRiskLevelLabel } from '@/lib/mock-data';
 
-interface RiskBadgeProps {
+export interface RiskBadgeProps {
   level: RiskLevel;
   size?: 'sm' | 'md' | 'lg';
   showDot?: boolean;

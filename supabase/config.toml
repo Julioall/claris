@@ -54,6 +54,9 @@ verify_jwt = false
 [functions.app-telemetry]
 verify_jwt = false
 
+[functions.task-tag-suggestions]
+verify_jwt = false
+
 [functions.moodle-sync-courses]
 verify_jwt = false
 

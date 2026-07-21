@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { TagInput } from '@/components/ui/TagInput';
+import { TaskTagInput } from '@/features/tasks/components/TaskTagInput';
 import { Send, MessageCircle, Tag as TagIcon, Sparkles } from 'lucide-react';
 import { useTaskDetail } from '@/features/tasks/hooks/useTasks';
 import type { Task } from '@/features/tasks/types';
@@ -65,7 +65,7 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
               ))}
             </div>
           )}
-          <TagInput
+          <TaskTagInput
             tags={tags}
             onAdd={addTag}
             onRemove={removeTag}

@@ -508,6 +508,12 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'app-telemetry',
     },
     {
+      body: { action: 'search_suggestions', prefix: 'aluno', query: '' },
+      expectedStatus: 401,
+      name: 'task-tag-suggestions valid-no-auth',
+      path: 'task-tag-suggestions',
+    },
+    {
       body: {},
       expectedStatus: 401,
       name: 'process-scheduled-messages no-secret',
@@ -624,6 +630,51 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, stu
   await deleteRows(status, 'app_usage_events', { event_type: telemetryEventType })
   await deleteRows(status, 'app_error_logs', { message: telemetryErrorMessage })
   log('app-telemetry validado com identidade autenticada e persistencia real.')
+
+  const [hiddenCourse] = await upsertRows(status, 'courses', 'moodle_course_id', {
+    moodle_course_id: 'smoke-hidden-course-001',
+    name: 'Curso Smoke Oculto',
+    short_name: 'SMOKE-HIDDEN',
+  })
+  const [hiddenStudent] = await upsertRows(status, 'students', 'moodle_user_id', {
+    full_name: 'Aluno Smoke Edge Oculto',
+    moodle_user_id: 'smoke-hidden-student-001',
+  })
+  if (!hiddenCourse?.id || !hiddenStudent?.id) {
+    fail('Nao foi possivel seedar o cenario de isolamento das sugestoes de tag.')
+  }
+  await upsertRows(status, 'student_courses', 'student_id,course_id', {
+    course_id: hiddenCourse.id,
+    enrollment_status: 'ativo',
+    student_id: hiddenStudent.id,
+  })
+
+  const tagSuggestions = await callV1EdgeFunction(
+    status,
+    'task-tag-suggestions',
+    { action: 'search_suggestions', prefix: 'aluno', query: 'Aluno Smoke Edge' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-task-tags',
+    },
+  )
+  assertV1Response(tagSuggestions, { correlationId: 'smoke-v1-task-tags', status: 200 })
+  const tagItems = tagSuggestions.data?.data?.items
+  if (!Array.isArray(tagItems) || !tagItems.some((item) => item.entityId === studentId)) {
+    fail(`task-tag-suggestions nao retornou o aluno acessivel: ${JSON.stringify(tagSuggestions.data)}`)
+  }
+  if (tagItems.some((item) => item.entityId === hiddenStudent.id)) {
+    fail('task-tag-suggestions vazou um aluno de curso sem acesso.')
+  }
+
+  await deleteRows(status, 'student_courses', {
+    course_id: hiddenCourse.id,
+    student_id: hiddenStudent.id,
+  })
+  await deleteRows(status, 'students', { id: hiddenStudent.id })
+  await deleteRows(status, 'courses', { id: hiddenCourse.id })
+  log('task-tag-suggestions validado com escopo de curso e isolamento entre usuarios.')
 
   await cleanupAutomatedTaskArtifacts(status, authUserId, studentId)
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { RiskBadge } from "@/components/ui/RiskBadge";
+import { RiskBadge } from "../RiskBadge";
 
 describe("RiskBadge", () => {
   it("renders label for normal risk level", () => {

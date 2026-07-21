@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { StatusBadge } from '../StatusBadge';
 
-describe('StatusBadge', () => {
+describe('tasks/StatusBadge', () => {
   it('renders "A fazer" for todo status', () => {
     render(<StatusBadge status="todo" />);
     expect(screen.getByText('A fazer')).toBeInTheDocument();
