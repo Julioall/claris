@@ -41,6 +41,20 @@ Para functions novas ou refatoradas, o padrao preferencial e:
 
 Nem toda function precisa de todos os arquivos, mas `index.ts` deve continuar pequeno.
 
+### Estrutura de um caso de uso
+
+```text
+supabase/functions/<function-name>/
+  index.ts       # adapta HTTP, auth e resposta; nao acessa tabelas
+  payload.ts     # interpreta e valida o contrato de entrada
+  contract.ts    # DTOs HTTP independentes do schema
+  service.ts     # orquestra o caso de uso e regras de aplicacao
+  repository.ts  # unico modulo local que conhece Supabase/PostgreSQL
+  mapper.ts      # converte modelos de persistencia em DTOs
+```
+
+Arquivos podem ser omitidos quando nao agregarem uma responsabilidade real, mas `index.ts` nao deve conter query, regra de negocio nem mapping de linha do banco. Services recebem repositories por parametro para permitir testes sem banco. O piloto completo e `moodle-reauth-settings`.
+
 ## Contrato HTTP V1
 
 As APIs chamadas pelo frontend usam a rota do gateway Supabase:
@@ -172,6 +186,7 @@ Antes de publicar mudancas em functions ou migrations:
 - `whatsapp-instance-manager`: operacao das instancias compartilhadas/pessoais
 - `moodle-*`: autenticacao e sincronizacao incremental com Moodle
 - `data-cleanup`: limpeza operacional admin-only, com ordenacao server-side e cobertura ampliada do banco
+- `moodle-reauth-settings`: referencia de handler fino com payload, contrato, service, repository e mapper separados
 
 ## Nova function: `moodle-grade-suggestions`
 

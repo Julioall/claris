@@ -4,94 +4,23 @@
 import {
   apiSuccessResponse,
   createHandler,
-  expectBodyObject,
   isApiV1Request,
   jsonResponse,
-  readRequiredBoolean,
 } from '../_shared/http/mod.ts'
-import { createServiceClient } from '../_shared/db/mod.ts'
-import {
-  disableMoodleReauthCredential,
-  findMoodleReauthCredentialByUserId,
-  upsertMoodleReauthCredential,
-} from '../_shared/domain/moodle-reauth/repository.ts'
+import { parseMoodleReauthSettingsPayload } from './payload.ts'
+import { createMoodleReauthSettingsRepository } from './repository.ts'
+import { getMoodleReauthSettings, updateMoodleReauthSettings } from './service.ts'
 
-interface MoodleReauthSettingsPayload {
-  enabled: boolean
-}
+Deno.serve(createHandler(async ({ body, correlationId, req, user }) => {
+  const repository = createMoodleReauthSettingsRepository()
+  const result = body.action === 'get_settings'
+    ? await getMoodleReauthSettings(repository, user.id)
+    : await updateMoodleReauthSettings(repository, user.id, body.enabled)
 
-interface MoodleReauthSettingsResult {
-  credentialActive: boolean
-  message: string
-  preferenceEnabled: boolean
-  requiresLogin: boolean
-}
-
-function settingsResponse(req: Request, result: MoodleReauthSettingsResult): Response {
-  if (!isApiV1Request(req)) return jsonResponse(result)
-
-  const correlationId = req.headers.get('x-correlation-id') || crypto.randomUUID()
-  return apiSuccessResponse(result, correlationId)
-}
-
-function parseBody(rawBody: unknown): MoodleReauthSettingsPayload {
-  const body = expectBodyObject(rawBody)
-  return { enabled: readRequiredBoolean(body, 'enabled') }
-}
-
-Deno.serve(createHandler(async ({ body, req, user }) => {
-  const supabase = createServiceClient()
-
-  const { error: userUpdateError } = await supabase
-    .from('users')
-    .update({ background_reauth_enabled: body.enabled })
-    .eq('id', user.id)
-
-  if (userUpdateError) throw userUpdateError
-
-  const existingCredential = await findMoodleReauthCredentialByUserId(supabase, user.id)
-
-  if (!body.enabled) {
-    if (existingCredential) {
-      await disableMoodleReauthCredential(supabase, user.id)
-    }
-
-    return settingsResponse(req, {
-      credentialActive: false,
-      message: 'Reautorizacao automatica desativada para esta conta.',
-      preferenceEnabled: false,
-      requiresLogin: false,
-    })
-  }
-
-  if (!existingCredential?.credential_ciphertext) {
-    return settingsResponse(req, {
-      credentialActive: false,
-      message: 'Preferencia salva. Faca logout e login novamente para registrar a credencial do Moodle nesta conta.',
-      preferenceEnabled: true,
-      requiresLogin: true,
-    })
-  }
-
-  await upsertMoodleReauthCredential(supabase, {
-    userId: user.id,
-    moodleService: existingCredential.moodle_service,
-    moodleUrl: existingCredential.moodle_url,
-    moodleUsername: existingCredential.moodle_username,
-    credentialCiphertext: existingCredential.credential_ciphertext,
-    reauthEnabled: true,
-    lastError: null,
-    lastReauthAt: existingCredential.last_reauth_at,
-    lastTokenIssuedAt: existingCredential.last_token_issued_at,
-  })
-
-  return settingsResponse(req, {
-    credentialActive: true,
-    message: 'Reautorizacao automatica ativada para esta conta.',
-    preferenceEnabled: true,
-    requiresLogin: false,
-  })
+  return isApiV1Request(req)
+    ? apiSuccessResponse(result, correlationId)
+    : jsonResponse(result)
 }, {
-  parseBody,
+  parseBody: parseMoodleReauthSettingsPayload,
   requireAuth: true,
 }))

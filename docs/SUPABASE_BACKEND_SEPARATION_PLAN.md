@@ -150,10 +150,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: payload invalido nunca chega ao service/repository.
   - Implementado com limite global configuravel, validadores tipados e testes que comprovam o bloqueio antes do caso de uso.
 
-- [ ] `SB-0104` Definir estrutura por caso de uso
+- [x] `SB-0104` Definir estrutura por caso de uso
   - Convencao: `index.ts`, `payload.ts`, `service.ts`, `repository.ts`, `mapper.ts` e testes.
   - `index.ts` deve apenas adaptar HTTP e chamar o service.
   - AC: template documentado em `EDGE_FUNCTIONS.md`.
+  - Implementado e aplicado no piloto `moodle-reauth-settings`, com service testavel por repository injetado.
 
 - [ ] `SB-0105` Criar client HTTP unico no frontend
   - Encapsular `functions.invoke`, normalizacao de erro, timeout, abort signal e correlation ID.
