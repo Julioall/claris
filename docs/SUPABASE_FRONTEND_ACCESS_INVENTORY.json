@@ -3,11 +3,11 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 11,
+    "filesWithSupabaseAccess": 9,
     "totals": {
-      "clientImports": 11,
+      "clientImports": 9,
       "from": 7,
-      "rpc": 9,
+      "rpc": 1,
       "functionsInvoke": 5,
       "auth": 5,
       "storage": 0,
@@ -15,42 +15,6 @@
     }
   },
   "files": [
-    {
-      "file": "src/features/admin/api/access.ts",
-      "feature": "admin",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Administrar autorizacao e permissoes"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [
-          "admin_delete_group",
-          "admin_list_groups",
-          "admin_list_permission_definitions",
-          "admin_search_users",
-          "admin_set_user_admin",
-          "admin_set_user_group",
-          "admin_upsert_group"
-        ],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0904"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 7,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
     {
       "file": "src/features/admin/api/services.ts",
       "feature": "admin",
@@ -196,35 +160,6 @@
         "from": 3,
         "rpc": 0,
         "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/hooks/usePermissions.ts",
-      "feature": "cross-cutting",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Administrar autorizacao e permissoes"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [
-          "get_current_user_authorization_context"
-        ],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0904"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 1,
-        "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,
         "channel": 0

@@ -35,20 +35,12 @@ export default function AdminGrupos() {
 
   const permissionsQuery = useQuery({
     queryKey: ['admin-permission-definitions'],
-    queryFn: async () => {
-      const { data, error } = await listPermissionDefinitions();
-      if (error) throw error;
-      return (data ?? []) as AdminPermissionDefinition[];
-    },
+    queryFn: listPermissionDefinitions,
   });
 
   const groupsQuery = useQuery({
     queryKey: ['admin-access-groups'],
-    queryFn: async () => {
-      const { data, error } = await listAccessGroups();
-      if (error) throw error;
-      return (data ?? []) as AdminAccessGroup[];
-    },
+    queryFn: listAccessGroups,
   });
 
   const permissionMap = useMemo(
@@ -62,10 +54,8 @@ export default function AdminGrupos() {
   }, [deleteTarget, groupsQuery.data]);
 
   const deleteMutation = useMutation({
-    mutationFn: async ({ groupId, reassignmentId }: { groupId: string; reassignmentId?: string | null }) => {
-      const { error } = await deleteAccessGroup(groupId, reassignmentId);
-      if (error) throw error;
-    },
+    mutationFn: ({ groupId, reassignmentId }: { groupId: string; reassignmentId?: string | null }) =>
+      deleteAccessGroup(groupId, reassignmentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-access-groups'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-access-users'] });
@@ -88,7 +78,7 @@ export default function AdminGrupos() {
 
     deleteMutation.mutate({
       groupId: deleteTarget.id,
-      reassignmentId: deleteTarget.user_count > 0 ? reassignGroupId || null : null,
+      reassignmentId: deleteTarget.userCount > 0 ? reassignGroupId || null : null,
     });
   };
 
@@ -184,7 +174,7 @@ export default function AdminGrupos() {
                       </TableCell>
                       <TableCell className="font-mono text-xs align-top">{group.slug}</TableCell>
                       <TableCell className="align-top">
-                        <Badge variant="secondary">{group.user_count}</Badge>
+                        <Badge variant="secondary">{group.userCount}</Badge>
                       </TableCell>
                       <TableCell className="align-top">
                         <div className="space-y-2">
@@ -232,11 +222,11 @@ export default function AdminGrupos() {
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="font-medium">{deleteTarget.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {deleteTarget.user_count} usuario(s), {deleteTarget.permissions.length} permissao(oes)
+                  {deleteTarget.userCount} usuario(s), {deleteTarget.permissions.length} permissao(oes)
                 </p>
               </div>
 
-              {deleteTarget.user_count > 0 ? (
+              {deleteTarget.userCount > 0 ? (
                 deleteCandidates.length > 0 ? (
                   <div className="space-y-2">
                     <Label htmlFor="reassign-group">Reatribuir usuarios para</Label>
@@ -278,8 +268,8 @@ export default function AdminGrupos() {
               onClick={handleDelete}
               disabled={
                 deleteMutation.isPending
-                || ((deleteTarget?.user_count ?? 0) > 0 && !reassignGroupId)
-                || (deleteCandidates.length === 0 && (deleteTarget?.user_count ?? 0) > 0)
+                || ((deleteTarget?.userCount ?? 0) > 0 && !reassignGroupId)
+                || (deleteCandidates.length === 0 && (deleteTarget?.userCount ?? 0) > 0)
               }
             >
               {deleteMutation.isPending ? 'Removendo...' : 'Remover grupo'}

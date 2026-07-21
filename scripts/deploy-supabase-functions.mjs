@@ -37,6 +37,7 @@ const DEFAULT_FUNCTIONS = [
   'app-settings',
   'support-tickets',
   'admin-observability',
+  'access-control',
   'claris-llm-test',
   'claris-chat',
   'claris-conversations',

@@ -5,9 +5,7 @@ import { Search, Shield, UserCog } from 'lucide-react';
 import {
   listAccessGroups,
   searchAdminUsers,
-  setUserAccessGroup,
-  setUserAdminAccess,
-  type AdminAccessGroup,
+  setUserAccess,
   type AdminUserAccess,
 } from '../api/access';
 import { Badge } from '@/components/ui/badge';
@@ -30,12 +28,12 @@ interface AccessEditorState {
 }
 
 function AccessSummaryBadge({ user }: { user: AdminUserAccess }) {
-  if (user.is_admin) {
+  if (user.isAdmin) {
     return <Badge>Administrador</Badge>;
   }
 
-  if (user.group_name) {
-    return <Badge variant="secondary">{user.group_name}</Badge>;
+  if (user.groupName) {
+    return <Badge variant="secondary">{user.groupName}</Badge>;
   }
 
   return <Badge variant="outline">Sem grupo</Badge>;
@@ -57,29 +55,24 @@ export default function AdminUsuarios() {
     queryKey: ['admin-access-users', deferredSearch, page],
     queryFn: async () => searchAdminUsers({
       query: deferredSearch,
-      limit: PAGE_SIZE,
-      offset: (page - 1) * PAGE_SIZE,
+      page,
+      pageSize: PAGE_SIZE,
     }),
     placeholderData: (previous) => previous,
   });
 
   const groupsQuery = useQuery({
     queryKey: ['admin-access-groups'],
-    queryFn: async () => {
-      const { data, error } = await listAccessGroups();
-      if (error) throw error;
-      return (data ?? []) as AdminAccessGroup[];
-    },
+    queryFn: listAccessGroups,
   });
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: { userId: string; isAdmin: boolean; groupId: string | null }) => {
-      const adminResult = await setUserAdminAccess(payload.userId, payload.isAdmin);
-      if (adminResult.error) throw adminResult.error;
-
-      const groupResult = await setUserAccessGroup(payload.userId, payload.isAdmin ? null : payload.groupId);
-      if (groupResult.error) throw groupResult.error;
-    },
+    mutationFn: (payload: { userId: string; isAdmin: boolean; groupId: string | null }) =>
+      setUserAccess({
+        targetUserId: payload.userId,
+        isAdmin: payload.isAdmin,
+        groupId: payload.groupId,
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-access-users'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-access-groups'] });
@@ -101,16 +94,16 @@ export default function AdminUsuarios() {
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
   const stats = useMemo(() => {
-    const adminCount = users.filter((user) => user.is_admin).length;
-    const groupedCount = users.filter((user) => !user.is_admin && user.group_id).length;
+    const adminCount = users.filter((user) => user.isAdmin).length;
+    const groupedCount = users.filter((user) => !user.isAdmin && user.groupId).length;
     return { adminCount, groupedCount };
   }, [users]);
 
   const openEditor = (user: AdminUserAccess) => {
     setSelectedUser(user);
     setEditorState({
-      isAdmin: user.is_admin,
-      groupId: user.group_id ?? NO_GROUP_VALUE,
+      isAdmin: user.isAdmin,
+      groupId: user.groupId ?? NO_GROUP_VALUE,
     });
   };
 
@@ -118,7 +111,7 @@ export default function AdminUsuarios() {
     if (!selectedUser) return;
 
     saveMutation.mutate({
-      userId: selectedUser.user_id,
+      userId: selectedUser.userId,
       isAdmin: editorState.isAdmin,
       groupId: editorState.groupId === NO_GROUP_VALUE ? null : editorState.groupId,
     });
@@ -185,7 +178,7 @@ export default function AdminUsuarios() {
         <CardHeader>
           <CardTitle className="text-base">Usuarios</CardTitle>
           <CardDescription>
-            Pagina {page} de {totalPages}. Cada alteracao passa pelas funcoes administrativas do banco.
+            Pagina {page} de {totalPages}. Cada alteracao e aplicada atomicamente pelo backend.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -215,19 +208,19 @@ export default function AdminUsuarios() {
                   </TableRow>
                 ) : (
                   users.map((user) => (
-                    <TableRow key={user.user_id}>
+                    <TableRow key={user.userId}>
                       <TableCell className="align-top">
-                        <div className="font-medium">{user.full_name}</div>
+                        <div className="font-medium">{user.fullName}</div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs align-top">{user.moodle_username}</TableCell>
+                      <TableCell className="font-mono text-xs align-top">{user.moodleUsername}</TableCell>
                       <TableCell className="text-sm text-muted-foreground align-top">
                         {user.email || 'Sem email'}
                       </TableCell>
                       <TableCell className="align-top">
                         <div className="flex flex-wrap gap-2">
                           <AccessSummaryBadge user={user} />
-                          {!user.is_admin && user.group_slug && (
-                            <Badge variant="outline">{user.group_slug}</Badge>
+                          {!user.isAdmin && user.groupSlug && (
+                            <Badge variant="outline">{user.groupSlug}</Badge>
                           )}
                         </div>
                       </TableCell>
@@ -279,8 +272,8 @@ export default function AdminUsuarios() {
           {selectedUser && (
             <div className="space-y-5 py-2">
               <div className="rounded-lg border bg-muted/30 p-3">
-                <p className="font-medium">{selectedUser.full_name}</p>
-                <p className="font-mono text-xs text-muted-foreground">{selectedUser.moodle_username}</p>
+                <p className="font-medium">{selectedUser.fullName}</p>
+                <p className="font-mono text-xs text-muted-foreground">{selectedUser.moodleUsername}</p>
                 <p className="text-sm text-muted-foreground">{selectedUser.email || 'Sem email'}</p>
               </div>
 

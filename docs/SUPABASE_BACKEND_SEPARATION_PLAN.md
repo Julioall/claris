@@ -420,9 +420,11 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
   - `support-tickets` deriva o solicitante do token e reserva listagem/atualizacao a administradores; atribuicao, contexto e resolucao sao server-side. `admin-observability` entrega dashboard agregado, eventos, logs e conversas em DTOs paginados, registra o admin que resolveu cada erro, redige atributos sensiveis e limita o historico retornado. O Realtime de novos tickets permanece encapsulado e somente administradores conservam `SELECT` para a subscription; escritas e as demais tabelas sao service-only.
   - O inventario caiu de 15 para 11 arquivos com acesso Supabase e de 20 para 7 chamadas `.from()`; as quatro APIs administrativas agora dependem apenas do client HTTP compartilhado.
 
-- [ ] `SB-0904` Migrar controle de acesso
+- [x] `SB-0904` Migrar controle de acesso
   - Encapsular RPCs administrativos e contexto de autorizacao.
   - AC: alteracoes de grupo/admin possuem auditoria e verificacao contra auto-lockout.
+  - `access-control` deriva o ator do token, entrega contexto e DTOs administrativos em `camelCase` e reserva comandos a application admins. Papel administrativo e grupo agora mudam em uma unica transacao; auto-rebaixamento e administradores protegidos sao bloqueados, e cada alteracao efetiva gera evento imutavel em `app_access_audit_log`.
+  - As cinco tabelas de autorizacao e as oito RPCs legadas perderam os grants de browser. O inventario caiu de 11 para 9 arquivos com acesso Supabase (6 legados + 3 adapters aprovados) e de 9 para 1 RPC; permanecem 7 chamadas `.from()` nas tasks seguintes.
 
 - [ ] `SB-0905` Migrar servicos e integracoes
   - Listagem, saude, configuracao e eventos operacionais.

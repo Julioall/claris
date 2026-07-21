@@ -144,6 +144,9 @@ verify_jwt = false
 [functions.admin-observability]
 verify_jwt = false
 
+[functions.access-control]
+verify_jwt = false
+
 [functions.claris-chat]
 verify_jwt = false
 

@@ -51,20 +51,12 @@ export default function AdminGrupoEditor() {
 
   const permissionsQuery = useQuery({
     queryKey: ['admin-permission-definitions'],
-    queryFn: async () => {
-      const { data, error } = await listPermissionDefinitions();
-      if (error) throw error;
-      return (data ?? []) as AdminPermissionDefinition[];
-    },
+    queryFn: listPermissionDefinitions,
   });
 
   const groupsQuery = useQuery({
     queryKey: ['admin-access-groups'],
-    queryFn: async () => {
-      const { data, error } = await listAccessGroups();
-      if (error) throw error;
-      return (data ?? []) as AdminAccessGroup[];
-    },
+    queryFn: listAccessGroups,
   });
 
   const editingGroup = useMemo(
@@ -121,15 +113,13 @@ export default function AdminGrupoEditor() {
   }, [editingGroup, isCreateMode]);
 
   const saveMutation = useMutation({
-    mutationFn: async (payload: GroupFormState & { groupId?: string }) => {
-      const { error } = await upsertAccessGroup({
+    mutationFn: (payload: GroupFormState & { groupId?: string }) =>
+      upsertAccessGroup({
         groupId: payload.groupId,
         name: payload.name,
         description: payload.description,
         permissionKeys: payload.permissionKeys,
-      });
-      if (error) throw error;
-    },
+      }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['admin-access-groups'] });
       void queryClient.invalidateQueries({ queryKey: ['authorization-context'] });

@@ -788,6 +788,7 @@ async function runUnauthenticatedContractChecks(status) {
       route: '/smoke',
     }],
     ['admin-observability', { action: 'get_dashboard' }],
+    ['access-control', { action: 'get_context' }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -869,6 +870,18 @@ async function runUnauthenticatedContractChecks(status) {
     status: 422,
   })
 
+  const accessControlIdentityPayload = await callV1EdgeFunction(
+    status,
+    'access-control',
+    { action: 'get_context', actorId: '00000000-0000-4000-8000-000000000001' },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-access-control-identity' },
+  )
+  assertV1Response(accessControlIdentityPayload, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-access-control-identity',
+    status: 422,
+  })
+
   const clarisTestIdentityPayload = await callV1EdgeFunction(
     status,
     'claris-llm-test',
@@ -946,7 +959,13 @@ function runCourseManagementGrantChecks() {
           ('app_settings'::TEXT),
           ('app_usage_events'::TEXT),
           ('app_error_logs'::TEXT),
-          ('claris_conversations'::TEXT)
+          ('claris_conversations'::TEXT),
+          ('app_permission_definitions'::TEXT),
+          ('app_groups'::TEXT),
+          ('app_group_permissions'::TEXT),
+          ('user_group_memberships'::TEXT),
+          ('admin_user_roles'::TEXT),
+          ('app_access_audit_log'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -976,7 +995,29 @@ function runCourseManagementGrantChecks() {
           ('public.backend_add_task_tag(uuid,uuid,text,text,text,text)'::TEXT),
           ('public.backend_act_on_claris_suggestion(uuid,uuid,text)'::TEXT),
           ('public.backend_seed_message_templates(uuid,jsonb)'::TEXT),
-          ('public.backend_update_claris_llm_settings(text,text,text,text,text)'::TEXT)
+          ('public.backend_update_claris_llm_settings(text,text,text,text,text)'::TEXT),
+          ('public.backend_get_authorization_context(uuid)'::TEXT),
+          ('public.backend_list_permission_definitions(uuid)'::TEXT),
+          ('public.backend_list_access_groups(uuid)'::TEXT),
+          ('public.backend_search_access_users(uuid,text,integer,integer)'::TEXT),
+          ('public.backend_upsert_access_group(uuid,uuid,text,text,text[])'::TEXT),
+          ('public.backend_delete_access_group(uuid,uuid,uuid)'::TEXT),
+          ('public.backend_set_user_access(uuid,uuid,boolean,uuid)'::TEXT)
+      ),
+      browser_blocked_functions(signature) AS (
+        SELECT signature FROM protected_functions
+        UNION ALL
+        SELECT signature
+        FROM (VALUES
+          ('public.get_current_user_authorization_context()'::TEXT),
+          ('public.admin_list_permission_definitions()'::TEXT),
+          ('public.admin_list_groups()'::TEXT),
+          ('public.admin_search_users(text,integer,integer)'::TEXT),
+          ('public.admin_upsert_group(uuid,text,text,text[])'::TEXT),
+          ('public.admin_delete_group(uuid,uuid)'::TEXT),
+          ('public.admin_set_user_group(uuid,uuid)'::TEXT),
+          ('public.admin_set_user_admin(uuid,boolean)'::TEXT)
+        ) AS legacy(signature)
       )
     SELECT json_build_object(
       'browserTableGrants', COALESCE((
@@ -1020,7 +1061,7 @@ function runCourseManagementGrantChecks() {
         FROM (
           SELECT role_name, signature
           FROM browser_roles
-          CROSS JOIN protected_functions
+          CROSS JOIN browser_blocked_functions
           WHERE has_function_privilege(role_name, signature, 'EXECUTE')
           ORDER BY role_name, signature
         ) AS grant_row
@@ -3125,6 +3166,282 @@ async function runClarisSuggestionChecks(status, accessToken, authUserId) {
   log('Sugestoes da Claris validadas com DTO V1 e aceite/dispensa atomicos actor-scoped.')
 }
 
+async function runAccessControlChecks(status, accessToken, authUserId) {
+  const targetUserId = '00000000-0000-4000-8000-000000000940'
+  const targetMoodleUserId = 'smoke-access-target-001'
+  const targetUsername = 'smoke.access.target'
+  const groupName = 'Smoke Access Control Group'
+  let createdGroupId = null
+
+  await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+  await deleteRows(status, 'users', { id: targetUserId })
+  await deleteRows(status, 'app_groups', { name: groupName })
+
+  const [tutorGroup] = await selectRows(status, 'app_groups', { slug: 'tutor' })
+  if (!tutorGroup?.id) fail('Grupo tutor ausente para o smoke de access-control.')
+
+  try {
+    const context = await callV1EdgeFunction(status, 'access-control', {
+      action: 'get_context',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-context',
+    })
+    assertV1Response(context, {
+      correlationId: 'smoke-v1-access-context',
+      status: 200,
+    })
+    const contextDto = context.data?.data
+    if (
+      contextDto?.contractVersion !== 1
+      || contextDto.isAdmin !== false
+      || contextDto.group?.id !== tutorGroup.id
+      || !Array.isArray(contextDto.permissions)
+      || !contextDto.permissions.includes('students.view')
+      || Object.prototype.hasOwnProperty.call(contextDto, 'userId')
+    ) {
+      fail(`access-control nao derivou o contexto autenticado: ${JSON.stringify(contextDto)}`)
+    }
+
+    const forbiddenGroups = await callV1EdgeFunction(status, 'access-control', {
+      action: 'list_groups',
+    }, {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-access-groups-forbidden',
+    })
+    assertV1Response(forbiddenGroups, {
+      code: 'forbidden',
+      correlationId: 'smoke-v1-access-groups-forbidden',
+      status: 403,
+    })
+
+    for (const table of [
+      'app_permission_definitions',
+      'app_groups',
+      'app_group_permissions',
+      'user_group_memberships',
+      'admin_user_roles',
+      'app_access_audit_log',
+    ]) {
+      await requestJson(`${status.REST_URL}/${table}?select=*&limit=1`, {
+        acceptStatuses: [401, 403],
+        headers: publishableHeaders(status, accessToken),
+      })
+    }
+
+    await requestJson(`${status.REST_URL}/rpc/get_current_user_authorization_context`, {
+      acceptStatuses: [401, 403],
+      body: {},
+      headers: publishableHeaders(status, accessToken),
+      method: 'POST',
+    })
+
+    await upsertRows(status, 'admin_user_roles', 'user_id', {
+      user_id: authUserId,
+      role: 'admin',
+      permissions: ['admin'],
+      granted_by: null,
+    })
+
+    const definitions = await callV1EdgeFunction(status, 'access-control', {
+      action: 'list_permission_definitions',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-permissions',
+    })
+    assertV1Response(definitions, {
+      correlationId: 'smoke-v1-access-permissions',
+      status: 200,
+    })
+    if (!definitions.data?.data?.items?.some((item) => (
+      item.key === 'students.view' && typeof item.sortOrder === 'number'
+    ))) {
+      fail(`access-control nao retornou permissoes em camelCase: ${JSON.stringify(definitions.data)}`)
+    }
+
+    const groups = await callV1EdgeFunction(status, 'access-control', {
+      action: 'list_groups',
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-groups',
+    })
+    assertV1Response(groups, {
+      correlationId: 'smoke-v1-access-groups',
+      status: 200,
+    })
+    if (!groups.data?.data?.items?.some((group) => (
+      group.id === tutorGroup.id && typeof group.userCount === 'number'
+    ))) {
+      fail(`access-control nao retornou grupos em camelCase: ${JSON.stringify(groups.data)}`)
+    }
+
+    await upsertRows(status, 'users', 'id', {
+      id: targetUserId,
+      email: 'smoke.access.target@example.com',
+      full_name: 'Smoke Access Target',
+      moodle_user_id: targetMoodleUserId,
+      moodle_username: targetUsername,
+    })
+
+    const createdGroup = await callV1EdgeFunction(status, 'access-control', {
+      action: 'upsert_group',
+      name: groupName,
+      description: 'Criado pelo smoke.',
+      permissionKeys: ['students.view', 'reports.view'],
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-group-create',
+    })
+    assertV1Response(createdGroup, {
+      correlationId: 'smoke-v1-access-group-create',
+      status: 200,
+    })
+    createdGroupId = createdGroup.data?.data?.groupId
+    if (typeof createdGroupId !== 'string' || createdGroup.data?.data?.created !== true) {
+      fail(`access-control nao criou o grupo: ${JSON.stringify(createdGroup.data)}`)
+    }
+
+    const updatedGroup = await callV1EdgeFunction(status, 'access-control', {
+      action: 'upsert_group',
+      groupId: createdGroupId,
+      name: groupName,
+      description: 'Atualizado pelo smoke.',
+      permissionKeys: ['students.view'],
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-group-update',
+    })
+    assertV1Response(updatedGroup, {
+      correlationId: 'smoke-v1-access-group-update',
+      status: 200,
+    })
+    if (updatedGroup.data?.data?.groupId !== createdGroupId || updatedGroup.data?.data?.created !== false) {
+      fail(`access-control nao atualizou o grupo: ${JSON.stringify(updatedGroup.data)}`)
+    }
+
+    const updatedUser = await callV1EdgeFunction(status, 'access-control', {
+      action: 'set_user_access',
+      targetUserId,
+      isAdmin: false,
+      groupId: createdGroupId,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-user-update',
+    })
+    assertV1Response(updatedUser, {
+      correlationId: 'smoke-v1-access-user-update',
+      status: 200,
+    })
+    if (
+      updatedUser.data?.data?.userId !== targetUserId
+      || updatedUser.data?.data?.groupId !== createdGroupId
+      || updatedUser.data?.data?.isAdmin !== false
+    ) {
+      fail(`access-control nao atualizou usuario atomicamente: ${JSON.stringify(updatedUser.data)}`)
+    }
+
+    const searchedUsers = await callV1EdgeFunction(status, 'access-control', {
+      action: 'search_users',
+      query: targetUsername,
+      page: 1,
+      pageSize: 10,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-users-search',
+    })
+    assertV1Response(searchedUsers, {
+      correlationId: 'smoke-v1-access-users-search',
+      status: 200,
+    })
+    const searchedUser = searchedUsers.data?.data?.items?.find((user) => user.userId === targetUserId)
+    if (
+      searchedUser?.groupId !== createdGroupId
+      || searchedUser.moodleUsername !== targetUsername
+      || searchedUsers.data?.data?.totalCount !== 1
+      || Object.prototype.hasOwnProperty.call(searchedUser ?? {}, 'user_id')
+    ) {
+      fail(`access-control nao paginou usuario em camelCase: ${JSON.stringify(searchedUsers.data)}`)
+    }
+
+    const selfLockout = await callV1EdgeFunction(status, 'access-control', {
+      action: 'set_user_access',
+      targetUserId: authUserId,
+      isAdmin: false,
+      groupId: tutorGroup.id,
+    }, {
+      acceptStatuses: [409],
+      accessToken,
+      correlationId: 'smoke-v1-access-self-lockout',
+    })
+    assertV1Response(selfLockout, {
+      code: 'conflict',
+      correlationId: 'smoke-v1-access-self-lockout',
+      status: 409,
+    })
+    const [adminRoleAfterLockout] = await selectRows(status, 'admin_user_roles', { user_id: authUserId })
+    if (adminRoleAfterLockout?.role !== 'admin') {
+      fail('access-control removeu o papel do proprio ator apesar do bloqueio de auto-lockout.')
+    }
+
+    const deletedGroup = await callV1EdgeFunction(status, 'access-control', {
+      action: 'delete_group',
+      groupId: createdGroupId,
+      reassignToGroupId: tutorGroup.id,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-access-group-delete',
+    })
+    assertV1Response(deletedGroup, {
+      correlationId: 'smoke-v1-access-group-delete',
+      status: 200,
+    })
+    if (
+      deletedGroup.data?.data?.groupId !== createdGroupId
+      || deletedGroup.data?.data?.reassignedUserCount !== 1
+    ) {
+      fail(`access-control nao removeu/reassociou o grupo: ${JSON.stringify(deletedGroup.data)}`)
+    }
+
+    const [reassignedMembership] = await selectRows(status, 'user_group_memberships', {
+      user_id: targetUserId,
+    })
+    if (reassignedMembership?.group_id !== tutorGroup.id) {
+      fail(`access-control nao reassociou o usuario: ${JSON.stringify(reassignedMembership)}`)
+    }
+
+    const auditRows = await selectRows(status, 'app_access_audit_log', { actor_id: authUserId })
+    const groupAuditActions = new Set(auditRows
+      .filter((row) => row.target_group_id === createdGroupId)
+      .map((row) => row.action))
+    const userAudit = auditRows.find((row) => (
+      row.target_user_id === targetUserId && row.action === 'user_access_updated'
+    ))
+    if (
+      !groupAuditActions.has('group_created')
+      || !groupAuditActions.has('group_updated')
+      || !groupAuditActions.has('group_deleted')
+      || userAudit?.details?.groupId !== createdGroupId
+    ) {
+      fail(`access-control nao registrou a auditoria esperada: ${JSON.stringify(auditRows)}`)
+    }
+  } finally {
+    if (createdGroupId) await deleteRows(status, 'app_groups', { id: createdGroupId })
+    await deleteRows(status, 'users', { id: targetUserId })
+    await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
+  }
+
+  log('Autorizacao e acessos validados com ator derivado, mutacoes atomicas, auditoria e anti-lockout.')
+}
+
 async function runAppSettingsChecks(status, accessToken, authUserId) {
   const publicSettings = await callV1EdgeFunction(
     status,
@@ -3568,6 +3885,7 @@ async function runAdminObservabilityChecks(status, accessToken, authUserId) {
 }
 
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
+  await runAccessControlChecks(status, accessToken, authUserId)
   await runAppSettingsChecks(status, accessToken, authUserId)
   await runAdminObservabilityChecks(status, accessToken, authUserId)
 

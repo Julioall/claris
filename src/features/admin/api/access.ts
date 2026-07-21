@@ -1,37 +1,25 @@
-import { supabase } from '@/integrations/supabase/client';
+import { invokeEdgeFunction } from '@/integrations/http/edge-function-client';
+import type {
+  AccessCollectionDto,
+  AccessGroupDeletionDto,
+  AccessGroupDto,
+  AccessGroupMutationDto,
+  AccessPermissionDefinitionDto,
+  AccessUserDto,
+  AccessUserMutationDto,
+  AccessUserPageDto,
+} from './contracts/access-control.contract';
 
-export interface AdminPermissionDefinition {
-  key: string;
-  category: string;
-  label: string;
-  description: string | null;
-  sort_order: number;
-}
-
-export interface AdminAccessGroup {
-  id: string;
-  slug: string;
-  name: string;
-  description: string | null;
-  user_count: number;
-  permissions: string[];
-}
-
-export interface AdminUserAccess {
-  user_id: string;
-  full_name: string;
-  moodle_username: string;
-  email: string | null;
-  is_admin: boolean;
-  group_id: string | null;
-  group_name: string | null;
-  group_slug: string | null;
-  total_count: number;
-}
+export type AdminPermissionDefinition = AccessPermissionDefinitionDto;
+export type AdminAccessGroup = AccessGroupDto;
+export type AdminUserAccess = AccessUserDto;
 
 export interface AdminUserSearchResult {
-  users: AdminUserAccess[];
+  page: number;
+  pageSize: number;
   totalCount: number;
+  totalPages: number;
+  users: AdminUserAccess[];
 }
 
 interface UpsertAccessGroupInput {
@@ -42,69 +30,85 @@ interface UpsertAccessGroupInput {
 }
 
 interface SearchAdminUsersInput {
+  page?: number;
+  pageSize?: number;
   query?: string;
-  limit?: number;
-  offset?: number;
 }
 
-export async function listPermissionDefinitions() {
-  return supabase.rpc('admin_list_permission_definitions' as never);
+interface SetUserAccessInput {
+  groupId?: string | null;
+  isAdmin: boolean;
+  targetUserId: string;
 }
 
-export async function listAccessGroups() {
-  return supabase.rpc('admin_list_groups' as never);
+export async function listPermissionDefinitions(): Promise<AdminPermissionDefinition[]> {
+  const result = await invokeEdgeFunction<AccessCollectionDto<AccessPermissionDefinitionDto>>(
+    'access-control',
+    { body: { action: 'list_permission_definitions' } },
+  );
+  return result.items;
+}
+
+export async function listAccessGroups(): Promise<AdminAccessGroup[]> {
+  const result = await invokeEdgeFunction<AccessCollectionDto<AccessGroupDto>>('access-control', {
+    body: { action: 'list_groups' },
+  });
+  return result.items;
 }
 
 export async function searchAdminUsers({
   query,
-  limit = 25,
-  offset = 0,
+  page = 1,
+  pageSize = 25,
 }: SearchAdminUsersInput = {}): Promise<AdminUserSearchResult> {
-  const { data, error } = await supabase.rpc('admin_search_users' as never, {
-    p_query: query?.trim() || null,
-    p_limit: limit,
-    p_offset: offset,
-  } as never);
-
-  if (error) throw error;
-
-  const users = ((data ?? []) as AdminUserAccess[]).map((user) => ({
-    ...user,
-    total_count: Number(user.total_count || 0),
-  }));
+  const result = await invokeEdgeFunction<AccessUserPageDto>('access-control', {
+    body: {
+      action: 'search_users',
+      page,
+      pageSize,
+      ...(query?.trim() ? { query: query.trim() } : {}),
+    },
+  });
 
   return {
-    users,
-    totalCount: users[0]?.total_count ?? 0,
+    users: result.items,
+    page: result.page,
+    pageSize: result.pageSize,
+    totalCount: result.totalCount,
+    totalPages: result.totalPages,
   };
 }
 
-export async function upsertAccessGroup(input: UpsertAccessGroupInput) {
-  return supabase.rpc('admin_upsert_group' as never, {
-    p_group_id: input.groupId ?? null,
-    p_name: input.name,
-    p_description: input.description?.trim() || null,
-    p_permission_keys: input.permissionKeys,
-  } as never);
+export function upsertAccessGroup(input: UpsertAccessGroupInput) {
+  const description = input.description?.trim();
+  return invokeEdgeFunction<AccessGroupMutationDto>('access-control', {
+    body: {
+      action: 'upsert_group',
+      name: input.name.trim(),
+      permissionKeys: input.permissionKeys,
+      ...(input.groupId ? { groupId: input.groupId } : {}),
+      ...(description ? { description } : {}),
+    },
+  });
 }
 
-export async function deleteAccessGroup(groupId: string, reassignToGroupId?: string | null) {
-  return supabase.rpc('admin_delete_group' as never, {
-    p_group_id: groupId,
-    p_reassign_to_group_id: reassignToGroupId ?? null,
-  } as never);
+export function deleteAccessGroup(groupId: string, reassignToGroupId?: string | null) {
+  return invokeEdgeFunction<AccessGroupDeletionDto>('access-control', {
+    body: {
+      action: 'delete_group',
+      groupId,
+      ...(reassignToGroupId ? { reassignToGroupId } : {}),
+    },
+  });
 }
 
-export async function setUserAccessGroup(userId: string, groupId?: string | null) {
-  return supabase.rpc('admin_set_user_group' as never, {
-    p_target_user_id: userId,
-    p_group_id: groupId ?? null,
-  } as never);
-}
-
-export async function setUserAdminAccess(userId: string, isAdmin: boolean) {
-  return supabase.rpc('admin_set_user_admin' as never, {
-    p_target_user_id: userId,
-    p_is_admin: isAdmin,
-  } as never);
+export function setUserAccess(input: SetUserAccessInput) {
+  return invokeEdgeFunction<AccessUserMutationDto>('access-control', {
+    body: {
+      action: 'set_user_access',
+      targetUserId: input.targetUserId,
+      isAdmin: input.isAdmin,
+      groupId: input.isAdmin ? null : input.groupId ?? null,
+    },
+  });
 }

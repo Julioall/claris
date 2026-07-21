@@ -30,6 +30,7 @@ Posturas especiais válidas:
 - `courses`: insert continua aceitando `auth.uid() IS NOT NULL`; isso depende do fluxo controlado pelas Edge Functions.
 - `user_sync_preferences`, `activity_feed`, `background_jobs`, `background_job_items` e `background_job_events`: policies contextuais permanecem como defesa, mas os grants de browser foram revogados e o acesso da aplicacao passa por Edge Functions service-only.
 - `claris_suggestions` e `claris_suggestion_cooldowns`: policies de dono permanecem como defesa, mas os grants de browser foram revogados; feed e comandos passam por `claris-suggestions`.
+- `app_permission_definitions`, `app_groups`, `app_group_permissions`, `user_group_memberships` e `admin_user_roles`: policies permanecem como defesa, mas os grants de browser foram revogados; contexto e administracao passam por `access-control`.
 
 ## Usuários E Preferências
 
@@ -259,6 +260,29 @@ Regra canônica:
 Migration de referência:
 
 - `20260721230000_secure_admin_observability.sql`
+
+### Controle de acesso
+
+Tabelas:
+
+- `app_permission_definitions`
+- `app_groups`
+- `app_group_permissions`
+- `user_group_memberships`
+- `admin_user_roles`
+- `app_access_audit_log`
+
+Regra canônica:
+
+- `anon` e `authenticated` nao possuem grants diretos nessas seis tabelas; as policies anteriores permanecem apenas como defesa em profundidade.
+- `access-control` deriva o ator autenticado e usa RPCs exclusivas de `service_role` para contexto, consultas e comandos administrativos.
+- `backend_set_user_access` altera papel administrativo e grupo na mesma transacao, bloqueia auto-rebaixamento e administradores de contingencia protegidos.
+- `app_access_audit_log` aceita apenas `SELECT`/`INSERT` de `service_role`; trigger rejeita `UPDATE` e `DELETE`, inclusive fora da API.
+- As oito RPCs legadas baseadas em `auth.uid()` nao sao mais executaveis por roles de browser.
+
+Migration de referência:
+
+- `20260721240000_secure_access_control.sql`
 
 ## Referencias
 

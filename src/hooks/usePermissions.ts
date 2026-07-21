@@ -2,15 +2,7 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-
-type AuthorizationContextPayload = {
-  is_admin?: boolean;
-  group_id?: string | null;
-  group_name?: string | null;
-  group_slug?: string | null;
-  permissions?: string[];
-};
+import { getAuthorizationContext } from '@/features/auth/api/authorization';
 
 export interface UserAccessGroup {
   id: string;
@@ -51,11 +43,7 @@ export function usePermissions(options: UsePermissionsOptions = {}): UserPermiss
     queryKey: ['authorization-context', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
-
-      const { data: context, error } = await supabase.rpc('get_current_user_authorization_context' as never);
-      if (error) throw error;
-
-      return (context ?? null) as AuthorizationContextPayload | null;
+      return getAuthorizationContext();
     },
     enabled: !!user?.id,
     staleTime: options.staleTime ?? 5 * 60 * 1000,
@@ -68,14 +56,8 @@ export function usePermissions(options: UsePermissionsOptions = {}): UserPermiss
       ? data.permissions.filter((permission): permission is string => typeof permission === 'string')
       : EMPTY_PERMISSIONS;
     const permissionSet = new Set(permissions);
-    const isAdmin = data?.is_admin === true;
-    const group = data?.group_id && data?.group_name && data?.group_slug
-      ? {
-          id: data.group_id,
-          name: data.group_name,
-          slug: data.group_slug,
-        }
-      : null;
+    const isAdmin = data?.isAdmin === true;
+    const group = data?.group ?? null;
 
     const can = (permission: string) => isAdmin || permissionSet.has(permission);
     const canAny = (requestedPermissions: string[]) => isAdmin || requestedPermissions.some((permission) => permissionSet.has(permission));

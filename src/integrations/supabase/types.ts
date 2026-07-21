@@ -393,6 +393,36 @@ export type Database = {
           },
         ]
       }
+      app_access_audit_log: {
+        Row: {
+          action: string
+          actor_id: string
+          created_at: string
+          details: Json
+          id: string
+          target_group_id: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          created_at?: string
+          details?: Json
+          id?: string
+          target_group_id?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          created_at?: string
+          details?: Json
+          id?: string
+          target_group_id?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       app_error_logs: {
         Row: {
           category: string
@@ -3423,6 +3453,14 @@ export type Database = {
         }
         Returns: string
       }
+      backend_delete_access_group: {
+        Args: {
+          p_actor_id: string
+          p_group_id: string
+          p_reassign_to_group_id?: string
+        }
+        Returns: Json
+      }
       backend_get_attendance_date_summaries: {
         Args: { p_course_id: string; p_user_id: string }
         Returns: {
@@ -3433,9 +3471,34 @@ export type Database = {
           total: number
         }[]
       }
+      backend_get_authorization_context: {
+        Args: { p_actor_id: string }
+        Returns: Json
+      }
       backend_link_eligible_user_courses: {
         Args: { p_course_ids: string[]; p_user_id: string }
         Returns: number
+      }
+      backend_list_access_groups: {
+        Args: { p_actor_id: string }
+        Returns: {
+          description: string
+          id: string
+          name: string
+          permissions: string[]
+          slug: string
+          user_count: number
+        }[]
+      }
+      backend_list_permission_definitions: {
+        Args: { p_actor_id: string }
+        Returns: {
+          category: string
+          description: string
+          key: string
+          label: string
+          sort_order: number
+        }[]
       }
       backend_list_students_page: {
         Args: {
@@ -3476,6 +3539,25 @@ export type Database = {
         }
         Returns: number
       }
+      backend_search_access_users: {
+        Args: {
+          p_actor_id: string
+          p_limit?: number
+          p_offset?: number
+          p_query?: string
+        }
+        Returns: {
+          email: string
+          full_name: string
+          group_id: string
+          group_name: string
+          group_slug: string
+          is_admin: boolean
+          moodle_username: string
+          total_count: number
+          user_id: string
+        }[]
+      }
       backend_seed_message_templates: {
         Args: { p_actor_id: string; p_defaults: Json }
         Returns: number
@@ -3493,6 +3575,15 @@ export type Database = {
         Args: { p_course_ids: string[]; p_enabled: boolean; p_user_id: string }
         Returns: number
       }
+      backend_set_user_access: {
+        Args: {
+          p_actor_id: string
+          p_group_id?: string
+          p_is_admin: boolean
+          p_target_user_id: string
+        }
+        Returns: Json
+      }
       backend_set_user_course_roles: {
         Args: { p_course_ids: string[]; p_role: string; p_user_id: string }
         Returns: number
@@ -3500,6 +3591,26 @@ export type Database = {
       backend_set_user_courses_ignored: {
         Args: { p_course_ids: string[]; p_ignored: boolean; p_user_id: string }
         Returns: number
+      }
+      backend_update_claris_llm_settings: {
+        Args: {
+          p_api_key?: string
+          p_base_url: string
+          p_custom_instructions: string
+          p_model: string
+          p_provider: string
+        }
+        Returns: undefined
+      }
+      backend_upsert_access_group: {
+        Args: {
+          p_actor_id: string
+          p_description?: string
+          p_group_id?: string
+          p_name?: string
+          p_permission_keys?: string[]
+        }
+        Returns: Json
       }
       calculate_next_recurrence_date: {
         Args: {

@@ -36,14 +36,15 @@ Os slices ativos hoje incluem `auth`, `courses`, `students`, `tasks`, `agenda`, 
 
 O estado-alvo nao permite `supabase.from()` nem `supabase.rpc()` no frontend. Os slices consomem contratos HTTP independentes do schema do banco, e `api/` representa clientes desses contratos, nao repositories executados no navegador.
 
-Os dominios `dashboard`, `courses`, `students`, `reports`, `tasks`, `agenda`, `messages`, `campaigns`, `whatsapp`, `claris` e os fluxos de sincronizacao/background jobs ja operam por essa fronteira. Na Claris, historico, sugestoes, disponibilidade, chat principal e mensagens Moodle usam DTOs HTTP actor-scoped. Aceitar ou dispensar uma sugestao e uma transacao backend que inclui entidade gerada e cooldown; configuracao do modelo e credenciais Moodle permanecem no servidor. Em comunicacoes, o browser envia apenas intencao e selecao: templates, publico, identidade Moodle, historico, snapshots e transicoes sao autoritativos no backend. Em sincronizacao, o browser envia cursos/entidades e acompanha um DTO; credencial, token renovado, etapas, risco e notificacoes ficam no servidor.
+Os dominios `dashboard`, `courses`, `students`, `reports`, `tasks`, `agenda`, `messages`, `campaigns`, `whatsapp`, `claris`, configuracoes globais, suporte, observabilidade administrativa, controle de acesso e os fluxos de sincronizacao/background jobs ja operam por essa fronteira. Na Claris, historico, sugestoes, disponibilidade, chat principal e mensagens Moodle usam DTOs HTTP actor-scoped. Aceitar ou dispensar uma sugestao e uma transacao backend que inclui entidade gerada e cooldown; configuracao do modelo e credenciais Moodle permanecem no servidor. Em comunicacoes, o browser envia apenas intencao e selecao: templates, publico, identidade Moodle, historico, snapshots e transicoes sao autoritativos no backend. Em sincronizacao, o browser envia cursos/entidades e acompanha um DTO; credencial, token renovado, etapas, risco e notificacoes ficam no servidor. Em autorizacao, contexto, grupos, permissoes e acessos passam por `access-control`; mudancas de papel/grupo sao atomicas e auditadas.
 
-As excecoes temporarias, ambas protegidas por allowlist explicita, sao:
+Os unicos adapters permanentes com SDK Supabase, protegidos por allowlist explicita, sao:
 
+- chamadas de Edge Functions encapsuladas por `src/integrations/http/edge-function-client.ts`
 - Supabase Auth encapsulado por `src/integrations/auth/auth-gateway.ts`
 - Realtime encapsulado por `src/integrations/realtime/realtime-gateway.ts`, sem consultas ou mutacoes no banco
 
-Os acessos diretos existentes sao legado em migracao conforme [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md), e nao precedente para codigo novo. O guardrail automatizado atual fica em `scripts/check-supabase-boundary.mjs` e sera endurecido ao longo dessa migracao.
+Os seis arquivos restantes com acesso direto sao legado em migracao conforme [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md), e nao precedente para codigo novo. O guardrail automatizado atual fica em `scripts/check-supabase-boundary.mjs` e sera endurecido ao longo dessa migracao.
 
 ### Estado e cache
 
