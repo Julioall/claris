@@ -1,30 +1,28 @@
 import { invokeEdgeFunction } from '@/integrations/http/edge-function-client';
 
-export interface MoodleReauthSettings {
-  credentialActive: boolean;
-  lastError: string | null;
-  lastReauthAt: string | null;
-  preferenceEnabled: boolean;
-}
-
-export interface UpdateMoodleReauthSettingsResult {
-  credentialActive: boolean;
-  message?: string;
-  preferenceEnabled: boolean;
-  requiresLogin: boolean;
-}
+import type {
+  MoodleReauthSettingsDto,
+  UpdateMoodleReauthSettingsDto,
+} from './contracts/moodle-reauth.contract';
+import {
+  mapMoodleReauthSettingsDto,
+  mapUpdateMoodleReauthSettingsDto,
+} from './mappers/moodle-reauth.mapper';
+import type { MoodleReauthSettings, UpdateMoodleReauthSettingsResult } from '../types';
 
 export async function fetchMoodleReauthSettings(_userId: string): Promise<MoodleReauthSettings> {
-  return invokeEdgeFunction<MoodleReauthSettings>('moodle-reauth-settings', {
+  const dto = await invokeEdgeFunction<MoodleReauthSettingsDto>('moodle-reauth-settings', {
     body: { action: 'get_settings' },
   });
+  return mapMoodleReauthSettingsDto(dto);
 }
 
 export async function updateMoodleReauthSettings(enabled: boolean): Promise<UpdateMoodleReauthSettingsResult> {
-  return invokeEdgeFunction<UpdateMoodleReauthSettingsResult>('moodle-reauth-settings', {
+  const dto = await invokeEdgeFunction<UpdateMoodleReauthSettingsDto>('moodle-reauth-settings', {
     body: {
       action: 'update_settings',
       enabled,
     },
   });
+  return mapUpdateMoodleReauthSettingsDto(dto);
 }

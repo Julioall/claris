@@ -162,9 +162,10 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: client testado para sucesso, erro funcional, erro HTTP, timeout e sessao expirada.
   - Implementado em `src/integrations/http/edge-function-client.ts`; o piloto de reautorizacao ja usa exclusivamente esse client.
 
-- [ ] `SB-0106` Separar DTOs de tipos do banco
+- [x] `SB-0106` Separar DTOs de tipos do banco
   - Criar convencao de contratos por feature; impedir import de `integrations/supabase/types` em UI e hooks.
   - AC: endpoint piloto faz mapping banco -> DTO -> view model sem cast `any/never`.
+  - Implementado no piloto com contracts e mappers explicitos nos dois lados; `guard:frontend-contracts` impede novas dependencias e controla duas dividas versionadas.
 
 - [ ] `SB-0107` Criar testes de contrato
   - Cobrir request/response das Edge Functions e seus clients frontend.
