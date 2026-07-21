@@ -19,6 +19,7 @@ Este indice organiza os documentos principais do projeto por assunto.
 - [EDGE_FUNCTIONS.md](./EDGE_FUNCTIONS.md): padroes de Edge Functions e operacao.
 - [SUPABASE_RLS.md](./SUPABASE_RLS.md): postura canonica de RLS por dominio.
 - [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md): plano executavel para remover queries Supabase do frontend.
+- [SUPABASE_FRONTEND_ACCESS_INVENTORY.json](./SUPABASE_FRONTEND_ACCESS_INVENTORY.json): inventario classificado e validado dos acessos legados no frontend.
 
 ## Integracao Moodle
 

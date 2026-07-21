@@ -1,0 +1,1524 @@
+{
+  "schemaVersion": 1,
+  "sourceCommand": "npm run audit:supabase-frontend -- --json",
+  "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
+  "expectedBaseline": {
+    "filesWithSupabaseAccess": 48,
+    "totals": {
+      "clientImports": 48,
+      "from": 146,
+      "rpc": 15,
+      "functionsInvoke": 15,
+      "auth": 12,
+      "storage": 0,
+      "channel": 1
+    }
+  },
+  "files": [
+    {
+      "file": "src/components/ui/api/tagInput.ts",
+      "feature": "shared-ui",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Mover lookups de UI para clients de dominio"
+      ],
+      "resources": {
+        "tables": [
+          "courses",
+          "students"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0205"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 3,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/access.ts",
+      "feature": "admin",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Administrar autorizacao e permissoes"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [
+          "admin_delete_group",
+          "admin_list_groups",
+          "admin_list_permission_definitions",
+          "admin_search_users",
+          "admin_set_user_admin",
+          "admin_set_user_group",
+          "admin_upsert_group"
+        ],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0904"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 7,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/backgroundJobs.ts",
+      "feature": "admin",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Administrar background jobs"
+      ],
+      "resources": {
+        "tables": [
+          "scheduled_messages",
+          "users"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0806"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 8,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/conversations.ts",
+      "feature": "admin",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Administrar suporte, logs e metricas"
+      ],
+      "resources": {
+        "tables": [
+          "claris_conversations"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0903"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/logs.ts",
+      "feature": "admin",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Administrar suporte, logs e metricas"
+      ],
+      "resources": {
+        "tables": [
+          "app_error_logs"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0903"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/metrics.ts",
+      "feature": "admin",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Administrar suporte, logs e metricas"
+      ],
+      "resources": {
+        "tables": [
+          "app_error_logs",
+          "app_usage_events",
+          "claris_conversations",
+          "support_tickets",
+          "users"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0903"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 7,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/services.ts",
+      "feature": "admin",
+      "categories": [
+        "auth",
+        "query"
+      ],
+      "useCases": [
+        "Consultar e administrar servicos"
+      ],
+      "resources": {
+        "tables": [
+          "app_service_instances"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0905"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 1,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/settings.ts",
+      "feature": "admin",
+      "categories": [
+        "command",
+        "edge-function"
+      ],
+      "useCases": [
+        "Gerenciar configuracoes globais",
+        "Executar ferramentas administrativas e diagnosticos"
+      ],
+      "resources": {
+        "tables": [
+          "app_settings"
+        ],
+        "rpcs": [],
+        "functions": [
+          "claris-llm-test"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0902",
+        "SB-0906"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 4,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/admin/api/support.ts",
+      "feature": "admin",
+      "categories": [
+        "command",
+        "query",
+        "realtime"
+      ],
+      "useCases": [
+        "Administrar suporte, logs e metricas"
+      ],
+      "resources": {
+        "tables": [
+          "support_tickets"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0903"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 3,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 1
+      }
+    },
+    {
+      "file": "src/features/agenda/api/calendar.repository.ts",
+      "feature": "agenda",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Consultar e alterar agenda e eventos"
+      ],
+      "resources": {
+        "tables": [
+          "calendar_events"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0605"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 4,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/auth/api/activity-feed.repository.ts",
+      "feature": "auth",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Executar sincronizacao Moodle no backend"
+      ],
+      "resources": {
+        "tables": [
+          "activity_feed"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0803"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/auth/api/login.ts",
+      "feature": "auth",
+      "categories": [
+        "legacy"
+      ],
+      "useCases": [
+        "Encapsular sessao e autenticacao no AuthGateway"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0202"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/auth/application/risk.service.ts",
+      "feature": "auth",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Recalcular risco no backend"
+      ],
+      "resources": {
+        "tables": [
+          "student_courses"
+        ],
+        "rpcs": [
+          "update_course_students_risk",
+          "update_student_risk"
+        ],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0805"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 4,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/auth/application/system-notification.service.ts",
+      "feature": "auth",
+      "categories": [
+        "command"
+      ],
+      "useCases": [
+        "Executar sincronizacao Moodle no backend"
+      ],
+      "resources": {
+        "tables": [
+          "activity_feed"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0803"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/auth/hooks/useAuthSession.ts",
+      "feature": "auth",
+      "categories": [
+        "auth"
+      ],
+      "useCases": [
+        "Encapsular sessao e autenticacao no AuthGateway"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0202"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 6,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/auth/infrastructure/course-sync.service.ts",
+      "feature": "auth",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Executar sincronizacao Moodle no backend"
+      ],
+      "resources": {
+        "tables": [
+          "courses"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0803"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/auth/infrastructure/moodle-api.ts",
+      "feature": "auth",
+      "categories": [
+        "auth",
+        "edge-function"
+      ],
+      "useCases": [
+        "Executar sincronizacao Moodle no backend"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": [
+          "moodle-auth",
+          "moodle-sync-courses"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0803"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 0,
+        "functionsInvoke": 2,
+        "auth": 2,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/background-jobs/api/backgroundJobs.repository.ts",
+      "feature": "background-jobs",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Consultar progresso de jobs"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0804"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 6,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/campaigns/api/campaigns.repository.ts",
+      "feature": "campaigns",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar campanhas e suas transicoes"
+      ],
+      "resources": {
+        "tables": [
+          "app_service_instances",
+          "bulk_message_jobs",
+          "bulk_message_recipients",
+          "scheduled_messages"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0704"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 11,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/claris/api/chat.ts",
+      "feature": "claris",
+      "categories": [
+        "edge-function",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar conversas e sugestoes da Claris"
+      ],
+      "resources": {
+        "tables": [
+          "app_settings"
+        ],
+        "rpcs": [],
+        "functions": [
+          "claris-chat"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0901"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/claris/api/conversations.ts",
+      "feature": "claris",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar conversas e sugestoes da Claris"
+      ],
+      "resources": {
+        "tables": [
+          "claris_conversations"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0901"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 4,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/claris/hooks/useChat.ts",
+      "feature": "claris",
+      "categories": [
+        "edge-function",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar conversas e sugestoes da Claris"
+      ],
+      "resources": {
+        "tables": [
+          "students"
+        ],
+        "rpcs": [],
+        "functions": [
+          "moodle-messaging"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0901"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 3,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/claris/hooks/useClarisSuggestions.ts",
+      "feature": "claris",
+      "categories": [
+        "auth",
+        "command",
+        "edge-function",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar conversas e sugestoes da Claris"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": [
+          "generate-proactive-suggestions"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0901"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 1,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/courses/api/courses.repository.ts",
+      "feature": "courses",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Listar catalogo de cursos do usuario autenticado",
+        "Obter painel consolidado do curso",
+        "Alterar associacoes de curso de forma atomica",
+        "Configurar frequencia por curso",
+        "Alterar visibilidade de atividades"
+      ],
+      "resources": {
+        "tables": [
+          "attendance_course_settings",
+          "courses",
+          "student_activities",
+          "student_courses",
+          "user_courses",
+          "user_ignored_courses"
+        ],
+        "rpcs": [
+          "get_user_courses_catalog_with_stats"
+        ],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0401",
+        "SB-0402",
+        "SB-0403",
+        "SB-0404",
+        "SB-0405"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 14,
+        "rpc": 1,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/courses/api/index.ts",
+      "feature": "courses",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Consultar e registrar presenca"
+      ],
+      "resources": {
+        "tables": [
+          "attendance_records",
+          "student_courses"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0406"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 4,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/courses/api/sync.ts",
+      "feature": "courses",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Executar sincronizacao Moodle no backend"
+      ],
+      "resources": {
+        "tables": [
+          "student_courses",
+          "user_sync_preferences"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0803"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 3,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/dashboard/api/dashboard.repository.ts",
+      "feature": "dashboard",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Obter resumo agregado do dashboard",
+        "Centralizar regras de pendencia, correcao e risco",
+        "Consumir o dashboard pelo client HTTP"
+      ],
+      "resources": {
+        "tables": [
+          "activity_feed",
+          "calendar_events",
+          "courses",
+          "dashboard_course_activity_aggregates",
+          "risk_history",
+          "student_activities",
+          "student_courses",
+          "students",
+          "tasks"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0302",
+        "SB-0303",
+        "SB-0304"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 12,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/messages/api/bulk-messaging.repository.ts",
+      "feature": "messages",
+      "categories": [
+        "edge-function",
+        "query"
+      ],
+      "useCases": [
+        "Resolver publico elegivel de mensagens",
+        "Acompanhar historico e jobs de envio"
+      ],
+      "resources": {
+        "tables": [
+          "bulk_message_jobs",
+          "courses",
+          "student_activities",
+          "student_course_grades",
+          "student_courses"
+        ],
+        "rpcs": [],
+        "functions": [
+          "bulk-message-send"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0702",
+        "SB-0703"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 6,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/messages/api/message-templates.repository.ts",
+      "feature": "messages",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar templates de mensagem"
+      ],
+      "resources": {
+        "tables": [
+          "message_templates"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0701"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 6,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/reports/api/index.ts",
+      "feature": "reports",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Gerar dados dos relatorios"
+      ],
+      "resources": {
+        "tables": [
+          "student_activities",
+          "student_course_grades",
+          "student_courses"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0505"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 4,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/services/api/myServices.ts",
+      "feature": "services",
+      "categories": [
+        "auth",
+        "query"
+      ],
+      "useCases": [
+        "Consultar e administrar servicos"
+      ],
+      "resources": {
+        "tables": [
+          "app_service_instance_events",
+          "app_service_instances"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0905"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 1,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/settings/api/cleanup.ts",
+      "feature": "settings",
+      "categories": [
+        "edge-function"
+      ],
+      "useCases": [
+        "Executar ferramentas administrativas e diagnosticos"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": [
+          "data-cleanup"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0906"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/settings/api/globalSettings.ts",
+      "feature": "settings",
+      "categories": [
+        "legacy"
+      ],
+      "useCases": [
+        "Gerenciar configuracoes globais"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0902"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/settings/api/gradeDebug.ts",
+      "feature": "settings",
+      "categories": [
+        "edge-function",
+        "query"
+      ],
+      "useCases": [
+        "Executar ferramentas administrativas e diagnosticos"
+      ],
+      "resources": {
+        "tables": [
+          "courses",
+          "student_courses"
+        ],
+        "rpcs": [],
+        "functions": [
+          "moodle-sync-grades"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0906"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 3,
+        "rpc": 0,
+        "functionsInvoke": 2,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/settings/api/moodleReauth.ts",
+      "feature": "settings",
+      "categories": [
+        "edge-function",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar configuracoes globais"
+      ],
+      "resources": {
+        "tables": [
+          "user_moodle_reauth_credentials",
+          "users"
+        ],
+        "rpcs": [],
+        "functions": [
+          "moodle-reauth-settings"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0902"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/students/api/gradeSuggestions.ts",
+      "feature": "students",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Acompanhar jobs de sugestao de nota"
+      ],
+      "resources": {
+        "tables": [
+          "ai_grade_suggestion_jobs"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0504"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/students/api/index.ts",
+      "feature": "students",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Obter perfil consolidado do aluno"
+      ],
+      "resources": {
+        "tables": [
+          "student_activities",
+          "student_course_grades"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0502"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/students/api/students.repository.ts",
+      "feature": "students",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Listar alunos com paginacao e escopo autorizado"
+      ],
+      "resources": {
+        "tables": [
+          "students"
+        ],
+        "rpcs": [
+          "list_students_paginated"
+        ],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0501"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 1,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/students/hooks/useStudentHistory.ts",
+      "feature": "students",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Obter historico calculado do aluno"
+      ],
+      "resources": {
+        "tables": [
+          "student_activities",
+          "student_sync_snapshots"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0503"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/tasks/api/tasks.service.ts",
+      "feature": "tasks",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Consultar tarefas, comentarios e tags",
+        "Executar comandos de tarefas",
+        "Localizar ou criar tags atomicamente",
+        "Alterar comentarios e vinculos de tags"
+      ],
+      "resources": {
+        "tables": [
+          "tags",
+          "task_comments",
+          "task_tags",
+          "tasks"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0601",
+        "SB-0602",
+        "SB-0603",
+        "SB-0604"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 14,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/features/whatsapp/api/messaging.ts",
+      "feature": "whatsapp",
+      "categories": [
+        "auth",
+        "edge-function",
+        "query"
+      ],
+      "useCases": [
+        "Executar operacoes de WhatsApp"
+      ],
+      "resources": {
+        "tables": [
+          "app_service_instances"
+        ],
+        "rpcs": [],
+        "functions": [
+          "whatsapp-messaging"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0705"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 1,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/hooks/useErrorLog.ts",
+      "feature": "cross-cutting",
+      "categories": [
+        "telemetry"
+      ],
+      "useCases": [
+        "Persistir telemetria por endpoint backend"
+      ],
+      "resources": {
+        "tables": [
+          "app_error_logs"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0204"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/hooks/useMoodleApi.ts",
+      "feature": "cross-cutting",
+      "categories": [
+        "edge-function"
+      ],
+      "useCases": [
+        "Executar sincronizacao Moodle no backend"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [],
+        "functions": [
+          "moodle-sync-students"
+        ]
+      },
+      "destinationTasks": [
+        "SB-0803"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 0,
+        "functionsInvoke": 1,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/hooks/usePermissions.ts",
+      "feature": "cross-cutting",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Administrar autorizacao e permissoes"
+      ],
+      "resources": {
+        "tables": [],
+        "rpcs": [
+          "get_current_user_authorization_context"
+        ],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0904"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 0,
+        "rpc": 1,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/hooks/useTrackEvent.ts",
+      "feature": "cross-cutting",
+      "categories": [
+        "telemetry"
+      ],
+      "useCases": [
+        "Persistir telemetria por endpoint backend"
+      ],
+      "resources": {
+        "tables": [
+          "app_usage_events"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0204"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/lib/course-access.ts",
+      "feature": "cross-cutting",
+      "categories": [
+        "query"
+      ],
+      "useCases": [
+        "Listar catalogo de cursos do usuario autenticado"
+      ],
+      "resources": {
+        "tables": [
+          "user_courses"
+        ],
+        "rpcs": [
+          "list_accessible_course_ids"
+        ],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0401"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 1,
+        "rpc": 1,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/lib/message-template-seeding.ts",
+      "feature": "cross-cutting",
+      "categories": [
+        "command",
+        "query"
+      ],
+      "useCases": [
+        "Gerenciar templates de mensagem"
+      ],
+      "resources": {
+        "tables": [
+          "message_templates"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0701"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    },
+    {
+      "file": "src/lib/tracking.ts",
+      "feature": "cross-cutting",
+      "categories": [
+        "telemetry"
+      ],
+      "useCases": [
+        "Persistir telemetria por endpoint backend"
+      ],
+      "resources": {
+        "tables": [
+          "app_error_logs",
+          "app_usage_events"
+        ],
+        "rpcs": [],
+        "functions": []
+      },
+      "destinationTasks": [
+        "SB-0204"
+      ],
+      "counts": {
+        "clientImports": 1,
+        "from": 2,
+        "rpc": 0,
+        "functionsInvoke": 0,
+        "auth": 0,
+        "storage": 0,
+        "channel": 0
+      }
+    }
+  ]
+}

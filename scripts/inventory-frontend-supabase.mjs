@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const rootDir = process.cwd();
 const srcDir = path.join(rootDir, 'src');
@@ -87,7 +88,7 @@ function hasAccess(counts) {
   return Object.values(counts).some((count) => count > 0);
 }
 
-function buildInventory() {
+export function buildInventory() {
   const files = walk(srcDir)
     .map((absolutePath) => ({
       absolutePath,
@@ -136,10 +137,15 @@ function printHumanReadable(inventory) {
   }
 }
 
-const inventory = buildInventory();
+const isDirectExecution = process.argv[1]
+  && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-if (outputJson) {
-  console.log(JSON.stringify(inventory, null, 2));
-} else {
-  printHumanReadable(inventory);
+if (isDirectExecution) {
+  const inventory = buildInventory();
+
+  if (outputJson) {
+    console.log(JSON.stringify(inventory, null, 2));
+  } else {
+    printHumanReadable(inventory);
+  }
 }

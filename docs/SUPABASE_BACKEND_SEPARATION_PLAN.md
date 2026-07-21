@@ -117,10 +117,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: baseline reproduzivel e diferencas visiveis em cada PR.
   - Implementado por `scripts/inventory-frontend-supabase.mjs` e executado com `npm run audit:supabase-frontend` (`-- --json` para integracao automatizada).
 
-- [ ] `SB-0002` Classificar cada acesso em inventario versionado
+- [x] `SB-0002` Classificar cada acesso em inventario versionado
   - Categorias: `auth`, `realtime`, `query`, `command`, `telemetry`, `edge-function` e `legacy`.
   - Registrar feature, arquivo, caso de uso, tabelas/RPC e epic de destino.
   - AC: todo acesso de runtime possui destino definido.
+  - Implementado em `docs/SUPABASE_FRONTEND_ACCESS_INVENTORY.json`; `npm run guard:supabase-inventory` valida cobertura e atualizacao no CI.
 
 - [x] `SB-0003` Registrar ADR da arquitetura intermediaria Supabase
   - Formalizar Edge Functions como API, RLS como defesa adicional e contratos independentes do banco.
