@@ -209,9 +209,10 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** retirar do navegador o maior conjunto de agregacoes e regras academicas.
 
-- [ ] `SB-0301` Especificar `DashboardSummaryDto`
+- [x] `SB-0301` Especificar `DashboardSummaryDto`
   - Definir KPIs, alunos em risco, atividades para revisar, feed e metadados de atualizacao.
   - AC: contrato nao referencia tabelas ou tipos Supabase.
+  - Implementado como contrato HTTP V1 em `camelCase`, espelhado nas duas bordas e protegido por teste de compatibilidade; identidade e nomes de persistencia nao fazem parte do DTO.
 
 - [ ] `SB-0302` Implementar endpoint `dashboard-summary`
   - Mover consultas e composicao de `dashboard.repository.ts` para service/repositories backend.
