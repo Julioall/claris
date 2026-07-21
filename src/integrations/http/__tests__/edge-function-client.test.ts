@@ -23,14 +23,9 @@ function httpError(status: number, body: unknown) {
 function dependencies(overrides: Partial<EdgeFunctionClientDependencies> = {}): EdgeFunctionClientDependencies {
   return {
     createCorrelationId: () => 'correlation-1',
-    getSession: vi.fn(async () => ({
-      data: { session: { access_token: 'access-token-1' } },
-      error: null,
-    })),
-    refreshSession: vi.fn(async () => ({
-      data: { session: { access_token: 'access-token-2' } },
-      error: null,
-    })),
+    getAccessToken: vi.fn(async (forceRefresh) => (
+      forceRefresh ? 'access-token-2' : 'access-token-1'
+    )),
     invoke: vi.fn(async () => success({ ok: true })),
     ...overrides,
   };
@@ -97,7 +92,7 @@ describe('edgeFunctionClient', () => {
     const client = createEdgeFunctionClient(deps);
 
     await expect(client('example')).resolves.toEqual({ ok: true });
-    expect(deps.refreshSession).toHaveBeenCalledTimes(1);
+    expect(deps.getAccessToken).toHaveBeenCalledWith(true, true);
     expect(invoke).toHaveBeenNthCalledWith(2, 'example', expect.objectContaining({
       headers: expect.objectContaining({ Authorization: 'Bearer access-token-2' }),
     }));
@@ -105,8 +100,7 @@ describe('edgeFunctionClient', () => {
 
   it('reports an expired session before invoking the endpoint', async () => {
     const deps = dependencies({
-      getSession: vi.fn(async () => ({ data: { session: null }, error: null })),
-      refreshSession: vi.fn(async () => ({ data: { session: null }, error: new Error('invalid refresh') })),
+      getAccessToken: vi.fn(async () => { throw new Error('invalid refresh'); }),
     });
     const client = createEdgeFunctionClient(deps);
 

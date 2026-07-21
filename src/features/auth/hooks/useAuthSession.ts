@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { supabase } from '@/integrations/supabase/client';
+import { authGateway } from '@/integrations/auth/auth-gateway';
 import type { User } from '@/features/auth/types';
 import { toast } from '@/hooks/use-toast';
 import { resolveFunctionsInvokeErrorMessage } from '@/lib/moodle-errors';
@@ -60,10 +60,10 @@ export function useAuthSession(): UseAuthSessionResult {
   useEffect(() => {
     const handleInvalidRefreshToken = async () => {
       resetAuthState();
-      await supabase.auth.signOut({ scope: 'local' });
+      await authGateway.signOut('local');
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const unsubscribe = authGateway.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         resetAuthState();
         setIsLoading(false);
@@ -80,13 +80,7 @@ export function useAuthSession(): UseAuthSessionResult {
 
     const initializeSession = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-
-        if (error && isInvalidRefreshTokenError(error)) {
-          await handleInvalidRefreshToken();
-          setIsLoading(false);
-          return;
-        }
+        const session = await authGateway.getSession();
 
         if (session?.user) {
           await hydrateFromStorage();
@@ -102,7 +96,7 @@ export function useAuthSession(): UseAuthSessionResult {
 
     void initializeSession();
 
-    return () => subscription.unsubscribe();
+    return unsubscribe;
   }, [hydrateFromStorage, resetAuthState]);
 
   const setLastSync = useCallback((value: string | null) => {
@@ -152,12 +146,12 @@ export function useAuthSession(): UseAuthSessionResult {
       }
 
       if (result.supabaseSession) {
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: result.supabaseSession.access_token,
-          refresh_token: result.supabaseSession.refresh_token,
-        });
-
-        if (sessionError) {
+        try {
+          await authGateway.setSession({
+            accessToken: result.supabaseSession.access_token,
+            refreshToken: result.supabaseSession.refresh_token,
+          });
+        } catch (sessionError) {
           console.error('Error setting auth session:', sessionError);
         }
       }
@@ -192,7 +186,7 @@ export function useAuthSession(): UseAuthSessionResult {
     const userId = user?.id;
 
     await trackEvent(userId, 'logout');
-    await supabase.auth.signOut();
+    await authGateway.signOut();
     resetAuthState();
 
     if (userId) {
@@ -207,7 +201,7 @@ export function useAuthSession(): UseAuthSessionResult {
 
   const clearInvalidSession = useCallback(async () => {
     resetAuthState();
-    await supabase.auth.signOut({ scope: 'local' });
+    await authGateway.signOut('local');
   }, [resetAuthState]);
 
   const resolveSessionContext = useCallback(async (): Promise<SessionContext | null> => {

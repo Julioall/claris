@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_URL } from '@/integrations/supabase/url';
+import { authGateway } from '@/integrations/auth/auth-gateway';
 
 async function extractFunctionErrorMessage(error: unknown): Promise<string | null> {
   if (!error || typeof error !== 'object') return null;
@@ -47,8 +48,7 @@ async function buildFunctionHeaders() {
     apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
   };
 
-  const { data } = await supabase.auth.getSession();
-  const accessToken = data.session?.access_token;
+  const accessToken = await authGateway.getAccessToken(false, false);
 
   if (accessToken) {
     headers.Authorization = `Bearer ${accessToken}`;

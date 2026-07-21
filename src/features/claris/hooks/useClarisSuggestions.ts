@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { authGateway } from '@/integrations/auth/auth-gateway';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
@@ -160,7 +161,7 @@ export function useClarisSuggestions() {
     isRunningRef.current = true;
     setIsGenerating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = await authGateway.getSession();
       if (!session) return;
       const { error } = await supabase.functions.invoke('generate-proactive-suggestions');
       if (!error) {

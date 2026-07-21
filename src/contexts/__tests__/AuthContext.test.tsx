@@ -60,7 +60,11 @@ function renderWithProviders(ui: React.ReactElement) {
 }
 
 describe("AuthContext", () => {
-  let currentSession: { access_token: string; refresh_token: string } | null = null;
+  let currentSession: {
+    access_token: string;
+    refresh_token: string;
+    user: { id: string; email: string };
+  } | null = null;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -75,7 +79,10 @@ describe("AuthContext", () => {
     getSessionMock.mockImplementation(async () => ({ data: { session: currentSession } }));
     refreshSessionMock.mockImplementation(async () => ({ data: { session: currentSession }, error: null }));
     setSessionMock.mockImplementation(async (session: { access_token: string; refresh_token: string }) => {
-      currentSession = session;
+      currentSession = {
+        ...session,
+        user: { id: "u-1", email: "user@example.test" },
+      };
       return { error: null };
     });
     signOutMock.mockImplementation(async () => {

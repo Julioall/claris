@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { authGateway } from '@/integrations/auth/auth-gateway';
 import { SUPABASE_URL } from '@/integrations/supabase/url';
 import {
   normalizeMoodleUrl,
@@ -62,24 +63,14 @@ export async function parseFunctionsError(err: unknown): Promise<ParsedFunctionE
 }
 
 export async function resolveEdgeAccessToken(forceRefresh = false): Promise<string> {
-  const { data: { session }, error } = await supabase.auth.getSession();
-
-  if (error && isInvalidRefreshTokenError(error)) {
-    throw new Error('Sessao expirada. Faca login novamente.');
-  }
-
-  if (!forceRefresh && session?.access_token) {
-    return session.access_token;
-  }
-
-  const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-
-  if (refreshError && isInvalidRefreshTokenError(refreshError)) {
-    throw new Error('Sessao expirada. Faca login novamente.');
-  }
-
-  if (refreshData.session?.access_token) {
-    return refreshData.session.access_token;
+  try {
+    const accessToken = await authGateway.getAccessToken(forceRefresh, true);
+    if (accessToken) return accessToken;
+  } catch (error) {
+    if (isInvalidRefreshTokenError(error)) {
+      throw new Error('Sessao expirada. Faca login novamente.');
+    }
+    throw error;
   }
 
   throw new Error('Sessao expirada. Faca login novamente.');

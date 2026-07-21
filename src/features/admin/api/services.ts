@@ -1,16 +1,11 @@
 import { supabase } from '@/integrations/supabase/client';
 import { SUPABASE_URL } from '@/integrations/supabase/url';
+import { authGateway } from '@/integrations/auth/auth-gateway';
 
 async function getAccessToken() {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('Nao autenticado');
-  }
-
-  return session.access_token;
+  const accessToken = await authGateway.getAccessToken(false, true);
+  if (!accessToken) throw new Error('Nao autenticado');
+  return accessToken;
 }
 
 export async function listSharedServiceInstances() {

@@ -50,6 +50,8 @@ src/
 
 Chamadas a Edge Functions passam por `src/integrations/http/edge-function-client.ts`, que aplica contrato V1, correlation ID, timeout, cancelamento, normalizacao de erros e uma unica tentativa de renovacao da sessao. Features migradas nao usam `supabase.functions.invoke` diretamente.
 
+O acesso ao Supabase Auth passa exclusivamente por `src/integrations/auth/auth-gateway.ts`. O gateway traduz a sessao do provedor para um contrato da aplicacao e concentra leitura, renovacao, eventos, persistencia de tokens e logout; features e demais integrations nao conhecem `supabase.auth`.
+
 DTOs de transporte vivem em `src/features/<dominio>/api/contracts/` e descrevem somente o JSON da API. View models permanecem no `types.ts` da feature, e mappers em `api/mappers/` convertem entre os dois quando necessario. Contratos, hooks, pages e components nao importam tipos gerados do banco. `npm run guard:frontend-contracts` protege essa regra e mantem uma allowlist decrescente para duas dividas anteriores.
 
 Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md). A validacao client-side existe para UX; regras de permissao, elegibilidade e estado persistido sempre sao revalidadas no backend.

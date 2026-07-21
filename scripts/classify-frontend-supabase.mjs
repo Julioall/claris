@@ -43,7 +43,8 @@ const destinationRules = [
   [/hooks\/(useErrorLog|useTrackEvent)|lib\/tracking/, ['SB-0204']],
   [/hooks\/useMoodleApi/, ['SB-0803']],
   [/hooks\/usePermissions/, ['SB-0904']],
-  [/integrations\/http\/edge-function-client/, ['SB-0202', 'SB-1002']],
+  [/integrations\/auth\/auth-gateway/, ['SB-0202', 'SB-1003']],
+  [/integrations\/http\/edge-function-client/, ['SB-1002']],
   [/lib\/course-access/, ['SB-0401']],
   [/lib\/message-template-seeding/, ['SB-0701']],
 ];
@@ -87,6 +88,7 @@ const taskUseCases = {
   'SB-0905': 'Consultar e administrar servicos',
   'SB-0906': 'Executar ferramentas administrativas e diagnosticos',
   'SB-1002': 'Manter invocacoes de Edge Functions somente no client HTTP aprovado',
+  'SB-1003': 'Restringir o SDK Supabase aos adapters aprovados',
 };
 
 function sortedUnique(values) {

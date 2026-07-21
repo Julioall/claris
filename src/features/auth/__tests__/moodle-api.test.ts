@@ -10,6 +10,12 @@ const getSessionMock = vi.fn();
 const refreshSessionMock = vi.fn();
 const fetchMock = vi.fn();
 
+const createSession = (accessToken: string) => ({
+  access_token: accessToken,
+  refresh_token: 'refresh-token',
+  user: { id: 'user-1', email: 'user@example.test' },
+});
+
 vi.mock('@/integrations/supabase/client', () => ({
   supabase: {
     functions: {
@@ -29,16 +35,13 @@ describe('moodle-api', () => {
 
     getSessionMock.mockResolvedValue({
       data: {
-        session: {
-          access_token: 'edge-token',
-        },
+        session: createSession('edge-token'),
       },
+      error: null,
     });
     refreshSessionMock.mockResolvedValue({
       data: {
-        session: {
-          access_token: 'refreshed-edge-token',
-        },
+        session: createSession('refreshed-edge-token'),
       },
       error: null,
     });
@@ -141,17 +144,13 @@ describe('moodle-api', () => {
   it('refreshes the session and retries when the first edge call returns invalid JWT', async () => {
     getSessionMock.mockResolvedValueOnce({
       data: {
-        session: {
-          access_token: 'stale-edge-token',
-        },
+        session: createSession('stale-edge-token'),
       },
       error: null,
     });
     refreshSessionMock.mockResolvedValueOnce({
       data: {
-        session: {
-          access_token: 'fresh-edge-token',
-        },
+        session: createSession('fresh-edge-token'),
       },
       error: null,
     });

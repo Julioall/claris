@@ -61,26 +61,6 @@ interface InstanceEvent {
 
 async function callInstanceManager(action: string, params: Record<string, unknown> = {}) {
   return callPersonalInstanceManager(action, params);
-  /*
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) throw new Error('Não autenticado');
-
-  const res = await fetch(
-    `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/whatsapp-instance-manager`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ action, ...params }),
-    }
-  );
-
-  const json = await res.json() as Record<string, unknown>;
-  if (!res.ok) throw new Error((json.error as string) ?? 'Erro desconhecido');
-  return json;
-  */
 }
 
 function parseQrResponse(res: Record<string, unknown>) {

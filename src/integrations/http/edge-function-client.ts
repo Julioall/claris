@@ -1,12 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
+import { authGateway } from '@/integrations/auth/auth-gateway';
 
 const API_VERSION_HEADER = 'x-claris-api-version';
 const CORRELATION_ID_HEADER = 'x-correlation-id';
-
-interface SessionResult {
-  data: { session: { access_token: string } | null };
-  error: unknown;
-}
 
 interface InvokeResult {
   data: unknown;
@@ -15,8 +11,7 @@ interface InvokeResult {
 
 export interface EdgeFunctionClientDependencies {
   createCorrelationId(): string;
-  getSession(): Promise<SessionResult>;
-  refreshSession(): Promise<SessionResult>;
+  getAccessToken(forceRefresh: boolean, required: boolean): Promise<string | null>;
   invoke(functionName: string, options: {
     body?: Record<string, unknown>;
     headers: Record<string, string>;
@@ -120,20 +115,14 @@ function unwrapEnvelope<TData>(value: unknown): ApiSuccessEnvelope<TData> {
 export function createEdgeFunctionClient(dependencies: EdgeFunctionClientDependencies) {
   async function resolveToken(mode: InvokeEdgeFunctionOptions['auth'], forceRefresh: boolean): Promise<string | null> {
     if (mode === 'none') return null;
-
-    const result = forceRefresh
-      ? await dependencies.refreshSession()
-      : await dependencies.getSession();
-
-    if (result.error) {
-      throw new ApiClientError({ code: 'session_expired', message: 'Sessao expirada. Faca login novamente.' });
+    try {
+      return await dependencies.getAccessToken(forceRefresh, mode === 'required');
+    } catch (error) {
+      throw new ApiClientError(
+        { code: 'session_expired', message: 'Sessao expirada. Faca login novamente.' },
+        { cause: error },
+      );
     }
-
-    if (result.data.session?.access_token) return result.data.session.access_token;
-    if (!forceRefresh) return resolveToken(mode, true);
-    if (mode === 'optional') return null;
-
-    throw new ApiClientError({ code: 'session_expired', message: 'Sessao expirada. Faca login novamente.' });
   }
 
   return async function invokeEdgeFunction<TData>(
@@ -195,7 +184,6 @@ export function createEdgeFunctionClient(dependencies: EdgeFunctionClientDepende
 
 export const invokeEdgeFunction = createEdgeFunctionClient({
   createCorrelationId: () => crypto.randomUUID(),
-  getSession: () => supabase.auth.getSession(),
-  refreshSession: () => supabase.auth.refreshSession(),
+  getAccessToken: (forceRefresh, required) => authGateway.getAccessToken(forceRefresh, required),
   invoke: (functionName, options) => supabase.functions.invoke(functionName, options),
 });

@@ -183,10 +183,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: acesso novo falha no CI; remocao de acesso reduz o snapshot.
   - Implementado com budget exato em `scripts/supabase-boundary-debt.json` e allowlist explicita apenas para adapters aprovados.
 
-- [ ] `SB-0202` Criar `AuthGateway`
+- [x] `SB-0202` Criar `AuthGateway`
   - Encapsular `getSession`, `refreshSession`, eventos e logout.
   - Migrar `useAuthSession` e consumidores de sessao.
   - AC: apenas o gateway importa Supabase Auth diretamente.
+  - Implementado em `src/integrations/auth/auth-gateway.ts`, com contrato estavel, renovacao de token, eventos, escrita de sessao e logout; o guardrail permite Auth apenas nesse adapter.
 
 - [ ] `SB-0203` Criar `RealtimeGateway`, se necessario
   - Inventariar channels/subscriptions e expor eventos de dominio.
