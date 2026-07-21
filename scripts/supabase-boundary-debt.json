@@ -291,18 +291,6 @@
       }
     },
     {
-      "path": "src/features/dashboard/api/dashboard.repository.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 12,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/messages/api/bulk-messaging.repository.ts",
       "counts": {
         "clientImports": 1,

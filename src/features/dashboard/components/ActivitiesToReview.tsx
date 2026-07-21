@@ -12,10 +12,10 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RiskBadge } from '@/features/students/components/RiskBadge';
 
-import type { DashboardReviewActivity } from '../types';
+import type { DashboardReviewActivityDto } from '../api/contracts/dashboard-summary.contract';
 
 interface ActivitiesToReviewProps {
-  activities: DashboardReviewActivity[];
+  activities: DashboardReviewActivityDto[];
   totalCount?: number;
 }
 
@@ -53,8 +53,8 @@ export function ActivitiesToReview({ activities, totalCount }: ActivitiesToRevie
         <ScrollArea className="h-[300px] px-6 pb-6">
           <div className="space-y-3">
             {visibleActivities.map((activity) => {
-              const courseLabel = activity.course.short_name || activity.course.name;
-              const dueDateLabel = formatShortDate(activity.due_date);
+              const courseLabel = activity.course.shortName || activity.course.name;
+              const dueDateLabel = formatShortDate(activity.dueAt);
 
               return (
                 <div
@@ -63,9 +63,9 @@ export function ActivitiesToReview({ activities, totalCount }: ActivitiesToRevie
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <p className="text-sm font-medium truncate">{activity.activity_name}</p>
+                      <p className="text-sm font-medium truncate">{activity.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {activity.student.full_name}
+                        {activity.student.name}
                       </p>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground/80">
                         <span className="inline-flex items-center gap-1">
@@ -74,11 +74,11 @@ export function ActivitiesToReview({ activities, totalCount }: ActivitiesToRevie
                         </span>
                         <span className="inline-flex items-center gap-1">
                           <Clock3 className="h-3 w-3" />
-                          {formatWaitingTime(activity.submitted_at)}
+                          {formatWaitingTime(activity.submittedAt)}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <RiskBadge level={activity.student.current_risk_level} size="sm" />
+                        <RiskBadge level={activity.student.riskLevel} size="sm" />
                         {dueDateLabel && (
                           <span className="text-xs text-muted-foreground">
                             Prazo: {dueDateLabel}
@@ -88,7 +88,7 @@ export function ActivitiesToReview({ activities, totalCount }: ActivitiesToRevie
                     </div>
 
                     <Button size="sm" variant="ghost" asChild>
-                      <Link to={`/alunos/${activity.student_id}`}>
+                      <Link to={`/alunos/${activity.studentId}`}>
                         <ExternalLink className="h-4 w-4" />
                       </Link>
                     </Button>

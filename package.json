@@ -6,6 +6,7 @@
   "scripts": {
     "branch-protection:edge-smoke": "node scripts/require-edge-smoke-check.mjs status",
     "branch-protection:edge-smoke:apply": "node scripts/require-edge-smoke-check.mjs apply",
+    "benchmark:dashboard": "node scripts/benchmark-dashboard-summary.mjs",
     "dev": "vite",
     "build": "vite build",
     "build:github-pages": "vite build && node scripts/prepare-github-pages.mjs",

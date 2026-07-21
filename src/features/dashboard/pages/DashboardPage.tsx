@@ -12,9 +12,9 @@ import {
 } from '@/components/ui/select';
 import { ClarisSuggestions } from '@/features/claris/components/ClarisSuggestions';
 import { useCoursesData } from '@/features/courses/hooks/useCoursesData';
-import type { WeeklySummary } from '@/features/dashboard/types';
 import { getCourseLifecycleStatus } from '@/lib/course-dates';
 
+import type { DashboardIndicatorsDto } from '../api/contracts/dashboard-summary.contract';
 import { ActivityFeed } from '../components/ActivityFeed';
 import { ActivitiesToReview } from '../components/ActivitiesToReview';
 import { CourseOverview } from '../components/CourseOverview';
@@ -22,15 +22,15 @@ import { PriorityList } from '../components/PriorityList';
 import { WeeklyIndicators } from '../components/WeeklyIndicators';
 import { useDashboardData } from '../hooks/useDashboardData';
 
-const EMPTY_SUMMARY: WeeklySummary = {
-  today_events: 0,
-  today_tasks: 0,
-  activities_to_review: 0,
-  active_normal_students: 0,
-  pending_submission_assignments: 0,
-  pending_correction_assignments: 0,
-  students_at_risk: 0,
-  new_at_risk_this_week: 0,
+const EMPTY_SUMMARY: DashboardIndicatorsDto = {
+  todayEvents: 0,
+  todayTasks: 0,
+  activitiesToReview: 0,
+  activeNormalStudents: 0,
+  pendingSubmissionAssignments: 0,
+  pendingCorrectionAssignments: 0,
+  studentsAtRisk: 0,
+  newAtRiskThisWeek: 0,
 };
 
 export default function DashboardPage() {
@@ -135,7 +135,7 @@ export default function DashboardPage() {
 
         <ActivitiesToReview
           activities={activitiesToReview}
-          totalCount={summary?.pending_correction_assignments ?? 0}
+          totalCount={summary?.pendingCorrectionAssignments ?? 0}
         />
       </div>
 

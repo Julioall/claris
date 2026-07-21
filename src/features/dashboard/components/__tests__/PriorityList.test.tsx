@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { PriorityList } from "@/features/dashboard/components/PriorityList";
-import type { Student } from "@/features/students/types";
+import type { DashboardCriticalStudentDto } from "@/features/dashboard/api/contracts/dashboard-summary.contract";
 
 vi.mock("@/components/ui/scroll-area", () => ({
   ScrollArea: ({ children }: { children: ReactNode }) => (
@@ -21,14 +21,13 @@ function renderWithRouter(ui: ReactNode) {
 
 const baseTimestamp = "2026-02-20T12:00:00.000Z";
 
-function buildCriticalStudent(id: string, name: string): Student {
+function buildCriticalStudent(id: string, name: string): DashboardCriticalStudentDto {
   return {
     id,
-    moodle_user_id: id,
-    full_name: name,
-    current_risk_level: "critico",
-    created_at: baseTimestamp,
-    updated_at: baseTimestamp,
+    name,
+    riskLevel: "critico",
+    riskReasons: [],
+    updatedAt: baseTimestamp,
   };
 }
 

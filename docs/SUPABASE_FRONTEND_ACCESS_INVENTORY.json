@@ -3,10 +3,10 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 45,
+    "filesWithSupabaseAccess": 44,
     "totals": {
-      "clientImports": 45,
-      "from": 137,
+      "clientImports": 44,
+      "from": 125,
       "rpc": 15,
       "functionsInvoke": 15,
       "auth": 5,
@@ -760,47 +760,6 @@
       "counts": {
         "clientImports": 1,
         "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/dashboard/api/dashboard.repository.ts",
-      "feature": "dashboard",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Obter resumo agregado do dashboard",
-        "Centralizar regras de pendencia, correcao e risco",
-        "Consumir o dashboard pelo client HTTP"
-      ],
-      "resources": {
-        "tables": [
-          "activity_feed",
-          "calendar_events",
-          "courses",
-          "dashboard_course_activity_aggregates",
-          "risk_history",
-          "student_activities",
-          "student_courses",
-          "students",
-          "tasks"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0302",
-        "SB-0303",
-        "SB-0304"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 12,
         "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,

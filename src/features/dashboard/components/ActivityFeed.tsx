@@ -11,10 +11,10 @@ import { ptBR } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
-import type { ActivityFeedItem } from '../types';
+import type { DashboardActivityFeedItemDto } from '../api/contracts/dashboard-summary.contract';
 
 interface ActivityFeedProps {
-  items: ActivityFeedItem[];
+  items: DashboardActivityFeedItemDto[];
 }
 
 const eventIcons: Record<string, { icon: typeof Activity; className: string }> = {
@@ -45,7 +45,7 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
       <CardContent>
         <div className="space-y-1">
           {items.map((item, index) => {
-            const config = getEventConfig(item.event_type);
+            const config = getEventConfig(item.eventType);
             const Icon = config.icon;
 
             return (
@@ -72,7 +72,7 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
                       </p>
                     )}
                     <p className="text-xs text-muted-foreground/70 mt-0.5">
-                      {formatTime(item.created_at)}
+                      {formatTime(item.occurredAt)}
                     </p>
                   </div>
                 </div>

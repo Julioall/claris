@@ -9,12 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { RiskBadge } from '@/features/students/components/RiskBadge';
-import type { Student } from '@/features/students/types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+import type { DashboardCriticalStudentDto } from '../api/contracts/dashboard-summary.contract';
+
 interface PriorityListProps {
-  criticalStudents: Student[];
+  criticalStudents: DashboardCriticalStudentDto[];
 }
 
 export function PriorityList({ criticalStudents }: PriorityListProps) {
@@ -43,17 +44,17 @@ export function PriorityList({ criticalStudents }: PriorityListProps) {
                   >
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium text-primary shrink-0">
-                        {student.full_name.charAt(0)}
+                        {student.name.charAt(0)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{student.full_name}</p>
+                        <p className="text-sm font-medium truncate">{student.name}</p>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <RiskBadge level={student.current_risk_level} size="sm" />
+                          <RiskBadge level={student.riskLevel} size="sm" />
                         </div>
-                        {student.updated_at && (
+                        {student.updatedAt && (
                           <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground/70">
                             <Clock className="h-3 w-3" />
-                            Sincronizado: {formatLastSync(student.updated_at)}
+                            Sincronizado: {formatLastSync(student.updatedAt)}
                           </div>
                         )}
                       </div>

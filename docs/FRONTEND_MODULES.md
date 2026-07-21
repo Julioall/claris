@@ -58,6 +58,8 @@ Telemetria passa por `src/integrations/telemetry/telemetry-client.ts`. O client 
 
 Componentes com semantica de dominio permanecem dentro da feature correspondente. O seletor de tags de tarefas, por exemplo, vive em `features/tasks/components` e consulta sugestoes pelo client do caso de uso; `components/ui` contem apenas primitives sem acesso a dados.
 
+O dashboard consome uma unica API de caso de uso em `features/dashboard/api/dashboard-summary.ts`. O hook preserva cache e invalidacao do React Query, enquanto indicadores, prioridades, fila e feed recebem DTOs enxutos; nenhuma parte da feature conhece tabelas, RPCs ou tipos gerados do Supabase.
+
 DTOs de transporte vivem em `src/features/<dominio>/api/contracts/` e descrevem somente o JSON da API. View models permanecem no `types.ts` da feature, e mappers em `api/mappers/` convertem entre os dois quando necessario. Contratos, hooks, pages e components nao importam tipos gerados do banco. `npm run guard:frontend-contracts` protege essa regra e mantem uma allowlist decrescente para duas dividas anteriores.
 
 Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md). A validacao client-side existe para UX; regras de permissao, elegibilidade e estado persistido sempre sao revalidadas no backend.

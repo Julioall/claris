@@ -226,13 +226,15 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - AC: frontend nao recalcula KPIs.
   - Implementado no dominio backend com escopo por matricula ativa aluno-curso, submissao real, ocultacao, deduplicacao de risco e semanas civis em `America/Sao_Paulo`; testes cobrem as fronteiras e corrigem a divergencia entre conclusao e submissao de assignments.
 
-- [ ] `SB-0304` Migrar `useDashboardData`
+- [x] `SB-0304` Migrar `useDashboardData`
   - Consumir o novo client e preservar query keys, loading, erro e invalidacoes.
   - AC: `dashboard.repository.ts` deixa de acessar Supabase e e removido ou reduzido a client HTTP.
+  - Implementado com client HTTP autenticado, validacao do DTO, cancelamento, timeout e preservacao das query keys/estados; o repository Supabase foi removido e os componentes usam somente contratos `camelCase` enxutos.
 
-- [ ] `SB-0305` Benchmark e regressao
+- [x] `SB-0305` Benchmark e regressao
   - Comparar requests, bytes, latencia e resultado antes/depois com fixtures equivalentes.
   - AC: nenhuma divergencia funcional nao documentada.
+  - Baseline local versionado em `docs/benchmarks/dashboard-summary.*`: requests do navegador cairam de 13 para 1, o resultado normalizado permaneceu igual e as correcoes semanticas estao documentadas; o script permite repetir o benchmark do endpoint.
 
 ## Epic 4 — Cursos, matriculas e frequencia
 

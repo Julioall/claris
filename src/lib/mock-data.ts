@@ -1,8 +1,8 @@
 // Mock data for development and demonstration
-import { 
-  type ActivityFeedItem,
-  type WeeklySummary,
-} from '@/features/dashboard/types';
+import type {
+  DashboardActivityFeedItemDto,
+  DashboardIndicatorsDto,
+} from '@/features/dashboard/api/contracts/dashboard-summary.contract';
 import type { Course } from '@/features/courses/types';
 import type { RiskLevel, Student } from '@/features/students/types';
 
@@ -142,60 +142,56 @@ export const mockStudents: Student[] = [
 ];
 
 // Mock Activity Feed
-export const mockActivityFeed: ActivityFeedItem[] = [
+export const mockActivityFeed: DashboardActivityFeedItemDto[] = [
   {
     id: 'feed-1',
-    user_id: 'mock-user-id',
-    student_id: 'student-6',
-    event_type: 'risk_change',
+    studentId: 'student-6',
+    eventType: 'risk_change',
     title: 'Nível de risco alterado',
     description: 'Fernanda Rodrigues passou de Risco para Crítico',
-    created_at: daysAgo(0),
-    student: mockStudents[5],
+    occurredAt: daysAgo(0),
+    student: { id: mockStudents[5].id, name: mockStudents[5].full_name },
   },
   {
     id: 'feed-2',
-    user_id: 'mock-user-id',
-    student_id: 'student-1',
-    course_id: 'course-1',
-    event_type: 'task_created',
+    studentId: 'student-1',
+    courseId: 'course-1',
+    eventType: 'task_created',
     title: 'Pendência criada',
     description: 'Nova pendência registrada para João Pedro Santos',
-    created_at: daysAgo(3),
-    student: mockStudents[0],
+    occurredAt: daysAgo(3),
+    student: { id: mockStudents[0].id, name: mockStudents[0].full_name },
   },
   {
     id: 'feed-3',
-    user_id: 'mock-user-id',
-    student_id: 'student-2',
-    event_type: 'note_created',
+    studentId: 'student-2',
+    eventType: 'note_created',
     title: 'Nota adicionada',
     description: 'Registro sobre desempenho de Ana Carolina Oliveira',
-    created_at: daysAgo(5),
-    student: mockStudents[1],
+    occurredAt: daysAgo(5),
+    student: { id: mockStudents[1].id, name: mockStudents[1].full_name },
   },
   {
     id: 'feed-4',
-    user_id: 'mock-user-id',
-    student_id: 'student-3',
-    event_type: 'task_resolved',
+    studentId: 'student-3',
+    eventType: 'task_resolved',
     title: 'Pendência resolvida',
     description: 'Carlos Eduardo Lima entregou atividade atrasada',
-    created_at: daysAgo(7),
-    student: mockStudents[2],
+    occurredAt: daysAgo(7),
+    student: { id: mockStudents[2].id, name: mockStudents[2].full_name },
   },
 ];
 
 // Weekly summary computed from mock data
-export const mockWeeklySummary: WeeklySummary = {
-  today_events: 0,
-  today_tasks: 0,
-  activities_to_review: 0,
-  active_normal_students: mockStudents.filter(s => s.current_risk_level === 'normal').length,
-  pending_submission_assignments: 0,
-  pending_correction_assignments: 0,
-  students_at_risk: mockStudents.filter(s => ['risco', 'critico'].includes(s.current_risk_level)).length,
-  new_at_risk_this_week: 1,
+export const mockWeeklySummary: DashboardIndicatorsDto = {
+  todayEvents: 0,
+  todayTasks: 0,
+  activitiesToReview: 0,
+  activeNormalStudents: mockStudents.filter(s => s.current_risk_level === 'normal').length,
+  pendingSubmissionAssignments: 0,
+  pendingCorrectionAssignments: 0,
+  studentsAtRisk: mockStudents.filter(s => ['risco', 'critico'].includes(s.current_risk_level)).length,
+  newAtRiskThisWeek: 1,
 };
 
 // Helper function to get risk level label
@@ -215,4 +211,3 @@ export const getStudentsByCourse = (courseId: string): Student[] => {
   // In a real app, this would filter by course relationship
   return mockStudents;
 };
-

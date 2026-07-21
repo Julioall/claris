@@ -7,10 +7,10 @@ import {
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 
-import type { WeeklySummary } from '../types';
+import type { DashboardIndicatorsDto } from '../api/contracts/dashboard-summary.contract';
 
 interface WeeklyIndicatorsProps {
-  summary: WeeklySummary;
+  summary: DashboardIndicatorsDto;
 }
 
 export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
@@ -20,41 +20,41 @@ export function WeeklyIndicators({ summary }: WeeklyIndicatorsProps) {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard
           title="Eventos hoje"
-          value={summary.today_events}
-          subtitle={summary.today_events > 0 ? 'na agenda' : 'nenhum evento hoje'}
+          value={summary.todayEvents}
+          subtitle={summary.todayEvents > 0 ? 'na agenda' : 'nenhum evento hoje'}
           icon={CalendarDays}
           variant="pending"
         />
         <StatCard
           title="Tarefas para hoje"
-          value={summary.today_tasks}
-          subtitle={summary.today_tasks > 0 ? 'com vencimento hoje' : 'nenhuma tarefa hoje'}
+          value={summary.todayTasks}
+          subtitle={summary.todayTasks > 0 ? 'com vencimento hoje' : 'nenhuma tarefa hoje'}
           icon={CheckSquare}
           variant="risk"
         />
         <StatCard
           title="Atividades para corrigir"
-          value={summary.activities_to_review}
-          subtitle={summary.activities_to_review > 0
-            ? `Envio pendente: ${summary.pending_submission_assignments} • Correção pendente: ${summary.pending_correction_assignments}`
+          value={summary.activitiesToReview}
+          subtitle={summary.activitiesToReview > 0
+            ? `Envio pendente: ${summary.pendingSubmissionAssignments} • Correção pendente: ${summary.pendingCorrectionAssignments}`
             : 'fila zerada'}
           icon={ClipboardCheck}
           variant="warning"
         />
         <StatCard
           title="Alunos Regulares"
-          value={summary.active_normal_students}
-          subtitle={summary.active_normal_students > 0 ? 'monitoramento estável' : 'nenhum aluno regular no momento'}
+          value={summary.activeNormalStudents}
+          subtitle={summary.activeNormalStudents > 0 ? 'monitoramento estável' : 'nenhum aluno regular no momento'}
           icon={UserCheck}
           variant="success"
         />
         <StatCard
           title="Alunos em risco"
-          value={summary.students_at_risk}
-          subtitle={summary.new_at_risk_this_week > 0 ? `+${summary.new_at_risk_this_week} novos` : undefined}
+          value={summary.studentsAtRisk}
+          subtitle={summary.newAtRiskThisWeek > 0 ? `+${summary.newAtRiskThisWeek} novos` : undefined}
           icon={AlertTriangle}
-          trend={summary.new_at_risk_this_week > 0 ? {
-            value: summary.new_at_risk_this_week,
+          trend={summary.newAtRiskThisWeek > 0 ? {
+            value: summary.newAtRiskThisWeek,
             label: 'esta semana',
             positive: false,
           } : undefined}

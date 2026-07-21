@@ -9,18 +9,18 @@ describe("ActivityFeed", () => {
         items={[
           {
             id: "evt-1",
-            event_type: "task_created",
+            eventType: "task_created",
             title: "Nova pendencia criada",
             description: "Pendencia para aluno Ana",
-            created_at: "2026-02-20T12:00:00.000Z",
-          } as unknown,
+            occurredAt: "2026-02-20T12:00:00.000Z",
+          },
           {
             id: "evt-2",
-            event_type: "evento_desconhecido",
+            eventType: "evento_desconhecido",
             title: "Evento customizado",
             description: undefined,
-            created_at: "2026-02-20T13:00:00.000Z",
-          } as unknown,
+            occurredAt: "2026-02-20T13:00:00.000Z",
+          },
         ]}
       />,
     );

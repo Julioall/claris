@@ -31,14 +31,14 @@ describe("WeeklyIndicators", () => {
     render(
       <WeeklyIndicators
         summary={{
-          today_events: 3,
-          today_tasks: 2,
-          activities_to_review: 5,
-          active_normal_students: 2,
-          pending_submission_assignments: 2,
-          pending_correction_assignments: 5,
-          students_at_risk: 4,
-          new_at_risk_this_week: 3,
+          todayEvents: 3,
+          todayTasks: 2,
+          activitiesToReview: 5,
+          activeNormalStudents: 2,
+          pendingSubmissionAssignments: 2,
+          pendingCorrectionAssignments: 5,
+          studentsAtRisk: 4,
+          newAtRiskThisWeek: 3,
         }}
       />,
     );
@@ -55,14 +55,14 @@ describe("WeeklyIndicators", () => {
     render(
       <WeeklyIndicators
         summary={{
-          today_events: 0,
-          today_tasks: 0,
-          activities_to_review: 0,
-          active_normal_students: 0,
-          pending_submission_assignments: 0,
-          pending_correction_assignments: 0,
-          students_at_risk: 0,
-          new_at_risk_this_week: 0,
+          todayEvents: 0,
+          todayTasks: 0,
+          activitiesToReview: 0,
+          activeNormalStudents: 0,
+          pendingSubmissionAssignments: 0,
+          pendingCorrectionAssignments: 0,
+          studentsAtRisk: 0,
+          newAtRiskThisWeek: 0,
         }}
       />,
     );

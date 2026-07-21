@@ -1,0 +1,46 @@
+{
+  "baselineCommit": "59826e612bd269561bc865e374d10651b9c02433",
+  "environment": "Supabase local via Docker; fixture smoke com 1 curso, 1 aluno em risco e nenhuma atividade",
+  "measuredAt": "2026-07-21T14:31:46.379Z",
+  "measurements": 30,
+  "warmups": 5,
+  "before": {
+    "implementation": "dashboard.repository.ts no navegador",
+    "bodyBytes": {
+      "median": 631,
+      "p95": 631
+    },
+    "browserRequests": {
+      "median": 13,
+      "p95": 13
+    },
+    "latencyMs": {
+      "median": 56.28,
+      "p95": 66.81
+    }
+  },
+  "after": {
+    "implementation": "dashboard-summary Edge Function",
+    "bodyBytes": {
+      "median": 749,
+      "p95": 749
+    },
+    "browserRequests": {
+      "median": 1,
+      "p95": 1
+    },
+    "latencyMs": {
+      "median": 97.94,
+      "p95": 132.16
+    }
+  },
+  "regression": {
+    "normalizedResultsEqual": true,
+    "compared": [
+      "indicators",
+      "criticalStudentIds",
+      "reviewActivityIds",
+      "activityFeedIds"
+    ]
+  }
+}

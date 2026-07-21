@@ -13,7 +13,7 @@ import {
   DASHBOARD_SUMMARY_TIME_ZONE as frontendTimeZone,
   DASHBOARD_WEEK_FILTERS as frontendWeekFilters,
   type DashboardSummaryDto as FrontendDashboardSummaryDto,
-} from '@/features/dashboard/api/dashboard-summary.contract';
+} from '@/features/dashboard/api/contracts/dashboard-summary.contract';
 
 const contractExample = {
   activitiesToReview: [{
