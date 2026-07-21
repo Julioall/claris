@@ -78,6 +78,12 @@ verify_jwt = false
 [functions.grade-suggestion-jobs]
 verify_jwt = false
 
+[functions.tasks]
+verify_jwt = false
+
+[functions.calendar-events]
+verify_jwt = false
+
 [functions.moodle-sync-courses]
 verify_jwt = false
 

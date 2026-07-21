@@ -15,14 +15,13 @@ export function useCalendarEvents(from?: string, to?: string) {
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: eventsQueryKey,
-    queryFn: () => calendarRepository.listEvents(from, to, user?.id),
+    queryFn: ({ signal }) => calendarRepository.listEvents(from, to, signal),
     enabled: !!user,
     staleTime: 5 * 60_000,
   });
 
   const createMutation = useMutation({
-    mutationFn: (input: CreateCalendarEventInput) =>
-      calendarRepository.createEvent({ ...input, owner: user?.id }),
+    mutationFn: (input: CreateCalendarEventInput) => calendarRepository.createEvent(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: agendaKeys.allEvents(user?.id) });
       toast.success('Evento criado com sucesso');

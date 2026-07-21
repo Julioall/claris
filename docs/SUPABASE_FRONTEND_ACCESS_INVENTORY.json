@@ -3,10 +3,10 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 37,
+    "filesWithSupabaseAccess": 35,
     "totals": {
-      "clientImports": 37,
-      "from": 96,
+      "clientImports": 35,
+      "from": 78,
       "rpc": 13,
       "functionsInvoke": 15,
       "auth": 5,
@@ -260,36 +260,6 @@
       "counts": {
         "clientImports": 1,
         "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/agenda/api/calendar.repository.ts",
-      "feature": "agenda",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Consultar e alterar agenda e eventos"
-      ],
-      "resources": {
-        "tables": [
-          "calendar_events"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0605"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 4,
         "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
@@ -873,45 +843,6 @@
         "from": 3,
         "rpc": 0,
         "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/tasks/api/tasks.service.ts",
-      "feature": "tasks",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Consultar tarefas, comentarios e tags",
-        "Executar comandos de tarefas",
-        "Localizar ou criar tags atomicamente",
-        "Alterar comentarios e vinculos de tags"
-      ],
-      "resources": {
-        "tables": [
-          "tags",
-          "task_comments",
-          "task_tags",
-          "tasks"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0601",
-        "SB-0602",
-        "SB-0603",
-        "SB-0604"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 14,
-        "rpc": 0,
-        "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,
         "channel": 0

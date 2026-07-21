@@ -22,7 +22,6 @@ function applyTaskPatch(task: Task, input: UpdateTaskInput): Task {
     assigned_to: input.assigned_to ?? task.assigned_to,
     due_date: input.due_date ?? task.due_date,
     project_id: input.project_id ?? task.project_id,
-    created_by: input.created_by ?? task.created_by,
     updated_at: new Date().toISOString(),
   };
 }
@@ -34,14 +33,13 @@ export function useTasks() {
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: tasksQueryKey,
-    queryFn: () => tasksRepository.listTasks(),
+    queryFn: ({ signal }) => tasksRepository.listTasks(signal),
     enabled: !!user,
     staleTime: 5 * 60_000,
   });
 
   const createMutation = useMutation({
-    mutationFn: (input: CreateTaskInput) =>
-      tasksRepository.createTask({ ...input, created_by: user?.id }),
+    mutationFn: (input: CreateTaskInput) => tasksRepository.createTask(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: tasksQueryKey });
       toast.success('Tarefa criada com sucesso');
@@ -102,56 +100,41 @@ export function useTasks() {
 
 export function useTaskDetail(taskId: string | null) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-
-  const { data: comments = [], isLoading: commentsLoading } = useQuery({
-    queryKey: tasksKeys.comments(taskId),
-    queryFn: () => tasksRepository.listComments(taskId!),
-    enabled: !!taskId,
-  });
-
-  const { data: tags = [] } = useQuery({
-    queryKey: tasksKeys.tags(taskId),
-    queryFn: () => tasksRepository.getTaskTags(taskId!),
+  const detailKey = tasksKeys.comments(taskId);
+  const { data: detail, isLoading: commentsLoading } = useQuery({
+    queryKey: detailKey,
+    queryFn: ({ signal }) => tasksRepository.getTaskDetail(taskId!, signal),
     enabled: !!taskId,
   });
 
   const addCommentMutation = useMutation({
-    mutationFn: (comment: string) => tasksRepository.addComment(taskId!, comment, user!.id),
+    mutationFn: (comment: string) => tasksRepository.addComment(taskId!, comment),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: tasksKeys.comments(taskId) });
+      await queryClient.invalidateQueries({ queryKey: detailKey });
     },
     onError: () => toast.error('Erro ao adicionar comentário'),
   });
 
   const addTagMutation = useMutation({
-    mutationFn: async (params: { label: string; prefix?: string; entityId?: string; entityType?: string }) => {
-      const tag = await tasksRepository.findOrCreateTag(
-        params.label,
-        params.prefix,
-        params.entityId,
-        params.entityType,
-        user?.id,
-      );
-      await tasksRepository.addTagToTask(taskId!, tag.id);
-    },
+    mutationFn: (params: { label: string; prefix?: string; entityId?: string; entityType?: string }) =>
+      tasksRepository.addTag(taskId!, params),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: tasksKeys.tags(taskId) });
+      await queryClient.invalidateQueries({ queryKey: detailKey });
     },
     onError: () => toast.error('Erro ao adicionar tag'),
   });
 
   const removeTagMutation = useMutation({
-    mutationFn: (tagId: string) => tasksRepository.removeTagFromTask(taskId!, tagId),
+    mutationFn: (tagId: string) => tasksRepository.removeTag(taskId!, tagId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: tasksKeys.tags(taskId) });
+      await queryClient.invalidateQueries({ queryKey: detailKey });
     },
     onError: () => toast.error('Erro ao remover tag'),
   });
 
   return {
-    comments,
-    tags,
+    comments: detail?.comments ?? [],
+    tags: detail?.tags ?? [],
     commentsLoading,
     addComment: addCommentMutation.mutate,
     addTag: addTagMutation.mutate,

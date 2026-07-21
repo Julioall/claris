@@ -3418,6 +3418,17 @@ export type Database = {
         }
         Returns: string
       }
+      backend_add_task_tag: {
+        Args: {
+          p_actor_id: string
+          p_entity_id?: string
+          p_entity_type?: string
+          p_label: string
+          p_prefix?: string
+          p_task_id: string
+        }
+        Returns: Json
+      }
       backend_cancel_grade_suggestion_job: {
         Args: { p_error_message: string; p_job_id: string; p_user_id: string }
         Returns: boolean
@@ -3455,6 +3466,20 @@ export type Database = {
           p_risk_filter?: string
           p_search?: string
           p_status_filter?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      backend_list_tasks_page: {
+        Args: {
+          p_due_from?: string
+          p_due_to?: string
+          p_limit?: number
+          p_offset?: number
+          p_priority?: string
+          p_status?: string
+          p_suggested_by_ai?: boolean
+          p_tag_search?: string
           p_user_id: string
         }
         Returns: Json

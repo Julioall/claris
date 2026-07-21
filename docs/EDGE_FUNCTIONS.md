@@ -200,16 +200,22 @@ O smoke de Edge Functions valida o piloto V1 de ponta a ponta: `Content-Type`, h
 - `students`: lista alunos com paginacao e consolida perfil/historico academico sem expor joins ou identidade do ator no payload
 - `academic-reports`: entrega cursos tutor-scoped e datasets completos para os relatorios de notas e atividades pendentes
 - `grade-suggestion-jobs`: localiza o job relevante do ator para uma atividade autorizada, sem acesso direto do browser as tabelas operacionais
+- `tasks`: lista tarefas com filtros e ordenacao estaveis, consolida detalhe/comentarios/tags e executa comandos escopados ao criador ou responsavel
+- `calendar-events`: executa o CRUD de agenda owner-scoped, valida intervalos e deriva proprietario/origem do token
 
 As functions de cursos usam DTOs V1 em `camelCase`, rejeitam identidade enviada no payload e reaplicam autorizacao e acesso ao curso no backend. Os comandos multi-registro chamam RPCs `SECURITY DEFINER` exclusivas de `service_role`; o navegador nao recebe permissao de execucao nem de escrita direta nas tabelas envolvidas.
 
-No `courses-catalog`, a leitura aceita as permissoes das tres rotas consumidoras (`courses.catalog.view`, `schools.view` ou `reports.view`). Associacao e preferencia de curso aceitam somente os fluxos de Cursos/Escolas, enquanto frequencia exige `courses.attendance.manage`. Para nao transformar o comando de associacao em autoelevacao, um ator nao administrador so pode alternar o papel de cursos aos quais ja possui acesso. A cada sincronizacao, `moodle-sync-courses` substitui atomicamente a elegibilidade do ator pelos cursos efetivamente retornados por sua sessao Moodle; a selecao posterior aceita ate 500 UUIDs unicos e os vincula em uma unica RPC que rejeita o lote inteiro quando qualquer curso estiver fora dessa elegibilidade.
+No `courses-catalog`, a leitura aceita as permissoes das rotas de Cursos e Escolas (`courses.catalog.view` ou `schools.view`). Associacao e preferencia de curso aceitam somente esses fluxos, enquanto frequencia exige `courses.attendance.manage`. Para nao transformar o comando de associacao em autoelevacao, um ator nao administrador so pode alternar o papel de cursos aos quais ja possui acesso. A cada sincronizacao, `moodle-sync-courses` substitui atomicamente a elegibilidade do ator pelos cursos efetivamente retornados por sua sessao Moodle; a selecao posterior aceita ate 500 UUIDs unicos e os vincula em uma unica RPC que rejeita o lote inteiro quando qualquer curso estiver fora dessa elegibilidade.
 
 Em frequencia, `records` e paginado para limitar o payload, enquanto `dateSummaries` e agregado no banco sobre todo o historico. A UI cancela folhas obsoletas quando a data muda e so habilita o salvamento depois de correlacionar curso e data da resposta.
 
 Os casos de uso academicos do Epic 5 usam a permissao da rota (`students.view`, `reports.view` ou `grades.suggestions.manage`) e reaplicam o escopo de curso no service. `students` retorna 404 tanto para aluno inexistente quanto inacessivel. `academic-reports` exige que todos os UUIDs do lote sejam associacoes `tutor` do ator e pagina internamente todas as tabelas consultadas. Como Relatorios possui endpoint proprio, `reports.view` nao autoriza mais o catalogo geral de cursos.
 
 Jobs de sugestao sao criados com seus itens em uma unica RPC e possuem no maximo um registro `pending/processing` por ator, curso e atividade. O cancelamento tambem e transacional; updates de worker usam precondicoes de status para nao sobrescrever um cancelamento concorrente. Jobs, itens, historico de auditoria e snapshots academicos nao possuem grants para `anon` ou `authenticated`.
+
+No Epic 6, `tasks` e `calendar-events` substituem os repositories Supabase do browser. Ambos exigem a permissao da rota (`tasks.view` ou `agenda.view`), rejeitam identidade no payload e retornam DTOs V1. A listagem de tarefas define filtros, ordenacao e paginacao no contrato; o detalhe agrega comentarios e tags. Criador, autor de comentario e owner de evento sao sempre derivados do token.
+
+`backend_add_task_tag` combina find-or-create e vinculo em uma transacao, apoiado por indice unico normalizado por ator, label e entidade. Chamadas concorrentes e repetidas retornam a mesma tag e um unico vinculo. As seis tabelas modernas de tarefas/agenda e as RPCs auxiliares nao possuem grants para `anon` ou `authenticated`; `service_role` e a unica porta de dados, com escopo reaplicado pelos services.
 
 ## Nova function: `moodle-grade-suggestions`
 

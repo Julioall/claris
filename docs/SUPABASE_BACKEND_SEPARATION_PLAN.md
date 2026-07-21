@@ -307,25 +307,30 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** mover CRUD, tags, comentarios, recorrencia e regras de agenda para casos de uso.
 
-- [ ] `SB-0601` Migrar consultas de tarefas
+- [x] `SB-0601` Migrar consultas de tarefas
   - Listagem, detalhe, comentarios e tags.
   - AC: ordenacao e filtros sao definidos no contrato.
+  - Implementado em `tasks` com listagem V1 paginada, filtros tipados, ordenacao estavel e detalhe consolidado de tarefa, comentarios e tags. O frontend recebe DTOs `camelCase` e nao conhece joins ou tabelas.
 
-- [ ] `SB-0602` Migrar comandos de tarefas
+- [x] `SB-0602` Migrar comandos de tarefas
   - Criar, editar, concluir e excluir com validacao autoritativa.
   - AC: transicoes invalidas retornam erro funcional padronizado.
+  - Criacao deriva `createdBy` do token; update reaplica acesso de criador/responsavel e registra alteracoes em `task_history`; delete exige o criador. Status fora da maquina suportada retorna `validation_failed`/422.
 
-- [ ] `SB-0603` Tornar `findOrCreateTag` atomico
+- [x] `SB-0603` Tornar `findOrCreateTag` atomico
   - Usar constraint + upsert/RPC transacional para evitar duplicacao por concorrencia.
   - AC: chamadas concorrentes retornam a mesma tag.
+  - A migration `20260721160000_secure_tasks_and_calendar.sql` deduplica o legado, cria identidade unica normalizada por ator/entidade e expõe `backend_add_task_tag` somente a `service_role`. Smoke com chamadas concorrentes confirma uma tag e um vinculo.
 
-- [ ] `SB-0604` Migrar comentarios e vinculos de tags
+- [x] `SB-0604` Migrar comentarios e vinculos de tags
   - Validar acesso a tarefa antes de qualquer comando.
   - AC: operacoes sao idempotentes quando aplicavel.
+  - Autor e proprietario da tag sao derivados do token. Todo comando revalida o acesso a tarefa; vinculo, remocao de vinculo e exclusao repetida de comentario possuem semantica idempotente sem expor existencia fora do escopo.
 
-- [ ] `SB-0605` Migrar agenda e eventos
+- [x] `SB-0605` Migrar agenda e eventos
   - Mover `calendar.repository.ts`, recorrencia e regras de escopo.
   - AC: frontend nao conhece tabelas de agenda.
+  - Implementado em `calendar-events`: CRUD, intervalo, ordenacao, paginacao e escopo `owner` sao autoritativos no backend; `owner`, origem e campos de sync nao sao aceitos do browser. A recorrencia de tarefas ja existente permanece no fluxo server-side `generate-recurring-tasks`; o modelo atual de `calendar_events` nao expoe configuracao de recorrencia no frontend.
 
 ## Epic 7 — Mensagens, campanhas e WhatsApp
 

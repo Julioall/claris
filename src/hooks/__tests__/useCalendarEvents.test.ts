@@ -66,10 +66,10 @@ describe('useCalendarEvents', () => {
     });
 
     expect(result.current.events).toEqual(baseEvents);
-    expect(listCalendarEventsMock).toHaveBeenCalledWith(undefined, undefined, 'user-1');
+    expect(listCalendarEventsMock).toHaveBeenCalledWith(undefined, undefined, expect.any(AbortSignal));
   });
 
-  it('creates an event with the current owner and invalidates the query', async () => {
+  it('creates an event without sending the current owner and invalidates the query', async () => {
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useCalendarEvents(), { wrapper });
 
@@ -90,7 +90,6 @@ describe('useCalendarEvents', () => {
         title: 'Novo evento',
         start_at: '2026-03-21T09:00',
         type: 'manual',
-        owner: 'user-1',
       });
     });
     await waitFor(() => {

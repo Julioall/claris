@@ -99,18 +99,6 @@
       }
     },
     {
-      "path": "src/features/agenda/api/calendar.repository.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 4,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/auth/api/activity-feed.repository.ts",
       "counts": {
         "clientImports": 1,
@@ -333,18 +321,6 @@
         "from": 3,
         "rpc": 0,
         "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/tasks/api/tasks.service.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 14,
-        "rpc": 0,
-        "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,
         "channel": 0

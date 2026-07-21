@@ -596,6 +596,18 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'grade-suggestion-jobs',
     },
     {
+      body: { action: 'list_tasks', filters: {}, order: 'createdAtDesc', page: 1, pageSize: 100 },
+      expectedStatus: 401,
+      name: 'tasks valid-no-auth',
+      path: 'tasks',
+    },
+    {
+      body: { action: 'list_events', filters: {}, order: 'startAtAsc', page: 1, pageSize: 100 },
+      expectedStatus: 401,
+      name: 'calendar-events valid-no-auth',
+      path: 'calendar-events',
+    },
+    {
       body: {},
       expectedStatus: 401,
       name: 'process-scheduled-messages no-secret',
@@ -663,6 +675,12 @@ function runCourseManagementGrantChecks() {
           ('course_activity_visibility_overrides'::TEXT),
           ('student_activities'::TEXT),
           ('student_sync_snapshots'::TEXT),
+          ('tasks'::TEXT),
+          ('task_comments'::TEXT),
+          ('task_history'::TEXT),
+          ('tags'::TEXT),
+          ('task_tags'::TEXT),
+          ('calendar_events'::TEXT),
           ('user_course_catalog_eligibility'::TEXT),
           ('user_courses'::TEXT),
           ('user_ignored_courses'::TEXT)
@@ -672,7 +690,13 @@ function runCourseManagementGrantChecks() {
           ('ai_grade_suggestion_history'::TEXT),
           ('ai_grade_suggestion_job_items'::TEXT),
           ('ai_grade_suggestion_jobs'::TEXT),
-          ('student_sync_snapshots'::TEXT)
+          ('student_sync_snapshots'::TEXT),
+          ('tasks'::TEXT),
+          ('task_comments'::TEXT),
+          ('task_history'::TEXT),
+          ('tags'::TEXT),
+          ('task_tags'::TEXT),
+          ('calendar_events'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -697,7 +721,9 @@ function runCourseManagementGrantChecks() {
           ('public.backend_list_students_page(uuid,uuid,text,text,text,integer,integer)'::TEXT),
           ('public.list_students_paginated(uuid,text,text,text,integer,integer)'::TEXT),
           ('public.backend_create_grade_suggestion_job_with_items(uuid,uuid,text,text,numeric,jsonb)'::TEXT),
-          ('public.backend_cancel_grade_suggestion_job(uuid,uuid,text)'::TEXT)
+          ('public.backend_cancel_grade_suggestion_job(uuid,uuid,text)'::TEXT),
+          ('public.backend_list_tasks_page(uuid,text,text,date,date,boolean,text,integer,integer)'::TEXT),
+          ('public.backend_add_task_tag(uuid,uuid,text,text,text,text)'::TEXT)
       )
     SELECT json_build_object(
       'browserTableGrants', COALESCE((
@@ -767,7 +793,318 @@ function runCourseManagementGrantChecks() {
     fail(`service_role nao executa RPCs internas: ${JSON.stringify(result.missingServiceFunctionGrants)}`)
   }
 
-  log('Grants internos de cursos bloqueados para roles de browser e liberados para service_role.')
+  log('Grants internos dos dominios migrados bloqueados para browser e liberados para service_role.')
+}
+
+async function runTasksAndAgendaChecks(status, accessToken, authUserId) {
+  const hiddenTaskId = '00000000-0000-4000-8000-000000000961'
+  const hiddenEventId = '00000000-0000-4000-8000-000000000962'
+  const taskTitle = 'Smoke Task Backend Boundary'
+  const eventTitle = 'Smoke Calendar Backend Boundary'
+  const tagLabel = 'SmokeTagAtomic'
+
+  await deleteRows(status, 'tasks', { id: hiddenTaskId })
+  await deleteRows(status, 'calendar_events', { id: hiddenEventId })
+  await deleteRows(status, 'tasks', { title: taskTitle })
+  await deleteRows(status, 'calendar_events', { title: eventTitle })
+  await deleteRows(status, 'tags', { created_by: authUserId, label: tagLabel })
+
+  const spoofCases = [
+    {
+      body: { action: 'list_tasks', filters: {}, page: 1, pageSize: 100, userId: authUserId },
+      correlationId: 'smoke-v1-tasks-spoof',
+      functionName: 'tasks',
+    },
+    {
+      body: { action: 'create_task', input: { createdBy: authUserId, title: taskTitle } },
+      correlationId: 'smoke-v1-task-create-spoof',
+      functionName: 'tasks',
+    },
+    {
+      body: { action: 'list_events', filters: {}, owner: authUserId },
+      correlationId: 'smoke-v1-calendar-spoof',
+      functionName: 'calendar-events',
+    },
+  ]
+
+  for (const spoofCase of spoofCases) {
+    const result = await callV1EdgeFunction(status, spoofCase.functionName, spoofCase.body, {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: spoofCase.correlationId,
+    })
+    assertV1Response(result, {
+      code: 'validation_failed',
+      correlationId: spoofCase.correlationId,
+      status: 422,
+    })
+  }
+
+  const createdTask = await callV1EdgeFunction(status, 'tasks', {
+    action: 'create_task',
+    input: {
+      dueDate: '2026-07-25',
+      priority: 'high',
+      status: 'todo',
+      title: taskTitle,
+    },
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-task-create',
+  })
+  assertV1Response(createdTask, { correlationId: 'smoke-v1-task-create', status: 200 })
+  const taskId = createdTask.data?.data?.task?.id
+  if (!taskId || createdTask.data?.data?.task?.createdBy !== authUserId) {
+    fail(`tasks nao derivou o criador autenticado: ${JSON.stringify(createdTask.data)}`)
+  }
+
+  await upsertRows(status, 'tasks', 'id', {
+    created_by: null,
+    id: hiddenTaskId,
+    title: 'Smoke Task Hidden',
+  })
+  const hiddenTask = await callV1EdgeFunction(status, 'tasks', {
+    action: 'get_task_detail',
+    taskId: hiddenTaskId,
+  }, {
+    acceptStatuses: [404],
+    accessToken,
+    correlationId: 'smoke-v1-task-hidden',
+  })
+  assertV1Response(hiddenTask, {
+    code: 'not_found',
+    correlationId: 'smoke-v1-task-hidden',
+    status: 404,
+  })
+
+  const invalidStatus = await callV1EdgeFunction(status, 'tasks', {
+    action: 'update_task',
+    input: { status: 'archived' },
+    taskId,
+  }, {
+    acceptStatuses: [422],
+    accessToken,
+    correlationId: 'smoke-v1-task-invalid-status',
+  })
+  assertV1Response(invalidStatus, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-task-invalid-status',
+    status: 422,
+  })
+
+  const updatedTask = await callV1EdgeFunction(status, 'tasks', {
+    action: 'update_task',
+    input: { status: 'done' },
+    taskId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-task-update',
+  })
+  assertV1Response(updatedTask, { correlationId: 'smoke-v1-task-update', status: 200 })
+  if (updatedTask.data?.data?.task?.status !== 'done') {
+    fail(`tasks nao aplicou a transicao de status: ${JSON.stringify(updatedTask.data)}`)
+  }
+
+  const createdComment = await callV1EdgeFunction(status, 'tasks', {
+    action: 'add_comment',
+    comment: 'Comentario do smoke',
+    taskId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-task-comment',
+  })
+  assertV1Response(createdComment, { correlationId: 'smoke-v1-task-comment', status: 200 })
+  const commentId = createdComment.data?.data?.comment?.id
+  if (!commentId || createdComment.data?.data?.comment?.authorId !== authUserId) {
+    fail(`tasks nao derivou o autor do comentario: ${JSON.stringify(createdComment.data)}`)
+  }
+
+  const concurrentTags = await Promise.all(Array.from({ length: 12 }, (_, index) => (
+    callV1EdgeFunction(status, 'tasks', {
+      action: 'add_tag',
+      tag: {
+        entityId: 'smoke-student-001',
+        entityType: 'aluno',
+        label: tagLabel,
+        prefix: 'aluno',
+      },
+      taskId,
+    }, {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: `smoke-v1-task-tag-${index}`,
+    })
+  )))
+  const tagIds = new Set(concurrentTags.map((result, index) => {
+    assertV1Response(result, { correlationId: `smoke-v1-task-tag-${index}`, status: 200 })
+    return result.data?.data?.tag?.id
+  }))
+  if (tagIds.size !== 1 || tagIds.has(undefined)) {
+    fail(`findOrCreateTag nao foi atomico: ${JSON.stringify([...tagIds])}`)
+  }
+  const [tagId] = [...tagIds]
+  const persistedTags = await selectRows(status, 'tags', { created_by: authUserId, label: tagLabel })
+  const persistedLinks = await selectRows(status, 'task_tags', { task_id: taskId })
+  if (persistedTags.length !== 1 || persistedLinks.length !== 1 || persistedLinks[0]?.tag_id !== tagId) {
+    fail(`Tag/link concorrente retornou cardinalidade inesperada: ${JSON.stringify({ persistedTags, persistedLinks })}`)
+  }
+
+  const taskDetail = await callV1EdgeFunction(status, 'tasks', {
+    action: 'get_task_detail',
+    taskId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-task-detail',
+  })
+  assertV1Response(taskDetail, { correlationId: 'smoke-v1-task-detail', status: 200 })
+  if (
+    taskDetail.data?.data?.task?.id !== taskId
+    || taskDetail.data?.data?.comments?.length !== 1
+    || taskDetail.data?.data?.tags?.length !== 1
+  ) {
+    fail(`tasks retornou detalhe inconsistente: ${JSON.stringify(taskDetail.data)}`)
+  }
+
+  const taskList = await callV1EdgeFunction(status, 'tasks', {
+    action: 'list_tasks',
+    filters: { status: 'done', tagSearch: 'smoketag' },
+    order: 'createdAtDesc',
+    page: 1,
+    pageSize: 100,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-task-list',
+  })
+  assertV1Response(taskList, { correlationId: 'smoke-v1-task-list', status: 200 })
+  if (
+    !taskList.data?.data?.items?.some((item) => item.id === taskId)
+    || taskList.data?.data?.items?.some((item) => item.id === hiddenTaskId)
+  ) {
+    fail(`tasks retornou filtro ou escopo inesperado: ${JSON.stringify(taskList.data)}`)
+  }
+
+  const firstTagRemoval = await callV1EdgeFunction(status, 'tasks', {
+    action: 'remove_tag', tagId, taskId,
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-task-tag-remove-1',
+  })
+  const repeatedTagRemoval = await callV1EdgeFunction(status, 'tasks', {
+    action: 'remove_tag', tagId, taskId,
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-task-tag-remove-2',
+  })
+  if (firstTagRemoval.data?.data?.deleted !== true || repeatedTagRemoval.data?.data?.deleted !== false) {
+    fail(`Remocao de tag nao foi idempotente: ${JSON.stringify({ firstTagRemoval, repeatedTagRemoval })}`)
+  }
+
+  const firstCommentDeletion = await callV1EdgeFunction(status, 'tasks', {
+    action: 'delete_comment', commentId, taskId,
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-task-comment-delete-1',
+  })
+  const repeatedCommentDeletion = await callV1EdgeFunction(status, 'tasks', {
+    action: 'delete_comment', commentId, taskId,
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-task-comment-delete-2',
+  })
+  if (firstCommentDeletion.data?.data?.deleted !== true || repeatedCommentDeletion.data?.data?.deleted !== false) {
+    fail(`Remocao de comentario nao foi idempotente: ${JSON.stringify({ firstCommentDeletion, repeatedCommentDeletion })}`)
+  }
+
+  const createdEvent = await callV1EdgeFunction(status, 'calendar-events', {
+    action: 'create_event',
+    input: {
+      endAt: '2026-07-25T13:00:00.000Z',
+      startAt: '2026-07-25T12:00:00.000Z',
+      title: eventTitle,
+      type: 'alignment',
+    },
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-calendar-create',
+  })
+  assertV1Response(createdEvent, { correlationId: 'smoke-v1-calendar-create', status: 200 })
+  const eventId = createdEvent.data?.data?.event?.id
+  if (!eventId || createdEvent.data?.data?.event?.externalSource !== 'manual') {
+    fail(`calendar-events nao derivou a origem manual: ${JSON.stringify(createdEvent.data)}`)
+  }
+
+  const invalidInterval = await callV1EdgeFunction(status, 'calendar-events', {
+    action: 'update_event',
+    eventId,
+    input: { endAt: '2026-07-25T11:00:00.000Z' },
+  }, {
+    acceptStatuses: [422],
+    accessToken,
+    correlationId: 'smoke-v1-calendar-invalid-interval',
+  })
+  assertV1Response(invalidInterval, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-calendar-invalid-interval',
+    status: 422,
+  })
+
+  await upsertRows(status, 'calendar_events', 'id', {
+    id: hiddenEventId,
+    owner: null,
+    start_at: '2026-07-25T12:00:00.000Z',
+    title: 'Smoke Calendar Hidden',
+  })
+  const hiddenEvent = await callV1EdgeFunction(status, 'calendar-events', {
+    action: 'delete_event', eventId: hiddenEventId,
+  }, {
+    acceptStatuses: [404], accessToken, correlationId: 'smoke-v1-calendar-hidden',
+  })
+  assertV1Response(hiddenEvent, {
+    code: 'not_found', correlationId: 'smoke-v1-calendar-hidden', status: 404,
+  })
+
+  const updatedEvent = await callV1EdgeFunction(status, 'calendar-events', {
+    action: 'update_event', eventId, input: { title: `${eventTitle} Updated` },
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-calendar-update',
+  })
+  if (updatedEvent.data?.data?.event?.title !== `${eventTitle} Updated`) {
+    fail(`calendar-events nao atualizou o evento: ${JSON.stringify(updatedEvent.data)}`)
+  }
+
+  const eventList = await callV1EdgeFunction(status, 'calendar-events', {
+    action: 'list_events',
+    filters: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-31T23:59:59.999Z' },
+    order: 'startAtAsc',
+    page: 1,
+    pageSize: 100,
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-calendar-list',
+  })
+  if (
+    !eventList.data?.data?.items?.some((item) => item.id === eventId)
+    || eventList.data?.data?.items?.some((item) => item.id === hiddenEventId)
+  ) {
+    fail(`calendar-events retornou escopo inesperado: ${JSON.stringify(eventList.data)}`)
+  }
+
+  await callV1EdgeFunction(status, 'calendar-events', {
+    action: 'delete_event', eventId,
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-calendar-delete',
+  })
+  await callV1EdgeFunction(status, 'tasks', {
+    action: 'delete_task', taskId,
+  }, {
+    acceptStatuses: [200], accessToken, correlationId: 'smoke-v1-task-delete',
+  })
+
+  await deleteRows(status, 'tasks', { id: hiddenTaskId })
+  await deleteRows(status, 'calendar_events', { id: hiddenEventId })
+  await deleteRows(status, 'tags', { created_by: authUserId, label: tagLabel })
+  log('Tarefas, comentarios, tags atomicas e agenda validados pela fronteira backend V1.')
 }
 
 async function runAcademicReadChecks(
@@ -1599,6 +1936,8 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
     hiddenCourse.id,
     hiddenStudent.id,
   )
+
+  await runTasksAndAgendaChecks(status, accessToken, authUserId)
 
   const tagSuggestions = await callV1EdgeFunction(
     status,

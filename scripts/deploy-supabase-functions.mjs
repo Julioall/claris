@@ -11,6 +11,8 @@ const DEFAULT_FUNCTIONS = [
   'students',
   'academic-reports',
   'grade-suggestion-jobs',
+  'tasks',
+  'calendar-events',
   'moodle-auth',
   'moodle-reauth-settings',
   'moodle-sync-courses',

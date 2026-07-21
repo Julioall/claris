@@ -26,8 +26,6 @@ export interface CreateCalendarEventInput {
   start_at: string;
   end_at?: string;
   type?: CalendarEventType;
-  owner?: string;
-  external_source?: ExternalSource;
 }
 
 export type UpdateCalendarEventInput = Partial<CreateCalendarEventInput>;

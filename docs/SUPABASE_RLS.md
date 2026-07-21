@@ -302,24 +302,27 @@ Tabelas:
 
 Regra canônica:
 
-- `tasks`: leitura e escrita restritas ao criador (`created_by`) ou responsável (`assigned_to`). Insert obriga `created_by = auth.uid()`. Delete apenas pelo criador.
-- `task_comments`: leitura contextual pelo vínculo com a tarefa (criador ou responsável); insert exige `author_id = auth.uid()` e pertencimento à tarefa; update/delete apenas pelo autor.
-- `task_history`: leitura pelo criador ou responsável da tarefa; insert exige `changed_by = auth.uid()` e pertencimento.
-- `tags`: user-owned por `created_by = auth.uid()`.
-- `task_tags`: acesso e insert condicionados ao vínculo com tarefa do próprio usuário.
-- `calendar_events`: user-owned por `owner = auth.uid()`. Todos os operations CRUD restritos ao dono.
+- `anon` e `authenticated` nao possuem grants diretos em nenhuma das seis tabelas; as policies anteriores permanecem como defesa adicional, mas o acesso da aplicacao passa por `tasks` e `calendar-events` com `service_role`.
+- `tasks`: o backend lista/atualiza apenas registros do criador (`created_by`) ou responsavel (`assigned_to`), deriva o criador no insert e permite delete somente ao criador.
+- `task_comments`: o backend valida acesso a tarefa, deriva `author_id` no insert e limita delete ao autor, retornando resultado idempotente.
+- `task_history`: alteracoes efetivas de tarefa sao registradas com `changed_by` derivado do token.
+- `tags`: identidade unica normalizada por `created_by`, label e entidade; find-or-create e vinculo ocorrem atomicamente na RPC service-only `backend_add_task_tag`.
+- `task_tags`: adicao valida criador/responsavel e usa `ON CONFLICT DO NOTHING`; remocao e limitada ao criador da tarefa e e idempotente.
+- `calendar_events`: consultas e comandos usam `owner` derivado do token; origem manual e intervalos sao definidos/validados no backend.
 
 Migrations de referência:
 
 - `20260317200000_create_tasks_and_agenda.sql` — criação inicial (policies permissivas, substituídas abaixo).
 - `20260317210000_extend_tasks_and_agenda_for_ia.sql` — campos adicionais para IA.
 - `20260317260000_tighten_tasks_calendar_rls.sql` — **canônica**: remove policies `auth.uid() IS NOT NULL` e substitui por escopo de propriedade real.
+- `20260721160000_secure_tasks_and_calendar.sql` — revoga grants de browser, cria consultas service-only e torna tags atomicas por identidade normalizada.
 
 Observações:
 
 - A migration `20260317200000` usava `USING (auth.uid() IS NOT NULL)` — qualquer usuário autenticado lia e gravava todos os registros. Isso foi corrigido pela migration `20260317260000`.
 - A política de `calendar_events` é análoga à de `moodle_conversations` (owner-only).
 - Tasks do sistema criadas por Edge Functions são inseridas via `service_role` e ficam fora do escopo de RLS.
+- A recorrencia do sistema legado (`task_recurrence_configs`) continua processada pela Edge Function `generate-recurring-tasks`; o CRUD moderno de agenda nao delega regras de recorrencia ao navegador.
 
 ## Auditoria de Ações da IA
 

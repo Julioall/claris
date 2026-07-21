@@ -1,78 +1,157 @@
-import { supabase } from '@/integrations/supabase/client';
+import { ApiClientError, invokeEdgeFunction } from '@/integrations/http/edge-function-client';
 
-import type { CalendarEvent } from '../types';
-import type { CreateCalendarEventInput, UpdateCalendarEventInput } from '../types';
+import type { CalendarEvent, CreateCalendarEventInput, UpdateCalendarEventInput } from '../types';
+import {
+  CALENDAR_EVENTS_CONTRACT_VERSION,
+  CALENDAR_EVENT_TYPES,
+  CALENDAR_EXTERNAL_SOURCES,
+  CALENDAR_SYNC_STATUSES,
+  type CalendarEventDeleteDto,
+  type CalendarEventDto,
+  type CalendarEventMutationDto,
+  type CalendarEventsMetadataDto,
+  type CalendarEventsPageDto,
+} from './contracts/calendar-events.contract';
+import { mapCalendarEvent } from './mappers/calendar-event.mapper';
 
-type CalendarEventRow = CalendarEvent;
+const CALENDAR_TIMEOUT_MS = 15_000;
 
-function toCalendarEvent(row: CalendarEventRow): CalendarEvent {
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function invalidResponse(expected: string): never {
+  throw new ApiClientError({
+    code: 'invalid_response',
+    message: `A API da agenda retornou ${expected} em formato invalido.`,
+  });
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
+
+function isMetadata(value: unknown): value is CalendarEventsMetadataDto {
+  const metadata = asRecord(value);
+  return Boolean(
+    metadata
+    && metadata.contractVersion === CALENDAR_EVENTS_CONTRACT_VERSION
+    && typeof metadata.generatedAt === 'string',
+  );
+}
+
+function isEvent(value: unknown): value is CalendarEventDto {
+  const event = asRecord(value);
+  return Boolean(
+    event
+    && typeof event.id === 'string'
+    && typeof event.title === 'string'
+    && isNullableString(event.description)
+    && typeof event.startAt === 'string'
+    && isNullableString(event.endAt)
+    && CALENDAR_EVENT_TYPES.includes(event.type as CalendarEventDto['type'])
+    && CALENDAR_EXTERNAL_SOURCES.includes(event.externalSource as CalendarEventDto['externalSource'])
+    && isNullableString(event.externalId)
+    && isNullableString(event.externalProvider)
+    && isNullableString(event.externalEventId)
+    && CALENDAR_SYNC_STATUSES.includes(event.syncStatus as CalendarEventDto['syncStatus'])
+    && isNullableString(event.lastSyncAt)
+    && typeof event.createdAt === 'string'
+    && typeof event.updatedAt === 'string',
+  );
+}
+
+function parsePage(value: unknown): CalendarEventsPageDto {
+  const page = asRecord(value);
+  if (!(
+    page
+    && Array.isArray(page.items)
+    && page.items.every(isEvent)
+    && Number.isSafeInteger(page.page)
+    && Number.isSafeInteger(page.pageSize)
+    && Number.isSafeInteger(page.totalCount)
+    && Number.isSafeInteger(page.totalPages)
+    && isMetadata(page.metadata)
+  )) invalidResponse('uma pagina');
+  return page as unknown as CalendarEventsPageDto;
+}
+
+function parseMutation(value: unknown): CalendarEventMutationDto {
+  const mutation = asRecord(value);
+  if (!(mutation && isEvent(mutation.event) && isMetadata(mutation.metadata))) {
+    invalidResponse('um evento');
+  }
+  return mutation as unknown as CalendarEventMutationDto;
+}
+
+function parseDelete(value: unknown): CalendarEventDeleteDto {
+  const deletion = asRecord(value);
+  if (!(deletion && typeof deletion.deleted === 'boolean' && isMetadata(deletion.metadata))) {
+    invalidResponse('uma confirmacao de exclusao');
+  }
+  return deletion as unknown as CalendarEventDeleteDto;
+}
+
+function toEventInput(input: CreateCalendarEventInput | UpdateCalendarEventInput) {
   return {
-    id: row.id,
-    title: row.title,
-    description: row.description,
-    start_at: row.start_at,
-    end_at: row.end_at,
-    type: row.type,
-    owner: row.owner,
-    external_source: row.external_source,
-    external_id: row.external_id,
-    external_provider: row.external_provider,
-    external_event_id: row.external_event_id,
-    sync_status: row.sync_status,
-    last_sync_at: row.last_sync_at,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
+    ...(input.description !== undefined ? { description: input.description } : {}),
+    ...(input.end_at !== undefined ? { endAt: input.end_at } : {}),
+    ...(input.start_at !== undefined ? { startAt: input.start_at } : {}),
+    ...(input.title !== undefined ? { title: input.title } : {}),
+    ...(input.type !== undefined ? { type: input.type } : {}),
   };
 }
 
-export async function listCalendarEvents(from?: string, to?: string, ownerId?: string): Promise<CalendarEvent[]> {
-  let query = supabase
-    .from('calendar_events' as never)
-    .select('*')
-    .order('start_at', { ascending: true });
-
-  if (from) query = query.gte('start_at', from);
-  if (to) query = query.lte('start_at', to);
-  if (ownerId) query = query.eq('owner', ownerId);
-
-  const { data, error } = await query;
-  if (error) throw error;
-
-  return ((data ?? []) as CalendarEventRow[]).map(toCalendarEvent);
+export async function listCalendarEvents(
+  from?: string,
+  to?: string,
+  signal?: AbortSignal,
+): Promise<CalendarEvent[]> {
+  const response = await invokeEdgeFunction<unknown>('calendar-events', {
+    auth: 'required',
+    body: {
+      action: 'list_events',
+      filters: {
+        ...(from ? { from } : {}),
+        ...(to ? { to } : {}),
+      },
+      order: 'startAtAsc',
+      page: 1,
+      pageSize: 1_000,
+    },
+    signal,
+    timeoutMs: CALENDAR_TIMEOUT_MS,
+  });
+  return parsePage(response).items.map(mapCalendarEvent);
 }
 
 export async function createCalendarEvent(input: CreateCalendarEventInput): Promise<CalendarEvent> {
-  const { data, error } = await supabase
-    .from('calendar_events' as never)
-    .insert({ ...input, external_source: input.external_source ?? 'manual' } as never)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  return toCalendarEvent(data as CalendarEventRow);
+  const response = await invokeEdgeFunction<unknown>('calendar-events', {
+    auth: 'required',
+    body: { action: 'create_event', input: toEventInput(input) },
+    timeoutMs: CALENDAR_TIMEOUT_MS,
+  });
+  return mapCalendarEvent(parseMutation(response).event);
 }
 
 export async function updateCalendarEvent(id: string, input: UpdateCalendarEventInput): Promise<CalendarEvent> {
-  const { data, error } = await supabase
-    .from('calendar_events' as never)
-    .update(input as never)
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) throw error;
-
-  return toCalendarEvent(data as CalendarEventRow);
+  const response = await invokeEdgeFunction<unknown>('calendar-events', {
+    auth: 'required',
+    body: { action: 'update_event', eventId: id, input: toEventInput(input) },
+    timeoutMs: CALENDAR_TIMEOUT_MS,
+  });
+  return mapCalendarEvent(parseMutation(response).event);
 }
 
 export async function deleteCalendarEvent(id: string): Promise<void> {
-  const { error } = await supabase
-    .from('calendar_events' as never)
-    .delete()
-    .eq('id', id);
-
-  if (error) throw error;
+  const response = await invokeEdgeFunction<unknown>('calendar-events', {
+    auth: 'required',
+    body: { action: 'delete_event', eventId: id },
+    timeoutMs: CALENDAR_TIMEOUT_MS,
+  });
+  if (!parseDelete(response).deleted) invalidResponse('uma confirmacao de exclusao');
 }
 
 export const calendarRepository = {
