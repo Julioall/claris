@@ -80,7 +80,7 @@ describe('MessageTemplatesTab', () => {
     render(<MessageTemplatesTab />);
 
     await waitFor(() => {
-      expect(listMessageTemplatesForUserMock).toHaveBeenCalledWith('user-1');
+      expect(listMessageTemplatesForUserMock).toHaveBeenCalledWith();
     });
 
     expect(screen.getByText('Boas-vindas')).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe('MessageTemplatesTab', () => {
     await user.click(screen.getByRole('button', { name: /^criar$/i }));
 
     await waitFor(() => {
-      expect(createMessageTemplateMock).toHaveBeenCalledWith('user-1', {
+      expect(createMessageTemplateMock).toHaveBeenCalledWith({
         title: 'Lembrete de atividade',
         content: 'Ola {nome_aluno}, lembre-se da atividade.',
         category: 'geral',

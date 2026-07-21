@@ -3,12 +3,12 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 35,
+    "filesWithSupabaseAccess": 30,
     "totals": {
-      "clientImports": 35,
-      "from": 78,
+      "clientImports": 30,
+      "from": 52,
       "rpc": 13,
-      "functionsInvoke": 15,
+      "functionsInvoke": 13,
       "auth": 5,
       "storage": 0,
       "channel": 1
@@ -473,39 +473,6 @@
       }
     },
     {
-      "file": "src/features/campaigns/api/campaigns.repository.ts",
-      "feature": "campaigns",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Gerenciar campanhas e suas transicoes"
-      ],
-      "resources": {
-        "tables": [
-          "app_service_instances",
-          "bulk_message_jobs",
-          "bulk_message_recipients",
-          "scheduled_messages"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0704"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 11,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/claris/api/chat.ts",
       "feature": "claris",
       "categories": [
@@ -662,74 +629,6 @@
       }
     },
     {
-      "file": "src/features/messages/api/bulk-messaging.repository.ts",
-      "feature": "messages",
-      "categories": [
-        "edge-function",
-        "query"
-      ],
-      "useCases": [
-        "Resolver publico elegivel de mensagens",
-        "Acompanhar historico e jobs de envio"
-      ],
-      "resources": {
-        "tables": [
-          "bulk_message_jobs",
-          "courses",
-          "student_activities",
-          "student_course_grades",
-          "student_courses"
-        ],
-        "rpcs": [],
-        "functions": [
-          "bulk-message-send"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0702",
-        "SB-0703"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 6,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/messages/api/message-templates.repository.ts",
-      "feature": "messages",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Gerenciar templates de mensagem"
-      ],
-      "resources": {
-        "tables": [
-          "message_templates"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0701"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 6,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/services/api/myServices.ts",
       "feature": "services",
       "categories": [
@@ -843,38 +742,6 @@
         "from": 3,
         "rpc": 0,
         "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/whatsapp/api/messaging.ts",
-      "feature": "whatsapp",
-      "categories": [
-        "edge-function",
-        "query"
-      ],
-      "useCases": [
-        "Executar operacoes de WhatsApp"
-      ],
-      "resources": {
-        "tables": [
-          "app_service_instances"
-        ],
-        "rpcs": [],
-        "functions": [
-          "whatsapp-messaging"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0705"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 1,
         "auth": 0,
         "storage": 0,
         "channel": 0
@@ -1048,36 +915,6 @@
         "clientImports": 1,
         "from": 1,
         "rpc": 1,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/lib/message-template-seeding.ts",
-      "feature": "cross-cutting",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Gerenciar templates de mensagem"
-      ],
-      "resources": {
-        "tables": [
-          "message_templates"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0701"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,

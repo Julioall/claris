@@ -36,6 +36,8 @@ Os slices ativos hoje incluem `auth`, `courses`, `students`, `tasks`, `agenda`, 
 
 O estado-alvo nao permite `supabase.from()` nem `supabase.rpc()` no frontend. Os slices consomem contratos HTTP independentes do schema do banco, e `api/` representa clientes desses contratos, nao repositories executados no navegador.
 
+Os dominios `dashboard`, `courses`, `students`, `reports`, `tasks`, `agenda`, `messages`, `campaigns` e `whatsapp` ja operam por essa fronteira. Em comunicacoes, o browser envia apenas intencao e selecao: templates, publico, identidade Moodle, historico, snapshots e transicoes sao autoritativos no backend.
+
 As excecoes temporarias, ambas protegidas por allowlist explicita, sao:
 
 - Supabase Auth encapsulado por `src/integrations/auth/auth-gateway.ts`
@@ -87,6 +89,8 @@ O padrao preferencial e:
 - services/repositories/mappers em `_shared/` ou no dominio da function
 - DTOs HTTP independentes dos tipos gerados do banco
 - RPC PostgreSQL para comandos com varias escritas que precisam ser atomicas
+
+O client HTTP do frontend tambem possui transporte XHR encapsulado para uploads com progresso. Assim, nem mesmo fluxos de midia precisam ler sessao, API key ou URL do Supabase dentro de uma feature.
 
 Mais detalhes estao em [EDGE_FUNCTIONS.md](./EDGE_FUNCTIONS.md).
 

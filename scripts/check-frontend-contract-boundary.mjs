@@ -5,10 +5,7 @@ const rootDir = process.cwd();
 const srcDir = path.join(rootDir, 'src');
 const sourceExtensions = new Set(['.ts', '.tsx']);
 const generatedTypeImport = /from\s+['"]@\/integrations\/supabase\/types['"]/;
-const presentationDebt = new Set([
-  'src/features/campaigns/types.ts',
-  'src/features/messages/types.ts',
-]);
+const presentationDebt = new Set();
 
 function normalize(filePath) {
   return filePath.split(path.sep).join('/');

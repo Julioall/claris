@@ -1,15 +1,17 @@
 import { useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
-  callWhatsAppMessaging,
-  callWhatsAppMessagingWithProgress,
   fetchActiveWhatsAppInstances,
+  fetchWhatsAppContacts,
+  fetchWhatsAppConversations,
+  fetchWhatsAppMessages,
+  sendWhatsAppMedia,
+  sendWhatsAppMessage,
 } from '@/features/whatsapp/api/messaging';
 import { buildContactList, filterDirectoryEntries, findSelectedThread, getMessageTypeLabel, mergeChatsWithContacts } from '@/features/whatsapp/lib/chat';
 import { createDraftAttachment, revokeDraftAttachment } from '@/features/whatsapp/lib/uploads';
 import type {
   DraftAttachment,
-  WhatsAppContact,
   WhatsAppConversation,
   WhatsAppInstance,
   WhatsAppMessage,
@@ -116,12 +118,7 @@ export function useWhatsAppWorkspace() {
     error: instancesError,
   } = useQuery({
     queryKey: ['page-whatsapp-instances'],
-    queryFn: async () => {
-      const { data, error } = await fetchActiveWhatsAppInstances();
-      if (error) throw error;
-
-      return sortInstances((data ?? []) as WhatsAppInstance[]);
-    },
+    queryFn: async () => sortInstances(await fetchActiveWhatsAppInstances()),
   });
 
   const selectedInstance = instances.find((instance) => instance.id === selectedInstanceId) ?? null;
@@ -136,11 +133,7 @@ export function useWhatsAppWorkspace() {
   } = useQuery({
     queryKey: ['whatsapp-contacts', selectedInstanceId],
     queryFn: async () => {
-      const data = await callWhatsAppMessaging('get_contacts', {
-        instance_id: selectedInstanceId,
-      });
-
-      return (data.contacts ?? []) as WhatsAppContact[];
+      return fetchWhatsAppContacts(selectedInstanceId as string);
     },
     enabled: !!selectedInstanceId && canLoadChats,
     refetchInterval: 60_000,
@@ -155,11 +148,7 @@ export function useWhatsAppWorkspace() {
   } = useQuery({
     queryKey: ['whatsapp-conversations', selectedInstanceId],
     queryFn: async () => {
-      const data = await callWhatsAppMessaging('get_chats', {
-        instance_id: selectedInstanceId,
-      });
-
-      return (data.conversations ?? []) as WhatsAppConversation[];
+      return fetchWhatsAppConversations(selectedInstanceId as string);
     },
     enabled: !!selectedInstanceId && canLoadChats,
     refetchInterval: 15_000,
@@ -178,13 +167,11 @@ export function useWhatsAppWorkspace() {
   } = useQuery({
     queryKey: ['whatsapp-messages', selectedInstanceId, selectedThread?.remote_jid],
     queryFn: async () => {
-      const data = await callWhatsAppMessaging('get_messages', {
-        instance_id: selectedInstanceId,
-        remote_jid: selectedThread?.remote_jid,
-        limit: 120,
-      });
-
-      return (data.messages ?? []) as WhatsAppMessage[];
+      return fetchWhatsAppMessages(
+        selectedInstanceId as string,
+        selectedThread?.remote_jid as string,
+        120,
+      );
     },
     enabled: !!selectedInstanceId && !!selectedThread?.remote_jid && canLoadChats,
     refetchInterval: selectedThread ? 6_000 : false,
@@ -242,34 +229,33 @@ export function useWhatsAppWorkspace() {
         setUploadStage('uploading');
         setUploadProgress(40);
 
-        const action = draftAttachment.send_as_sticker ? 'send_sticker' : 'send_media';
-        return callWhatsAppMessagingWithProgress(
-          action,
+        return sendWhatsAppMedia(
           {
-            instance_id: selectedInstanceId,
-            remote_jid: selectedThread.remote_jid,
+            instanceId: selectedInstanceId,
+            remoteJid: selectedThread.remote_jid,
             media: draftAttachment.base64,
-            media_type: draftAttachment.kind,
-            mime_type: draftAttachment.mime_type,
-            file_name: draftAttachment.file_name,
+            mediaType: draftAttachment.kind,
+            mimeType: draftAttachment.mime_type,
+            fileName: draftAttachment.file_name,
             caption: draftAttachment.send_as_sticker || draftAttachment.kind === 'audio'
               ? undefined
               : draftMessage.trim() || undefined,
+            sendAsSticker: draftAttachment.send_as_sticker,
           },
           setUploadProgress,
         );
       }
 
-      return callWhatsAppMessaging('send_message', {
-        instance_id: selectedInstanceId,
-        remote_jid: selectedThread.remote_jid,
+      return sendWhatsAppMessage({
+        instanceId: selectedInstanceId,
+        remoteJid: selectedThread.remote_jid,
         message: draftMessage.trim(),
       });
     },
     onSuccess: (data) => {
       if (!selectedInstanceId || !selectedThread) return;
 
-      const rawMessage = (data.message ?? null) as WhatsAppMessage | null;
+      const rawMessage = data;
       const nextMessage = rawMessage
         ? (draftAttachment ? buildAttachmentMessage(draftAttachment, selectedThread.remote_jid, rawMessage) : rawMessage)
         : null;

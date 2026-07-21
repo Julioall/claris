@@ -321,7 +321,7 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
     setIsLoadingStudents(true);
 
     try {
-      const audience = await listBulkSendAudienceForUser(user.id);
+      const audience = await listBulkSendAudienceForUser();
       setStudents(audience.students);
       setGradeLookup(audience.gradeLookup);
       setPendingLookup(audience.pendingLookup);
@@ -340,7 +340,7 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
     if (!user) return;
 
     try {
-      setTemplates(await listMessageTemplateOptionsForUser(user.id));
+      setTemplates(await listMessageTemplateOptionsForUser());
     } catch (error) {
       console.error(error);
       toast.error("Erro ao carregar modelos");
@@ -352,7 +352,7 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
       if (!user) return;
 
       try {
-        setRecentJobs(await listRecentBulkMessageJobsForUser(user.id));
+        setRecentJobs(await listRecentBulkMessageJobsForUser());
       } catch (error) {
         console.error(error);
         if (!options?.silent) {
@@ -820,7 +820,7 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
         ),
       }));
 
-      await createScheduledMessage(user.id, {
+      await createScheduledMessage({
         title:
           scheduledTitle.trim() ||
           buildDefaultScheduledTitle(selectedStudents.length),

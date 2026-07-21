@@ -7,31 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       activity_feed: {
@@ -3497,6 +3472,10 @@ export type Database = {
         }
         Returns: number
       }
+      backend_seed_message_templates: {
+        Args: { p_actor_id: string; p_defaults: Json }
+        Returns: number
+      }
       backend_set_course_activity_visibility: {
         Args: {
           p_course_id: string
@@ -3859,9 +3838,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       ai_grade_suggestion_job_item_status: [

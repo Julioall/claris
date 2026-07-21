@@ -1,99 +1,125 @@
-import { supabase } from '@/integrations/supabase/client';
-import type { TablesInsert, TablesUpdate } from '@/integrations/supabase/types';
-import { ensureDefaultMessageTemplates } from '@/lib/message-template-seeding';
+import { ApiClientError, invokeEdgeFunction } from '@/integrations/http/edge-function-client';
 
 import type { MessageTemplate, MessageTemplateOption } from '../types';
+import {
+  MESSAGE_TEMPLATES_CONTRACT_VERSION,
+  type MessageTemplateDeleteDto,
+  type MessageTemplateDto,
+  type MessageTemplateMutationDto,
+  type MessageTemplatesListDto,
+  type MessageTemplatesMetadataDto,
+} from './contracts/message-templates.contract';
+import {
+  mapMessageTemplate,
+  mapMessageTemplateOption,
+} from './mappers/message-template.mapper';
 
 interface SaveMessageTemplateInput {
-  title: string;
-  content: string;
   category: string;
+  content: string;
+  title: string;
 }
 
-export async function listMessageTemplateOptionsForUser(userId: string): Promise<MessageTemplateOption[]> {
-  await ensureDefaultMessageTemplates(userId);
+const MESSAGE_TEMPLATES_TIMEOUT_MS = 15_000;
 
-  const { data, error } = await supabase
-    .from('message_templates')
-    .select('id, title, content, category, is_favorite')
-    .eq('user_id', userId)
-    .order('is_favorite', { ascending: false })
-    .order('title');
-
-  if (error) throw error;
-
-  return (data || []) as MessageTemplateOption[];
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
-export async function listMessageTemplatesForUser(userId: string): Promise<MessageTemplate[]> {
-  await ensureDefaultMessageTemplates(userId);
-
-  const { data, error } = await supabase
-    .from('message_templates')
-    .select('*')
-    .eq('user_id', userId)
-    .order('is_favorite', { ascending: false })
-    .order('updated_at', { ascending: false });
-
-  if (error) throw error;
-
-  return (data || []) as MessageTemplate[];
+function invalidResponse(): never {
+  throw new ApiClientError({
+    code: 'invalid_response',
+    message: 'A API de modelos de mensagem retornou uma resposta invalida.',
+  });
 }
 
-export async function createMessageTemplate(userId: string, input: SaveMessageTemplateInput) {
-  const payload: TablesInsert<'message_templates'> = {
-    user_id: userId,
-    title: input.title.trim(),
-    content: input.content.trim(),
-    category: input.category,
-  };
+function nullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string';
+}
 
-  const { error } = await supabase.from('message_templates').insert(payload);
+function isMetadata(value: unknown): value is MessageTemplatesMetadataDto {
+  const metadata = asRecord(value);
+  return Boolean(
+    metadata
+    && metadata.contractVersion === MESSAGE_TEMPLATES_CONTRACT_VERSION
+    && typeof metadata.generatedAt === 'string',
+  );
+}
 
-  if (error) throw error;
+function isTemplate(value: unknown): value is MessageTemplateDto {
+  const template = asRecord(value);
+  return Boolean(
+    template
+    && typeof template.id === 'string'
+    && typeof template.title === 'string'
+    && typeof template.content === 'string'
+    && nullableString(template.category)
+    && typeof template.isFavorite === 'boolean'
+    && typeof template.isDefault === 'boolean'
+    && nullableString(template.defaultKey)
+    && typeof template.createdAt === 'string'
+    && typeof template.updatedAt === 'string',
+  );
+}
+
+function parseList(value: unknown): MessageTemplatesListDto {
+  const list = asRecord(value);
+  if (!(list && Array.isArray(list.items) && list.items.every(isTemplate) && isMetadata(list.metadata))) {
+    invalidResponse();
+  }
+  return list as unknown as MessageTemplatesListDto;
+}
+
+function parseMutation(value: unknown): MessageTemplateMutationDto {
+  const mutation = asRecord(value);
+  if (!(mutation && isTemplate(mutation.template) && isMetadata(mutation.metadata))) invalidResponse();
+  return mutation as unknown as MessageTemplateMutationDto;
+}
+
+function parseDelete(value: unknown): MessageTemplateDeleteDto {
+  const deletion = asRecord(value);
+  if (!(deletion && deletion.deleted === true && isMetadata(deletion.metadata))) invalidResponse();
+  return deletion as unknown as MessageTemplateDeleteDto;
+}
+
+async function invoke(body: Record<string, unknown>): Promise<unknown> {
+  return invokeEdgeFunction('message-templates', {
+    auth: 'required',
+    body,
+    timeoutMs: MESSAGE_TEMPLATES_TIMEOUT_MS,
+  });
+}
+
+export async function listMessageTemplateOptionsForUser(): Promise<MessageTemplateOption[]> {
+  const response = parseList(await invoke({ action: 'list_template_options' }));
+  return response.items.map(mapMessageTemplateOption);
+}
+
+export async function listMessageTemplatesForUser(): Promise<MessageTemplate[]> {
+  const response = parseList(await invoke({ action: 'list_templates' }));
+  return response.items.map(mapMessageTemplate);
+}
+
+export async function createMessageTemplate(input: SaveMessageTemplateInput): Promise<void> {
+  parseMutation(await invoke({ action: 'create_template', input }));
 }
 
 export async function updateMessageTemplate(
-  userId: string,
   templateId: string,
   input: SaveMessageTemplateInput,
-) {
-  const payload: TablesUpdate<'message_templates'> = {
-    title: input.title.trim(),
-    content: input.content.trim(),
-    category: input.category,
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error } = await supabase
-    .from('message_templates')
-    .update(payload)
-    .eq('id', templateId)
-    .eq('user_id', userId);
-
-  if (error) throw error;
+): Promise<void> {
+  parseMutation(await invoke({ action: 'update_template', input, templateId }));
 }
 
-export async function deleteMessageTemplate(userId: string, templateId: string) {
-  const { error } = await supabase
-    .from('message_templates')
-    .delete()
-    .eq('id', templateId)
-    .eq('user_id', userId);
-
-  if (error) throw error;
+export async function deleteMessageTemplate(templateId: string): Promise<void> {
+  parseDelete(await invoke({ action: 'delete_template', templateId }));
 }
 
 export async function setMessageTemplateFavorite(
-  userId: string,
   templateId: string,
   isFavorite: boolean,
-) {
-  const { error } = await supabase
-    .from('message_templates')
-    .update({ is_favorite: isFavorite })
-    .eq('id', templateId)
-    .eq('user_id', userId);
-
-  if (error) throw error;
+): Promise<void> {
+  parseMutation(await invoke({ action: 'set_favorite', isFavorite, templateId }));
 }

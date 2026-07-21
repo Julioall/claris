@@ -13,7 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { callWhatsAppMessaging } from '@/features/whatsapp/api/messaging';
+import { resolveWhatsAppMedia } from '@/features/whatsapp/api/messaging';
 import {
   formatFileSize,
   formatMessageTime,
@@ -23,7 +23,6 @@ import {
 import type {
   WhatsAppMessage,
   WhatsAppMessageStatus,
-  WhatsAppResolvedMedia,
 } from '@/features/whatsapp/types';
 import { cn } from '@/lib/utils';
 
@@ -159,16 +158,14 @@ function useResolvedMedia(instanceId: string | null, message: WhatsAppMessage) {
   return useQuery({
     queryKey: ['whatsapp-media', instanceId, message.id],
     queryFn: async () => {
-      const data = await callWhatsAppMessaging('resolve_media', {
-        instance_id: instanceId,
-        remote_jid: message.remote_jid,
-        message_id: message.id,
-        mime_type: message.media?.mime_type,
-        file_name: message.media?.file_name,
-        convert_to_mp4: message.type === 'video',
+      return resolveWhatsAppMedia({
+        instanceId: instanceId as string,
+        remoteJid: message.remote_jid,
+        messageId: message.id,
+        mimeType: message.media?.mime_type,
+        fileName: message.media?.file_name,
+        convertToMp4: message.type === 'video',
       });
-
-      return (data.media ?? null) as WhatsAppResolvedMedia | null;
     },
     enabled: needsResolve,
     staleTime: Infinity,

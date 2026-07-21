@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { authGateway } from '@/integrations/auth/auth-gateway';
+import { SUPABASE_URL } from '@/integrations/supabase/url';
 
 const API_VERSION_HEADER = 'x-claris-api-version';
 const CORRELATION_ID_HEADER = 'x-correlation-id';
@@ -24,6 +25,11 @@ export interface InvokeEdgeFunctionOptions {
   body?: Record<string, unknown>;
   signal?: AbortSignal;
   timeoutMs?: number;
+}
+
+export interface InvokeEdgeFunctionWithUploadProgressOptions extends InvokeEdgeFunctionOptions {
+  body: Record<string, unknown>;
+  onUploadProgress?: (progress: number) => void;
 }
 
 interface ApiSuccessEnvelope<TData> {
@@ -187,3 +193,131 @@ export const invokeEdgeFunction = createEdgeFunctionClient({
   getAccessToken: (forceRefresh, required) => authGateway.getAccessToken(forceRefresh, required),
   invoke: (functionName, options) => supabase.functions.invoke(functionName, options),
 });
+
+interface UploadHttpResult {
+  payload: unknown;
+  status: number;
+}
+
+function parseUploadPayload(responseText: string): unknown {
+  if (!responseText.trim()) return null;
+  try {
+    return JSON.parse(responseText) as unknown;
+  } catch {
+    throw new ApiClientError({
+      code: 'invalid_response',
+      message: 'A API retornou uma resposta invalida.',
+    });
+  }
+}
+
+function uploadHttpError(result: UploadHttpResult): ApiClientError {
+  const payload = asRecord(result.payload);
+  const nestedError = asRecord(payload?.error);
+  return new ApiClientError({
+    code: typeof nestedError?.code === 'string' ? nestedError.code : 'edge_function_error',
+    correlationId: typeof nestedError?.correlationId === 'string'
+      ? nestedError.correlationId
+      : undefined,
+    details: nestedError?.details,
+    message: typeof nestedError?.message === 'string'
+      ? nestedError.message
+      : typeof payload?.error === 'string'
+        ? payload.error
+        : 'Edge Function request failed.',
+    status: result.status,
+  });
+}
+
+function uploadRequest(
+  functionName: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+  timeoutMs: number,
+  signal: AbortSignal | undefined,
+  onUploadProgress: ((progress: number) => void) | undefined,
+): Promise<UploadHttpResult> {
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    const abort = () => request.abort();
+    request.open('POST', `${SUPABASE_URL}/functions/v1/${encodeURIComponent(functionName)}`, true);
+    request.timeout = timeoutMs;
+    Object.entries(headers).forEach(([key, value]) => request.setRequestHeader(key, value));
+
+    request.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      onUploadProgress?.(Math.min(100, Math.round((event.loaded / event.total) * 100)));
+    };
+    request.onerror = () => reject(new ApiClientError({
+      code: 'network_error',
+      message: 'Nao foi possivel conectar ao servidor.',
+    }));
+    request.ontimeout = () => reject(new ApiClientError({
+      code: 'timeout',
+      message: 'A requisicao excedeu o tempo limite.',
+    }));
+    request.onabort = () => reject(new ApiClientError({
+      code: 'aborted',
+      message: 'A requisicao foi cancelada.',
+    }));
+    request.onload = () => {
+      try {
+        resolve({ payload: parseUploadPayload(request.responseText), status: request.status });
+      } catch (error) {
+        reject(error);
+      }
+    };
+    request.onloadend = () => signal?.removeEventListener('abort', abort);
+
+    if (signal?.aborted) {
+      reject(new ApiClientError({ code: 'aborted', message: 'A requisicao foi cancelada.' }));
+      return;
+    }
+    signal?.addEventListener('abort', abort, { once: true });
+    request.send(JSON.stringify(body));
+  });
+}
+
+/** Uses the same authenticated V1 boundary as invokeEdgeFunction while exposing XHR upload progress. */
+export async function invokeEdgeFunctionWithUploadProgress<TData>(
+  functionName: string,
+  options: InvokeEdgeFunctionWithUploadProgressOptions,
+): Promise<TData> {
+  const authMode = options.auth ?? 'required';
+  const correlationId = crypto.randomUUID();
+  const resolveToken = async (forceRefresh: boolean): Promise<string | null> => {
+    if (authMode === 'none') return null;
+    try {
+      return await authGateway.getAccessToken(forceRefresh, authMode === 'required');
+    } catch (error) {
+      throw new ApiClientError(
+        { code: 'session_expired', message: 'Sessao expirada. Faca login novamente.' },
+        { cause: error },
+      );
+    }
+  };
+  const execute = (token: string | null) => uploadRequest(
+    functionName,
+    options.body,
+    {
+      'Content-Type': 'application/json',
+      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+      [API_VERSION_HEADER]: '1',
+      [CORRELATION_ID_HEADER]: correlationId,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    options.timeoutMs ?? 120_000,
+    options.signal,
+    options.onUploadProgress,
+  );
+
+  let token = await resolveToken(false);
+  let result = await execute(token);
+  if (result.status === 401 && authMode !== 'none') {
+    token = await resolveToken(true);
+    result = await execute(token);
+  }
+  if (result.status < 200 || result.status >= 300) throw uploadHttpError(result);
+  options.onUploadProgress?.(100);
+  return unwrapEnvelope<TData>(result.payload).data;
+}

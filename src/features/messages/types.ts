@@ -1,5 +1,3 @@
-import type { Enums } from '@/integrations/supabase/types';
-
 export interface StudentCourseOption {
   course_id: string;
   course_name: string;
@@ -55,7 +53,7 @@ export interface BulkMessageJobPreview {
   sent_count: number;
   failed_count: number;
   origin: 'manual' | 'ia';
-  status: Enums<'bulk_message_status'>;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
   created_at: string;
 }
 

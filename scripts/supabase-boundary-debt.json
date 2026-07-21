@@ -183,18 +183,6 @@
       }
     },
     {
-      "path": "src/features/campaigns/api/campaigns.repository.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 11,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/claris/api/chat.ts",
       "counts": {
         "clientImports": 1,
@@ -255,30 +243,6 @@
       }
     },
     {
-      "path": "src/features/messages/api/bulk-messaging.repository.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 6,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/messages/api/message-templates.repository.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 6,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/services/api/myServices.ts",
       "counts": {
         "clientImports": 1,
@@ -327,18 +291,6 @@
       }
     },
     {
-      "path": "src/features/whatsapp/api/messaging.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/hooks/useMoodleApi.ts",
       "counts": {
         "clientImports": 1,
@@ -368,18 +320,6 @@
         "clientImports": 1,
         "from": 1,
         "rpc": 1,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/lib/message-template-seeding.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,

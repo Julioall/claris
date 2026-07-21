@@ -63,7 +63,7 @@ export function MessageTemplatesTab() {
     if (!user) return;
     setIsLoading(true);
     try {
-      setTemplates(await listMessageTemplatesForUser(user.id));
+      setTemplates(await listMessageTemplatesForUser());
     } catch {
       toast.error('Erro ao carregar modelos');
     } finally {
@@ -94,14 +94,14 @@ export function MessageTemplatesTab() {
     setIsSaving(true);
     try {
       if (editingTemplate) {
-        await updateMessageTemplate(user.id, editingTemplate.id, {
+        await updateMessageTemplate(editingTemplate.id, {
           title: formTitle,
           content: formContent,
           category: formCategory,
         });
         toast.success('Modelo atualizado');
       } else {
-        await createMessageTemplate(user.id, {
+        await createMessageTemplate({
           title: formTitle,
           content: formContent,
           category: formCategory,
@@ -120,7 +120,7 @@ export function MessageTemplatesTab() {
   const handleDelete = async () => {
     if (!editingTemplate || !user) return;
     try {
-      await deleteMessageTemplate(user.id, editingTemplate.id);
+      await deleteMessageTemplate(editingTemplate.id);
       toast.success('Modelo excluído');
       setDeleteDialogOpen(false);
       setEditDialogOpen(false);
@@ -133,7 +133,7 @@ export function MessageTemplatesTab() {
   const toggleFavorite = async (t: MessageTemplate) => {
     if (!user) return;
     try {
-      await setMessageTemplateFavorite(user.id, t.id, !t.is_favorite);
+      await setMessageTemplateFavorite(t.id, !t.is_favorite);
       await fetchTemplates();
     } catch {
       toast.error('Erro ao atualizar favorito');

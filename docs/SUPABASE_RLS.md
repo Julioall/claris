@@ -189,20 +189,20 @@ Regra canônica:
 
 - `moodle_conversations`: user-owned por `user_id = auth.uid()`.
 - `moodle_messages`: acesso herdado do contexto do usuário da conversa relacionada.
-- `message_templates`: user-owned por `user_id = auth.uid()`.
-- `bulk_message_jobs`: user-owned por `user_id = auth.uid()`.
-- `bulk_message_recipients`: acesso e insert condicionados à posse do job pai.
+- `message_templates`, `bulk_message_jobs` e `bulk_message_recipients`: sem grants para `anon` ou `authenticated`; acesso da aplicacao exclusivamente por Edge Functions com `service_role`, que reaplicam o escopo do ator.
 
 Migrations de referência:
 
 - `20260218053748_9ccf508c-1a1d-4414-a8b7-9757903c75d6.sql`
 - `20260309210021_77bab771-f56d-43d3-8fa7-28d8bacbe2ef.sql`
 - `20260310103000_message_template_defaults_and_seed.sql`
+- `20260721170000_secure_communications.sql`
 
 Observações:
 
-- `bulk_message_recipients` não deve ganhar política independente por usuário direto; a fronteira correta é o job.
-- `message_templates` segue o mesmo padrão user-owned de `task_templates` e `action_types`.
+- `bulk_message_recipients` e sempre escopada pelo job pai; o endpoint valida a posse do job antes de paginar recipients.
+- Defaults de `message_templates` sao inseridos por `backend_seed_message_templates`, exclusiva de `service_role` e serializada por ator com advisory lock.
+- As policies user-owned anteriores permanecem como defesa em profundidade, mas nao constituem uma porta de acesso do browser.
 
 ## Jobs E Observabilidade
 
@@ -278,16 +278,18 @@ Tabelas:
 
 Regra canônica:
 
-- Ambas são user-owned, com `SELECT`, `INSERT`, `UPDATE` e `DELETE` limitados ao `user_id = auth.uid()`.
+- `task_templates` permanece user-owned pela fronteira RLS atual.
+- `message_templates` preserva policies user-owned como defesa em profundidade, mas os grants de browser foram revogados e o CRUD passa por `message-templates`.
 
 Migrations de referência:
 
 - `20260227175940_2627352f-cede-4ca7-9337-405e9ca2cb7d.sql`
 - `20260309210021_77bab771-f56d-43d3-8fa7-28d8bacbe2ef.sql`
+- `20260721170000_secure_communications.sql`
 
 Observações:
 
-- Embora vivam em domínios funcionais diferentes, a fronteira de autorização é a mesma e deve permanecer consistente.
+- A autorizacao efetiva de `message_templates` e `messages.bulk_send` mais o `actorId` derivado do token; `user_id` nao faz parte do contrato HTTP.
 
 ## Tarefas (schema tasks) E Agenda
 

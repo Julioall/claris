@@ -336,25 +336,30 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** manter selecao de publico, estado de campanha e mensageria exclusivamente no backend.
 
-- [ ] `SB-0701` Migrar templates de mensagem
+- [x] `SB-0701` Migrar templates de mensagem
   - Listagem, criacao, atualizacao e defaults/seeding.
   - AC: seeding nao e disparado pelo navegador com inserts diretos.
+  - Implementado em `message-templates`: CRUD e favoritos sao actor-scoped; os 17 defaults vivem no backend e sao seedados uma unica vez por uma RPC service-only protegida contra corrida. O helper de inserts do browser foi removido.
 
-- [ ] `SB-0702` Migrar resolucao do publico de mensagem
+- [x] `SB-0702` Migrar resolucao do publico de mensagem
   - Mover matriculas, elegibilidade, risco, notas e pendencias de `bulk-messaging.repository.ts`.
   - AC: frontend recebe opcoes/resumo; backend recalcula destinatarios no envio para evitar TOCTOU.
+  - `bulk-message-audience` compoe cursos, alunos, risco, notas e pendencias dentro do backend. Envio e agendamento aceitam apenas `studentId` e mensagem personalizada; nome e Moodle ID sao recalculados imediatamente antes da escrita, e alunos fora do escopo falham com 422.
 
-- [ ] `SB-0703` Migrar historico e acompanhamento de envios
+- [x] `SB-0703` Migrar historico e acompanhamento de envios
   - Encapsular jobs e recipients em DTOs paginados.
   - AC: nenhuma tabela de bulk messaging e consultada pelo frontend.
+  - `campaigns` expoe lista/detalhe de jobs e recipients com ordenacao e paginacao server-side. O ator vem do token, detalhes de job de outro ator retornam 404 e as tabelas de bulk messaging perderam todos os grants de browser.
 
-- [ ] `SB-0704` Migrar CRUD e transicoes de campanhas
+- [x] `SB-0704` Migrar CRUD e transicoes de campanhas
   - Criar, editar, agendar, pausar, retomar e cancelar com maquina de estados no backend.
   - AC: status nao pode ser alterado por update generico.
+  - O mesmo endpoint `campaigns` executa CRUD actor-scoped e comandos explicitos `pause`, `resume` e `cancel`. Updates aceitam apenas `pending/paused`, transicoes usam precondicao de status e o backend deriva origem, contagem, contextos e snapshots.
 
-- [ ] `SB-0705` Centralizar client WhatsApp
+- [x] `SB-0705` Centralizar client WhatsApp
   - Fazer todas as operacoes passarem pelo client HTTP comum e contratos versionados.
   - AC: sessao e erros seguem os mesmos padroes dos demais dominios.
+  - `whatsapp-messaging` agora lista instancias acessiveis, rejeita campos desconhecidos/identidade, responde no envelope V1 em `camelCase` e nao devolve o payload bruto da Evolution. Chamadas normais e uploads com progresso usam o client HTTP comum; a feature nao acessa Supabase, sessao, URL ou API key.
 
 ## Epic 8 — Sincronizacao, risco e background jobs
 

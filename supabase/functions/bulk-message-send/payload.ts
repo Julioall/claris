@@ -1,84 +1,103 @@
 import {
   RequestBodyValidationError,
   expectBodyObject,
-  readOptionalLiteral,
-  readOptionalString,
   readRequiredMoodleUrl,
-  readRequiredString,
 } from '../_shared/http/mod.ts'
 
-type BulkMessageOrigin = 'manual' | 'ia'
-
-export interface BulkMessageRecipientPayload {
-  moodleUserId: string
-  personalizedMessage?: string
-  studentId: string
-  studentName: string
-}
-
-interface ExistingBulkMessageSendPayload {
-  jobId: string
-  mode: 'existing'
-  moodleUrl: string
-  token: string
-}
-
-interface CreateBulkMessageSendPayload {
+export interface StartBulkMessageSendPayload {
+  action: 'start_send'
   messageContent: string
-  mode: 'create'
   moodleUrl: string
-  origin: BulkMessageOrigin
-  recipients: BulkMessageRecipientPayload[]
+  origin: 'manual'
+  recipients: Array<{
+    personalizedMessage?: string
+    studentId: string
+  }>
   templateId?: string
   token: string
 }
 
-export type BulkMessageSendPayload =
-  | ExistingBulkMessageSendPayload
-  | CreateBulkMessageSendPayload
+export interface RetryBulkMessageSendPayload {
+  action: 'retry_send'
+  jobId: string
+  moodleUrl: string
+  token: string
+}
 
-function readRecipients(body: Record<string, unknown>): BulkMessageRecipientPayload[] {
-  const rawRecipients = body.recipients
-  if (!Array.isArray(rawRecipients) || rawRecipients.length === 0) {
-    throw new RequestBodyValidationError('Invalid recipients')
-  }
+export type BulkMessageSendPayload = StartBulkMessageSendPayload | RetryBulkMessageSendPayload
 
-  return rawRecipients.map((entry, index) => {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
-      throw new RequestBodyValidationError(`Invalid recipients[${index}]`)
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const MAX_RECIPIENTS = 1_000
+
+function invalid(field: string): never {
+  throw new RequestBodyValidationError(`Invalid ${field}`, 422)
+}
+
+function exactFields(body: Record<string, unknown>, allowedFields: string[]) {
+  const allowed = new Set(allowedFields)
+  if (Object.keys(body).some((field) => !allowed.has(field))) invalid('request fields')
+}
+
+function requiredString(value: unknown, field: string, maximum: number): string {
+  if (typeof value !== 'string') invalid(field)
+  const parsed = value.trim()
+  if (!parsed || parsed.length > maximum) invalid(field)
+  return parsed
+}
+
+function optionalUuid(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined
+  if (typeof value !== 'string' || !UUID_PATTERN.test(value)) invalid(field)
+  return value
+}
+
+function requiredUuid(value: unknown, field: string): string {
+  return optionalUuid(value, field) ?? invalid(field)
+}
+
+function parseRecipients(value: unknown): StartBulkMessageSendPayload['recipients'] {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_RECIPIENTS) invalid('recipients')
+  return value.map((rawRecipient, index) => {
+    if (!rawRecipient || typeof rawRecipient !== 'object' || Array.isArray(rawRecipient)) {
+      invalid(`recipients[${index}]`)
     }
-
-    const recipientBody = entry as Record<string, unknown>
-
+    const recipient = rawRecipient as Record<string, unknown>
+    exactFields(recipient, ['personalizedMessage', 'studentId'])
+    const personalizedMessage = recipient.personalizedMessage === undefined
+      ? undefined
+      : requiredString(recipient.personalizedMessage, `recipients[${index}].personalizedMessage`, 12_000)
     return {
-      moodleUserId: readRequiredString(recipientBody, 'moodle_user_id', 255),
-      personalizedMessage: readOptionalString(recipientBody, 'personalized_message', 12000),
-      studentId: readRequiredString(recipientBody, 'student_id', 255),
-      studentName: readRequiredString(recipientBody, 'student_name', 255),
+      ...(personalizedMessage ? { personalizedMessage } : {}),
+      studentId: requiredUuid(recipient.studentId, `recipients[${index}].studentId`),
     }
   })
 }
 
 export function parseBulkMessageSendPayload(rawBody: unknown): BulkMessageSendPayload {
   const body = expectBodyObject(rawBody)
-  const jobId = readOptionalString(body, 'job_id', 255)
-
-  if (jobId) {
-    return {
-      jobId,
-      mode: 'existing',
-      moodleUrl: readRequiredMoodleUrl(body),
-      token: readRequiredString(body, 'token'),
+  switch (body.action) {
+    case 'start_send': {
+      exactFields(body, ['action', 'messageContent', 'moodleUrl', 'origin', 'recipients', 'templateId', 'token'])
+      if (body.origin !== undefined && body.origin !== 'manual') invalid('origin')
+      return {
+        action: 'start_send',
+        messageContent: requiredString(body.messageContent, 'messageContent', 12_000),
+        moodleUrl: readRequiredMoodleUrl(body),
+        origin: 'manual',
+        recipients: parseRecipients(body.recipients),
+        templateId: optionalUuid(body.templateId, 'templateId'),
+        token: requiredString(body.token, 'token', 12_000),
+      }
     }
-  }
-
-  return {
-    messageContent: readRequiredString(body, 'message_content', 12000),
-    mode: 'create',
-    moodleUrl: readRequiredMoodleUrl(body),
-    origin: readOptionalLiteral(body, 'origin', ['manual', 'ia'] as const) ?? 'manual',
-    recipients: readRecipients(body),
-    templateId: readOptionalString(body, 'template_id', 255),
-    token: readRequiredString(body, 'token'),
+    case 'retry_send':
+      exactFields(body, ['action', 'jobId', 'moodleUrl', 'token'])
+      return {
+        action: 'retry_send',
+        jobId: requiredUuid(body.jobId, 'jobId'),
+        moodleUrl: readRequiredMoodleUrl(body),
+        token: requiredString(body.token, 'token', 12_000),
+      }
+    default:
+      invalid('action')
   }
 }

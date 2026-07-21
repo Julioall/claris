@@ -7,19 +7,24 @@ import { MemoryRouter } from "react-router-dom";
 import WhatsAppPage from "@/features/whatsapp/pages/WhatsAppPage";
 import { BackgroundActivityProvider } from "@/contexts/BackgroundActivityContext";
 
-const fromMock = vi.fn();
-const invokeMock = vi.fn();
+const apiMocks = vi.hoisted(() => ({
+  fetchInstances: vi.fn(),
+  fetchContacts: vi.fn(),
+  fetchConversations: vi.fn(),
+  fetchMessages: vi.fn(),
+  sendMedia: vi.fn(),
+  sendMessage: vi.fn(),
+  resolveMedia: vi.fn(),
+}));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-    functions: {
-      invoke: (...args: unknown[]) => invokeMock(...args),
-    },
-    auth: {
-      getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
-    },
-  },
+vi.mock("@/features/whatsapp/api/messaging", () => ({
+  fetchActiveWhatsAppInstances: (...args: unknown[]) => apiMocks.fetchInstances(...args),
+  fetchWhatsAppContacts: (...args: unknown[]) => apiMocks.fetchContacts(...args),
+  fetchWhatsAppConversations: (...args: unknown[]) => apiMocks.fetchConversations(...args),
+  fetchWhatsAppMessages: (...args: unknown[]) => apiMocks.fetchMessages(...args),
+  sendWhatsAppMedia: (...args: unknown[]) => apiMocks.sendMedia(...args),
+  sendWhatsAppMessage: (...args: unknown[]) => apiMocks.sendMessage(...args),
+  resolveWhatsAppMedia: (...args: unknown[]) => apiMocks.resolveMedia(...args),
 }));
 
 vi.mock("@/components/ui/scroll-area", () => ({
@@ -167,18 +172,7 @@ function renderPage() {
 }
 
 function mockInstances(instances: unknown[]) {
-  fromMock.mockReturnValue({
-    select: vi.fn().mockReturnValue({
-      eq: vi.fn().mockReturnValue({
-        eq: vi.fn().mockReturnValue({
-          eq: vi.fn().mockResolvedValue({
-            data: instances,
-            error: null,
-          }),
-        }),
-      }),
-    }),
-  });
+  apiMocks.fetchInstances.mockResolvedValue(instances);
 }
 
 function setViewportWidth(width: number) {
@@ -190,29 +184,16 @@ function setViewportWidth(width: number) {
 }
 
 function mockWhatsAppInvoke() {
-  invokeMock.mockImplementation((_fn: string, { body }: { body: Record<string, unknown> }) => {
-    if (body.action === "get_contacts") {
-      return Promise.resolve({ data: { contacts }, error: null });
-    }
-
-    if (body.action === "get_chats") {
-      return Promise.resolve({ data: { conversations }, error: null });
-    }
-
-    if (body.action === "get_messages") {
-      return Promise.resolve({
-        data: {
-          messages: messagesByConversation[String(body.remote_jid)] ?? [],
-        },
-        error: null,
-      });
-    }
-
-    if (body.action === "send_message") {
+  apiMocks.fetchContacts.mockResolvedValue(contacts);
+  apiMocks.fetchConversations.mockResolvedValue(conversations);
+  apiMocks.fetchMessages.mockImplementation((_instanceId: string, remoteJid: string) => (
+    Promise.resolve(messagesByConversation[remoteJid] ?? [])
+  ));
+  apiMocks.sendMessage.mockImplementation((input: { message: string; remoteJid: string }) => {
       const sentMessage = {
         id: "msg-4",
-        remote_jid: String(body.remote_jid),
-        text: String(body.message),
+        remote_jid: input.remoteJid,
+        text: input.message,
         sent_at: "2026-03-19T12:01:00.000Z",
         direction: "outgoing",
         status: "sent",
@@ -223,20 +204,11 @@ function mockWhatsAppInvoke() {
         sender_name: null,
       };
 
-      messagesByConversation[String(body.remote_jid)] = [
-        ...(messagesByConversation[String(body.remote_jid)] ?? []),
+      messagesByConversation[input.remoteJid] = [
+        ...(messagesByConversation[input.remoteJid] ?? []),
         sentMessage,
       ];
-
-      return Promise.resolve({
-        data: {
-          message: sentMessage,
-        },
-        error: null,
-      });
-    }
-
-    return Promise.resolve({ data: {}, error: null });
+      return Promise.resolve(sentMessage);
   });
 }
 
@@ -302,7 +274,7 @@ describe("WhatsApp page", () => {
       "href",
       "/meus-servicos",
     );
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(apiMocks.fetchContacts).not.toHaveBeenCalled();
   });
 
   it("loads contacts, conversations and the first message history from the connected instance", async () => {
@@ -317,24 +289,8 @@ describe("WhatsApp page", () => {
 
     expect(screen.getAllByText(/whatsapp pessoal/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/bom dia, professora!/i)).toBeInTheDocument();
-    expect(invokeMock).toHaveBeenCalledWith(
-      "whatsapp-messaging",
-      expect.objectContaining({
-        body: expect.objectContaining({
-          action: "get_contacts",
-          instance_id: "inst-1",
-        }),
-      }),
-    );
-    expect(invokeMock).toHaveBeenCalledWith(
-      "whatsapp-messaging",
-      expect.objectContaining({
-        body: expect.objectContaining({
-          action: "get_chats",
-          instance_id: "inst-1",
-        }),
-      }),
-    );
+    expect(apiMocks.fetchContacts).toHaveBeenCalledWith("inst-1");
+    expect(apiMocks.fetchConversations).toHaveBeenCalledWith("inst-1");
   });
 
   it("filters conversations by the search field", async () => {
@@ -398,17 +354,11 @@ describe("WhatsApp page", () => {
       expect(screen.getAllByText("Tudo bem, Ana?").length).toBeGreaterThan(0);
     });
 
-    expect(invokeMock).toHaveBeenCalledWith(
-      "whatsapp-messaging",
-      expect.objectContaining({
-        body: expect.objectContaining({
-          action: "send_message",
-          instance_id: "inst-1",
-          remote_jid: "5511999991111@s.whatsapp.net",
-          message: "Tudo bem, Ana?",
-        }),
-      }),
-    );
+    expect(apiMocks.sendMessage).toHaveBeenCalledWith({
+      instanceId: "inst-1",
+      remoteJid: "5511999991111@s.whatsapp.net",
+      message: "Tudo bem, Ana?",
+    });
   });
 
   it("uses a master-detail flow on mobile so the message area stays usable", async () => {

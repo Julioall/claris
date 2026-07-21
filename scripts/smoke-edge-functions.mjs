@@ -428,33 +428,67 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'moodle-auth',
     },
     {
-      body: { moodleUrl: 'https://example.com', token: 'token-demo' },
-      expectedStatus: 400,
-      name: 'bulk-message-send missing-job',
+      body: { action: 'unknown' },
+      expectedStatus: 422,
+      name: 'bulk-message-send invalid-action',
       path: 'bulk-message-send',
     },
     {
-      body: { job_id: '00000000-0000-0000-0000-000000000000', moodleUrl: 'https://example.com', token: 'token-demo' },
+      body: {
+        action: 'retry_send',
+        jobId: '00000000-0000-4000-8000-000000000001',
+        moodleUrl: 'https://example.com',
+        token: 'token-demo',
+      },
       expectedStatus: 401,
       name: 'bulk-message-send valid-no-auth',
       path: 'bulk-message-send',
     },
     {
       body: {
-        message_content: 'Mensagem smoke',
+        action: 'start_send',
+        messageContent: 'Mensagem smoke',
         moodleUrl: 'https://example.com',
         origin: 'manual',
         recipients: [{
-          moodle_user_id: 'smoke-student-001',
-          personalized_message: 'Mensagem smoke',
-          student_id: 'student-smoke',
-          student_name: 'Aluno Smoke',
+          personalizedMessage: 'Mensagem smoke',
+          studentId: '00000000-0000-4000-8000-000000000001',
         }],
         token: 'token-demo',
       },
       expectedStatus: 401,
       name: 'bulk-message-send create-no-auth',
       path: 'bulk-message-send',
+    },
+    {
+      body: { action: 'get_audience' },
+      expectedStatus: 401,
+      name: 'bulk-message-audience valid-no-auth',
+      path: 'bulk-message-audience',
+    },
+    {
+      body: { action: 'list_templates' },
+      expectedStatus: 401,
+      name: 'message-templates valid-no-auth',
+      path: 'message-templates',
+    },
+    {
+      body: { action: 'list_bulk_jobs', filters: {}, order: 'createdAtDesc', page: 1, pageSize: 10 },
+      expectedStatus: 401,
+      name: 'campaigns valid-no-auth',
+      path: 'campaigns',
+    },
+    {
+      body: { action: 'list_instances' },
+      expectedStatus: 401,
+      name: 'whatsapp-messaging valid-no-auth',
+      path: 'whatsapp-messaging',
+    },
+    {
+      body: { action: 'get_contacts', instance_id: '00000000-0000-4000-8000-000000000001' },
+      expectedStatus: 422,
+      name: 'whatsapp-messaging rejects-snake-case',
+      path: 'whatsapp-messaging',
     },
     {
       body: { automation_types: 'auto_at_risk' },
@@ -656,7 +690,34 @@ async function runUnauthenticatedContractChecks(status) {
     status: 422,
   })
 
-  log('Envelope V1 validado para 401 e 422.')
+  const communicationCases = [
+    ['bulk-message-audience', { action: 'get_audience' }],
+    ['message-templates', { action: 'list_templates' }],
+    ['campaigns', { action: 'list_bulk_jobs', filters: {}, order: 'createdAtDesc', page: 1, pageSize: 10 }],
+    ['whatsapp-messaging', { action: 'list_instances' }],
+  ]
+  for (const [path, body] of communicationCases) {
+    const correlationId = `smoke-v1-${path}-unauthorized`
+    const result = await callV1EdgeFunction(status, path, body, {
+      acceptStatuses: [401],
+      correlationId,
+    })
+    assertV1Response(result, { code: 'unauthorized', correlationId, status: 401 })
+  }
+
+  const whatsappPersistencePayload = await callV1EdgeFunction(
+    status,
+    'whatsapp-messaging',
+    { action: 'get_contacts', instance_id: '00000000-0000-4000-8000-000000000001' },
+    { acceptStatuses: [422], correlationId: 'smoke-v1-whatsapp-persistence-field' },
+  )
+  assertV1Response(whatsappPersistencePayload, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-whatsapp-persistence-field',
+    status: 422,
+  })
+
+  log('Envelope V1 validado para autenticacao, validacao e funcoes de comunicacao.')
 }
 
 function runCourseManagementGrantChecks() {
@@ -681,6 +742,9 @@ function runCourseManagementGrantChecks() {
           ('tags'::TEXT),
           ('task_tags'::TEXT),
           ('calendar_events'::TEXT),
+          ('message_templates'::TEXT),
+          ('bulk_message_jobs'::TEXT),
+          ('bulk_message_recipients'::TEXT),
           ('user_course_catalog_eligibility'::TEXT),
           ('user_courses'::TEXT),
           ('user_ignored_courses'::TEXT)
@@ -696,7 +760,10 @@ function runCourseManagementGrantChecks() {
           ('task_history'::TEXT),
           ('tags'::TEXT),
           ('task_tags'::TEXT),
-          ('calendar_events'::TEXT)
+          ('calendar_events'::TEXT),
+          ('message_templates'::TEXT),
+          ('bulk_message_jobs'::TEXT),
+          ('bulk_message_recipients'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -723,7 +790,8 @@ function runCourseManagementGrantChecks() {
           ('public.backend_create_grade_suggestion_job_with_items(uuid,uuid,text,text,numeric,jsonb)'::TEXT),
           ('public.backend_cancel_grade_suggestion_job(uuid,uuid,text)'::TEXT),
           ('public.backend_list_tasks_page(uuid,text,text,date,date,boolean,text,integer,integer)'::TEXT),
-          ('public.backend_add_task_tag(uuid,uuid,text,text,text,text)'::TEXT)
+          ('public.backend_add_task_tag(uuid,uuid,text,text,text,text)'::TEXT),
+          ('public.backend_seed_message_templates(uuid,jsonb)'::TEXT)
       )
     SELECT json_build_object(
       'browserTableGrants', COALESCE((
@@ -1842,6 +1910,431 @@ async function runCourseManagementChecks(
   runCourseManagementGrantChecks()
 }
 
+async function runCommunicationsChecks(status, accessToken, authUserId, studentId) {
+  const templateTitle = 'Smoke Template Comunicacoes'
+  const campaignTitle = 'Smoke Campaign Comunicacoes'
+  const jobId = '00000000-0000-4000-8000-000000000902'
+  const foreignJobId = '00000000-0000-4000-8000-000000000905'
+  const instanceId = '00000000-0000-4000-8000-000000000906'
+  const blockedInstanceId = '00000000-0000-4000-8000-000000000907'
+
+  await deleteRows(status, 'message_templates', { title: templateTitle, user_id: authUserId })
+  await deleteRows(status, 'scheduled_messages', { title: campaignTitle, user_id: authUserId })
+  await deleteRows(status, 'bulk_message_jobs', { id: jobId })
+  await deleteRows(status, 'bulk_message_jobs', { id: foreignJobId })
+  await deleteRows(status, 'app_service_instances', { id: instanceId })
+  await deleteRows(status, 'app_service_instances', { id: blockedInstanceId })
+
+  const templatesList = await callV1EdgeFunction(
+    status,
+    'message-templates',
+    { action: 'list_templates' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-message-templates-list',
+    },
+  )
+  assertV1Response(templatesList, {
+    correlationId: 'smoke-v1-message-templates-list',
+    status: 200,
+  })
+  if (!Array.isArray(templatesList.data?.data?.items) || templatesList.data.data.items.length < 1) {
+    fail(`message-templates nao seedou defaults no backend: ${JSON.stringify(templatesList.data)}`)
+  }
+
+  const spoofedTemplateActor = await callV1EdgeFunction(
+    status,
+    'message-templates',
+    { action: 'list_templates', userId: authUserId },
+    {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-message-templates-spoof',
+    },
+  )
+  assertV1Response(spoofedTemplateActor, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-message-templates-spoof',
+    status: 422,
+  })
+
+  const createdTemplate = await callV1EdgeFunction(
+    status,
+    'message-templates',
+    {
+      action: 'create_template',
+      input: { category: 'smoke', content: 'Mensagem de smoke', title: templateTitle },
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-message-templates-create',
+    },
+  )
+  assertV1Response(createdTemplate, {
+    correlationId: 'smoke-v1-message-templates-create',
+    status: 200,
+  })
+  const templateId = createdTemplate.data?.data?.template?.id
+  if (!templateId) fail(`message-templates create nao retornou id: ${JSON.stringify(createdTemplate.data)}`)
+
+  const favoriteTemplate = await callV1EdgeFunction(
+    status,
+    'message-templates',
+    { action: 'set_favorite', isFavorite: true, templateId },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-message-templates-favorite',
+    },
+  )
+  assertV1Response(favoriteTemplate, {
+    correlationId: 'smoke-v1-message-templates-favorite',
+    status: 200,
+  })
+  if (favoriteTemplate.data?.data?.template?.isFavorite !== true) {
+    fail(`message-templates nao atualizou favorito: ${JSON.stringify(favoriteTemplate.data)}`)
+  }
+
+  const audience = await callV1EdgeFunction(
+    status,
+    'bulk-message-audience',
+    { action: 'get_audience' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-bulk-message-audience',
+    },
+  )
+  assertV1Response(audience, {
+    correlationId: 'smoke-v1-bulk-message-audience',
+    status: 200,
+  })
+  const audienceStudent = audience.data?.data?.students?.find((student) => student.id === studentId)
+  if (audienceStudent?.moodleUserId !== seed.studentMoodleUserId) {
+    fail(`bulk-message-audience nao resolveu aluno autorizado: ${JSON.stringify(audience.data)}`)
+  }
+  if (JSON.stringify(audience.data?.data).includes('moodle_user_id')) {
+    fail('bulk-message-audience vazou nomes de persistencia no contrato V1.')
+  }
+
+  const inaccessibleRecipient = await callV1EdgeFunction(
+    status,
+    'bulk-message-send',
+    {
+      action: 'start_send',
+      messageContent: 'Destinatario inacessivel',
+      moodleUrl: 'https://example.com',
+      origin: 'manual',
+      recipients: [{ studentId: '99999999-9999-4999-8999-999999999999' }],
+      token: 'token-smoke',
+    },
+    {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-bulk-message-inaccessible',
+    },
+  )
+  assertV1Response(inaccessibleRecipient, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-bulk-message-inaccessible',
+    status: 422,
+  })
+
+  await upsertRows(status, 'bulk_message_jobs', 'id', {
+    id: jobId,
+    user_id: authUserId,
+    message_content: 'Historico smoke comunicacoes',
+    total_recipients: 2,
+    sent_count: 1,
+    failed_count: 1,
+    status: 'completed',
+    origin: 'manual',
+  })
+  await upsertRows(status, 'bulk_message_recipients', 'id', [
+    {
+      id: '00000000-0000-4000-8000-000000000903',
+      job_id: jobId,
+      student_id: studentId,
+      moodle_user_id: seed.studentMoodleUserId,
+      student_name: 'Aluno A Smoke',
+      status: 'sent',
+    },
+    {
+      id: '00000000-0000-4000-8000-000000000904',
+      job_id: jobId,
+      student_id: studentId,
+      moodle_user_id: seed.studentMoodleUserId,
+      student_name: 'Aluno B Smoke',
+      status: 'failed',
+    },
+  ])
+  await upsertRows(status, 'bulk_message_jobs', 'id', {
+    id: foreignJobId,
+    user_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    message_content: 'Historico fora do escopo',
+    total_recipients: 0,
+    status: 'completed',
+    origin: 'manual',
+  })
+
+  const jobsPage = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    {
+      action: 'list_bulk_jobs',
+      filters: { search: 'Historico smoke comunicacoes' },
+      order: 'createdAtDesc',
+      page: 1,
+      pageSize: 1,
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-jobs',
+    },
+  )
+  assertV1Response(jobsPage, { correlationId: 'smoke-v1-campaigns-jobs', status: 200 })
+  if (jobsPage.data?.data?.totalCount !== 1 || jobsPage.data?.data?.items?.[0]?.id !== jobId) {
+    fail(`campaigns nao paginou jobs no escopo do ator: ${JSON.stringify(jobsPage.data)}`)
+  }
+
+  const recipientsPage = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    { action: 'list_bulk_job_recipients', jobId, order: 'studentNameAsc', page: 2, pageSize: 1 },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-recipients',
+    },
+  )
+  assertV1Response(recipientsPage, {
+    correlationId: 'smoke-v1-campaigns-recipients',
+    status: 200,
+  })
+  if (recipientsPage.data?.data?.totalCount !== 2 || recipientsPage.data?.data?.items?.length !== 1) {
+    fail(`campaigns nao paginou recipients: ${JSON.stringify(recipientsPage.data)}`)
+  }
+
+  const foreignJob = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    { action: 'get_bulk_job_detail', jobId: foreignJobId },
+    {
+      acceptStatuses: [404],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-foreign-job',
+    },
+  )
+  assertV1Response(foreignJob, {
+    code: 'not_found',
+    correlationId: 'smoke-v1-campaigns-foreign-job',
+    status: 404,
+  })
+
+  const scheduleInput = {
+    channel: 'moodle',
+    messageContent: 'Mensagem agendada smoke',
+    moodleUrl: 'https://example.com',
+    schedule: { type: 'specific_date' },
+    scheduledAt: new Date(Date.now() + 86_400_000).toISOString(),
+    selectedRecipients: [{ personalizedMessage: 'Mensagem personalizada', studentId }],
+    templateId,
+    title: campaignTitle,
+  }
+  const createdCampaign = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    { action: 'create_scheduled_message', input: scheduleInput },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-create',
+    },
+  )
+  assertV1Response(createdCampaign, { correlationId: 'smoke-v1-campaigns-create', status: 200 })
+  const campaign = createdCampaign.data?.data?.message
+  const campaignId = campaign?.id
+  const recipientSnapshot = campaign?.executionContext?.recipientSnapshot?.[0]
+  if (
+    !campaignId
+    || campaign?.recipientCount !== 1
+    || recipientSnapshot?.moodleUserId !== seed.studentMoodleUserId
+    || recipientSnapshot?.studentName !== seed.studentFullName
+  ) {
+    fail(`campaigns nao derivou snapshot autoritativo: ${JSON.stringify(createdCampaign.data)}`)
+  }
+  if (JSON.stringify(campaign).includes('recipient_snapshot')) {
+    fail('campaigns vazou nomes de persistencia no contrato V1.')
+  }
+
+  const updatedCampaign = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    {
+      action: 'update_scheduled_message',
+      input: { ...scheduleInput, messageContent: 'Mensagem atualizada smoke' },
+      messageId: campaignId,
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-update',
+    },
+  )
+  assertV1Response(updatedCampaign, { correlationId: 'smoke-v1-campaigns-update', status: 200 })
+  if (updatedCampaign.data?.data?.message?.messageContent !== 'Mensagem atualizada smoke') {
+    fail(`campaigns nao atualizou mensagem: ${JSON.stringify(updatedCampaign.data)}`)
+  }
+
+  const pausedCampaign = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    { action: 'transition_scheduled_message', messageId: campaignId, transition: 'pause' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-pause',
+    },
+  )
+  assertV1Response(pausedCampaign, { correlationId: 'smoke-v1-campaigns-pause', status: 200 })
+  if (pausedCampaign.data?.data?.message?.status !== 'paused') {
+    fail(`campaigns nao pausou agendamento: ${JSON.stringify(pausedCampaign.data)}`)
+  }
+
+  const invalidPause = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    { action: 'transition_scheduled_message', messageId: campaignId, transition: 'pause' },
+    {
+      acceptStatuses: [409],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-invalid-pause',
+    },
+  )
+  assertV1Response(invalidPause, {
+    code: 'conflict',
+    correlationId: 'smoke-v1-campaigns-invalid-pause',
+    status: 409,
+  })
+
+  for (const [transition, correlationId] of [
+    ['resume', 'smoke-v1-campaigns-resume'],
+    ['cancel', 'smoke-v1-campaigns-cancel'],
+  ]) {
+    const result = await callV1EdgeFunction(
+      status,
+      'campaigns',
+      { action: 'transition_scheduled_message', messageId: campaignId, transition },
+      { acceptStatuses: [200], accessToken, correlationId },
+    )
+    assertV1Response(result, { correlationId, status: 200 })
+  }
+
+  const deletedCampaign = await callV1EdgeFunction(
+    status,
+    'campaigns',
+    { action: 'delete_scheduled_message', messageId: campaignId },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-campaigns-delete',
+    },
+  )
+  assertV1Response(deletedCampaign, { correlationId: 'smoke-v1-campaigns-delete', status: 200 })
+
+  await upsertRows(status, 'app_service_instances', 'id', [
+    {
+      id: instanceId,
+      name: 'WhatsApp Smoke Ativo',
+      service_type: 'whatsapp',
+      provider: 'evolution_api',
+      scope: 'shared',
+      owner_user_id: null,
+      evolution_instance_name: 'claris-smoke-active',
+      connection_status: 'connected',
+      operational_status: 'connected',
+      is_active: true,
+      is_blocked: false,
+      metadata: { phone_number: '5562999990000' },
+    },
+    {
+      id: blockedInstanceId,
+      name: 'WhatsApp Smoke Bloqueado',
+      service_type: 'whatsapp',
+      provider: 'evolution_api',
+      scope: 'shared',
+      owner_user_id: null,
+      evolution_instance_name: 'claris-smoke-blocked',
+      connection_status: 'blocked',
+      operational_status: 'blocked',
+      is_active: true,
+      is_blocked: true,
+      metadata: {},
+    },
+  ])
+  const instances = await callV1EdgeFunction(
+    status,
+    'whatsapp-messaging',
+    { action: 'list_instances' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-whatsapp-instances',
+    },
+  )
+  assertV1Response(instances, { correlationId: 'smoke-v1-whatsapp-instances', status: 200 })
+  const activeInstance = instances.data?.data?.instances?.find((instance) => instance.id === instanceId)
+  const blockedInstance = instances.data?.data?.instances?.find((instance) => instance.id === blockedInstanceId)
+  if (activeInstance?.metadata?.phoneNumber !== '5562999990000' || blockedInstance) {
+    fail(`whatsapp-messaging nao filtrou instancias no backend: ${JSON.stringify(instances.data)}`)
+  }
+  const serializedInstances = JSON.stringify(instances.data?.data)
+  if (serializedInstances.includes('ownerUserId') || serializedInstances.includes('connection_status')) {
+    fail('whatsapp-messaging vazou ownership ou nomes de persistencia.')
+  }
+
+  const spoofedWhatsappActor = await callV1EdgeFunction(
+    status,
+    'whatsapp-messaging',
+    { action: 'list_instances', ownerUserId: authUserId },
+    {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: 'smoke-v1-whatsapp-spoof',
+    },
+  )
+  assertV1Response(spoofedWhatsappActor, {
+    code: 'validation_failed',
+    correlationId: 'smoke-v1-whatsapp-spoof',
+    status: 422,
+  })
+
+  const deletedTemplate = await callV1EdgeFunction(
+    status,
+    'message-templates',
+    { action: 'delete_template', templateId },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-message-templates-delete',
+    },
+  )
+  assertV1Response(deletedTemplate, {
+    correlationId: 'smoke-v1-message-templates-delete',
+    status: 200,
+  })
+
+  await deleteRows(status, 'bulk_message_jobs', { id: jobId })
+  await deleteRows(status, 'bulk_message_jobs', { id: foreignJobId })
+  await deleteRows(status, 'app_service_instances', { id: instanceId })
+  await deleteRows(status, 'app_service_instances', { id: blockedInstanceId })
+  runCourseManagementGrantChecks()
+  log('Templates, publico, historico, campanhas e WhatsApp validados no backend real.')
+}
+
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   const settings = await callV1EdgeFunction(
     status,
@@ -1938,6 +2431,7 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
   )
 
   await runTasksAndAgendaChecks(status, accessToken, authUserId)
+  await runCommunicationsChecks(status, accessToken, authUserId, studentId)
 
   const tagSuggestions = await callV1EdgeFunction(
     status,

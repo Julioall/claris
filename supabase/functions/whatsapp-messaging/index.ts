@@ -4,14 +4,7 @@
 import {
   createHandler,
   errorResponse,
-  expectBodyObject,
   jsonResponse,
-  RequestBodyValidationError,
-  readOptionalLiteral,
-  readOptionalPositiveInteger,
-  readOptionalString,
-  readRequiredLiteral,
-  readRequiredString,
 } from '../_shared/http/mod.ts'
 import type { AuthenticatedHandlerContext } from '../_shared/http/mod.ts'
 import { userHasPermission } from '../_shared/auth/mod.ts'
@@ -24,22 +17,14 @@ import {
   resolveConversationName,
 } from '../_shared/whatsapp/normalization.ts'
 import { evolutionRequest as requestEvolutionApi } from '../_shared/whatsapp/evolution.ts'
+import {
+  MAX_MEDIA_PAYLOAD_SIZE,
+  parseWhatsAppMessagingPayload,
+  type OutgoingMediaType,
+  type WhatsAppMessagingCommand,
+} from './payload.ts'
+import { toWhatsAppApiResponse } from './response.ts'
 
-const ACTIONS = [
-  'get_contacts',
-  'get_chats',
-  'get_messages',
-  'send_message',
-  'send_media',
-  'send_sticker',
-  'resolve_media',
-] as const
-
-const OUTGOING_MEDIA_TYPES = ['image', 'video', 'audio', 'document'] as const
-const MAX_MEDIA_PAYLOAD_SIZE = 50_000_000
-
-type Action = (typeof ACTIONS)[number]
-type OutgoingMediaType = (typeof OUTGOING_MEDIA_TYPES)[number]
 type JsonRecord = Record<string, unknown>
 type MessageType =
   | 'text'
@@ -52,20 +37,7 @@ type MessageType =
   | 'location'
   | 'unknown'
 
-interface RequestBody {
-  action: Action
-  instance_id?: string
-  remote_jid?: string
-  message?: string
-  limit?: number
-  media?: string
-  media_type?: OutgoingMediaType
-  mime_type?: string
-  file_name?: string
-  caption?: string
-  message_id?: string
-  convert_to_mp4?: boolean
-}
+type RequestBody = WhatsAppMessagingCommand
 
 interface AccessibleInstance {
   id: string
@@ -156,50 +128,6 @@ interface MessageDescriptor {
   media: NormalizedMedia | null
   contact: NormalizedContactCard | null
   location: NormalizedLocation | null
-}
-
-function readOptionalBoolean(body: JsonRecord, fieldName: string): boolean | undefined {
-  const value = body[fieldName]
-  if (value === undefined || value === null || value === '') {
-    return undefined
-  }
-
-  if (typeof value === 'boolean') {
-    return value
-  }
-
-  if (typeof value === 'string') {
-    if (value === 'true') return true
-    if (value === 'false') return false
-  }
-
-  throw new RequestBodyValidationError(`Invalid ${fieldName}`)
-}
-
-function parseBody(rawBody: unknown): RequestBody {
-  const body = expectBodyObject(rawBody)
-  const action = readRequiredLiteral(body, 'action', ACTIONS)
-
-  return {
-    action,
-    instance_id: readOptionalString(body, 'instance_id', 128),
-    remote_jid: readOptionalString(body, 'remote_jid', 256),
-    message: action === 'send_message'
-      ? readRequiredString(body, 'message', 4096)
-      : readOptionalString(body, 'message', 4096),
-    limit: readOptionalPositiveInteger(body, 'limit'),
-    media: action === 'send_media' || action === 'send_sticker'
-      ? readRequiredString(body, 'media', MAX_MEDIA_PAYLOAD_SIZE)
-      : readOptionalString(body, 'media', MAX_MEDIA_PAYLOAD_SIZE),
-    media_type: readOptionalLiteral(body, 'media_type', OUTGOING_MEDIA_TYPES),
-    mime_type: readOptionalString(body, 'mime_type', 256),
-    file_name: readOptionalString(body, 'file_name', 512),
-    caption: readOptionalString(body, 'caption', 2048),
-    message_id: action === 'resolve_media'
-      ? readRequiredString(body, 'message_id', 256)
-      : readOptionalString(body, 'message_id', 256),
-    convert_to_mp4: readOptionalBoolean(body, 'convert_to_mp4'),
-  }
 }
 
 function isRecord(value: unknown): value is JsonRecord {
@@ -1160,6 +1088,23 @@ function createFallbackOutgoingMessage(
   }
 }
 
+async function handleListInstances(
+  db: ReturnType<typeof createServiceClient>,
+  userId: string,
+): Promise<Response> {
+  const { data, error } = await db
+    .from('app_service_instances')
+    .select('id, name, scope, connection_status, is_active, is_blocked, last_activity_at, created_at, metadata')
+    .eq('service_type', 'whatsapp')
+    .eq('is_active', true)
+    .eq('is_blocked', false)
+    .or(`scope.eq.shared,owner_user_id.eq.${userId}`)
+    .order('name', { ascending: true })
+
+  if (error) return errorResponse(`Failed to load WhatsApp instances: ${error.message}`, 500)
+  return jsonResponse({ instances: data ?? [] })
+}
+
 async function handleGetContacts(
   db: ReturnType<typeof createServiceClient>,
   userId: string,
@@ -1283,6 +1228,7 @@ async function handleSendMessage(
   db: ReturnType<typeof createServiceClient>,
   userId: string,
   body: RequestBody,
+  correlationId: string,
 ): Promise<Response> {
   const { instance, error } = await resolveAccessibleInstance(db, userId, body.instance_id)
   if (!instance || error) return error ?? errorResponse('Instance not found', 404)
@@ -1293,7 +1239,6 @@ async function handleSendMessage(
   const target = resolveTarget(body)
   if (target.error) return target.error
 
-  const correlationId = crypto.randomUUID()
   await logInstanceEvent(db, instance, userId, {
     event_type: 'send_attempt',
     status: 'pending',
@@ -1336,6 +1281,7 @@ async function handleSendMedia(
   db: ReturnType<typeof createServiceClient>,
   userId: string,
   body: RequestBody,
+  correlationId: string,
 ): Promise<Response> {
   const { instance, error } = await resolveAccessibleInstance(db, userId, body.instance_id)
   if (!instance || error) return error ?? errorResponse('Instance not found', 404)
@@ -1352,8 +1298,6 @@ async function handleSendMedia(
   }
 
   const mediaType = inferOutgoingMediaType(body.media_type, body.mime_type)
-  const correlationId = crypto.randomUUID()
-
   await logInstanceEvent(db, instance, userId, {
     event_type: 'send_attempt',
     status: 'pending',
@@ -1413,6 +1357,7 @@ async function handleSendSticker(
   db: ReturnType<typeof createServiceClient>,
   userId: string,
   body: RequestBody,
+  correlationId: string,
 ): Promise<Response> {
   const { instance, error } = await resolveAccessibleInstance(db, userId, body.instance_id)
   if (!instance || error) return error ?? errorResponse('Instance not found', 404)
@@ -1428,7 +1373,6 @@ async function handleSendSticker(
     return errorResponse('media required', 400)
   }
 
-  const correlationId = crypto.randomUUID()
   await logInstanceEvent(db, instance, userId, {
     event_type: 'send_attempt',
     status: 'pending',
@@ -1554,39 +1498,47 @@ async function handleResolveMedia(
   })
 }
 
+const db = createServiceClient()
+
 const handler = async ({
   body,
+  correlationId,
   user,
 }: AuthenticatedHandlerContext<RequestBody>): Promise<Response> => {
-  const db = createServiceClient()
-  const canUseWhatsApp = await userHasPermission(db, user.id, 'whatsapp.view')
-
-  if (!canUseWhatsApp) {
-    return errorResponse('Permission denied for WhatsApp.', 403)
-  }
-
+  let response: Response
   switch (body.action) {
+    case 'list_instances':
+      response = await handleListInstances(db, user.id)
+      break
     case 'get_contacts':
-      return handleGetContacts(db, user.id, body)
+      response = await handleGetContacts(db, user.id, body)
+      break
     case 'get_chats':
-      return handleGetChats(db, user.id, body)
+      response = await handleGetChats(db, user.id, body)
+      break
     case 'get_messages':
-      return handleGetMessages(db, user.id, body)
+      response = await handleGetMessages(db, user.id, body)
+      break
     case 'send_message':
-      return handleSendMessage(db, user.id, body)
+      response = await handleSendMessage(db, user.id, body, correlationId)
+      break
     case 'send_media':
-      return handleSendMedia(db, user.id, body)
+      response = await handleSendMedia(db, user.id, body, correlationId)
+      break
     case 'send_sticker':
-      return handleSendSticker(db, user.id, body)
+      response = await handleSendSticker(db, user.id, body, correlationId)
+      break
     case 'resolve_media':
-      return handleResolveMedia(db, user.id, body)
-    default:
-      return errorResponse(`Unknown action: ${body.action}`, 400)
+      response = await handleResolveMedia(db, user.id, body)
+      break
   }
+
+  return toWhatsAppApiResponse(response, body.action, correlationId)
 }
 
 Deno.serve(createHandler(handler, {
+  authorize: ({ user }) => userHasPermission(db, user.id, 'whatsapp.view'),
   maxBodyBytes: MAX_MEDIA_PAYLOAD_SIZE + 1024 * 1024,
-  parseBody,
+  parseBody: parseWhatsAppMessagingPayload,
   requireAuth: true,
 }))
