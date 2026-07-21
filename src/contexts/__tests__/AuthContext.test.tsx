@@ -163,14 +163,19 @@ describe("AuthContext", () => {
 
     expect(loginResult).toBe(true);
     expect(setSessionMock).toHaveBeenCalledWith({ access_token: "access", refresh_token: "refresh" });
-    expect(invokeMock).toHaveBeenCalledWith("moodle-auth", {
+    expect(invokeMock).toHaveBeenCalledWith("moodle-auth", expect.objectContaining({
       body: {
         moodleUrl: "https://moodle.local",
         username: "julio",
         password: "secret",
         service: "moodle_mobile_app",
       },
-    });
+      headers: expect.objectContaining({
+        "x-claris-api-version": "1",
+        "x-correlation-id": expect.any(String),
+      }),
+      signal: expect.any(AbortSignal),
+    }));
     expect(encryptSessionDataMock).toHaveBeenCalled();
     expect(sessionStorage.getItem("session")).toBe("encrypted-session");
     expect(authRef?.isAuthenticated).toBe(true);

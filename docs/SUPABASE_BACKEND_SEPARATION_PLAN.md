@@ -444,29 +444,37 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
 
 **Objetivo:** tornar a separacao completa e verificavel.
 
-- [ ] `SB-1001` Zerar `.from()` e `.rpc()` em runtime frontend
+- [x] `SB-1001` Zerar `.from()` e `.rpc()` em runtime frontend
   - Excluir adaptadores legados e atualizar o inventario.
   - AC: contagem igual a zero em `src/`, exceto fixtures/testes explicitamente permitidos.
+  - `src/lib/course-access.ts` nao possuia consumidores e foi removido; o inventario final registra zero `.from()` e zero `.rpc()`.
 
-- [ ] `SB-1002` Zerar invocacoes diretas de Edge Functions nas features
+- [x] `SB-1002` Zerar invocacoes diretas de Edge Functions nas features
   - Todas devem passar pelo client HTTP compartilhado.
   - AC: `functions.invoke` existe somente no adaptador aprovado.
+  - `moodle-api.ts` deixou de importar SDK, URL e chave do Supabase. Login e chamadas Moodle historicas usam o transporte compartilhado, que concentra auth, correlation ID, timeout e retry; o modo raw fica explicito e restrito a contratos ainda nao envelopados.
 
-- [ ] `SB-1003` Restringir imports do SDK Supabase
+- [x] `SB-1003` Restringir imports do SDK Supabase
   - Allowlist final: AuthGateway, RealtimeGateway e client HTTP, conforme necessario.
   - AC: CI falha para qualquer novo import fora da lista.
+  - O budget de legado ficou vazio. O guard exige exatamente os tres adapters, restringe o pacote SDK ao client base e bloqueia imports do client/URL e rotas `functions/v1`/`rest/v1` fora da fronteira aprovada.
 
-- [ ] `SB-1004` Remover tipos de banco da camada de apresentacao
+- [x] `SB-1004` Remover tipos de banco da camada de apresentacao
   - DTOs e view models nao podem depender de `Database[...]`.
   - AC: guardrail arquitetural automatizado.
+  - `guard:frontend-db-types` verifica todo runtime TypeScript e permite tipos gerados somente no client/tipo base do adapter Supabase; o CI executa a verificacao.
 
-- [ ] `SB-1005` Atualizar documentacao e diagramas
+- [x] `SB-1005` Atualizar documentacao e diagramas
   - Revisar `ARCHITECTURE.md`, `FRONTEND_MODULES.md`, `EDGE_FUNCTIONS.md` e ADRs.
   - AC: documentacao descreve o codigo real.
+  - Arquitetura, modulos frontend, Edge Functions, auth, ADR-005, instrucoes de contribuicao e inventario agora descrevem a fronteira concluida e os adapters finais.
 
-- [ ] `SB-1006` Executar regressao final
+- [x] `SB-1006` Executar regressao final
   - Testes, build, smoke das Edge Functions e fluxos criticos em staging.
   - AC: baseline funcional aprovada e inventario final anexado ao PR.
+  - Regressao local final: 195 arquivos/932 testes, testes direcionados do ultimo endurecimento, typecheck, build, lint sem erros, quatro guards e smoke real completo da stack Supabase aprovados. O inventario versionado registra somente os tres adapters permanentes. O workflow `edge-smoke` continua sendo o gate para validar a mesma baseline no ambiente de entrega, sem promover ou alterar staging a partir desta execucao local.
+
+Resultado do epic: 3 arquivos de runtime com acesso Supabase, todos adapters aprovados; zero `.from()`, zero `.rpc()`, uma unica `functions.invoke`, cinco operacoes de Auth encapsuladas e um channel Realtime encapsulado. A divida legada e de contratos de apresentacao ficou vazia.
 
 ## Ordem de execucao
 

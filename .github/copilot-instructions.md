@@ -38,6 +38,9 @@ npm run lint
 
 # Supabase boundary guard
 npm run guard:supabase-boundary
+npm run guard:supabase-inventory
+npm run guard:frontend-contracts
+npm run guard:frontend-db-types
 
 # Typecheck
 npm run typecheck
@@ -108,9 +111,11 @@ supabase/
 - Use **TanStack Query** for server state.
 - Prefer domain hooks in `src/features/<domain>/hooks/`.
 - Keep auth/session/sync integration logic in `src/features/auth/` instead of growing `AuthContext.tsx`.
-- Do not add `supabase.from(...)` or `supabase.functions.invoke(...)` directly inside feature pages or UI components when the domain already has a slice; prefer `api/`, `application/`, `infrastructure/`, and domain hooks.
-- Import the Supabase client from `@/integrations/supabase/client` only inside the data boundary or explicit cross-domain exceptions.
-- Run `npm run guard:supabase-boundary` after moving data access to keep the UI boundary clean.
+- Do not add `supabase.from(...)` or `supabase.rpc(...)` anywhere in frontend runtime.
+- All Edge Function calls go through `@/integrations/http/edge-function-client`; features must not import the Supabase client, URL, key, SDK, or construct `functions/v1` URLs.
+- The Supabase client may be imported only by `auth-gateway`, `edge-function-client`, and `realtime-gateway`; the SDK package itself stays in `integrations/supabase/client.ts`.
+- Generated Supabase database types must not be used by feature DTOs, hooks, pages, components, or view models.
+- Run all four frontend boundary guards after changing data access.
 
 ### Styling
 - Use Tailwind CSS utility classes and `cn()` from `@/lib/utils` for conditional class merging.
@@ -164,7 +169,7 @@ For local Docker-based development, see `docker-compose.yml` and `docker-compose
 ## CI/CD
 
 The CI pipeline (`.github/workflows/ci.yml`) runs on every push or PR to `main`:
-1. **Supabase Boundary** - `npm run guard:supabase-boundary`
+1. **Supabase Boundary** - boundary, inventory, contract and database-type guards
 2. **Lint** - `npm run lint`
 3. **Test** - `npm run test`
 4. **Typecheck** - `npm run typecheck`

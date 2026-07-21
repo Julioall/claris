@@ -1,7 +1,7 @@
 {
   "name": "claris",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "scripts": {
     "branch-protection:edge-smoke": "node scripts/require-edge-smoke-check.mjs status",
@@ -16,6 +16,7 @@
     "guard:supabase-inventory": "node scripts/classify-frontend-supabase.mjs --check",
     "guard:supabase-boundary": "node scripts/check-supabase-boundary.mjs",
     "guard:frontend-contracts": "node scripts/check-frontend-contract-boundary.mjs",
+    "guard:frontend-db-types": "node scripts/check-frontend-database-types.mjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "smoke:edge": "node scripts/smoke-edge-functions.mjs",

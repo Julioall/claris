@@ -25,7 +25,7 @@ React
             -> PostgreSQL + RLS
 ```
 
-A implementacao sera incremental. A existencia temporaria de acessos diretos inventariados nao altera a fronteira escolhida; eles sao divida de migracao, nao um padrao permitido para codigo novo.
+A implementacao foi incremental e a divida de acessos diretos foi encerrada no Epic 10. O inventario permanece versionado como prova da fronteira, nao como permissao para reabrir excecoes.
 
 ### Responsabilidades do frontend
 
@@ -95,14 +95,15 @@ Aplicam-se as seguintes regras:
 - efeitos em sistemas externos nao fazem parte da transacao PostgreSQL; esses fluxos precisam de idempotencia, estado persistido e estrategia explicita de retry ou compensacao
 - funcoes privilegiadas no banco devem ter permissoes minimas, `search_path` controlado e cobertura de autorizacao
 
-### Excecoes temporarias no navegador
+### Adapters Supabase permitidos no navegador
 
-Duas integracoes diretas com o SDK Supabase continuam permitidas, desde que encapsuladas:
+O SDK Supabase fica restrito a tres adapters com allowlist explicita:
 
-1. **Auth:** login, logout, renovacao e observacao da sessao podem usar Supabase Auth por meio do adapter do dominio de autenticacao.
-2. **Realtime:** subscriptions podem usar channels por meio de um gateway dedicado quando a atualizacao em tempo real for requisito do produto.
+1. **HTTP:** invocacoes de Edge Functions, autenticacao do transporte, timeout, retry e erros ficam no client HTTP compartilhado.
+2. **Auth:** login local, logout, renovacao e observacao da sessao podem usar Supabase Auth por meio do gateway de autenticacao.
+3. **Realtime:** subscriptions podem usar channels por meio de um gateway dedicado quando a atualizacao em tempo real for requisito do produto.
 
-Essas excecoes nao permitem consultas ou mutacoes no banco. O payload recebido por Realtime deve ser tratado como notificacao para invalidar dados obtidos pela API, e nao como um novo contrato de leitura baseado em linhas do banco. Policies continuam obrigatorias para canais expostos.
+Esses adapters nao permitem consultas ou mutacoes no banco. O payload recebido por Realtime deve ser tratado como notificacao para invalidar dados obtidos pela API, e nao como um novo contrato de leitura baseado em linhas do banco. Policies continuam obrigatorias para canais expostos.
 
 Uso de Storage ou de outra API direta do Supabase exige uma ADR ou alteracao explicita desta decisao; nao e uma excecao implicita.
 
@@ -117,7 +118,7 @@ A transicao segue o padrao Strangler:
 5. remover o acesso direto migrado e ampliar o guardrail para impedir regressao
 6. eliminar tipos de banco da camada de apresentacao
 
-Durante a migracao, codigo legado deve estar identificado no inventario e nao pode ser usado como precedente para novas implementacoes.
+A estrategia foi concluida com divida vazia. O guard de CI exige os tres adapters aprovados, zero `.from()`/`.rpc()`, nenhuma rota Supabase montada em features e nenhum tipo gerado do banco na apresentacao.
 
 ## Preparacao para um futuro backend .NET
 
@@ -141,7 +142,7 @@ A futura Clean Architecture sera uma decisao interna do backend. O frontend nao 
 - algumas telas podem ganhar uma chamada adicional durante a transicao
 - contratos duplicados manualmente podem divergir ate existir geracao ou verificacao automatizada
 - service role e RPCs privilegiadas exigem revisao de seguranca cuidadosa
-- coexistencia temporaria entre caminhos novo e legado exige inventario e guardrails ativos
+- endpoints ainda com resposta historica exigem um modo de compatibilidade central ate adotarem o envelope V1
 
 ## Relacao com decisoes anteriores
 

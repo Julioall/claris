@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   ApiClientError,
   createEdgeFunctionClient,
+  createLegacyEdgeFunctionClient,
   type EdgeFunctionClientDependencies,
 } from '../edge-function-client';
 
@@ -82,6 +83,24 @@ describe('edgeFunctionClient', () => {
     }));
 
     await expect(client('example')).rejects.toMatchObject({ code: 'invalid_response' });
+  });
+
+  it('keeps legacy raw responses behind the shared transport adapter', async () => {
+    const deps = dependencies({
+      invoke: vi.fn(async () => ({ data: { legacy: true }, error: null })),
+    });
+    const client = createLegacyEdgeFunctionClient(deps);
+
+    await expect(client<{ legacy: boolean }>('legacy-example'))
+      .resolves.toEqual({ legacy: true });
+    expect(deps.invoke).toHaveBeenCalledWith('legacy-example', expect.objectContaining({
+      headers: expect.objectContaining({
+        Authorization: 'Bearer access-token-1',
+        'x-claris-api-version': '1',
+        'x-correlation-id': 'correlation-1',
+      }),
+      signal: expect.any(AbortSignal),
+    }));
   });
 
   it('refreshes once and retries after a 401 response', async () => {

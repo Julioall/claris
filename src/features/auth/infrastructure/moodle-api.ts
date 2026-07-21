@@ -1,6 +1,7 @@
-import { supabase } from '@/integrations/supabase/client';
-import { authGateway } from '@/integrations/auth/auth-gateway';
-import { SUPABASE_URL } from '@/integrations/supabase/url';
+import {
+  ApiClientError,
+  invokeLegacyEdgeFunction,
+} from '@/integrations/http/edge-function-client';
 import {
   normalizeMoodleUrl,
   resolveFunctionsInvokeErrorMessage,
@@ -8,28 +9,20 @@ import {
 } from '@/lib/moodle-errors';
 import type { User } from '@/features/auth/types';
 
-import { isInvalidRefreshTokenError } from '../domain/session';
 import type { MoodleSession } from '../domain/session';
 
 const DEFAULT_MOODLE_SERVICE = 'moodle_mobile_app';
-const SUPABASE_FUNCTIONS_BASE_URL = `${SUPABASE_URL}/functions/v1`;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-
-export interface ParsedFunctionError {
-  status?: number;
-  message?: string;
-}
 
 export interface AuthenticateMoodleSuccess {
   success: true;
+  authSession?: {
+    accessToken: string;
+    refreshToken: string;
+  };
   backgroundReauthError?: string;
   backgroundReauthStored?: boolean;
   user: User;
   moodleSession: MoodleSession | null;
-  supabaseSession?: {
-    access_token: string;
-    refresh_token: string;
-  };
   offlineMode: boolean;
 }
 
@@ -40,32 +33,19 @@ export interface AuthenticateMoodleFailure {
 
 export type AuthenticateMoodleResult = AuthenticateMoodleSuccess | AuthenticateMoodleFailure;
 
-export async function parseFunctionsError(err: unknown): Promise<ParsedFunctionError> {
-  const context = (err as { context?: Response })?.context;
-  if (!context) return {};
-
-  const status = context.status;
-  try {
-    const payload = await context.clone().json();
-    const message = typeof payload?.error === 'string' ? payload.error : undefined;
-    return { status, message };
-  } catch {
-    return { status };
-  }
-}
-
-export async function resolveEdgeAccessToken(forceRefresh = false): Promise<string> {
-  try {
-    const accessToken = await authGateway.getAccessToken(forceRefresh, true);
-    if (accessToken) return accessToken;
-  } catch (error) {
-    if (isInvalidRefreshTokenError(error)) {
-      throw new Error('Sessao expirada. Faca login novamente.');
-    }
-    throw error;
-  }
-
-  throw new Error('Sessao expirada. Faca login novamente.');
+interface MoodleAuthResponse {
+  backgroundReauthError?: string;
+  backgroundReauthStored?: boolean;
+  error?: string;
+  errorcode?: string;
+  moodleToken?: string | null;
+  moodleUserId?: number;
+  offlineMode?: boolean;
+  session?: {
+    access_token: string;
+    refresh_token: string;
+  };
+  user?: User;
 }
 
 export async function authenticateMoodleUser(params: {
@@ -86,32 +66,26 @@ export async function authenticateMoodleUser(params: {
       : {}),
   };
 
-  const { data, error } = await supabase.functions.invoke('moodle-auth', {
-    body,
-  });
-
-  if (error) {
-    const parsed = await parseFunctionsError(error);
+  let rawPayload: unknown;
+  try {
+    rawPayload = await invokeLegacyEdgeFunction<unknown>('moodle-auth', {
+      auth: 'none',
+      body,
+    });
+  } catch (error) {
     return {
       success: false,
-      error: resolveFunctionsInvokeErrorMessage(parsed.message || error),
+      error: resolveFunctionsInvokeErrorMessage(error),
     };
   }
 
-  const payload = (data ?? {}) as {
-    error?: string;
-    errorcode?: string;
-    backgroundReauthError?: string;
-    backgroundReauthStored?: boolean;
-    user: User;
-    moodleToken?: string;
-    moodleUserId?: number;
-    offlineMode?: boolean;
-    session?: {
-      access_token: string;
-      refresh_token: string;
+  if (!rawPayload || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
+    return {
+      success: false,
+      error: 'O servidor retornou uma resposta de autenticacao invalida.',
     };
-  };
+  }
+  const payload = rawPayload as MoodleAuthResponse;
 
   if (payload.error) {
     return {
@@ -120,19 +94,33 @@ export async function authenticateMoodleUser(params: {
     };
   }
 
+  if (!payload.user || typeof payload.user !== 'object') {
+    return {
+      success: false,
+      error: 'O servidor retornou uma resposta de autenticacao invalida.',
+    };
+  }
+
   return {
     success: true,
+    authSession: payload.session
+      && typeof payload.session.access_token === 'string'
+      && typeof payload.session.refresh_token === 'string'
+      ? {
+          accessToken: payload.session.access_token,
+          refreshToken: payload.session.refresh_token,
+        }
+      : undefined,
     backgroundReauthError: payload.backgroundReauthError,
     backgroundReauthStored: payload.backgroundReauthStored,
     user: payload.user,
-    moodleSession: payload.moodleToken
+    moodleSession: typeof payload.moodleToken === 'string' && payload.moodleToken.length > 0
       ? {
           moodleToken: payload.moodleToken,
           moodleUserId: payload.moodleUserId ?? 0,
           moodleUrl: cleanUrl,
         }
       : null,
-    supabaseSession: payload.session,
     offlineMode: Boolean(payload.offlineMode),
   };
 }
@@ -141,86 +129,25 @@ export async function invokeMoodleFunctionWithTimeout(params: {
   functionName: string;
   body: Record<string, unknown>;
   timeoutMs?: number;
-  accessTokenOverride?: string;
 }): Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), params.timeoutMs ?? 25000);
-
   try {
-    let accessToken: string;
-    try {
-      accessToken = params.accessTokenOverride || await resolveEdgeAccessToken();
-    } catch (error) {
-      return {
-        data: null,
-        error: {
-          message: error instanceof Error ? error.message : 'Sessao expirada. Faca login novamente.',
-        },
-      };
-    }
+    const data = await invokeLegacyEdgeFunction<Record<string, unknown> | null>(
+      params.functionName,
+      {
+        body: params.body,
+        timeoutMs: params.timeoutMs,
+      },
+    );
 
-    const invokeRequest = async (token: string) => {
-      const response = await fetch(`${SUPABASE_FUNCTIONS_BASE_URL}/${params.functionName}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: SUPABASE_PUBLISHABLE_KEY,
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(params.body),
-        signal: controller.signal,
-      });
-
-      let payload: Record<string, unknown> | null = null;
-      try {
-        payload = await response.json() as Record<string, unknown>;
-      } catch {
-        payload = null;
-      }
-
-      return { response, payload };
-    };
-
-    let { response, payload } = await invokeRequest(accessToken);
-
-    if (
-      response.status === 401 &&
-      !params.accessTokenOverride &&
-      ((typeof payload?.error === 'string' && /invalid jwt|unauthorized/i.test(payload.error)) ||
-        (typeof payload?.msg === 'string' && /invalid jwt|unauthorized/i.test(payload.msg)))
-    ) {
-      try {
-        accessToken = await resolveEdgeAccessToken(true);
-        ({ response, payload } = await invokeRequest(accessToken));
-      } catch (error) {
-        return {
-          data: null,
-          error: {
-            message: error instanceof Error ? error.message : 'Sessao expirada. Faca login novamente.',
-          },
-        };
-      }
-    }
-
-    if (!response.ok) {
-      return {
-        data: null,
-        error: {
-          message:
-            (typeof payload?.error === 'string' && payload.error) ||
-            (typeof payload?.msg === 'string' && payload.msg) ||
-            `Request failed with status ${response.status}`,
-        },
-      };
-    }
-
-    return { data: payload, error: null };
+    return { data, error: null };
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      return { data: null, error: { message: 'Request timeout' } };
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
+    return {
+      data: null,
+      error: {
+        message: error instanceof ApiClientError
+          ? error.message
+          : resolveFunctionsInvokeErrorMessage(error),
+      },
+    };
   }
 }

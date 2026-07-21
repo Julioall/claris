@@ -65,7 +65,7 @@ As APIs chamadas pelo frontend usam a rota do gateway Supabase:
 
 Functions usam nomes `kebab-case`. Quando uma function oferece mais de uma operacao, o campo `action` usa `snake_case` e representa uma intencao de dominio, nunca uma operacao generica sobre tabela. Campos JSON usam `camelCase`; datas sao strings ISO-8601 em UTC.
 
-Durante a migracao, o contrato V1 e solicitado pelo header `x-claris-api-version: 1`. Endpoints legados podem manter temporariamente a resposta anterior quando o header nao estiver presente. Codigo novo deve usar exclusivamente V1.
+O contrato V1 e solicitado pelo header `x-claris-api-version: 1`. Endpoints legados podem manter temporariamente a resposta anterior; o modo de compatibilidade fica confinado ao client HTTP compartilhado. Codigo novo deve usar exclusivamente V1.
 
 ### Respostas
 
@@ -138,7 +138,9 @@ Endpoints de coleta devem declarar limites menores e nunca confiar em identidade
 `_shared/db/` oferece:
 
 - client com service role quando necessario
-- tipos compartilhados entre frontend e functions
+- tipos gerados para repositories server-side
+
+O espelho frontend dos tipos gerados existe somente para tipar o adapter do SDK. DTOs, hooks e componentes nao importam tipos de tabela; o CI valida essa restricao com `guard:frontend-db-types`.
 
 ### Dominio
 

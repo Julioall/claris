@@ -118,7 +118,10 @@ function unwrapEnvelope<TData>(value: unknown): ApiSuccessEnvelope<TData> {
   return envelope as unknown as ApiSuccessEnvelope<TData>;
 }
 
-export function createEdgeFunctionClient(dependencies: EdgeFunctionClientDependencies) {
+function createEdgeFunctionInvoker(
+  dependencies: EdgeFunctionClientDependencies,
+  responseMode: 'legacy' | 'v1',
+) {
   async function resolveToken(mode: InvokeEdgeFunctionOptions['auth'], forceRefresh: boolean): Promise<string | null> {
     if (mode === 'none') return null;
     try {
@@ -171,7 +174,9 @@ export function createEdgeFunctionClient(dependencies: EdgeFunctionClientDepende
       }
 
       if (parsedError) throw new ApiClientError(parsedError, { cause: result.error });
-      return unwrapEnvelope<TData>(result.data).data;
+      return responseMode === 'legacy'
+        ? result.data as TData
+        : unwrapEnvelope<TData>(result.data).data;
     } catch (error) {
       if (controller.signal.aborted) {
         throw new ApiClientError({
@@ -188,11 +193,28 @@ export function createEdgeFunctionClient(dependencies: EdgeFunctionClientDepende
   };
 }
 
-export const invokeEdgeFunction = createEdgeFunctionClient({
+export function createEdgeFunctionClient(dependencies: EdgeFunctionClientDependencies) {
+  return createEdgeFunctionInvoker(dependencies, 'v1');
+}
+
+export function createLegacyEdgeFunctionClient(dependencies: EdgeFunctionClientDependencies) {
+  return createEdgeFunctionInvoker(dependencies, 'legacy');
+}
+
+const defaultDependencies: EdgeFunctionClientDependencies = {
   createCorrelationId: () => crypto.randomUUID(),
   getAccessToken: (forceRefresh, required) => authGateway.getAccessToken(forceRefresh, required),
   invoke: (functionName, options) => supabase.functions.invoke(functionName, options),
-});
+};
+
+export const invokeEdgeFunction = createEdgeFunctionClient(defaultDependencies);
+
+/**
+ * Transitional transport for endpoints that still return their historical raw
+ * success body. Authentication, retries, correlation and timeouts remain
+ * centralized here while those backend contracts are upgraded to V1 envelopes.
+ */
+export const invokeLegacyEdgeFunction = createLegacyEdgeFunctionClient(defaultDependencies);
 
 interface UploadHttpResult {
   payload: unknown;

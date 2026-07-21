@@ -26,6 +26,7 @@ jobs:
       - run: npm run guard:supabase-boundary
       - run: npm run guard:supabase-inventory
       - run: npm run guard:frontend-contracts
+      - run: npm run guard:frontend-db-types
 
   lint:
     name: Lint

@@ -34,7 +34,7 @@ Os slices ativos hoje incluem `auth`, `courses`, `students`, `tasks`, `agenda`, 
 
 ### Fronteira de backend
 
-O estado-alvo nao permite `supabase.from()` nem `supabase.rpc()` no frontend. Os slices consomem contratos HTTP independentes do schema do banco, e `api/` representa clientes desses contratos, nao repositories executados no navegador.
+A fronteira foi concluida: nao existem `supabase.from()` nem `supabase.rpc()` no runtime frontend. Os slices consomem contratos HTTP independentes do schema do banco, e `api/` representa clientes desses contratos, nao repositories executados no navegador.
 
 Os dominios `dashboard`, `courses`, `students`, `reports`, `tasks`, `agenda`, `messages`, `campaigns`, `whatsapp`, `services`, `claris`, configuracoes globais, suporte, observabilidade administrativa, controle de acesso, manutencao/diagnostico e os fluxos de sincronizacao/background jobs ja operam por essa fronteira. Na Claris, historico, sugestoes, disponibilidade, chat principal e mensagens Moodle usam DTOs HTTP actor-scoped. Aceitar ou dispensar uma sugestao e uma transacao backend que inclui entidade gerada e cooldown; configuracao do modelo e credenciais Moodle permanecem no servidor. Em comunicacoes, o browser envia apenas intencao e selecao: templates, publico, identidade Moodle, historico, snapshots e transicoes sao autoritativos no backend. Em servicos, overview pessoal, eventos, saude e comandos compartilhados passam por um contrato V1; ownership e administracao sao resolvidos no backend, e respostas brutas da Evolution nao chegam a UI. Em sincronizacao, o browser envia cursos/entidades e acompanha um DTO; credencial, token renovado, etapas, risco e notificacoes ficam no servidor. Em autorizacao, contexto, grupos, permissoes e acessos passam por `access-control`; mudancas de papel/grupo sao atomicas e auditadas. Limpezas recebem apenas IDs funcionais de categorias, exigem confirmacao de contrato e produzem trilha imutavel; nomes de tabelas e ordem de exclusao ficam no backend. Diagnosticos Moodle recebem somente UUIDs internos, renovam a credencial no servidor e retornam dados normalizados.
 
@@ -44,7 +44,9 @@ Os unicos adapters permanentes com SDK Supabase, protegidos por allowlist explic
 - Supabase Auth encapsulado por `src/integrations/auth/auth-gateway.ts`
 - Realtime encapsulado por `src/integrations/realtime/realtime-gateway.ts`, sem consultas ou mutacoes no banco
 
-Os dois arquivos restantes com acesso direto sao legado em migracao conforme [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md), e nao precedente para codigo novo. O guardrail automatizado atual fica em `scripts/check-supabase-boundary.mjs` e sera endurecido ao longo dessa migracao.
+Nao ha arquivos legados na allowlist. O inventario final possui somente esses tres adapters, com zero `.from()` e `.rpc()` e uma unica `functions.invoke`, interna ao transporte compartilhado. Respostas historicas ainda usadas por alguns endpoints Moodle passam pelo modo de compatibilidade do mesmo client; features nao conhecem SDK, URL, API key, retry ou header do Supabase.
+
+`scripts/check-supabase-boundary.mjs` exige divida vazia e bloqueia imports do SDK, client e URL fora da allowlist, alem de acesso direto a rotas `functions/v1` ou `rest/v1`. `scripts/check-frontend-database-types.mjs` impede que tipos gerados do banco atravessem para DTOs ou view models. Ambos executam no CI.
 
 ### Estado e cache
 
@@ -70,7 +72,7 @@ Novos contratos devem nascer no slice do dominio. O antigo barrel central de tip
 
 - schema e migrations ficam em `supabase/`
 - policies e convencoes de acesso estao documentadas em [SUPABASE_RLS.md](./SUPABASE_RLS.md)
-- tipos do banco sao regenerados em `src/integrations/supabase/types.ts` e espelhados para `supabase/functions/_shared/db/generated.types.ts`
+- tipos do banco sao regenerados em `src/integrations/supabase/types.ts`, usados somente pelo adapter Supabase, e espelhados para `supabase/functions/_shared/db/generated.types.ts`
 
 ### Edge Functions
 

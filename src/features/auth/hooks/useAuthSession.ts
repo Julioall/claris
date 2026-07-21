@@ -145,11 +145,11 @@ export function useAuthSession(): UseAuthSessionResult {
         return false;
       }
 
-      if (result.supabaseSession) {
+      if (result.authSession) {
         try {
           await authGateway.setSession({
-            accessToken: result.supabaseSession.access_token,
-            refreshToken: result.supabaseSession.refresh_token,
+            accessToken: result.authSession.accessToken,
+            refreshToken: result.authSession.refreshToken,
           });
         } catch (sessionError) {
           console.error('Error setting auth session:', sessionError);

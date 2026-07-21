@@ -8,6 +8,7 @@ const rootDir = process.cwd();
 const debtPath = path.join(rootDir, 'scripts', 'supabase-boundary-debt.json');
 const writeDebt = process.argv.includes('--write-debt');
 const countKeys = ['clientImports', 'from', 'rpc', 'functionsInvoke', 'auth', 'storage', 'channel'];
+const supabaseClientPath = 'src/integrations/supabase/client.ts';
 
 const permanentAdapters = new Map([
   ['src/integrations/http/edge-function-client.ts', {
@@ -65,6 +66,74 @@ function fail(messages) {
   process.exit(1);
 }
 
+function normalizePath(filePath) {
+  return filePath.split(path.sep).join('/');
+}
+
+function walk(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+      const fullPath = path.join(directory, entry.name);
+      return entry.isDirectory() ? walk(fullPath) : [fullPath];
+    });
+}
+
+function isRuntimeSource(relativePath) {
+  if (!/\.tsx?$/.test(relativePath)) return false;
+  return !(
+    relativePath.includes('/__tests__/')
+    || relativePath.includes('/test/')
+    || relativePath.includes('/mocks/')
+    || /\.(?:test|spec)\.tsx?$/.test(relativePath)
+  );
+}
+
+function stripComments(source) {
+  return source
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+function checkRestrictedImports() {
+  const errors = [];
+  const approvedClientImporters = new Set(permanentAdapters.keys());
+  const httpAdapterPath = 'src/integrations/http/edge-function-client.ts';
+  const approvedUrlImporters = new Set([httpAdapterPath, supabaseClientPath]);
+  const files = walk(path.join(rootDir, 'src'))
+    .map((absolutePath) => ({
+      absolutePath,
+      relativePath: normalizePath(path.relative(rootDir, absolutePath)),
+    }))
+    .filter(({ relativePath }) => isRuntimeSource(relativePath));
+
+  for (const { absolutePath, relativePath } of files) {
+    const source = stripComments(fs.readFileSync(absolutePath, 'utf8'));
+    const referencesClient = /integrations\/supabase\/client/.test(source);
+    const referencesSdk = /['"]@supabase\/supabase-js['"]/.test(source);
+    const referencesFunctionEndpoint = /functions\/v1|SUPABASE_FUNCTIONS_BASE_URL/.test(source);
+    const referencesRestEndpoint = /rest\/v1/.test(source);
+    const referencesSupabaseUrl = /integrations\/supabase\/url/.test(source);
+
+    if (referencesClient && !approvedClientImporters.has(relativePath)) {
+      errors.push(`${relativePath}: Supabase client import is outside the approved adapter allowlist`);
+    }
+    if (referencesSdk && relativePath !== supabaseClientPath) {
+      errors.push(`${relativePath}: Supabase SDK package import is only allowed in ${supabaseClientPath}`);
+    }
+    if (referencesSupabaseUrl && !approvedUrlImporters.has(relativePath)) {
+      errors.push(`${relativePath}: Supabase URL access is outside the approved transport adapters`);
+    }
+    if (referencesFunctionEndpoint && relativePath !== httpAdapterPath) {
+      errors.push(`${relativePath}: direct Edge Function URL access is only allowed in ${httpAdapterPath}`);
+    }
+    if (referencesRestEndpoint) {
+      errors.push(`${relativePath}: direct PostgREST URL access is forbidden in frontend runtime`);
+    }
+  }
+
+  return errors;
+}
+
 export function checkSupabaseBoundary() {
   const inventory = buildInventory();
 
@@ -84,6 +153,11 @@ export function checkSupabaseBoundary() {
   const detectedByPath = new Map(inventory.files.map((file) => [file.path, normalizeCounts(file.counts)]));
   const debtByPath = new Map(debt.files.map((file) => [file.path, normalizeCounts(file.counts)]));
   const errors = [];
+
+  errors.push(...checkRestrictedImports());
+  if (debt.files.length > 0) {
+    errors.push('legacy Supabase debt must remain empty after Epic 10');
+  }
 
   for (const [adapterPath, expectedCounts] of permanentAdapters) {
     const detected = detectedByPath.get(adapterPath);

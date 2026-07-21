@@ -1,6 +1,6 @@
 # Auth Module Architecture
 
-Atualizado em `2026-04-01`.
+Atualizado em `2026-07-21`.
 
 ## Objetivo
 
@@ -50,7 +50,7 @@ src/features/auth/
 ### Infraestrutura
 
 - `session-storage.ts`: persistencia local de sessao.
-- `moodle-api.ts`: chamadas Edge para Moodle com timeout, auth headers e parsing de erro.
+- `moodle-api.ts`: adapter de dominio para respostas Moodle historicas; delega auth, timeout, retry, headers e transporte ao client HTTP compartilhado.
 - `course-sync.service.ts`: sincronizacao em lote de cursos/alunos/atividades/notas.
 
 ### Dominio
@@ -63,7 +63,7 @@ src/features/auth/
 - Se a UI so precisa de credenciais Moodle, usar `useMoodleSession()`.
 - Nova regra de sync deve entrar em `useCourseSync` ou servicos de suporte.
 - Persistencia local deve ficar em `session-storage.ts`.
-- Chamadas Moodle compartilhadas devem ficar em `moodle-api.ts`.
+- Chamadas Moodle compartilhadas devem ficar em `moodle-api.ts` e nunca importar o SDK, URL ou chave do Supabase.
 
 ## Cobertura de Testes
 

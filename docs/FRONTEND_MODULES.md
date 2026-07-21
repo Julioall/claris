@@ -46,9 +46,9 @@ src/
 - `src/pages/` deve ficar restrito ao shell publico.
 - codigo novo no frontend nao deve chamar `supabase.from()` nem `supabase.rpc()`.
 - tipos gerados do banco nao devem fazer parte dos DTOs ou view models da apresentacao.
-- Supabase Auth e Realtime sao excecoes temporarias apenas por adapters dedicados; elas nao autorizam acesso ao banco.
+- Supabase Auth e Realtime sao excecoes controladas apenas por adapters dedicados enquanto esses provedores forem usados; elas nao autorizam acesso ao banco.
 
-Chamadas a Edge Functions passam por `src/integrations/http/edge-function-client.ts`, que aplica contrato V1, correlation ID, timeout, cancelamento, normalizacao de erros e uma unica tentativa de renovacao da sessao. Features migradas nao usam `supabase.functions.invoke` diretamente.
+Chamadas a Edge Functions passam por `src/integrations/http/edge-function-client.ts`, que aplica correlation ID, timeout, cancelamento, normalizacao de erros e uma unica tentativa de renovacao da sessao. Contratos novos usam o envelope V1; endpoints Moodle ainda nao envelopados usam um modo de compatibilidade no mesmo adapter. Features nao usam `supabase.functions.invoke`, URL do gateway ou chave do Supabase diretamente.
 
 O acesso ao Supabase Auth passa exclusivamente por `src/integrations/auth/auth-gateway.ts`. O gateway traduz a sessao do provedor para um contrato da aplicacao e concentra leitura, renovacao, eventos, persistencia de tokens e logout; features e demais integrations nao conhecem `supabase.auth`.
 
@@ -66,7 +66,7 @@ Alunos consome `students` por um client HTTP unico: listagem, perfil, notas/ativ
 
 Tarefas consome `tasks`: a listagem e o detalhe consolidado chegam por contratos versionados, enquanto criar, atualizar, excluir, comentar e alterar tags enviam apenas a intencao do usuario. O hook nao envia criador, autor ou proprietario de tag. Agenda consome `calendar-events`; o adapter converte DTOs para o view model legado, e owner, origem, validacao temporal, escopo e persistencia permanecem no backend.
 
-DTOs de transporte vivem em `src/features/<dominio>/api/contracts/` e descrevem somente o JSON da API. View models permanecem no `types.ts` da feature, e mappers em `api/mappers/` convertem entre os dois quando necessario. Contratos, hooks, pages e components nao importam tipos gerados do banco. `npm run guard:frontend-contracts` protege essa regra e mantem uma allowlist decrescente para duas dividas anteriores.
+DTOs de transporte vivem em `src/features/<dominio>/api/contracts/` e descrevem somente o JSON da API. View models permanecem no `types.ts` da feature, e mappers em `api/mappers/` convertem entre os dois quando necessario. Contratos, hooks, pages e components nao importam tipos gerados do banco. `npm run guard:frontend-contracts` protege os contratos da apresentacao sem dividas restantes, e `npm run guard:frontend-db-types` impede imports de tipos fisicos do banco fora do adapter Supabase.
 
 Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md). A validacao client-side existe para UX; regras de permissao, elegibilidade e estado persistido sempre sao revalidadas no backend.
 
@@ -90,9 +90,10 @@ Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-bou
   - `students`
   - `tasks`
   - `whatsapp`
-- A migracao dos acessos diretos existentes e incremental e esta controlada por [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md).
-- O guardrail de fronteira de dados segue em `scripts/check-supabase-boundary.mjs` (`npm run guard:supabase-boundary`) e sera ampliado conforme o legado for removido.
-- `scripts/supabase-boundary-debt.json` congela contagens exatas por arquivo: novas dependencias falham, e cada migracao deve reduzir o snapshot com `node scripts/check-supabase-boundary.mjs --write-debt` apos revisao.
+- A migracao dos acessos diretos foi concluida conforme [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md).
+- `scripts/check-supabase-boundary.mjs` (`npm run guard:supabase-boundary`) exige exatamente os tres adapters aprovados e nenhuma divida legada.
+- `scripts/supabase-boundary-debt.json` permanece vazio; qualquer nova entrada faz o CI falhar.
+- O inventario versionado final registra zero `.from()`/`.rpc()` e nenhuma invocacao de Edge Function fora do client HTTP.
 
 ## Sequencia Recomendada Para Evolucao
 
@@ -100,8 +101,8 @@ Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-bou
 2. implementar novas features direto em `src/features/<dominio>/...`
 3. expor novos casos de uso por Edge Functions e consumi-los por clientes em `api/`
 4. manter contratos no slice e evitar barrels globais de tipos
-5. migrar os acessos Supabase inventariados sem alterar contratos de UI desnecessariamente
-6. remover wrappers legados e endurecer o guardrail conforme os imports antigos desaparecerem
+5. manter o inventario Supabase e os guardrails verdes em toda mudanca de dados
+6. evoluir endpoints de compatibilidade para envelopes V1 sem espalhar detalhes de transporte pelas features
 
 ## Fora de Escopo
 

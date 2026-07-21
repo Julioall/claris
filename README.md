@@ -97,7 +97,7 @@ O container `supabase` executa automaticamente:
 - `supabase gen types typescript --local --schema public` para regenerar [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts)
 - sincronizacao de [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts) para [supabase/functions/_shared/db/generated.types.ts](supabase/functions/_shared/db/generated.types.ts)
 - sincronizacao dos secrets locais de Edge Functions a partir do `docker-compose.yml` para [supabase/functions/.env](supabase/functions/.env)
-- carregamento das Edge Functions locais em `supabase/functions/` (ex.: `moodle-api`)
+- carregamento das Edge Functions locais em `supabase/functions/` (ex.: `moodle-auth`)
 
 ## Validacao rapida
 
@@ -116,9 +116,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f supabase
 1. Verificar function local (retorno esperado: HTTP 400 por falta de campos, provando que a function esta ativa):
 
 ```bash
-curl -i -X POST http://127.0.0.1:54321/functions/v1/moodle-api \
+curl -i -X POST http://127.0.0.1:54321/functions/v1/moodle-auth \
   -H "Content-Type: application/json" \
-  -d '{"action":"login"}'
+  -d '{"moodleUrl":"foo","username":"demo","password":"demo"}'
 ```
 
 ## Smoke test das Edge Functions

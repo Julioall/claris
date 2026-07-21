@@ -1,64 +1,29 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+const invokeLegacyMock = vi.hoisted(() => vi.fn());
+
+vi.mock('@/integrations/http/edge-function-client', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/integrations/http/edge-function-client')>(),
+  invokeLegacyEdgeFunction: invokeLegacyMock,
+}));
+
+import { ApiClientError } from '@/integrations/http/edge-function-client';
 import {
   authenticateMoodleUser,
   invokeMoodleFunctionWithTimeout,
 } from '@/features/auth/infrastructure/moodle-api';
 
-const invokeMock = vi.fn();
-const getSessionMock = vi.fn();
-const refreshSessionMock = vi.fn();
-const fetchMock = vi.fn();
-
-const createSession = (accessToken: string) => ({
-  access_token: accessToken,
-  refresh_token: 'refresh-token',
-  user: { id: 'user-1', email: 'user@example.test' },
-});
-
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: {
-      invoke: (...args: unknown[]) => invokeMock(...args),
-    },
-    auth: {
-      getSession: (...args: unknown[]) => getSessionMock(...args),
-      refreshSession: (...args: unknown[]) => refreshSessionMock(...args),
-    },
-  },
-}));
-
 describe('moodle-api', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal('fetch', fetchMock);
-
-    getSessionMock.mockResolvedValue({
-      data: {
-        session: createSession('edge-token'),
-      },
-      error: null,
-    });
-    refreshSessionMock.mockResolvedValue({
-      data: {
-        session: createSession('refreshed-edge-token'),
-      },
-      error: null,
-    });
   });
 
-  afterAll(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('authenticates and normalizes the Moodle URL once', async () => {
-    invokeMock.mockResolvedValueOnce({
-      data: {
-        user: { id: 'u-1', full_name: 'Julio Tutor', moodle_user_id: '10' },
-        moodleToken: 'token-1',
-        moodleUserId: 10,
-      },
-      error: null,
+  it('authenticates through the shared transport and normalizes the Moodle URL once', async () => {
+    invokeLegacyMock.mockResolvedValueOnce({
+      user: { id: 'u-1', full_name: 'Julio Tutor', moodle_user_id: '10' },
+      moodleToken: 'token-1',
+      moodleUserId: 10,
+      session: { access_token: 'access-1', refresh_token: 'refresh-1' },
     });
 
     const result = await authenticateMoodleUser({
@@ -67,7 +32,8 @@ describe('moodle-api', () => {
       moodleUrl: 'https://moodle.local/',
     });
 
-    expect(invokeMock).toHaveBeenCalledWith('moodle-auth', {
+    expect(invokeLegacyMock).toHaveBeenCalledWith('moodle-auth', {
+      auth: 'none',
       body: {
         moodleUrl: 'https://moodle.local',
         username: 'julio',
@@ -77,6 +43,7 @@ describe('moodle-api', () => {
     });
     expect(result).toMatchObject({
       success: true,
+      authSession: { accessToken: 'access-1', refreshToken: 'refresh-1' },
       user: { id: 'u-1' },
       moodleSession: {
         moodleUrl: 'https://moodle.local',
@@ -87,11 +54,8 @@ describe('moodle-api', () => {
     });
   });
 
-  it('calls edge functions with timeout-aware auth headers', async () => {
-    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ activitiesCount: 3 }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' },
-    }));
+  it('delegates authenticated legacy calls and their timeout to the shared transport', async () => {
+    invokeLegacyMock.mockResolvedValueOnce({ activitiesCount: 3 });
 
     const result = await invokeMoodleFunctionWithTimeout({
       functionName: 'moodle-sync-activities',
@@ -99,100 +63,58 @@ describe('moodle-api', () => {
       timeoutMs: 1000,
     });
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/moodle-sync-activities$/),
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          apikey: 'test-anon-key',
-          Authorization: 'Bearer edge-token',
-        }),
-        body: JSON.stringify({ courseId: 42 }),
-        signal: expect.any(AbortSignal),
-      }),
-    );
+    expect(invokeLegacyMock).toHaveBeenCalledWith('moodle-sync-activities', {
+      body: { courseId: 42 },
+      timeoutMs: 1000,
+    });
     expect(result).toEqual({
       data: { activitiesCount: 3 },
       error: null,
     });
   });
 
-  it('returns a friendly error when there is no valid Supabase session', async () => {
-    getSessionMock.mockResolvedValueOnce({
-      data: { session: null },
-      error: null,
-    });
-    refreshSessionMock.mockResolvedValueOnce({
-      data: { session: null },
-      error: null,
-    });
+  it('preserves the compatibility error shape for an expired session', async () => {
+    invokeLegacyMock.mockRejectedValueOnce(new ApiClientError({
+      code: 'session_expired',
+      message: 'Sessao expirada. Faca login novamente.',
+    }));
 
-    const result = await invokeMoodleFunctionWithTimeout({
+    await expect(invokeMoodleFunctionWithTimeout({
       functionName: 'moodle-grade-suggestions',
       body: { courseId: 42 },
       timeoutMs: 1000,
-    });
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result).toEqual({
+    })).resolves.toEqual({
       data: null,
       error: { message: 'Sessao expirada. Faca login novamente.' },
     });
   });
 
-  it('refreshes the session and retries when the first edge call returns invalid JWT', async () => {
-    getSessionMock.mockResolvedValueOnce({
-      data: {
-        session: createSession('stale-edge-token'),
-      },
-      error: null,
-    });
-    refreshSessionMock.mockResolvedValueOnce({
-      data: {
-        session: createSession('fresh-edge-token'),
-      },
-      error: null,
-    });
+  it('maps login transport failures to the existing authentication result', async () => {
+    invokeLegacyMock.mockRejectedValueOnce(new ApiClientError({
+      code: 'network_error',
+      message: 'Failed to fetch',
+    }));
 
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Invalid JWT' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }));
-
-    const result = await invokeMoodleFunctionWithTimeout({
-      functionName: 'moodle-grade-suggestions',
-      body: { courseId: 42 },
-      timeoutMs: 1000,
+    await expect(authenticateMoodleUser({
+      username: 'julio',
+      password: 'secret',
+      moodleUrl: 'https://moodle.local',
+    })).resolves.toEqual({
+      success: false,
+      error: 'Nao foi possivel conectar ao Moodle. Verifique a URL informada e se o servidor esta acessivel.',
     });
+  });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
-      expect.stringMatching(/moodle-grade-suggestions$/),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer stale-edge-token',
-        }),
-      }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      expect.stringMatching(/moodle-grade-suggestions$/),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer fresh-edge-token',
-        }),
-      }),
-    );
-    expect(result).toEqual({
-      data: { ok: true },
-      error: null,
+  it('rejects a malformed legacy login response without leaking transport details', async () => {
+    invokeLegacyMock.mockResolvedValueOnce(null);
+
+    await expect(authenticateMoodleUser({
+      username: 'julio',
+      password: 'secret',
+      moodleUrl: 'https://moodle.local',
+    })).resolves.toEqual({
+      success: false,
+      error: 'O servidor retornou uma resposta de autenticacao invalida.',
     });
-    expect(refreshSessionMock).toHaveBeenCalled();
   });
 });

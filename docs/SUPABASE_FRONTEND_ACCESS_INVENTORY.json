@@ -3,47 +3,18 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 5,
+    "filesWithSupabaseAccess": 3,
     "totals": {
-      "clientImports": 5,
-      "from": 1,
-      "rpc": 1,
-      "functionsInvoke": 2,
+      "clientImports": 3,
+      "from": 0,
+      "rpc": 0,
+      "functionsInvoke": 1,
       "auth": 5,
       "storage": 0,
       "channel": 1
     }
   },
   "files": [
-    {
-      "file": "src/features/auth/infrastructure/moodle-api.ts",
-      "feature": "auth",
-      "categories": [
-        "edge-function"
-      ],
-      "useCases": [
-        "Executar sincronizacao Moodle no backend"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [],
-        "functions": [
-          "moodle-auth"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0803"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
     {
       "file": "src/integrations/auth/auth-gateway.ts",
       "feature": "app",
@@ -127,37 +98,6 @@
         "auth": 0,
         "storage": 0,
         "channel": 1
-      }
-    },
-    {
-      "file": "src/lib/course-access.ts",
-      "feature": "cross-cutting",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Listar catalogo de cursos do usuario autenticado"
-      ],
-      "resources": {
-        "tables": [
-          "user_courses"
-        ],
-        "rpcs": [
-          "list_accessible_course_ids"
-        ],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0401"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 1,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
       }
     }
   ]

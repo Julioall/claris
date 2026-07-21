@@ -1,30 +1,5 @@
 {
   "schemaVersion": 1,
   "description": "Exact, decreasing budget for legacy Supabase access in frontend runtime files.",
-  "files": [
-    {
-      "path": "src/features/auth/infrastructure/moodle-api.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 1,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/lib/course-access.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 1,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    }
-  ]
+  "files": []
 }
