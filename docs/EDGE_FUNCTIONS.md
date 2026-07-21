@@ -189,6 +189,7 @@ O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e
 - `claris-conversations`: CRUD actor-scoped do historico da Claris, com DTO V1 e identidade derivada do token
 - `claris-suggestions`: lista o feed actor-scoped e aceita/dispensa sugestoes em uma transacao que tambem cria tarefa/evento e cooldown
 - `generate-proactive-suggestions`: executa os motores proativos e oferece DTO V1 para o client HTTP, preservando temporariamente o contrato legado
+- `moodle-messaging`: lista conversas, consulta mensagens e envia mensagens em DTO V1; resolve a credencial no servidor e associa alunos dentro do escopo do tutor
 - `bulk-message-audience`: resolve cursos, alunos, risco, notas e pendencias no escopo tutor
 - `bulk-message-send`: revalida destinatarios no servidor, cria o job e executa o disparo inicial
 - `message-templates`: seed server-side, CRUD e favoritos actor-scoped

@@ -8,19 +8,15 @@ import {
   type BackgroundJobItemRecord,
   type BackgroundJobRecord,
 } from '../background-jobs/repository.ts'
-import {
-  findMoodleReauthCredentialByUserId,
-  markMoodleReauthFailure,
-  markMoodleReauthSuccess,
-} from '../moodle-reauth/repository.ts'
+import { resolveMoodleAccess, type MoodleAccess } from '../moodle-reauth/access.ts'
 import { findUserById, touchUserLastSync } from '../users/repository.ts'
 import { recalculateRiskForCourses } from '../risk/recalculation.ts'
-import { decryptMoodleReauthPayload } from '../../security/moodle-reauth-crypto.ts'
-import { getMoodleToken } from '../../moodle/mod.ts'
 import { syncCourses, linkSelectedCourses } from '../../../moodle-sync-courses/service.ts'
 import { syncStudents } from '../../../moodle-sync-students/service.ts'
 import { syncActivities } from '../../../moodle-sync-activities/service.ts'
 import { syncGrades } from '../../../moodle-sync-grades/service.ts'
+
+export { resolveMoodleAccess } from '../moodle-reauth/access.ts'
 
 export const MOODLE_SYNC_JOB_TYPE = 'moodle_sync'
 export type MoodleSyncEntity = 'students' | 'activities' | 'grades'
@@ -31,11 +27,6 @@ export interface MoodleSyncJobMetadata {
   entities: MoodleSyncEntity[]
   schema_version: 1
   sync_kind: MoodleSyncKind
-}
-
-interface MoodleAccess {
-  moodleUrl: string
-  token: string
 }
 
 interface CourseRecord {
@@ -97,39 +88,6 @@ async function parseServiceResponse(response: Response): Promise<Record<string, 
   }
 
   return payload
-}
-
-export async function resolveMoodleAccess(
-  supabase: AppSupabaseClient,
-  userId: string,
-): Promise<MoodleAccess> {
-  const credential = await findMoodleReauthCredentialByUserId(supabase, userId)
-  if (!credential?.reauth_enabled || !credential.credential_ciphertext) {
-    throw new Error(
-      'A reautorizacao automatica do Moodle precisa estar ativa. Faca login novamente para registrar a credencial no servidor.',
-    )
-  }
-
-  try {
-    const { password } = await decryptMoodleReauthPayload(credential.credential_ciphertext)
-    const tokenResponse = await getMoodleToken(
-      credential.moodle_url,
-      credential.moodle_username,
-      password,
-      credential.moodle_service,
-    )
-
-    if (!tokenResponse.token || tokenResponse.error) {
-      throw new Error(tokenResponse.error || 'Nao foi possivel reautorizar a sessao do Moodle')
-    }
-
-    await markMoodleReauthSuccess(supabase, userId, new Date().toISOString())
-    return { moodleUrl: credential.moodle_url, token: tokenResponse.token }
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Falha ao reautorizar a sessao do Moodle'
-    await markMoodleReauthFailure(supabase, userId, message).catch(() => undefined)
-    throw new Error(message)
-  }
 }
 
 async function listCourses(

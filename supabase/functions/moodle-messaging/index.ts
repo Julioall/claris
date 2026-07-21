@@ -1,16 +1,31 @@
-import { createHandler } from '../_shared/http/mod.ts'
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="../edge-runtime.d.ts" />
+
 import { createServiceClient } from '../_shared/db/mod.ts'
-import { userHasPermission } from '../_shared/auth/mod.ts'
-import { errorResponse } from '../_shared/http/mod.ts'
-import { sendMessage, getConversations, getMessages } from './service.ts'
+import { resolveMoodleAccess } from '../_shared/domain/moodle-reauth/access.ts'
+import { ApiError, apiSuccessResponse, createHandler, errorResponse } from '../_shared/http/mod.ts'
 import { parseMessagingPayload } from './payload.ts'
+import { createMoodleMessagingRepository } from './repository.ts'
+import { executeMessagingV1, getConversations, getMessages, sendMessage } from './service.ts'
 
-Deno.serve(createHandler(async ({ body, user }) => {
-  const supabase = createServiceClient()
-  const canUseMessaging = await userHasPermission(supabase, user.id, 'messages.view')
+const supabase = createServiceClient()
+const repository = createMoodleMessagingRepository(supabase)
 
-  if (!canUseMessaging) {
-    return errorResponse('Permission denied for Moodle messaging.', 403)
+Deno.serve(createHandler(async ({ body, correlationId, user }) => {
+  if (body.requestVersion === 'v1') {
+    let access
+    try {
+      access = await resolveMoodleAccess(supabase, user.id)
+    } catch (error) {
+      throw ApiError.conflict(
+        error instanceof Error ? error.message : 'Nao foi possivel acessar o Moodle pelo servidor.',
+      )
+    }
+
+    return apiSuccessResponse(
+      await executeMessagingV1(repository, user.id, access, body),
+      correlationId,
+    )
   }
 
   switch (body.action) {
@@ -23,4 +38,9 @@ Deno.serve(createHandler(async ({ body, user }) => {
     default:
       return errorResponse('Invalid messaging action')
   }
-}, { requireAuth: true, parseBody: parseMessagingPayload }))
+}, {
+  authorize: ({ user }) => repository.userCanViewMessages(user.id),
+  maxBodyBytes: 16 * 1024,
+  parseBody: parseMessagingPayload,
+  requireAuth: true,
+}))

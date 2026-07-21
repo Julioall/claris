@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
+import {
+  fetchMoodleConversations,
+  fetchMoodleMessages,
+  sendMoodleMessage,
+} from '@/features/claris/api/moodle-messaging';
 import { useErrorLog } from '@/hooks/useErrorLog';
 import { useTrackEvent } from '@/hooks/useTrackEvent';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
 export interface ChatMessage {
@@ -49,26 +53,6 @@ export interface UseChatResult {
   getCachedMessages: (moodleUserId: number | string) => ChatMessage[];
 }
 
-interface MoodleConvMember {
-  id: number;
-  fullname: string;
-  profileimageurl?: string;
-}
-
-interface MoodleConvMessage {
-  id: number;
-  text: string;
-  timecreated: number;
-  useridfrom: number;
-}
-
-interface MoodleConversation {
-  id: number;
-  members?: MoodleConvMember[];
-  messages?: MoodleConvMessage[];
-  unreadcount?: number;
-}
-
 interface PersistedChatCache {
   conversations: Conversation[];
   messagesByUserId: Record<string, ChatMessage[]>;
@@ -77,36 +61,6 @@ interface PersistedChatCache {
 
 const CHAT_CACHE_STORAGE_PREFIX = 'claris_moodle_chat_cache';
 const moodleChatMemoryCache = new Map<string, PersistedChatCache>();
-
-function normalizeChatErrorMessage(message: string): string {
-  return message
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-}
-
-function isMissingConversationMessage(message?: string | null): boolean {
-  if (!message) return false;
-
-  const normalized = normalizeChatErrorMessage(message);
-  return normalized.includes('conversa nao existe')
-    || normalized.includes('conversation does not exist')
-    || normalized.includes('conversation not found');
-}
-
-async function extractFunctionErrorMessage(error: unknown): Promise<string | null> {
-  if (!error || typeof error !== 'object') return null;
-
-  const context = (error as { context?: Response }).context;
-  if (!context) return null;
-
-  try {
-    const payload = await context.clone().json();
-    return typeof payload?.error === 'string' ? payload.error : null;
-  } catch {
-    return null;
-  }
-}
 
 function getEmptyChatCache(): PersistedChatCache {
   return {
@@ -326,60 +280,29 @@ export function useChat(): UseChatResult {
     }
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('moodle-messaging', {
-        body: {
-          action: 'get_conversations',
-          moodleUrl: session.moodleUrl,
-          token: session.moodleToken,
+      const response = await fetchMoodleConversations();
+      syncCurrentMoodleUserId(response.currentMoodleUserId);
+
+      const mapped: Conversation[] = response.items.map((conversation) => ({
+        id: conversation.id,
+        member: {
+          id: conversation.member.id,
+          fullname: conversation.member.fullName,
+          ...(conversation.member.profileImageUrl
+            ? { profileimageurl: conversation.member.profileImageUrl }
+            : {}),
         },
-      });
-
-      if (fnError) throw new Error(fnError.message);
-      if (data?.error) throw new Error(data.error);
-
-      syncCurrentMoodleUserId(data.current_user_id);
-
-      const mapped: Conversation[] = (data.conversations || []).map((conversation: MoodleConversation) => {
-        const otherMember =
-          conversation.members?.find((member: MoodleConvMember) => member.id !== data.current_user_id)
-          || conversation.members?.[0];
-        const lastMessage = conversation.messages?.[0];
-
-        return {
-          id: conversation.id,
-          member: otherMember || { id: 0, fullname: 'Desconhecido' },
-          lastMessage: lastMessage
-            ? {
-                text: lastMessage.text,
-                timecreated: lastMessage.timecreated,
-              }
-            : undefined,
-          unreadcount: conversation.unreadcount || 0,
-        };
-      });
-
-      const moodleUserIds = mapped.map((conversation) => String(conversation.member.id));
-      if (moodleUserIds.length > 0) {
-        const { data: students, error: studentsError } = await supabase
-          .from('students')
-          .select('id, moodle_user_id')
-          .in('moodle_user_id', moodleUserIds);
-
-        if (studentsError) {
-          console.error('Error matching Moodle users to students:', studentsError);
-        } else {
-          const moodleToStudent = new Map(students?.map((student) => [student.moodle_user_id, student.id]) || []);
-          mapped.forEach((conversation) => {
-            conversation.studentId = moodleToStudent.get(String(conversation.member.id));
-          });
-        }
-      }
-
-      mapped.sort((left, right) => {
-        const leftTime = left.lastMessage?.timecreated || 0;
-        const rightTime = right.lastMessage?.timecreated || 0;
-        return rightTime - leftTime;
-      });
+        ...(conversation.lastMessage
+          ? {
+              lastMessage: {
+                text: conversation.lastMessage.text,
+                timecreated: conversation.lastMessage.createdAtUnix,
+              },
+            }
+          : {}),
+        unreadcount: conversation.unreadCount,
+        ...(conversation.studentId ? { studentId: conversation.studentId } : {}),
+      }));
 
       syncConversationsState(mapped);
     } catch (err) {
@@ -412,48 +335,16 @@ export function useChat(): UseChatResult {
     }
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('moodle-messaging', {
-        body: {
-          action: 'get_messages',
-          moodleUrl: session.moodleUrl,
-          token: session.moodleToken,
-          moodle_user_id: Number(moodleUserId),
-          limit_num: limit || 50,
-        },
-      });
+      const response = await fetchMoodleMessages(Number(moodleUserId), limit || 50);
+      syncCurrentMoodleUserId(response.currentMoodleUserId);
 
-      if (fnError) {
-        const detailedMessage = await extractFunctionErrorMessage(fnError);
-        if (isMissingConversationMessage(detailedMessage) || isMissingConversationMessage(fnError.message)) {
-          syncMessagesState(messagesKey, []);
-          syncConversationPatch(messagesKey, { unreadcount: 0 });
-          return;
-        }
-
-        throw new Error(detailedMessage || fnError.message);
-      }
-
-      if (data?.error) {
-        if (isMissingConversationMessage(data.error)) {
-          syncMessagesState(messagesKey, []);
-          syncConversationPatch(messagesKey, { unreadcount: 0 });
-          return;
-        }
-
-        throw new Error(data.error);
-      }
-
-      syncCurrentMoodleUserId(data.current_user_id);
-
-      const mapped: ChatMessage[] = (data.messages || []).map((message: MoodleConvMessage) => ({
-        id: String(message.id),
+      const mapped: ChatMessage[] = response.items.map((message) => ({
+        id: message.id,
         text: message.text,
-        timecreated: message.timecreated,
-        useridfrom: message.useridfrom,
-        senderType: message.useridfrom === data.current_user_id ? 'tutor' : 'student',
+        timecreated: message.createdAtUnix,
+        useridfrom: message.senderMoodleUserId,
+        senderType: message.senderType,
       }));
-
-      mapped.sort((left, right) => left.timecreated - right.timecreated);
 
       syncMessagesState(messagesKey, mapped);
 
@@ -470,13 +361,6 @@ export function useChat(): UseChatResult {
           : {}),
       });
     } catch (err) {
-      if (err instanceof Error && isMissingConversationMessage(err.message)) {
-        syncMessagesState(messagesKey, []);
-        setMessagesError(null);
-        syncConversationPatch(messagesKey, { unreadcount: 0 });
-        return;
-      }
-
       console.error('Error fetching messages:', err);
       setMessagesError(err instanceof Error ? err.message : 'Erro ao carregar mensagens');
     } finally {
@@ -498,22 +382,11 @@ export function useChat(): UseChatResult {
     setMessagesError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke('moodle-messaging', {
-        body: {
-          action: 'send_message',
-          moodleUrl: session.moodleUrl,
-          token: session.moodleToken,
-          moodle_user_id: Number(moodleUserId),
-          message: normalizedText,
-        },
-      });
-
-      if (fnError) throw new Error(fnError.message);
-      if (data?.error) throw new Error(data.error);
+      const response = await sendMoodleMessage(Number(moodleUserId), normalizedText);
 
       const sentAt = Math.floor(Date.now() / 1000);
       const newMessage: ChatMessage = {
-        id: data.message_id ? String(data.message_id) : `temp-${Date.now()}`,
+        id: response.messageId || `temp-${Date.now()}`,
         text: normalizedText,
         timecreated: sentAt,
         useridfrom: currentMoodleUserIdRef.current || 0,

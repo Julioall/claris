@@ -351,11 +351,14 @@ async function cleanupAutomatedTaskArtifacts(status, authUserId, studentId) {
   })
 }
 
-async function callEdgeFunction(status, functionName, body, accessToken) {
+async function callEdgeFunction(status, functionName, body, accessToken, headers = {}) {
   const { data, response } = await requestJson(`${status.FUNCTIONS_URL}/${functionName}`, {
     acceptStatuses: [200, 400, 401, 403, 404, 409, 422],
     body,
-    headers: publishableHeaders(status, accessToken),
+    headers: {
+      ...publishableHeaders(status, accessToken),
+      ...headers,
+    },
     method: 'POST',
   })
 
@@ -618,14 +621,23 @@ async function runUnauthenticatedContractChecks(status) {
     },
     {
       body: { action: 'bad_action' },
-      expectedStatus: 400,
+      expectedStatus: 422,
+      headers: { 'x-claris-api-version': '1' },
       name: 'moodle-messaging invalid-action',
       path: 'moodle-messaging',
     },
     {
-      body: { action: 'get_messages', limit_num: 10, moodleUrl: 'https://example.com', moodle_user_id: 1, token: 'token-demo' },
+      body: { action: 'get_messages', limit: 10, moodleUserId: 1 },
       expectedStatus: 401,
+      headers: { 'x-claris-api-version': '1' },
       name: 'moodle-messaging valid-no-auth',
+      path: 'moodle-messaging',
+    },
+    {
+      body: { action: 'get_conversations', moodleUrl: 'https://example.com', token: 'token-demo' },
+      expectedStatus: 422,
+      headers: { 'x-claris-api-version': '1' },
+      name: 'moodle-messaging rejects-browser-credentials',
       path: 'moodle-messaging',
     },
     {
@@ -718,7 +730,7 @@ async function runUnauthenticatedContractChecks(status) {
   const failures = []
 
   for (const testCase of cases) {
-    const result = await callEdgeFunction(status, testCase.path, testCase.body)
+    const result = await callEdgeFunction(status, testCase.path, testCase.body, undefined, testCase.headers)
     const pass = result.status === testCase.expectedStatus
 
     console.log(`${pass ? 'PASS' : 'FAIL'} ${testCase.name} -> ${result.status}`)

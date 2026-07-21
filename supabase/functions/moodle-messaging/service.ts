@@ -1,10 +1,97 @@
-import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
+import type { MoodleAccess } from '../_shared/domain/moodle-reauth/access.ts'
+import { ApiError, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
 import { callMoodleApi, callMoodleApiPost, getSiteInfo } from '../_shared/moodle/mod.ts'
+import {
+  MOODLE_MESSAGING_CONTRACT_VERSION,
+  type MoodleConversationDto,
+  type MoodleConversationsDto,
+  type MoodleMessageSentDto,
+  type MoodleMessagesDto,
+  type MoodleMessagingResponseDto,
+} from './contract.ts'
 import type {
   GetConversationsPayload,
   GetMessagesPayload,
+  MessagingV1Payload,
   SendMessagePayload,
 } from './payload.ts'
+import type { MoodleMessagingRepository } from './repository.ts'
+
+interface MoodleMessageRecord {
+  id: unknown
+  text: string
+  timecreated: number
+  useridfrom: number
+}
+
+interface MoodleMemberRecord {
+  fullname: string
+  id: number
+  profileimageurl: string | null
+}
+
+interface MoodleConversationRecord {
+  id: number
+  members: MoodleMemberRecord[]
+  messages: MoodleMessageRecord[]
+  unreadcount: number
+}
+
+interface ConversationsResult {
+  conversations: MoodleConversationRecord[]
+  currentUserId: number
+}
+
+interface MessagesResult {
+  conversationId: number | null
+  currentUserId: number
+  messages: MoodleMessageRecord[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function records(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : []
+}
+
+function numberOr(value: unknown, fallback = 0): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function textOr(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback
+}
+
+function normalizeMessage(value: Record<string, unknown>): MoodleMessageRecord {
+  return {
+    id: value.id,
+    text: textOr(value.text),
+    timecreated: numberOr(value.timecreated),
+    useridfrom: numberOr(value.useridfrom),
+  }
+}
+
+function normalizeMember(value: Record<string, unknown>): MoodleMemberRecord {
+  return {
+    id: numberOr(value.id),
+    fullname: textOr(value.fullname, 'Desconhecido'),
+    profileimageurl: typeof value.profileimageurl === 'string' && value.profileimageurl
+      ? value.profileimageurl
+      : null,
+  }
+}
+
+function normalizeConversation(value: Record<string, unknown>): MoodleConversationRecord {
+  return {
+    id: numberOr(value.id),
+    members: records(value.members).map(normalizeMember),
+    messages: records(value.messages).map(normalizeMessage),
+    unreadcount: Math.max(0, numberOr(value.unreadcount)),
+  }
+}
 
 function isConversationMissingError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
@@ -19,98 +106,177 @@ function isConversationMissingError(error: unknown): boolean {
     normalized.includes('conversation not found')
 }
 
-export async function sendMessage(body: SendMessagePayload): Promise<Response> {
-  const { moodleUrl, token, moodleUserId: targetMoodleUserId, message: messageText } = body
-
-  console.log(`Sending message to Moodle user ${targetMoodleUserId}`)
-
-  const result = await callMoodleApi(String(moodleUrl), String(token), 'core_message_send_instant_messages', {
-    'messages[0][touserid]': Number(targetMoodleUserId),
-    'messages[0][text]': String(messageText),
+async function sendMessageToMoodle(
+  access: MoodleAccess,
+  targetMoodleUserId: number,
+  messageText: string,
+): Promise<{ errorMessage: string | null; messageId: unknown }> {
+  const result = await callMoodleApi(access.moodleUrl, access.token, 'core_message_send_instant_messages', {
+    'messages[0][touserid]': targetMoodleUserId,
+    'messages[0][text]': messageText,
     'messages[0][textformat]': 0,
   })
 
-  const msgResult = Array.isArray(result) ? result[0] : result
-  if (msgResult?.errormessage) return errorResponse(msgResult.errormessage)
-
-  return jsonResponse({ success: true, message_id: msgResult?.msgid })
+  const messageResult = Array.isArray(result) ? result[0] : result
+  return {
+    errorMessage: isRecord(messageResult) && typeof messageResult.errormessage === 'string'
+      ? messageResult.errormessage
+      : null,
+    messageId: isRecord(messageResult) ? messageResult.msgid : null,
+  }
 }
 
-export async function getConversations(body: GetConversationsPayload): Promise<Response> {
-  const { moodleUrl, token } = body
-  console.log('Fetching conversations from Moodle')
-
-  const siteInfo = await getSiteInfo(String(moodleUrl), String(token))
-  const result = await callMoodleApi(String(moodleUrl), String(token), 'core_message_get_conversations', {
-    userid: siteInfo.userid,
+async function fetchConversationsFromMoodle(access: MoodleAccess): Promise<ConversationsResult> {
+  const siteInfo = await getSiteInfo(access.moodleUrl, access.token)
+  const currentUserId = numberOr(siteInfo.userid)
+  const result = await callMoodleApi(access.moodleUrl, access.token, 'core_message_get_conversations', {
+    userid: currentUserId,
     type: 1,
     limitnum: 50,
   })
 
-  const conversations = (result?.conversations || []).map((conv: Record<string, unknown>) => ({
-    id: conv.id,
-    members: (conv.members || []).map((m: Record<string, unknown>) => ({
-      id: m.id,
-      fullname: m.fullname,
-      profileimageurl: m.profileimageurl,
-    })),
-    messages: (conv.messages || []).map((msg: Record<string, unknown>) => ({
-      id: msg.id,
-      text: msg.text,
-      timecreated: msg.timecreated,
-      useridfrom: msg.useridfrom,
-    })),
-    unreadcount: conv.unreadcount || 0,
-  }))
-
-  return jsonResponse({ conversations, current_user_id: siteInfo.userid })
+  return {
+    currentUserId,
+    conversations: records(isRecord(result) ? result.conversations : []).map(normalizeConversation),
+  }
 }
 
-export async function getMessages(body: GetMessagesPayload): Promise<Response> {
-  const { moodleUrl, token, moodleUserId: otherUserId, limitNum } = body
-  console.log(`Fetching messages with Moodle user ${otherUserId}`)
-
-  const siteInfo = await getSiteInfo(String(moodleUrl), String(token))
-  let convResult: Record<string, unknown> | undefined
+async function fetchMessagesFromMoodle(
+  access: MoodleAccess,
+  otherUserId: number,
+  limit: number,
+): Promise<MessagesResult> {
+  const siteInfo = await getSiteInfo(access.moodleUrl, access.token)
+  const currentUserId = numberOr(siteInfo.userid)
+  let conversation: Record<string, unknown> | null = null
 
   try {
-    convResult = await callMoodleApiPost(
-      String(moodleUrl),
-      String(token),
+    const result = await callMoodleApiPost(
+      access.moodleUrl,
+      access.token,
       'core_message_get_conversation_between_users',
       {
-        userid: siteInfo.userid,
-        otheruserid: Number(otherUserId),
+        userid: currentUserId,
+        otheruserid: otherUserId,
         includecontactrequests: 0,
         includeprivacyinfo: 0,
-        messagelimit: limitNum || 50,
+        messagelimit: limit,
         messageoffset: 0,
         newestmessagesfirst: 1,
       },
     )
+    conversation = isRecord(result) ? result : null
   } catch (error) {
-    if (isConversationMissingError(error)) {
-      console.log(`No existing conversation with Moodle user ${otherUserId}`)
-      return jsonResponse({
-        messages: [],
-        current_user_id: siteInfo.userid,
-        conversation_id: null,
-      })
-    }
-
-    throw error
+    if (!isConversationMissingError(error)) throw error
   }
 
-  const messages = (convResult?.messages || []).map((msg: Record<string, unknown>) => ({
-    id: msg.id,
-    text: msg.text,
-    timecreated: msg.timecreated,
-    useridfrom: msg.useridfrom,
-  }))
+  return {
+    currentUserId,
+    conversationId: conversation ? numberOr(conversation.id) || null : null,
+    messages: records(conversation?.messages).map(normalizeMessage),
+  }
+}
 
+function toConversationDto(
+  conversation: MoodleConversationRecord,
+  currentUserId: number,
+  moodleToStudentId: Map<string, string>,
+): MoodleConversationDto {
+  const member = conversation.members.find((candidate) => candidate.id !== currentUserId)
+    ?? conversation.members[0]
+    ?? { id: 0, fullname: 'Desconhecido', profileimageurl: null }
+  const lastMessage = conversation.messages[0]
+
+  return {
+    id: conversation.id,
+    member: {
+      id: member.id,
+      fullName: member.fullname,
+      profileImageUrl: member.profileimageurl,
+    },
+    lastMessage: lastMessage
+      ? { text: lastMessage.text, createdAtUnix: lastMessage.timecreated }
+      : null,
+    unreadCount: conversation.unreadcount,
+    studentId: moodleToStudentId.get(String(member.id)) ?? null,
+  }
+}
+
+export async function executeMessagingV1(
+  repository: MoodleMessagingRepository,
+  actorId: string,
+  access: MoodleAccess,
+  body: MessagingV1Payload,
+): Promise<MoodleMessagingResponseDto> {
+  if (body.action === 'send_message') {
+    const result = await sendMessageToMoodle(access, body.moodleUserId, body.message)
+    if (result.errorMessage) throw ApiError.unprocessable(result.errorMessage)
+
+    return {
+      contractVersion: MOODLE_MESSAGING_CONTRACT_VERSION,
+      messageId: result.messageId === null || result.messageId === undefined
+        ? null
+        : String(result.messageId),
+    } satisfies MoodleMessageSentDto
+  }
+
+  if (body.action === 'get_messages') {
+    const result = await fetchMessagesFromMoodle(access, body.moodleUserId, body.limit)
+    const items = result.messages
+      .map((message) => ({
+        id: String(message.id ?? ''),
+        text: message.text,
+        createdAtUnix: message.timecreated,
+        senderMoodleUserId: message.useridfrom,
+        senderType: message.useridfrom === result.currentUserId ? 'tutor' as const : 'student' as const,
+      }))
+      .sort((left, right) => left.createdAtUnix - right.createdAtUnix)
+
+    return {
+      contractVersion: MOODLE_MESSAGING_CONTRACT_VERSION,
+      conversationId: result.conversationId,
+      currentMoodleUserId: result.currentUserId,
+      items,
+    } satisfies MoodleMessagesDto
+  }
+
+  const result = await fetchConversationsFromMoodle(access)
+  const moodleToStudentId = await repository.listAccessibleStudentIds(
+    actorId,
+    result.conversations.flatMap((conversation) => conversation.members.map((member) => member.id)),
+  )
+  const items = result.conversations
+    .map((conversation) => toConversationDto(conversation, result.currentUserId, moodleToStudentId))
+    .sort((left, right) => (
+      (right.lastMessage?.createdAtUnix ?? 0) - (left.lastMessage?.createdAtUnix ?? 0)
+    ))
+
+  return {
+    contractVersion: MOODLE_MESSAGING_CONTRACT_VERSION,
+    currentMoodleUserId: result.currentUserId,
+    items,
+  } satisfies MoodleConversationsDto
+}
+
+export async function sendMessage(body: SendMessagePayload): Promise<Response> {
+  const result = await sendMessageToMoodle(body, body.moodleUserId, body.message)
+  if (result.errorMessage) return errorResponse(result.errorMessage)
+  return jsonResponse({ success: true, message_id: result.messageId })
+}
+
+export async function getConversations(body: GetConversationsPayload): Promise<Response> {
+  const result = await fetchConversationsFromMoodle(body)
   return jsonResponse({
-    messages,
-    current_user_id: siteInfo.userid,
-    conversation_id: convResult?.id,
+    conversations: result.conversations,
+    current_user_id: result.currentUserId,
+  })
+}
+
+export async function getMessages(body: GetMessagesPayload): Promise<Response> {
+  const result = await fetchMessagesFromMoodle(body, body.moodleUserId, body.limitNum ?? 50)
+  return jsonResponse({
+    messages: result.messages,
+    current_user_id: result.currentUserId,
+    conversation_id: result.conversationId,
   })
 }
