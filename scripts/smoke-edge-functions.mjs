@@ -587,6 +587,18 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'claris-conversations',
     },
     {
+      body: { action: 'list_pending', limit: 10 },
+      expectedStatus: 401,
+      name: 'claris-suggestions valid-no-auth',
+      path: 'claris-suggestions',
+    },
+    {
+      body: { action: 'list_pending', limit: 10, userId: '00000000-0000-4000-8000-000000000001' },
+      expectedStatus: 422,
+      name: 'claris-suggestions rejects-browser-identity',
+      path: 'claris-suggestions',
+    },
+    {
       body: { courseId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
       expectedStatus: 401,
       name: 'moodle-sync-students valid-no-auth',
@@ -753,6 +765,7 @@ async function runUnauthenticatedContractChecks(status) {
     ['background-jobs', { action: 'list_active' }],
     ['activity-feed', { action: 'list', limit: 20 }],
     ['claris-conversations', { action: 'list', limit: 30 }],
+    ['claris-suggestions', { action: 'list_pending', limit: 10 }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -791,6 +804,8 @@ function runCourseManagementGrantChecks() {
           ('ai_grade_suggestion_jobs'::TEXT),
           ('attendance_course_settings'::TEXT),
           ('attendance_records'::TEXT),
+          ('claris_suggestion_cooldowns'::TEXT),
+          ('claris_suggestions'::TEXT),
           ('course_activity_visibility_overrides'::TEXT),
           ('student_activities'::TEXT),
           ('student_sync_snapshots'::TEXT),
@@ -817,6 +832,8 @@ function runCourseManagementGrantChecks() {
           ('ai_grade_suggestion_history'::TEXT),
           ('ai_grade_suggestion_job_items'::TEXT),
           ('ai_grade_suggestion_jobs'::TEXT),
+          ('claris_suggestion_cooldowns'::TEXT),
+          ('claris_suggestions'::TEXT),
           ('student_sync_snapshots'::TEXT),
           ('tasks'::TEXT),
           ('task_comments'::TEXT),
@@ -859,6 +876,7 @@ function runCourseManagementGrantChecks() {
           ('public.backend_cancel_grade_suggestion_job(uuid,uuid,text)'::TEXT),
           ('public.backend_list_tasks_page(uuid,text,text,date,date,boolean,text,integer,integer)'::TEXT),
           ('public.backend_add_task_tag(uuid,uuid,text,text,text,text)'::TEXT),
+          ('public.backend_act_on_claris_suggestion(uuid,uuid,text)'::TEXT),
           ('public.backend_seed_message_templates(uuid,jsonb)'::TEXT)
       )
     SELECT json_build_object(
@@ -2767,6 +2785,247 @@ async function runClarisConversationChecks(status, accessToken, authUserId) {
   log('Historico da Claris validado com DTO V1, identidade derivada e CRUD actor-scoped.')
 }
 
+async function runClarisSuggestionChecks(status, accessToken, authUserId) {
+  const taskSuggestionId = '00000000-0000-4000-8000-000000000971'
+  const eventSuggestionId = '00000000-0000-4000-8000-000000000972'
+  const dismissSuggestionId = '00000000-0000-4000-8000-000000000973'
+  const invalidSuggestionId = '00000000-0000-4000-8000-000000000974'
+  const suggestionIds = [taskSuggestionId, eventSuggestionId, dismissSuggestionId, invalidSuggestionId]
+  const taskTitle = 'Smoke Claris Suggested Task'
+  const eventTitle = 'Smoke Claris Suggested Event'
+
+  for (const suggestionId of suggestionIds) {
+    await deleteRows(status, 'claris_suggestion_cooldowns', { suggestion_id: suggestionId })
+    await deleteRows(status, 'claris_suggestions', { id: suggestionId })
+  }
+  await deleteRows(status, 'tasks', { title: taskTitle })
+  await deleteRows(status, 'calendar_events', { title: eventTitle })
+
+  const common = {
+    acted_at: null,
+    analysis: 'Smoke de operacao atomica.',
+    body: 'Validar que a entidade e o ciclo de vida mudam na mesma transacao.',
+    entity_id: 'smoke-entity',
+    entity_name: 'Entidade Smoke',
+    entity_type: 'custom',
+    expected_impact: 'Fronteira backend consistente.',
+    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    priority: 'high',
+    reason: 'Validacao do smoke local.',
+    status: 'pending',
+    trigger_engine: 'manual',
+    user_id: authUserId,
+  }
+  await upsertRows(status, 'claris_suggestions', 'id', [
+    {
+      ...common,
+      action_payload: {
+        description: 'Criada atomicamente por uma sugestao da Claris.',
+        due_date: '2026-07-25T12:00:00.000Z',
+        priority: 'urgent',
+        tags: ['smoke', 'claris'],
+        title: taskTitle,
+      },
+      action_type: 'create_task',
+      id: taskSuggestionId,
+      title: 'Criar tarefa pelo smoke',
+      trigger_context: { trigger_key: 'smoke_atomic_task' },
+      type: 'custom',
+    },
+    {
+      ...common,
+      action_payload: {
+        all_day: false,
+        description: 'Criado atomicamente por uma sugestao da Claris.',
+        end_at: '2026-07-25T15:00:00.000Z',
+        start_at: '2026-07-25T14:00:00.000Z',
+        tags: ['smoke', 'agenda'],
+        title: eventTitle,
+        type: 'meeting',
+      },
+      action_type: 'create_event',
+      id: eventSuggestionId,
+      title: 'Criar evento pelo smoke',
+      trigger_context: { trigger_key: 'smoke_atomic_event' },
+      type: 'alignment_event',
+    },
+    {
+      ...common,
+      action_payload: { title: 'Nao deve ser criada' },
+      action_type: 'create_task',
+      id: dismissSuggestionId,
+      title: 'Dispensar sugestao pelo smoke',
+      trigger_context: { trigger_key: 'smoke_atomic_dismiss' },
+      type: 'custom',
+    },
+    {
+      ...common,
+      action_payload: { title: 'Evento sem inicio' },
+      action_type: 'create_event',
+      id: invalidSuggestionId,
+      title: 'Sugestao invalida pelo smoke',
+      trigger_context: { trigger_key: 'smoke_invalid_event' },
+      type: 'alignment_event',
+    },
+  ])
+
+  const listed = await callV1EdgeFunction(status, 'claris-suggestions', {
+    action: 'list_pending',
+    limit: 10,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-claris-suggestions-list',
+  })
+  assertV1Response(listed, {
+    correlationId: 'smoke-v1-claris-suggestions-list',
+    status: 200,
+  })
+  const listedTask = listed.data?.data?.items?.find((item) => item.id === taskSuggestionId)
+  if (
+    listedTask?.actionType !== 'create_task'
+    || listedTask.triggerEngine !== 'manual'
+    || Object.hasOwn(listedTask, 'action_payload')
+    || Object.hasOwn(listedTask, 'actionPayload')
+    || Object.hasOwn(listedTask, 'trigger_context')
+    || Object.hasOwn(listedTask, 'triggerContext')
+  ) {
+    fail(`claris-suggestions expos contrato inesperado: ${JSON.stringify(listedTask)}`)
+  }
+
+  const acceptedTask = await callV1EdgeFunction(status, 'claris-suggestions', {
+    action: 'accept',
+    suggestionId: taskSuggestionId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-claris-suggestions-accept-task',
+  })
+  assertV1Response(acceptedTask, {
+    correlationId: 'smoke-v1-claris-suggestions-accept-task',
+    status: 200,
+  })
+  const taskEffect = acceptedTask.data?.data
+  if (taskEffect?.effect !== 'task_created' || typeof taskEffect.createdEntityId !== 'string') {
+    fail(`claris-suggestions nao retornou o efeito da tarefa: ${JSON.stringify(taskEffect)}`)
+  }
+  const [createdTask] = await selectRows(status, 'tasks', { id: taskEffect.createdEntityId })
+  if (
+    createdTask?.created_by !== authUserId
+    || createdTask.assigned_to !== authUserId
+    || createdTask.title !== taskTitle
+    || createdTask.priority !== 'urgent'
+    || createdTask.suggested_by_ai !== true
+    || !createdTask.tags?.includes('claris')
+  ) {
+    fail(`claris-suggestions nao criou a tarefa actor-scoped esperada: ${JSON.stringify(createdTask)}`)
+  }
+
+  const staleAccept = await callV1EdgeFunction(status, 'claris-suggestions', {
+    action: 'accept',
+    suggestionId: taskSuggestionId,
+  }, {
+    acceptStatuses: [409],
+    accessToken,
+    correlationId: 'smoke-v1-claris-suggestions-stale-accept',
+  })
+  assertV1Response(staleAccept, {
+    code: 'conflict',
+    correlationId: 'smoke-v1-claris-suggestions-stale-accept',
+    status: 409,
+  })
+  const duplicateTasks = await selectRows(status, 'tasks', { title: taskTitle })
+  if (duplicateTasks.length !== 1) {
+    fail(`claris-suggestions duplicou tarefa em retry: ${JSON.stringify(duplicateTasks)}`)
+  }
+
+  const acceptedEvent = await callV1EdgeFunction(status, 'claris-suggestions', {
+    action: 'accept',
+    suggestionId: eventSuggestionId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-claris-suggestions-accept-event',
+  })
+  assertV1Response(acceptedEvent, {
+    correlationId: 'smoke-v1-claris-suggestions-accept-event',
+    status: 200,
+  })
+  const eventEffect = acceptedEvent.data?.data
+  if (eventEffect?.effect !== 'event_created' || typeof eventEffect.createdEntityId !== 'string') {
+    fail(`claris-suggestions nao retornou o efeito do evento: ${JSON.stringify(eventEffect)}`)
+  }
+  const [createdEvent] = await selectRows(status, 'calendar_events', {
+    id: eventEffect.createdEntityId,
+  })
+  if (
+    createdEvent?.owner !== authUserId
+    || createdEvent.title !== eventTitle
+    || createdEvent.ia_source !== 'sugestao_confirmada'
+  ) {
+    fail(`claris-suggestions nao criou o evento actor-scoped esperado: ${JSON.stringify(createdEvent)}`)
+  }
+
+  const dismissed = await callV1EdgeFunction(status, 'claris-suggestions', {
+    action: 'dismiss',
+    suggestionId: dismissSuggestionId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-claris-suggestions-dismiss',
+  })
+  assertV1Response(dismissed, {
+    correlationId: 'smoke-v1-claris-suggestions-dismiss',
+    status: 200,
+  })
+  if (dismissed.data?.data?.status !== 'dismissed' || dismissed.data?.data?.effect !== 'none') {
+    fail(`claris-suggestions nao dispensou atomicamente: ${JSON.stringify(dismissed.data)}`)
+  }
+
+  for (const [suggestionId, outcome] of [
+    [taskSuggestionId, 'accepted'],
+    [eventSuggestionId, 'accepted'],
+    [dismissSuggestionId, 'dismissed'],
+  ]) {
+    const cooldowns = await selectRows(status, 'claris_suggestion_cooldowns', {
+      outcome,
+      suggestion_id: suggestionId,
+    })
+    if (cooldowns.length !== 1 || cooldowns[0].user_id !== authUserId) {
+      fail(`Cooldown ${outcome} ausente para ${suggestionId}: ${JSON.stringify(cooldowns)}`)
+    }
+  }
+
+  const invalidAction = await callV1EdgeFunction(status, 'claris-suggestions', {
+    action: 'accept',
+    suggestionId: invalidSuggestionId,
+  }, {
+    acceptStatuses: [409],
+    accessToken,
+    correlationId: 'smoke-v1-claris-suggestions-invalid-action',
+  })
+  assertV1Response(invalidAction, {
+    code: 'conflict',
+    correlationId: 'smoke-v1-claris-suggestions-invalid-action',
+    status: 409,
+  })
+  const [invalidSuggestion] = await selectRows(status, 'claris_suggestions', {
+    id: invalidSuggestionId,
+  })
+  if (invalidSuggestion?.status !== 'pending' || invalidSuggestion.acted_at !== null) {
+    fail(`Acao invalida alterou parcialmente a sugestao: ${JSON.stringify(invalidSuggestion)}`)
+  }
+
+  for (const suggestionId of suggestionIds) {
+    await deleteRows(status, 'claris_suggestion_cooldowns', { suggestion_id: suggestionId })
+    await deleteRows(status, 'claris_suggestions', { id: suggestionId })
+  }
+  await deleteRows(status, 'tasks', { title: taskTitle })
+  await deleteRows(status, 'calendar_events', { title: eventTitle })
+
+  log('Sugestoes da Claris validadas com DTO V1 e aceite/dispensa atomicos actor-scoped.')
+}
+
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   const settings = await callV1EdgeFunction(
     status,
@@ -2784,6 +3043,7 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
   }
 
   await runClarisConversationChecks(status, accessToken, authUserId)
+  await runClarisSuggestionChecks(status, accessToken, authUserId)
 
   await runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, courseId)
 
@@ -2987,23 +3247,30 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
 
   log('Fluxo autenticado validado com seed local e passagem pela camada de servico.')
 
-  // Smoke check for generate-proactive-suggestions (authenticated)
-  const proactiveRun = await callEdgeFunction(
+  const proactiveRun = await callV1EdgeFunction(
     status,
     'generate-proactive-suggestions',
     {},
-    accessToken,
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-generate-proactive-suggestions',
+    },
   )
-
-  if (proactiveRun.status !== 200) {
-    fail(`generate-proactive-suggestions deveria retornar 200 com auth, mas retornou ${proactiveRun.status}: ${JSON.stringify(proactiveRun.data)}`)
+  assertV1Response(proactiveRun, {
+    correlationId: 'smoke-v1-generate-proactive-suggestions',
+    status: 200,
+  })
+  if (
+    proactiveRun.data?.data?.contractVersion !== 1
+    || proactiveRun.data?.data?.enginesRun !== 6
+    || typeof proactiveRun.data?.data?.suggestionsCreated !== 'number'
+    || typeof proactiveRun.data?.data?.details?.platformUsage !== 'number'
+  ) {
+    fail(`generate-proactive-suggestions nao retornou o DTO V1: ${JSON.stringify(proactiveRun.data)}`)
   }
 
-  if (typeof proactiveRun.data?.engines_run !== 'number') {
-    fail(`generate-proactive-suggestions nao retornou engines_run: ${JSON.stringify(proactiveRun.data)}`)
-  }
-
-  log('generate-proactive-suggestions validado com autenticacao.')
+  log('generate-proactive-suggestions validado com contrato V1 e autenticacao.')
 
   const scheduledMessageId = '00000000-0000-0000-0000-000000000901'
   await deleteRows(status, 'scheduled_messages', { id: scheduledMessageId })

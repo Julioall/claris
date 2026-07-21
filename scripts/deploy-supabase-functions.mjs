@@ -37,6 +37,7 @@ const DEFAULT_FUNCTIONS = [
   'claris-llm-test',
   'claris-chat',
   'claris-conversations',
+  'claris-suggestions',
   'whatsapp-instance-manager',
   'receive-whatsapp-webhook',
   'whatsapp-messaging',

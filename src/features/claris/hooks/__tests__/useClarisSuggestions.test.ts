@@ -1,312 +1,168 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ReactNode } from "react";
-import { createElement } from "react";
-import { useClarisSuggestions } from "@/features/claris/hooks/useClarisSuggestions";
+import { act, renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createElement, type ReactNode } from 'react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// ─── Module mocks ──────────────────────────────────────────────────────────
-const useAuthMock = vi.fn();
-const invokeMock = vi.fn();
-const fromMock = vi.fn();
-const getSessionMock = vi.fn();
-const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+import type { ClarisSuggestion } from '@/features/claris/api/contracts/claris-suggestions.contract';
+import { useClarisSuggestions } from '@/features/claris/hooks/useClarisSuggestions';
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => useAuthMock(),
+const mocks = vi.hoisted(() => ({
+  accept: vi.fn(),
+  dismiss: vi.fn(),
+  fetch: vi.fn(),
+  generate: vi.fn(),
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
+  useAuth: vi.fn(),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    auth: { getSession: () => getSessionMock() },
-    functions: { invoke: (...args: unknown[]) => invokeMock(...args) },
-    from: (...args: unknown[]) => fromMock(...args),
-  },
+vi.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => mocks.useAuth(),
 }));
 
-// ─── QueryClient wrapper ───────────────────────────────────────────────────
+vi.mock('@/features/claris/api/suggestions', () => ({
+  acceptClarisSuggestion: (...args: unknown[]) => mocks.accept(...args),
+  dismissClarisSuggestion: (...args: unknown[]) => mocks.dismiss(...args),
+  fetchPendingClarisSuggestions: (...args: unknown[]) => mocks.fetch(...args),
+  generateClarisSuggestions: (...args: unknown[]) => mocks.generate(...args),
+}));
+
+vi.mock('sonner', () => ({
+  toast: { error: mocks.toastError, success: mocks.toastSuccess },
+}));
+
 function createWrapper() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const client = new QueryClient({
+    defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+  });
   return ({ children }: { children: ReactNode }) =>
     createElement(QueryClientProvider, { client }, children);
 }
 
-// ─── Chainable query mock helpers ─────────────────────────────────────────
-const selectMock = vi.fn();
-const eqMock = vi.fn();
-const orMock = vi.fn();
-const orderMock = vi.fn();
-const limitMock = vi.fn();
-const updateMock = vi.fn();
-
-function setupFromChain(tableMock: (table: string) => Record<string, unknown>) {
-  fromMock.mockImplementation(tableMock);
-}
-
-function setupSuggestionsRead(suggestions: unknown[]) {
-  selectMock.mockReturnValue({ eq: eqMock });
-  eqMock.mockReturnValue({ or: orMock });
-  orMock.mockReturnValue({ order: orderMock });
-  orderMock.mockReturnValue({ limit: limitMock });
-  limitMock.mockResolvedValue({ data: suggestions, error: null });
-
-  setupFromChain((table: string) => {
-    if (table === "claris_suggestions") {
-      return { select: selectMock };
-    }
-    return {};
-  });
-}
-
-function buildPendingSuggestion(id = "sug-1") {
+function buildSuggestion(id = '11111111-1111-4111-8111-111111111111'): ClarisSuggestion {
   return {
+    actionType: 'create_task',
+    analysis: 'Risco elevado',
+    body: 'Sem contato recente.',
+    entityId: 'student-1',
+    entityName: 'Ana Silva',
+    entityType: 'student',
+    expectedImpact: 'Melhoria no engajamento',
+    expiresAt: null,
     id,
-    type: "interrupted_contact",
-    title: `Retomar contato — ${id}`,
-    body: "Sem contato recente.",
-    reason: "30 dias sem contato",
-    analysis: "Risco elevado",
-    expected_impact: "Melhoria no engajamento",
-    trigger_engine: "communication",
-    trigger_context: { trigger_key: "interrupted_contact" },
-    priority: "high",
-    status: "pending",
-    entity_type: "student",
-    entity_id: `student-${id}`,
-    entity_name: "Ana Silva",
-    action_type: "create_task",
-    action_payload: { title: "Contatar Ana Silva", description: "Desc" },
-    suggested_at: "2026-03-18T12:00:00.000Z",
-    expires_at: null,
+    priority: 'high',
+    reason: '30 dias sem contato',
+    status: 'pending',
+    suggestedAt: '2026-07-21T12:00:00.000Z',
+    title: 'Retomar contato',
+    triggerEngine: 'communication',
+    type: 'interrupted_contact',
   };
 }
 
-// ─── Tests ─────────────────────────────────────────────────────────────────
-describe("useClarisSuggestions", () => {
+describe('useClarisSuggestions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-    getSessionMock.mockResolvedValue({
-      data: {
-        session: {
-          access_token: "tok",
-          refresh_token: "refresh",
-          user: { id: "user-1", email: "user@example.test" },
-        },
+    sessionStorage.clear();
+    mocks.useAuth.mockReturnValue({ user: { id: 'user-1' } });
+    mocks.fetch.mockResolvedValue([]);
+    mocks.generate.mockResolvedValue({
+      contractVersion: 1,
+      details: {
+        academic: 0,
+        agenda: 0,
+        communication: 0,
+        operational: 0,
+        platformUsage: 0,
+        tasks: 0,
       },
-      error: null,
+      enginesRun: 6,
+      suggestionsCreated: 0,
     });
-    invokeMock.mockResolvedValue({ error: null });
   });
 
-  afterAll(() => {
-    consoleErrorSpy.mockRestore();
-  });
+  it('does not query suggestions without an authenticated user', async () => {
+    mocks.useAuth.mockReturnValue({ user: null });
+    const { result } = renderHook(() => useClarisSuggestions(), { wrapper: createWrapper() });
 
-  it("returns empty suggestions when user is not authenticated", async () => {
-    useAuthMock.mockReturnValue({ user: null });
-    setupSuggestionsRead([]);
-
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
-    });
-
-    // Query is disabled so isLoading stays false and suggestions stays []
-    await waitFor(() => {
-      expect(result.current.isLoading).toBe(false);
-    });
-
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.suggestions).toEqual([]);
-    expect(fromMock).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
-  it("fetches and returns pending suggestions for authenticated user", async () => {
-    const pending = [buildPendingSuggestion("sug-1"), buildPendingSuggestion("sug-2")];
-    setupSuggestionsRead(pending);
+  it('loads pending DTOs through the typed API client', async () => {
+    const suggestion = buildSuggestion();
+    mocks.fetch.mockResolvedValue([suggestion]);
+    const { result } = renderHook(() => useClarisSuggestions(), { wrapper: createWrapper() });
 
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.suggestions).toHaveLength(2);
-    });
-
-    expect(result.current.suggestions[0].id).toBe("sug-1");
-    expect(result.current.suggestions[1].id).toBe("sug-2");
-    expect(result.current.isLoading).toBe(false);
+    await waitFor(() => expect(result.current.suggestions).toEqual([suggestion]));
+    expect(mocks.fetch).toHaveBeenCalledWith(10);
   });
 
-  it("exposes suggestion title and body fields", async () => {
-    const pending = [buildPendingSuggestion()];
-    setupSuggestionsRead(pending);
-
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
+  it('accepts a suggestion by id and uses the backend effect', async () => {
+    const suggestion = buildSuggestion();
+    mocks.fetch.mockResolvedValue([suggestion]);
+    mocks.accept.mockResolvedValue({
+      actionType: 'create_task',
+      contractVersion: 1,
+      createdEntityId: '22222222-2222-4222-8222-222222222222',
+      effect: 'task_created',
+      status: 'accepted',
+      suggestionId: suggestion.id,
     });
+    const { result } = renderHook(() => useClarisSuggestions(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.suggestions).toHaveLength(1));
 
-    await waitFor(() => {
-      expect(result.current.suggestions).toHaveLength(1);
-    });
+    act(() => result.current.acceptSuggestion(suggestion));
 
-    const s = result.current.suggestions[0];
-    expect(s.title).toBe("Retomar contato — sug-1");
-    expect(s.body).toBe("Sem contato recente.");
-    expect(s.trigger_engine).toBe("communication");
-    expect(s.priority).toBe("high");
+    await waitFor(() => expect(mocks.accept).toHaveBeenCalledWith(suggestion.id));
+    expect(mocks.toastSuccess).toHaveBeenCalledWith('Tarefa criada a partir da sugestão');
   });
 
-  it("triggerProactiveGeneration invokes the edge function when session exists", async () => {
-    setupSuggestionsRead([]);
-
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
+  it('dismisses through one backend command without a client-side cooldown write', async () => {
+    const suggestion = buildSuggestion();
+    mocks.fetch.mockResolvedValue([suggestion]);
+    mocks.dismiss.mockResolvedValue({
+      actionType: 'create_task',
+      contractVersion: 1,
+      createdEntityId: null,
+      effect: 'none',
+      status: 'dismissed',
+      suggestionId: suggestion.id,
     });
+    const { result } = renderHook(() => useClarisSuggestions(), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.suggestions).toHaveLength(1));
 
-    // Clear sessionStorage so the rate-limit does not block the call
-    sessionStorage.removeItem("claris_proactive_last_run");
+    act(() => result.current.dismissSuggestion(suggestion.id));
 
-    await act(async () => {
-      await result.current.triggerProactiveGeneration();
-    });
-
-    expect(invokeMock).toHaveBeenCalledWith("generate-proactive-suggestions");
+    await waitFor(() => expect(mocks.dismiss).toHaveBeenCalledWith(suggestion.id));
   });
 
-  it("triggerProactiveGeneration is rate-limited by sessionStorage", async () => {
-    setupSuggestionsRead([]);
+  it('generates through the typed HTTP client and records the successful run', async () => {
+    const { result } = renderHook(() => useClarisSuggestions(), { wrapper: createWrapper() });
 
-    // Simulate a recent run (1 minute ago — under the 30-min window)
-    sessionStorage.setItem(
-      "claris_proactive_last_run",
-      String(Date.now() - 60_000),
-    );
+    await act(async () => result.current.triggerProactiveGeneration());
 
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
-    });
-
-    await act(async () => {
-      await result.current.triggerProactiveGeneration();
-    });
-
-    expect(invokeMock).not.toHaveBeenCalled();
-
-    // Cleanup
-    sessionStorage.removeItem("claris_proactive_last_run");
+    expect(mocks.generate).toHaveBeenCalledTimes(1);
+    expect(Number(sessionStorage.getItem('claris_proactive_last_run'))).toBeGreaterThan(0);
   });
 
-  it("triggerProactiveGeneration does nothing when user is not authenticated", async () => {
-    useAuthMock.mockReturnValue({ user: null });
-    setupSuggestionsRead([]);
-    sessionStorage.removeItem("claris_proactive_last_run");
+  it('rate-limits automatic generation in session storage', async () => {
+    sessionStorage.setItem('claris_proactive_last_run', String(Date.now() - 60_000));
+    const { result } = renderHook(() => useClarisSuggestions(), { wrapper: createWrapper() });
 
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
-    });
+    await act(async () => result.current.triggerProactiveGeneration());
 
-    await act(async () => {
-      await result.current.triggerProactiveGeneration();
-    });
-
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(mocks.generate).not.toHaveBeenCalled();
   });
 
-  it("triggerProactiveGeneration does nothing when there is no active session", async () => {
-    getSessionMock.mockResolvedValue({ data: { session: null } });
-    setupSuggestionsRead([]);
-    sessionStorage.removeItem("claris_proactive_last_run");
+  it('does not record a failed best-effort generation', async () => {
+    mocks.generate.mockRejectedValue(new Error('offline'));
+    const { result } = renderHook(() => useClarisSuggestions(), { wrapper: createWrapper() });
 
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
-    });
+    await act(async () => result.current.forceGenerate());
 
-    await act(async () => {
-      await result.current.triggerProactiveGeneration();
-    });
-
-    expect(invokeMock).not.toHaveBeenCalled();
-  });
-
-  it("dismissSuggestion updates the record status to dismissed", async () => {
-    const pending = [buildPendingSuggestion("sug-1")];
-    setupSuggestionsRead(pending);
-
-    // Setup dismiss chain
-    const eqDismissMock = vi.fn().mockResolvedValue({ error: null });
-    const updateReturnMock = { eq: eqDismissMock };
-
-    // Setup cooldown insert chain
-    const insertCooldownMock = vi.fn().mockResolvedValue({ error: null });
-
-    setupFromChain((table: string) => {
-      if (table === "claris_suggestions") {
-        return {
-          select: selectMock,
-          update: updateMock,
-        };
-      }
-      if (table === "claris_suggestion_cooldowns") {
-        return { insert: insertCooldownMock };
-      }
-      return {};
-    });
-
-    updateMock.mockReturnValue(updateReturnMock);
-
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.suggestions).toHaveLength(1);
-    });
-
-    await act(async () => {
-      result.current.dismissSuggestion("sug-1");
-    });
-
-    expect(updateMock).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "dismissed" }),
-    );
-    expect(eqDismissMock).toHaveBeenCalledWith("id", "sug-1");
-  });
-
-  it("acceptSuggestion updates the record status to accepted", async () => {
-    const pending = [buildPendingSuggestion("sug-1")];
-    setupSuggestionsRead(pending);
-
-    const eqAcceptMock = vi.fn().mockResolvedValue({ error: null });
-    const updateReturnMock = { eq: eqAcceptMock };
-
-    setupFromChain((table: string) => {
-      if (table === "claris_suggestions") {
-        return {
-          select: selectMock,
-          update: updateMock,
-        };
-      }
-      return {};
-    });
-
-    updateMock.mockReturnValue(updateReturnMock);
-
-    const { result } = renderHook(() => useClarisSuggestions(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.suggestions).toHaveLength(1);
-    });
-
-    await act(async () => {
-      result.current.acceptSuggestion(result.current.suggestions[0]);
-    });
-
-    expect(updateMock).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "accepted" }),
-    );
-    expect(eqAcceptMock).toHaveBeenCalledWith("id", "sug-1");
+    expect(sessionStorage.getItem('claris_proactive_last_run')).toBeNull();
+    expect(result.current.isGenerating).toBe(false);
   });
 });

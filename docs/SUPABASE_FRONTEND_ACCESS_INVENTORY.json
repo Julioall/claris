@@ -3,12 +3,12 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 21,
+    "filesWithSupabaseAccess": 20,
     "totals": {
-      "clientImports": 21,
-      "from": 27,
+      "clientImports": 20,
+      "from": 26,
       "rpc": 9,
-      "functionsInvoke": 11,
+      "functionsInvoke": 10,
       "auth": 5,
       "storage": 0,
       "channel": 1
@@ -351,37 +351,6 @@
         "from": 1,
         "rpc": 0,
         "functionsInvoke": 3,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/claris/hooks/useClarisSuggestions.ts",
-      "feature": "claris",
-      "categories": [
-        "command",
-        "edge-function",
-        "query"
-      ],
-      "useCases": [
-        "Gerenciar conversas e sugestoes da Claris"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [],
-        "functions": [
-          "generate-proactive-suggestions"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0901"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 1,
         "auth": 0,
         "storage": 0,
         "channel": 0

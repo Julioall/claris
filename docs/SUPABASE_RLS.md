@@ -29,6 +29,7 @@ Posturas especiais válidas:
 - `task_action_history`: insert permitido para `service_role` e, no fluxo autenticado, somente com validação de ownership e integridade cruzada.
 - `courses`: insert continua aceitando `auth.uid() IS NOT NULL`; isso depende do fluxo controlado pelas Edge Functions.
 - `user_sync_preferences`, `activity_feed`, `background_jobs`, `background_job_items` e `background_job_events`: policies contextuais permanecem como defesa, mas os grants de browser foram revogados e o acesso da aplicacao passa por Edge Functions service-only.
+- `claris_suggestions` e `claris_suggestion_cooldowns`: policies de dono permanecem como defesa, mas os grants de browser foram revogados; feed e comandos passam por `claris-suggestions`.
 
 ## Usuários E Preferências
 
@@ -327,6 +328,26 @@ Observações:
 - A política de `calendar_events` é análoga à de `moodle_conversations` (owner-only).
 - Tasks do sistema criadas por Edge Functions são inseridas via `service_role` e ficam fora do escopo de RLS.
 - A recorrencia do sistema legado (`task_recurrence_configs`) continua processada pela Edge Function `generate-recurring-tasks`; o CRUD moderno de agenda nao delega regras de recorrencia ao navegador.
+
+## Sugestoes da Claris
+
+Tabelas:
+
+- `claris_suggestions`
+- `claris_suggestion_cooldowns`
+
+Regra canônica:
+
+- `anon` e `authenticated` nao possuem grants diretos de leitura ou escrita; a aplicacao usa `claris-suggestions` com `service_role` e identidade derivada do token.
+- O feed retorna apenas sugestoes pendentes e nao expiradas do ator. `action_payload` e `trigger_context` continuam internos ao backend.
+- `backend_act_on_claris_suggestion` e `SECURITY DEFINER`, executavel somente por `service_role`, bloqueia a sugestao com `FOR UPDATE` e atualiza lifecycle, tarefa/evento e cooldown na mesma transacao.
+- Retries sobre uma sugestao ja processada retornam conflito e nao duplicam entidades. Payload de acao invalido mantem a sugestao pendente sem escrita parcial.
+
+Migrations de referência:
+
+- `20260317220000_add_claris_suggestions.sql`
+- `20260317240000_extend_claris_suggestions_proactive.sql`
+- `20260721210000_secure_claris_suggestions.sql`
 
 ## Auditoria de Ações da IA
 

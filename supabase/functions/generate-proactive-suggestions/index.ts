@@ -15,8 +15,13 @@
  * Each engine checks cooldowns before generating to avoid repetition.
  */
 
-import { createHandler, jsonResponse } from '../_shared/http/mod.ts'
-import { errorResponse } from '../_shared/http/mod.ts'
+import {
+  ApiError,
+  apiSuccessResponse,
+  createHandler,
+  isApiV1Request,
+  jsonResponse,
+} from '../_shared/http/mod.ts'
 import { userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
@@ -147,13 +152,13 @@ async function recordFailedProactiveSuggestionJob(
   })
 }
 
-Deno.serve(createHandler(async ({ user }) => {
+Deno.serve(createHandler(async ({ correlationId, req, user }) => {
   const supabase = createServiceClient()
   const startedAt = new Date().toISOString()
   const canGenerateSuggestions = await userHasPermission(supabase, user.id, 'claris.proactive.generate')
 
   if (!canGenerateSuggestions) {
-    return errorResponse('Permission denied for proactive Claris suggestions.', 403)
+    throw ApiError.forbidden('Permission denied for proactive Claris suggestions.')
   }
 
   try {
@@ -169,7 +174,21 @@ Deno.serve(createHandler(async ({ user }) => {
       })
     })
 
-    return jsonResponse(result)
+    return isApiV1Request(req)
+      ? apiSuccessResponse({
+        contractVersion: 1,
+        details: {
+          academic: result.details.academic,
+          agenda: result.details.agenda,
+          communication: result.details.communication,
+          operational: result.details.operational,
+          platformUsage: result.details.platform_usage,
+          tasks: result.details.tasks,
+        },
+        enginesRun: result.engines_run,
+        suggestionsCreated: result.suggestions_created,
+      }, correlationId)
+      : jsonResponse(result)
   } catch (error) {
     const errorMessage = error instanceof Error
       ? error.message

@@ -141,6 +141,9 @@ verify_jwt = false
 [functions.claris-conversations]
 verify_jwt = false
 
+[functions.claris-suggestions]
+verify_jwt = false
+
 [functions.generate-proactive-suggestions]
 verify_jwt = false
 

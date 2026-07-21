@@ -3393,6 +3393,10 @@ export type Database = {
         }
         Returns: string
       }
+      backend_act_on_claris_suggestion: {
+        Args: { p_actor_id: string; p_outcome: string; p_suggestion_id: string }
+        Returns: Json
+      }
       backend_add_task_tag: {
         Args: {
           p_actor_id: string

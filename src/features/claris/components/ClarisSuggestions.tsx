@@ -88,9 +88,9 @@ function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps
   const [detailsOpen, setDetailsOpen] = useState(false);
   const styles = PRIORITY_STYLES[suggestion.priority] ?? PRIORITY_STYLES.medium;
   const Icon = TYPE_ICONS[suggestion.type] ?? Lightbulb;
-  const hasDetails = suggestion.reason || suggestion.analysis || suggestion.expected_impact;
+  const hasDetails = suggestion.reason || suggestion.analysis || suggestion.expectedImpact;
 
-  const engine = suggestion.trigger_engine;
+  const engine = suggestion.triggerEngine;
   const EngineIcon = engine ? ENGINE_ICONS[engine] : Brain;
   const engineLabel = engine ? ENGINE_LABELS[engine] : null;
 
@@ -126,8 +126,8 @@ function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps
               {engineLabel}
             </Badge>
           )}
-          {suggestion.entity_name && (
-            <span className="text-xs text-muted-foreground truncate">· {suggestion.entity_name}</span>
+          {suggestion.entityName && (
+            <span className="text-xs text-muted-foreground truncate">· {suggestion.entityName}</span>
           )}
         </div>
 
@@ -155,10 +155,10 @@ function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps
                     {suggestion.analysis}
                   </div>
                 )}
-                {suggestion.expected_impact && (
+                {suggestion.expectedImpact && (
                   <div>
                     <span className="font-medium text-foreground/70">Impacto esperado: </span>
-                    {suggestion.expected_impact}
+                    {suggestion.expectedImpact}
                   </div>
                 )}
               </div>
@@ -166,16 +166,16 @@ function SuggestionCard({ suggestion, onAccept, onDismiss }: SuggestionCardProps
           </div>
         )}
 
-        {suggestion.action_type && (
+        {suggestion.actionType && (
           <Button
             size="sm"
             variant="outline"
             className="h-7 text-xs mt-1 gap-1"
             onClick={() => onAccept(suggestion)}
           >
-            {suggestion.action_type === 'create_task' && 'Criar tarefa'}
-            {suggestion.action_type === 'create_event' && 'Criar evento'}
-            {suggestion.action_type === 'open_chat' && 'Abrir chat'}
+            {suggestion.actionType === 'create_task' && 'Criar tarefa'}
+            {suggestion.actionType === 'create_event' && 'Criar evento'}
+            {suggestion.actionType === 'open_chat' && 'Abrir chat'}
             <ChevronRight className="h-3 w-3" />
           </Button>
         )}

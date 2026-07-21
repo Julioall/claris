@@ -406,6 +406,7 @@ Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase,
 - [ ] `SB-0901` Migrar conversas e sugestoes da Claris
   - Remover `fromAny`, queries em hooks e acesso direto ao historico.
   - AC: hooks usam clients tipados e nao importam Supabase.
+  - Historico e sugestoes ja foram migrados para `claris-conversations` e `claris-suggestions`; aceite/dispensa usam RPC service-only atomica e o feed nao expoe `action_payload`/`trigger_context`. O recorte permanece aberto ate remover os acessos restantes de chat/Moodle no hook da Claris.
 
 - [ ] `SB-0902` Migrar configuracoes globais
   - Leitura e alteracao via endpoints com permissao administrativa.

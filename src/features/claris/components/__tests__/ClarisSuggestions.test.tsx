@@ -18,21 +18,16 @@ function buildSuggestion(overrides: Partial<ClarisSuggestion> = {}): ClarisSugge
     body: "O aluno Ana Silva está com status em risco e não há registro de contato recente.",
     reason: "Aluno sem contato nos últimos 30 dias",
     analysis: "Risco elevado sem interação",
-    expected_impact: "Melhoria no engajamento do aluno",
-    trigger_engine: "communication",
-    trigger_context: { trigger_key: "interrupted_contact" },
+    expectedImpact: "Melhoria no engajamento do aluno",
+    triggerEngine: "communication",
     priority: "high",
     status: "pending",
-    entity_type: "student",
-    entity_id: "student-1",
-    entity_name: "Ana Silva",
-    action_type: "create_task",
-    action_payload: {
-      title: "Contatar Ana Silva",
-      description: "Realizar contato com Ana Silva",
-    },
-    suggested_at: "2026-03-18T12:00:00.000Z",
-    expires_at: null,
+    entityType: "student",
+    entityId: "student-1",
+    entityName: "Ana Silva",
+    actionType: "create_task",
+    suggestedAt: "2026-03-18T12:00:00.000Z",
+    expiresAt: null,
     ...overrides,
   };
 }
@@ -98,8 +93,8 @@ describe("ClarisSuggestions", () => {
     expect(screen.getByText("2")).toBeInTheDocument();
   });
 
-  it("shows trigger engine badge for suggestions with trigger_engine", () => {
-    const suggestion = buildSuggestion({ trigger_engine: "communication" });
+  it("shows trigger engine badge for suggestions with triggerEngine", () => {
+    const suggestion = buildSuggestion({ triggerEngine: "communication" });
     useClarisSuggestionsMock.mockReturnValue(defaultHookValue([suggestion]));
 
     render(<ClarisSuggestions />);
@@ -107,8 +102,8 @@ describe("ClarisSuggestions", () => {
     expect(screen.getByText("Comunicação")).toBeInTheDocument();
   });
 
-  it("shows entity name for suggestions with entity_name", () => {
-    const suggestion = buildSuggestion({ entity_name: "Beatriz Costa" });
+  it("shows entity name for suggestions with entityName", () => {
+    const suggestion = buildSuggestion({ entityName: "Beatriz Costa" });
     useClarisSuggestionsMock.mockReturnValue(defaultHookValue([suggestion]));
 
     render(<ClarisSuggestions />);
@@ -117,7 +112,7 @@ describe("ClarisSuggestions", () => {
   });
 
   it("shows action button for create_task suggestions", () => {
-    const suggestion = buildSuggestion({ action_type: "create_task" });
+    const suggestion = buildSuggestion({ actionType: "create_task" });
     useClarisSuggestionsMock.mockReturnValue(defaultHookValue([suggestion]));
 
     render(<ClarisSuggestions />);
@@ -126,7 +121,7 @@ describe("ClarisSuggestions", () => {
   });
 
   it("shows action button for create_event suggestions", () => {
-    const suggestion = buildSuggestion({ action_type: "create_event" });
+    const suggestion = buildSuggestion({ actionType: "create_event" });
     useClarisSuggestionsMock.mockReturnValue(defaultHookValue([suggestion]));
 
     render(<ClarisSuggestions />);
@@ -135,7 +130,7 @@ describe("ClarisSuggestions", () => {
   });
 
   it("shows action button for open_chat suggestions", () => {
-    const suggestion = buildSuggestion({ action_type: "open_chat" });
+    const suggestion = buildSuggestion({ actionType: "open_chat" });
     useClarisSuggestionsMock.mockReturnValue(defaultHookValue([suggestion]));
 
     render(<ClarisSuggestions />);
@@ -144,7 +139,7 @@ describe("ClarisSuggestions", () => {
   });
 
   it("calls acceptSuggestion when action button is clicked", async () => {
-    const suggestion = buildSuggestion({ action_type: "create_task" });
+    const suggestion = buildSuggestion({ actionType: "create_task" });
     const acceptSuggestion = vi.fn();
     useClarisSuggestionsMock.mockReturnValue(
       defaultHookValue([suggestion], { acceptSuggestion }),
@@ -265,7 +260,7 @@ describe("ClarisSuggestions", () => {
   it("renders multiple suggestions", () => {
     const suggestions = [
       buildSuggestion({ id: "sug-1", title: "Sugestão um" }),
-      buildSuggestion({ id: "sug-2", title: "Sugestão dois", type: "overdue_task", trigger_engine: "tasks" }),
+      buildSuggestion({ id: "sug-2", title: "Sugestão dois", type: "overdue_task", triggerEngine: "tasks" }),
       buildSuggestion({ id: "sug-3", title: "Sugestão três", priority: "urgent" }),
     ];
     useClarisSuggestionsMock.mockReturnValue(defaultHookValue(suggestions));
