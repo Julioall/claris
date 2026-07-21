@@ -1,7 +1,9 @@
 import type { MoodleSession } from '@/features/auth/domain/session';
 import { invokeMoodleFunctionWithTimeout } from '@/features/auth/infrastructure/moodle-api';
-import { supabase } from '@/integrations/supabase/client';
-import type { Database } from '@/integrations/supabase/types';
+import {
+  ApiClientError,
+  invokeEdgeFunction,
+} from '@/integrations/http/edge-function-client';
 
 import type {
   ActivityGradeSuggestionJobSummary,
@@ -9,31 +11,66 @@ import type {
   StudentGradeApprovalResponse,
   StudentGradeSuggestionResponse,
 } from '../types';
+import {
+  GRADE_SUGGESTION_JOBS_CONTRACT_VERSION,
+  GRADE_SUGGESTION_JOB_STATUSES,
+  type FindLatestRelevantGradeSuggestionJobDto,
+  type GradeSuggestionJobSummaryDto,
+} from './contracts/grade-suggestion-jobs.contract';
 
-type ActivityGradeSuggestionJobRow = Database['public']['Tables']['ai_grade_suggestion_jobs']['Row'];
+const GRADE_SUGGESTION_JOBS_TIMEOUT_MS = 15_000;
 
-function mapActivityGradeSuggestionJobSummary(row: ActivityGradeSuggestionJobRow): ActivityGradeSuggestionJobSummary {
-  return {
-    jobId: row.id,
-    activityName: row.activity_name,
-    courseId: row.course_id,
-    moodleActivityId: row.moodle_activity_id,
-    status: row.status,
-    totalItems: row.total_items,
-    processedItems: row.processed_items,
-    successCount: row.success_count,
-    errorCount: row.error_count,
-    errorMessage: row.error_message,
-    createdAt: row.created_at,
-  };
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
 }
 
-function isRelevantActivityGradeSuggestionJob(job: ActivityGradeSuggestionJobSummary) {
+function isNonNegativeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0;
+}
+
+function isJobSummary(value: unknown): value is GradeSuggestionJobSummaryDto {
+  const job = asRecord(value);
+  if (!job) return false;
+
   return (
-    job.status === 'pending' ||
-    job.status === 'processing' ||
-    job.processedItems > 0
+    typeof job.jobId === 'string'
+    && typeof job.activityName === 'string'
+    && typeof job.courseId === 'string'
+    && typeof job.moodleActivityId === 'string'
+    && typeof job.createdAt === 'string'
+    && (job.errorMessage === null || typeof job.errorMessage === 'string')
+    && typeof job.status === 'string'
+    && GRADE_SUGGESTION_JOB_STATUSES.includes(
+      job.status as (typeof GRADE_SUGGESTION_JOB_STATUSES)[number],
+    )
+    && isNonNegativeInteger(job.totalItems)
+    && isNonNegativeInteger(job.processedItems)
+    && isNonNegativeInteger(job.successCount)
+    && isNonNegativeInteger(job.errorCount)
+    && job.processedItems <= job.totalItems
+    && job.successCount + job.errorCount <= job.processedItems
   );
+}
+
+function parseFindLatestRelevantResponse(value: unknown): FindLatestRelevantGradeSuggestionJobDto {
+  const response = asRecord(value);
+  const metadata = asRecord(response?.metadata);
+  if (!(
+    response
+    && (response.job === null || isJobSummary(response.job))
+    && metadata
+    && metadata.contractVersion === GRADE_SUGGESTION_JOBS_CONTRACT_VERSION
+    && typeof metadata.generatedAt === 'string'
+  )) {
+    throw new ApiClientError({
+      code: 'invalid_response',
+      message: 'A API retornou um job de sugestao de nota invalido.',
+    });
+  }
+
+  return response as unknown as FindLatestRelevantGradeSuggestionJobDto;
 }
 
 export async function generateStudentGradeSuggestion(params: {
@@ -80,64 +117,23 @@ export async function generateActivityGradeSuggestions(params: {
   };
 }
 
-export async function listActiveActivityGradeSuggestionJobsForUser(
-  userId: string,
-): Promise<ActivityGradeSuggestionJobSummary[]> {
-  const { data, error } = await supabase
-    .from('ai_grade_suggestion_jobs')
-    .select(`
-      id,
-      activity_name,
-      course_id,
-      moodle_activity_id,
-      status,
-      total_items,
-      processed_items,
-      success_count,
-      error_count,
-      error_message,
-      created_at
-    `)
-    .eq('user_id', userId)
-    .in('status', ['pending', 'processing'])
-    .order('created_at', { ascending: false });
-
-  if (error) throw error;
-
-  return ((data || []) as ActivityGradeSuggestionJobRow[]).map(mapActivityGradeSuggestionJobSummary);
-}
-
 export async function findLatestRelevantActivityGradeSuggestionJob(params: {
-  userId: string;
+  activityId: string;
   courseId: string;
-  moodleActivityId: string;
+  signal?: AbortSignal;
 }): Promise<ActivityGradeSuggestionJobSummary | null> {
-  const { data, error } = await supabase
-    .from('ai_grade_suggestion_jobs')
-    .select(`
-      id,
-      activity_name,
-      course_id,
-      moodle_activity_id,
-      status,
-      total_items,
-      processed_items,
-      success_count,
-      error_count,
-      error_message,
-      created_at
-    `)
-    .eq('user_id', params.userId)
-    .eq('course_id', params.courseId)
-    .eq('moodle_activity_id', params.moodleActivityId)
-    .in('status', ['pending', 'processing', 'failed', 'completed'])
-    .order('created_at', { ascending: false })
-    .limit(10);
+  const response = await invokeEdgeFunction<unknown>('grade-suggestion-jobs', {
+    auth: 'required',
+    body: {
+      action: 'find_latest_relevant',
+      activityId: params.activityId,
+      courseId: params.courseId,
+    },
+    signal: params.signal,
+    timeoutMs: GRADE_SUGGESTION_JOBS_TIMEOUT_MS,
+  });
 
-  if (error) throw error;
-
-  const jobs = ((data || []) as ActivityGradeSuggestionJobRow[]).map(mapActivityGradeSuggestionJobSummary);
-  return jobs.find(isRelevantActivityGradeSuggestionJob) ?? null;
+  return parseFindLatestRelevantResponse(response).job;
 }
 
 export async function getActivityGradeSuggestionJob(params: {

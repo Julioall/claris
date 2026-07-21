@@ -197,12 +197,19 @@ O smoke de Edge Functions valida o piloto V1 de ponta a ponta: `Content-Type`, h
 - `courses-catalog`: entrega o catalogo do ator autenticado e executa comandos atomicos de associacao, ignorar/designorar e configuracao de frequencia
 - `course-panel`: consolida curso, alunos, atividades, submissoes e estatisticas com metadados canonicos independentes da ordem; tambem persiste a intencao de ocultar ou exibir uma atividade
 - `course-attendance`: consulta detalhes paginados, totais completos por data e folha por curso, e salva lotes de presenca com validacao course-scoped e transacao unica
+- `students`: lista alunos com paginacao e consolida perfil/historico academico sem expor joins ou identidade do ator no payload
+- `academic-reports`: entrega cursos tutor-scoped e datasets completos para os relatorios de notas e atividades pendentes
+- `grade-suggestion-jobs`: localiza o job relevante do ator para uma atividade autorizada, sem acesso direto do browser as tabelas operacionais
 
 As functions de cursos usam DTOs V1 em `camelCase`, rejeitam identidade enviada no payload e reaplicam autorizacao e acesso ao curso no backend. Os comandos multi-registro chamam RPCs `SECURITY DEFINER` exclusivas de `service_role`; o navegador nao recebe permissao de execucao nem de escrita direta nas tabelas envolvidas.
 
 No `courses-catalog`, a leitura aceita as permissoes das tres rotas consumidoras (`courses.catalog.view`, `schools.view` ou `reports.view`). Associacao e preferencia de curso aceitam somente os fluxos de Cursos/Escolas, enquanto frequencia exige `courses.attendance.manage`. Para nao transformar o comando de associacao em autoelevacao, um ator nao administrador so pode alternar o papel de cursos aos quais ja possui acesso. A cada sincronizacao, `moodle-sync-courses` substitui atomicamente a elegibilidade do ator pelos cursos efetivamente retornados por sua sessao Moodle; a selecao posterior aceita ate 500 UUIDs unicos e os vincula em uma unica RPC que rejeita o lote inteiro quando qualquer curso estiver fora dessa elegibilidade.
 
 Em frequencia, `records` e paginado para limitar o payload, enquanto `dateSummaries` e agregado no banco sobre todo o historico. A UI cancela folhas obsoletas quando a data muda e so habilita o salvamento depois de correlacionar curso e data da resposta.
+
+Os casos de uso academicos do Epic 5 usam a permissao da rota (`students.view`, `reports.view` ou `grades.suggestions.manage`) e reaplicam o escopo de curso no service. `students` retorna 404 tanto para aluno inexistente quanto inacessivel. `academic-reports` exige que todos os UUIDs do lote sejam associacoes `tutor` do ator e pagina internamente todas as tabelas consultadas. Como Relatorios possui endpoint proprio, `reports.view` nao autoriza mais o catalogo geral de cursos.
+
+Jobs de sugestao sao criados com seus itens em uma unica RPC e possuem no maximo um registro `pending/processing` por ator, curso e atividade. O cancelamento tambem e transacional; updates de worker usam precondicoes de status para nao sobrescrever um cancelamento concorrente. Jobs, itens, historico de auditoria e snapshots academicos nao possuem grants para `anon` ou `authenticated`.
 
 ## Nova function: `moodle-grade-suggestions`
 

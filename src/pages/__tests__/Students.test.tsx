@@ -38,11 +38,12 @@ vi.mock("react-router-dom", async () => {
 describe("Students page", () => {
   let studentsFixture: Array<{
     id: string;
-    full_name: string;
+    name: string;
     email: string;
-    current_risk_level: string;
-    enrollment_status: string;
-    last_access: string;
+    riskLevel: string;
+    enrollmentStatus: string;
+    lastAccessAt: string;
+    avatarUrl: string | null;
   }>;
 
   beforeEach(() => {
@@ -51,11 +52,12 @@ describe("Students page", () => {
     studentsFixture = [
       {
         id: "s-1",
-        full_name: "Ana Silva",
+        name: "Ana Silva",
         email: "ana@example.com",
-        current_risk_level: "risco",
-        enrollment_status: "ativo",
-        last_access: "2026-02-20T00:00:00.000Z",
+        riskLevel: "risco",
+        enrollmentStatus: "ativo",
+        lastAccessAt: "2026-02-20T00:00:00.000Z",
+        avatarUrl: null,
       },
     ];
 
@@ -64,10 +66,10 @@ describe("Students page", () => {
       const statusFilter = params?.statusFilter ?? "all";
 
       const filtered = studentsFixture.filter((student) => {
-        const matchesStatus = statusFilter === "all" || student.enrollment_status === statusFilter;
+        const matchesStatus = statusFilter === "all" || student.enrollmentStatus === statusFilter;
         const matchesSearch =
           normalizedSearch.length === 0 ||
-          student.full_name.toLowerCase().includes(normalizedSearch) ||
+          student.name.toLowerCase().includes(normalizedSearch) ||
           student.email.toLowerCase().includes(normalizedSearch);
 
         return matchesStatus && matchesSearch;
@@ -123,19 +125,21 @@ describe("Students page", () => {
     studentsFixture = [
       {
         id: "s-1",
-        full_name: "Ana Silva",
+        name: "Ana Silva",
         email: "ana@example.com",
-        current_risk_level: "risco",
-        enrollment_status: "ativo",
-        last_access: "2026-02-20T00:00:00.000Z",
+        riskLevel: "risco",
+        enrollmentStatus: "ativo",
+        lastAccessAt: "2026-02-20T00:00:00.000Z",
+        avatarUrl: null,
       },
       {
         id: "s-2",
-        full_name: "Bruno Souza",
+        name: "Bruno Souza",
         email: "bruno@example.com",
-        current_risk_level: "normal",
-        enrollment_status: "suspenso",
-        last_access: "2026-02-18T00:00:00.000Z",
+        riskLevel: "normal",
+        enrollmentStatus: "suspenso",
+        lastAccessAt: "2026-02-18T00:00:00.000Z",
+        avatarUrl: null,
       },
     ];
 

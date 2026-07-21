@@ -208,27 +208,27 @@ export default function StudentsPage() {
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9 shrink-0">
-                      <AvatarImage src={student.avatar_url ?? undefined} alt={student.full_name} />
+                      <AvatarImage src={student.avatarUrl ?? undefined} alt={student.name} />
                       <AvatarFallback className="bg-primary/10 text-sm font-medium text-primary">
-                        {student.full_name.charAt(0)}
+                        {student.name.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <p className="truncate font-medium">{student.full_name}</p>
+                      <p className="truncate font-medium">{student.name}</p>
                       <p className="truncate text-xs text-muted-foreground">{student.email}</p>
                     </div>
                   </div>
                 </TableCell>
                 <TableCell>
-                  <RiskBadge level={student.current_risk_level} />
+                  <RiskBadge level={student.riskLevel} />
                 </TableCell>
                 <TableCell className="hidden sm:table-cell">
-                  <EnrollmentStatusBadge status={student.enrollment_status} />
+                  <EnrollmentStatusBadge status={student.enrollmentStatus} />
                 </TableCell>
                 <TableCell className="hidden lg:table-cell">
                   <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Clock className="h-4 w-4" />
-                    <span>{formatLastAccess(student.last_access)}</span>
+                    <span>{formatLastAccess(student.lastAccessAt)}</span>
                   </div>
                 </TableCell>
               </TableRow>

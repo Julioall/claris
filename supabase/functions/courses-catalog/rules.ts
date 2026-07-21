@@ -5,20 +5,17 @@ import type {
 
 export const COURSE_CATALOG_VIEW_PERMISSION = 'courses.catalog.view' as const
 export const SCHOOLS_VIEW_PERMISSION = 'schools.view' as const
-export const REPORTS_VIEW_PERMISSION = 'reports.view' as const
 export const COURSE_ATTENDANCE_MANAGE_PERMISSION = 'courses.attendance.manage' as const
 
 export type CourseCatalogPermission =
   | typeof COURSE_CATALOG_VIEW_PERMISSION
   | typeof SCHOOLS_VIEW_PERMISSION
-  | typeof REPORTS_VIEW_PERMISSION
   | typeof COURSE_ATTENDANCE_MANAGE_PERMISSION
 
 const COURSE_CATALOG_ACTION_PERMISSIONS = {
   get_catalog: [
     COURSE_CATALOG_VIEW_PERMISSION,
     SCHOOLS_VIEW_PERMISSION,
-    REPORTS_VIEW_PERMISSION,
   ],
   set_association_role: [
     COURSE_CATALOG_VIEW_PERMISSION,

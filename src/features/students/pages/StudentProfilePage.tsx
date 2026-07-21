@@ -41,17 +41,17 @@ function formatDate(date?: string | null) {
 }
 
 function resolveMobilePhone(student: {
-  mobile_phone?: string | null;
-  phone_number?: string | null;
+  mobilePhone?: string | null;
+  phoneNumber?: string | null;
   phone?: string | null;
 }) {
-  return student.mobile_phone || student.phone_number || student.phone || null;
+  return student.mobilePhone || student.phoneNumber || student.phone || null;
 }
 
 export default function StudentProfilePage() {
   const { id } = useParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState('notas');
-  const { student, isLoading, error } = useStudentProfile(id);
+  const { student, courses, isLoading, error } = useStudentProfile(id);
 
   if (isLoading) {
     return (
@@ -88,16 +88,16 @@ export default function StudentProfilePage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex items-start gap-4">
           <Avatar className="h-16 w-16 shrink-0">
-            <AvatarImage src={student.avatar_url ?? undefined} alt={student.full_name} />
+            <AvatarImage src={student.avatarUrl ?? undefined} alt={student.name} />
             <AvatarFallback className="bg-primary/10 text-2xl font-bold text-primary">
-              {student.full_name.charAt(0)}
+              {student.name.charAt(0)}
             </AvatarFallback>
           </Avatar>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{student.full_name}</h1>
+            <h1 className="text-2xl font-bold tracking-tight">{student.name}</h1>
             <p className="text-muted-foreground">{student.email || 'Email não informado'}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <RiskBadge level={student.current_risk_level} size="lg" />
+              <RiskBadge level={student.riskLevel} size="lg" />
             </div>
           </div>
         </div>
@@ -112,7 +112,7 @@ export default function StudentProfilePage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Último acesso</p>
-                <p className="font-medium">{student.last_access ? formatTime(student.last_access) : 'Nunca'}</p>
+                <p className="font-medium">{student.lastAccessAt ? formatTime(student.lastAccessAt) : 'Nunca'}</p>
               </div>
             </div>
           </CardContent>
@@ -130,7 +130,7 @@ export default function StudentProfilePage() {
                 <User className="h-4 w-4" />
                 Nome
               </p>
-              <p className="break-all text-sm font-medium">{student.full_name || 'Não informado'}</p>
+              <p className="break-all text-sm font-medium">{student.name || 'Não informado'}</p>
             </div>
 
             <div className="space-y-1">
@@ -162,7 +162,7 @@ export default function StudentProfilePage() {
                 <CalendarDays className="h-4 w-4" />
                 Último acesso
               </p>
-              <p className="text-sm font-medium">{formatDate(student.last_access)}</p>
+              <p className="text-sm font-medium">{formatDate(student.lastAccessAt)}</p>
             </div>
 
             <div className="space-y-1">
@@ -170,7 +170,7 @@ export default function StudentProfilePage() {
                 <CalendarDays className="h-4 w-4" />
                 Criado em
               </p>
-              <p className="text-sm font-medium">{formatDate(student.created_at)}</p>
+              <p className="text-sm font-medium">{formatDate(student.createdAt)}</p>
             </div>
 
           </div>
@@ -194,7 +194,7 @@ export default function StudentProfilePage() {
         </TabsList>
 
         <TabsContent value="notas" className="mt-4">
-          {id && <StudentGradesTab studentId={id} />}
+          <StudentGradesTab courses={courses} />
         </TabsContent>
 
         <TabsContent value="historico" className="mt-4">
@@ -202,10 +202,10 @@ export default function StudentProfilePage() {
         </TabsContent>
 
         <TabsContent value="chat" className="mt-4">
-          {student.moodle_user_id ? (
+          {student.moodleUserId ? (
             <ChatWindow
-              moodleUserId={student.moodle_user_id}
-              studentName={student.full_name}
+              moodleUserId={student.moodleUserId}
+              studentName={student.name}
               className="h-[500px]"
             />
           ) : (

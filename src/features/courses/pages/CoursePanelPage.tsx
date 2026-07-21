@@ -85,6 +85,7 @@ export default function CoursePanelPage() {
     APP_PERMISSIONS.COURSES_ACTIVITIES_VISIBILITY_MANAGE,
   );
   const canManageAttendance = can(APP_PERMISSIONS.COURSES_ATTENDANCE_MANAGE);
+  const canManageGradeSuggestions = can(APP_PERMISSIONS.GRADES_SUGGESTIONS_MANAGE);
   const [activeTab, setActiveTab] = useState('overview');
   const [expandedActivities, setExpandedActivities] = useState<Record<string, boolean>>({});
   const [isSyncingSection, setIsSyncingSection] = useState<CoursePanelSyncSection | null>(null);
@@ -661,6 +662,7 @@ export default function CoursePanelPage() {
                               {isAssignment && (
                                 <AssignmentSuggestionPanel
                                   activity={activity}
+                                  canManageGradeSuggestions={canManageGradeSuggestions}
                                   submissions={activitySubmissionsForAssign}
                                   studentsById={studentsById}
                                   isExpanded={isExpanded}

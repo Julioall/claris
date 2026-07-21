@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { FileSpreadsheet } from 'lucide-react';
 import type * as XLSXType from 'xlsx-js-style';
 import { Spinner } from '@/components/ui/spinner';
-import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -17,19 +16,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
-import { getCourseLifecycleStatus, withEffectiveCourseDates } from '@/lib/course-dates';
-import { getStudentActivityWorkflowStatus } from '@/lib/student-activity-status';
 import {
-  fetchAllReportActivityDetails,
-  fetchAllReportActivityGrades,
-  fetchAllReportCourseTotals,
-  fetchAllReportEnrollments,
-  fetchTutorCourses,
-  type ActivityDetailRow,
-  type ActivityGradeRow,
-  type CourseTotalRow,
-  type EnrollmentRow,
-  type TutorCourse,
+  getAcademicGradesReport,
+  getAcademicPendingActivitiesReport,
+  listAcademicReportCourses,
+  type AcademicReportCourseDto,
+  type AcademicReportCourseLifecycleDto,
 } from '@/features/reports/api';
 
 const SEM_CATEGORIA = 'Sem categoria';
@@ -66,8 +58,6 @@ function daysSinceAccess(lastAccess: string | null | undefined): number | string
   return Math.floor((Date.now() - new Date(lastAccess).getTime()) / (1000 * 60 * 60 * 24));
 }
 
-type ReportActivityStatus = 'graded' | 'submitted' | 'pending' | 'nao_iniciada' | 'sem_atividades';
-
 type ExcelStyle = Record<string, unknown>;
 type ExcelWorksheet = XLSXType.WorkSheet & {
   '!cols'?: Array<{ wch: number }>;
@@ -77,8 +67,6 @@ type ExcelCell = XLSXType.CellObject & {
   s?: ExcelStyle;
   z?: string;
 };
-
-type UnitLifecycleStatus = ReturnType<typeof getCourseLifecycleStatus>;
 
 const BORDER_STYLE: ExcelStyle = {
   top: { style: 'thin', color: { rgb: 'FFB0B0B0' } },
@@ -179,64 +167,22 @@ const getLastAccessCellStyle = (daysWithoutAccess: number) => {
   };
 };
 
-const REPORT_ACTIVITY_STATUS_LABELS: Record<ReportActivityStatus, string> = {
-  graded: 'Corrigida',
-  submitted: 'Aguardando correção',
-  pending: 'Pendente',
-  nao_iniciada: 'Não iniciada',
-  sem_atividades: 'Sem atividades',
-};
-
-const UNIT_STATUS_LABELS: Record<UnitLifecycleStatus, string> = {
+const UNIT_STATUS_LABELS: Record<AcademicReportCourseLifecycleDto, string> = {
   finalizada: 'Finalizada',
   em_andamento: 'Em andamento',
   nao_iniciada: 'Nao iniciada',
 };
 
-const UNIT_STATUS_BADGE_STYLES: Record<UnitLifecycleStatus, string> = {
+const UNIT_STATUS_BADGE_STYLES: Record<AcademicReportCourseLifecycleDto, string> = {
   finalizada: 'border-slate-300 bg-slate-100 text-slate-700',
   em_andamento: 'border-emerald-200 bg-emerald-50 text-emerald-700',
   nao_iniciada: 'border-amber-200 bg-amber-50 text-amber-700',
 };
 
-const getNormalizedActivityStatus = (activity: ActivityGradeRow): Exclude<ReportActivityStatus, 'nao_iniciada' | 'sem_atividades'> => {
-  const workflowStatus = getStudentActivityWorkflowStatus(activity);
-
-  if (workflowStatus === 'pending_correction') {
-    return 'submitted';
-  }
-
-  if (workflowStatus === 'corrected') {
-    return 'graded';
-  }
-
-  return 'pending';
-};
-
-const getReportActivityStatusLabel = (status: ReportActivityStatus) => REPORT_ACTIVITY_STATUS_LABELS[status];
-
-function buildCourseActivityKey(courseId: string, moodleActivityId: string) {
-  return `${courseId}::${moodleActivityId}`;
-}
-
-function buildEvaluativeActivityKeys(activities: ActivityDetailRow[]) {
-  const evaluativeActivityKeys = new Set<string>();
-
-  for (const activity of activities) {
-    if (activity.hidden) continue;
-    if ((activity.grade_max ?? 0) <= 0) continue;
-
-    evaluativeActivityKeys.add(buildCourseActivityKey(activity.course_id, activity.moodle_activity_id));
-  }
-
-  return evaluativeActivityKeys;
-}
-
 export default function ReportsPage() {
-  const { user } = useAuth();
   const [isLoadingCourses, setIsLoadingCourses] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [tutorCourses, setTutorCourses] = useState<TutorCourse[]>([]);
+  const [tutorCourses, setTutorCourses] = useState<AcademicReportCourseDto[]>([]);
   const [selectedReportType, setSelectedReportType] = useState('notas');
   const [selectedCourseGroup, setSelectedCourseGroup] = useState<string>('');
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
@@ -244,15 +190,9 @@ export default function ReportsPage() {
 
   useEffect(() => {
     const loadTutorCourses = async () => {
-      if (!user) {
-        setTutorCourses([]);
-        setIsLoadingCourses(false);
-        return;
-      }
-
       setIsLoadingCourses(true);
       try {
-        const courses = await fetchTutorCourses(user.id);
+        const courses = await listAcademicReportCourses();
         setTutorCourses(courses);
       } catch (err) {
         console.error('Erro ao carregar cursos para relatório:', err);
@@ -263,7 +203,7 @@ export default function ReportsPage() {
     };
 
     loadTutorCourses();
-  }, [user]);
+  }, []);
 
   const availableCourseGroups = useMemo(() => {
     const categories = new Set(
@@ -282,18 +222,11 @@ export default function ReportsPage() {
         return category === selectedCourseGroup;
       })
       .sort((a, b) => {
-        const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
-        const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
-        return dateA - dateB;
+        const dateA = a.startsAt ? new Date(a.startsAt).getTime() : Infinity;
+        const dateB = b.startsAt ? new Date(b.startsAt).getTime() : Infinity;
+        return dateA - dateB || a.name.localeCompare(b.name, 'pt-BR') || a.id.localeCompare(b.id);
       });
   }, [selectedCourseGroup, tutorCourses]);
-
-  const availableUnitsWithStatus = useMemo(() => {
-    return withEffectiveCourseDates(availableUnits).map(unit => ({
-      ...unit,
-      lifecycleStatus: getCourseLifecycleStatus(unit),
-    }));
-  }, [availableUnits]);
 
   useEffect(() => {
     setSelectedUnitIds([]);
@@ -313,7 +246,7 @@ export default function ReportsPage() {
   };
 
   const selectAllUnits = () => {
-    setSelectedUnitIds(availableUnitsWithStatus.map(unit => unit.id));
+    setSelectedUnitIds(availableUnits.map(unit => unit.id));
   };
 
   const clearUnitsSelection = () => {
@@ -329,80 +262,13 @@ export default function ReportsPage() {
     setIsGenerating(true);
     try {
       const XLSX = await import('xlsx-js-style');
-
-      const [enrollments, activities, courseTotals] = await Promise.all([
-        fetchAllReportEnrollments(selectedUnitIds),
-        fetchAllReportActivityGrades(selectedUnitIds),
-        fetchAllReportCourseTotals(selectedUnitIds),
-      ]);
-
-      const summaryByStudentAndCourse = new Map<string, {
-        grade: number | null;
-        gradePercentage: number | null;
-        status: Exclude<ReportActivityStatus, 'nao_iniciada'>;
-      }>();
-
-      const gradebookTotalsByKey = new Map(
-        courseTotals.map(total => [
-          `${total.student_id}::${total.course_id}`,
-          {
-            grade: total.grade_raw,
-            gradePercentage: total.grade_percentage,
-          },
-        ]),
-      );
-
-      const groupedByKey = activities.reduce<Record<string, ActivityGradeRow[]>>((acc, row) => {
-        const key = `${row.student_id}::${row.course_id}`;
-        if (!acc[key]) {
-          acc[key] = [];
-        }
-        acc[key].push(row);
-        return acc;
-      }, {});
-
-      Object.entries(groupedByKey).forEach(([key, rows]) => {
-        const visibleActivities = rows.filter(row => !row.hidden);
-        const gradebookTotal = gradebookTotalsByKey.get(key);
-
-        if (visibleActivities.length === 0) {
-          summaryByStudentAndCourse.set(key, {
-            grade: gradebookTotal?.grade ?? null,
-            gradePercentage: gradebookTotal?.gradePercentage ?? null,
-            status: gradebookTotal?.grade != null ? 'graded' : 'sem_atividades',
-          });
-          return;
-        }
-
-        const normalizedStatuses = visibleActivities.map(getNormalizedActivityStatus);
-
-        let reportStatus: Exclude<ReportActivityStatus, 'nao_iniciada'> = 'graded';
-        if (normalizedStatuses.some(status => status === 'submitted')) {
-          reportStatus = 'submitted';
-        } else if (normalizedStatuses.some(status => status === 'pending')) {
-          reportStatus = 'pending';
-        }
-
-        summaryByStudentAndCourse.set(key, {
-          grade: gradebookTotal?.grade ?? null,
-          gradePercentage: gradebookTotal?.gradePercentage ?? null,
-          status: reportStatus,
-        });
-      });
-
-      const now = new Date();
-      const selectedUnits = withEffectiveCourseDates(
-        availableUnits
-          .filter(unit => selectedUnitIds.includes(unit.id))
-          .sort((a, b) => {
-            const dateA = a.start_date ? new Date(a.start_date).getTime() : Infinity;
-            const dateB = b.start_date ? new Date(b.start_date).getTime() : Infinity;
-            return dateA - dateB;
-          }),
+      const report = await getAcademicGradesReport(
+        selectedUnitIds,
+        includeSuspendedStudents,
       );
 
       const usedHeaders = new Set<string>();
-      const selectedUnitsWithHeader = selectedUnits.map(unit => {
+      const selectedUnitsWithHeader = report.units.map(unit => {
         const simplifiedName = simplifyUnitName(unit.name);
         let headerName = simplifiedName;
         let counter = 2;
@@ -417,64 +283,31 @@ export default function ReportsPage() {
         return {
           ...unit,
           headerName,
-          status: getCourseLifecycleStatus(unit, now),
         };
       });
 
-      const studentsById = new Map<string, string>();
-      const suspendedStudentIds = new Set<string>();
-      const lastAccessByStudentId = new Map<string, number | string>();
-      enrollments.forEach(enrollment => {
-        if (!studentsById.has(enrollment.student_id)) {
-          studentsById.set(enrollment.student_id, enrollment.students?.full_name || 'Aluno sem nome');
-          const lastAccess = enrollment.students?.last_access;
-          lastAccessByStudentId.set(enrollment.student_id, daysSinceAccess(lastAccess));
-        }
-        if (enrollment.enrollment_status === 'suspenso') {
-          suspendedStudentIds.add(enrollment.student_id);
-        }
-      });
+      const reportRows = report.students.map(student => {
+        const gradeByCourse = new Map(student.grades.map(grade => [grade.courseId, grade]));
+        const row: Record<string, string | number> = {
+          Aluno: student.isSuspended ? `${student.name} (Suspenso)` : student.name,
+          'Último Acesso (dias)': daysSinceAccess(student.lastAccessAt),
+        };
+        const gradePercentagesByUnitHeader = new Map<string, number | null>();
 
-      const rows = Array.from(studentsById.entries())
-        .map(([studentId, studentName]) => {
-          const isSuspended = suspendedStudentIds.has(studentId);
-          const row: Record<string, string | number> = {
-            Aluno: isSuspended ? `${studentName} (Suspenso)` : studentName,
-            'Último Acesso (dias)': lastAccessByStudentId.get(studentId) ?? '-',
-          };
-          const gradePercentagesByUnitHeader = new Map<string, number | null>();
+        selectedUnitsWithHeader.forEach(unit => {
+          if (unit.lifecycleStatus === 'nao_iniciada') {
+            row[unit.headerName] = '-';
+            gradePercentagesByUnitHeader.set(unit.headerName, null);
+            return;
+          }
 
-          selectedUnitsWithHeader.forEach(unit => {
-            if (unit.status === 'nao_iniciada') {
-              row[unit.headerName] = '-';
-              gradePercentagesByUnitHeader.set(unit.headerName, null);
-              return;
-            }
-
-            const key = `${studentId}::${unit.id}`;
-            const gradebookTotal = gradebookTotalsByKey.get(key);
-            const summary = summaryByStudentAndCourse.get(key) || {
-              grade: gradebookTotal?.grade ?? null,
-              gradePercentage: gradebookTotal?.gradePercentage ?? null,
-              status: gradebookTotal?.grade != null
-                ? 'graded'
-                : 'sem_atividades',
-            };
-
-            row[unit.headerName] = summary?.grade === null || summary?.grade === undefined ? '' : summary.grade;
-            gradePercentagesByUnitHeader.set(unit.headerName, summary?.gradePercentage ?? null);
-          });
-
-          return { row, isSuspended, gradePercentagesByUnitHeader };
-        })
-        .sort((a, b) => {
-          if (a.isSuspended !== b.isSuspended) return a.isSuspended ? 1 : -1;
-          return String(a.row.Aluno).localeCompare(String(b.row.Aluno), 'pt-BR');
+          const grade = gradeByCourse.get(unit.id);
+          row[unit.headerName] = grade?.gradeRaw ?? '';
+          gradePercentagesByUnitHeader.set(unit.headerName, grade?.gradePercentage ?? null);
         });
 
-      const reportRows = includeSuspendedStudents
-        ? rows
-        : rows.filter(entry => !entry.isSuspended);
+        return { row, isSuspended: student.isSuspended, gradePercentagesByUnitHeader };
+      });
 
       if (reportRows.length === 0) {
         toast.error('Nenhum dado encontrado para as unidades selecionadas');
@@ -585,114 +418,34 @@ export default function ReportsPage() {
     setIsGenerating(true);
     try {
       const XLSX = await import('xlsx-js-style');
-      const [allEnrollments, allActivities] = await Promise.all([
-        fetchAllReportEnrollments(selectedUnitIds),
-        fetchAllReportActivityDetails(selectedUnitIds),
-      ]);
+      const report = await getAcademicPendingActivitiesReport(selectedUnitIds);
 
-      // Build units with inferred end dates
-      const selectedUnitsRaw = availableUnits.filter(u => selectedUnitIds.includes(u.id));
-      const unitsWithEndDates = withEffectiveCourseDates(selectedUnitsRaw);
-      const unitEndDateMap = new Map(unitsWithEndDates.map(u => [u.id, u.effective_end_date]));
-      const unitNameMap = new Map(unitsWithEndDates.map(u => [u.id, simplifyUnitName(u.name)]));
-      const unitStartMap = new Map(unitsWithEndDates.map(u => [u.id, u.start_date]));
-
-      const now = new Date();
-      const evaluativeActivityKeys = buildEvaluativeActivityKeys(allActivities);
-
-      // Filter: only gradebook-evaluative, visible, non-quiz activities that are pending within the unit period
-      const pendingActivities = allActivities.filter(a => {
-        if (!evaluativeActivityKeys.has(buildCourseActivityKey(a.course_id, a.moodle_activity_id))) {
-          return false;
-        }
-        if (a.hidden) return false;
-        if (a.activity_type === 'quiz') return false;
-
-        // Exclude fully completed/graded; submitted-but-ungraded activities are included as 'Pendente de Correção'
-        const workflowStatus = getStudentActivityWorkflowStatus(a);
-        if (workflowStatus !== 'pending_submission' && workflowStatus !== 'pending_correction') return false;
-
-        // Check if the activity's unit period has started
-        const unitStart = unitStartMap.get(a.course_id);
-        if (unitStart && new Date(unitStart) > now) return false;
-
-        // Check if the activity's unit period has ended (past due)
-        const unitEnd = unitEndDateMap.get(a.course_id);
-        if (unitEnd && new Date(unitEnd) < now) {
-          // Unit already ended - activity is overdue
-          return true;
-        }
-
-        // Unit still in progress - check due_date if available
-        if (a.due_date && new Date(a.due_date) < now) return true;
-
-        // Unit in progress, no due date or not past due yet - still pending
-        return true;
-      });
-
-      // Build student map
-      const studentsById = new Map<string, string>();
-      const suspendedIds = new Set<string>();
-      const lastAccessByStudentId = new Map<string, number | string>();
-      allEnrollments.forEach(e => {
-        if (!studentsById.has(e.student_id)) {
-          studentsById.set(e.student_id, e.students?.full_name || 'Aluno sem nome');
-          const lastAccess = e.students?.last_access;
-          lastAccessByStudentId.set(e.student_id, daysSinceAccess(lastAccess));
-        }
-        if (e.enrollment_status === 'suspenso') suspendedIds.add(e.student_id);
-      });
-
-      // Group pending by student
-      const pendingByStudent = new Map<string, ActivityDetailRow[]>();
-      pendingActivities.forEach(a => {
-        if (suspendedIds.has(a.student_id)) return;
-        const list = pendingByStudent.get(a.student_id) || [];
-        list.push(a);
-        pendingByStudent.set(a.student_id, list);
-      });
-
-      if (pendingByStudent.size === 0) {
+      if (report.details.length === 0) {
         toast.info('Nenhuma atividade pendente encontrada para as unidades selecionadas');
-        setIsGenerating(false);
         return;
       }
 
-      // Build rows
-      const rows: Record<string, string | number>[] = [];
-      const sortedStudents = Array.from(pendingByStudent.entries())
-        .sort((a, b) => b[1].length - a[1].length); // Most pending first
+      const studentsById = new Map(report.students.map(student => [student.studentId, student]));
+      const rows = report.details.map(detail => {
+        const student = studentsById.get(detail.studentId);
+        return {
+          'Aluno': student?.name ?? 'Desconhecido',
+          'Último Acesso (dias)': daysSinceAccess(student?.lastAccessAt),
+          'Unidade Curricular': simplifyUnitName(detail.unitName),
+          'Atividade': detail.activityName,
+          'Tipo': detail.activityType || '-',
+          'Status': detail.workflowStatus === 'pendingCorrection'
+            ? 'Pendente de Correção'
+            : 'Pendente de Envio',
+        };
+      });
 
-      for (const [studentId, activities] of sortedStudents) {
-        const studentName = studentsById.get(studentId) || 'Desconhecido';
-        const lastAccessDays = lastAccessByStudentId.get(studentId) ?? '-';
-        for (const act of activities) {
-          const unitName = unitNameMap.get(act.course_id) || 'N/A';
-
-          rows.push({
-            'Aluno': studentName,
-            'Último Acesso (dias)': lastAccessDays,
-            'Unidade Curricular': unitName,
-            'Atividade': act.activity_name,
-            'Tipo': act.activity_type || '-',
-            'Status': getStudentActivityWorkflowStatus(act) === 'pending_correction'
-              ? 'Pendente de Correção'
-              : 'Pendente de Envio',
-          });
-        }
-      }
-
-      // Summary sheet: count per student
-      const summaryRows = sortedStudents.map(([studentId, activities]) => ({
-        'Aluno': studentsById.get(studentId) || 'Desconhecido',
-        'Último Acesso (dias)': lastAccessByStudentId.get(studentId) ?? '-',
-        'Atividades Pendentes': activities.length,
-        'Pendente de Envio': activities.filter(
-          (activity) => getStudentActivityWorkflowStatus(activity) === 'pending_submission',
-        ).length,
-        'Pendente de Correção': activities.filter(
-          (activity) => getStudentActivityWorkflowStatus(activity) === 'pending_correction',
-        ).length,
+      const summaryRows = report.students.map(student => ({
+        'Aluno': student.name,
+        'Último Acesso (dias)': daysSinceAccess(student.lastAccessAt),
+        'Atividades Pendentes': student.totalCount,
+        'Pendente de Envio': student.pendingSubmissionCount,
+        'Pendente de Correção': student.pendingCorrectionCount,
       }));
 
       const workbook = XLSX.utils.book_new();
@@ -805,7 +558,7 @@ export default function ReportsPage() {
                 <p className="text-sm text-muted-foreground">Selecione um curso para listar as unidades curriculares.</p>
               )}
 
-              {availableUnitsWithStatus.map(unit => {
+              {availableUnits.map(unit => {
                 const checked = selectedUnitIds.includes(unit.id);
                 const unitName = simplifyUnitName(unit.name);
                 return (

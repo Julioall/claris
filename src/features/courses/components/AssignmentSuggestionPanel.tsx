@@ -8,7 +8,6 @@ import {
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/contexts/AuthContext';
 import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext';
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
@@ -55,6 +54,7 @@ interface AssignmentSuggestionJobState {
 
 interface AssignmentSuggestionPanelProps {
   activity: CoursePanelActivityDto;
+  canManageGradeSuggestions: boolean;
   submissions: CoursePanelSubmissionDto[];
   studentsById: Map<string, CoursePanelStudentDto>;
   isExpanded: boolean;
@@ -93,13 +93,13 @@ function parseEditedGrade(value: string) {
 
 export function AssignmentSuggestionPanel({
   activity,
+  canManageGradeSuggestions,
   submissions,
   studentsById,
   isExpanded,
   onToggleExpand,
   onApproved,
 }: AssignmentSuggestionPanelProps) {
-  const { user } = useAuth();
   const moodleSession = useMoodleSession();
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
@@ -164,7 +164,9 @@ export function AssignmentSuggestionPanel({
 
   useBackgroundActivityFlag({
     id: persistentActivityId ?? `ai-grading:activity:${activity.id}`,
-    active: isGenerating || isResumingJob || hasActiveBatchJob || approvingCount > 0,
+    active: canManageGradeSuggestions && (
+      isGenerating || isResumingJob || hasActiveBatchJob || approvingCount > 0
+    ),
     label: approvingCount > 0
       ? 'Publicando correcoes no Moodle'
       : hasActiveBatchJob
@@ -243,7 +245,7 @@ export function AssignmentSuggestionPanel({
   }, [activeJobId, closedSuggestionIds]);
 
   const loadJob = useCallback(async (jobId: string) => {
-    if (!moodleSession) {
+    if (!canManageGradeSuggestions || !moodleSession) {
       return;
     }
 
@@ -261,10 +263,10 @@ export function AssignmentSuggestionPanel({
     }
 
     applyJobResponse(data);
-  }, [applyJobResponse, moodleSession]);
+  }, [applyJobResponse, canManageGradeSuggestions, moodleSession]);
 
   const resumeJob = useCallback(async (jobId: string) => {
-    if (!moodleSession) {
+    if (!canManageGradeSuggestions || !moodleSession) {
       return;
     }
 
@@ -291,9 +293,10 @@ export function AssignmentSuggestionPanel({
     } finally {
       setIsResumingJob(false);
     }
-  }, [applyJobResponse, moodleSession]);
+  }, [applyJobResponse, canManageGradeSuggestions, moodleSession]);
 
   const cancelJob = useCallback(async (jobId: string) => {
+    if (!canManageGradeSuggestions) return;
     setIsCancellingJob(true);
 
     try {
@@ -323,10 +326,10 @@ export function AssignmentSuggestionPanel({
     } finally {
       setIsCancellingJob(false);
     }
-  }, [applyJobResponse, toast]);
+  }, [applyJobResponse, canManageGradeSuggestions, toast]);
 
   const handleGenerateSuggestions = async () => {
-    if (!moodleSession || !activity.moodleActivityId) {
+    if (!canManageGradeSuggestions || !moodleSession || !activity.moodleActivityId) {
       setBatchError('A sessao Moodle nao esta disponivel para gerar as sugestoes.');
       return;
     }
@@ -378,7 +381,7 @@ export function AssignmentSuggestionPanel({
   };
 
   useEffect(() => {
-    if (!isExpanded || activeJobId || !user?.id || !activity.moodleActivityId) {
+    if (!canManageGradeSuggestions || !isExpanded || activeJobId || !activity.id) {
       return;
     }
 
@@ -387,9 +390,8 @@ export function AssignmentSuggestionPanel({
     const restoreExistingJob = async () => {
       try {
         const existingJob = await findLatestRelevantActivityGradeSuggestionJob({
-          userId: user.id,
+          activityId: activity.id,
           courseId: activity.courseId,
-          moodleActivityId: activity.moodleActivityId,
         });
 
         if (!existingJob || cancelled) {
@@ -416,10 +418,10 @@ export function AssignmentSuggestionPanel({
     return () => {
       cancelled = true;
     };
-  }, [activity.courseId, activity.moodleActivityId, activeJobId, isExpanded, user?.id]);
+  }, [activity.courseId, activity.id, activeJobId, canManageGradeSuggestions, isExpanded]);
 
   useEffect(() => {
-    if (!activeJobId) {
+    if (!canManageGradeSuggestions || !activeJobId) {
       return;
     }
 
@@ -455,10 +457,10 @@ export function AssignmentSuggestionPanel({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [activeJobId, jobState?.processedItems, jobState?.status, jobState?.totalItems, loadJob]);
+  }, [activeJobId, canManageGradeSuggestions, jobState?.processedItems, jobState?.status, jobState?.totalItems, loadJob]);
 
   useEffect(() => {
-    if (!activeJobId || !jobState || isResumingJob) {
+    if (!canManageGradeSuggestions || !activeJobId || !jobState || isResumingJob) {
       return;
     }
 
@@ -477,7 +479,7 @@ export function AssignmentSuggestionPanel({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [activeJobId, isResumingJob, jobState, resumeJob]);
+  }, [activeJobId, canManageGradeSuggestions, isResumingJob, jobState, resumeJob]);
 
   const updateRow = (studentActivityId: string, updater: (current: SuggestionRowState | undefined) => SuggestionRowState) => {
     setRows((current) => ({
@@ -673,7 +675,7 @@ export function AssignmentSuggestionPanel({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-end gap-2">
-        {activeJobId && hasActiveBatchJob ? (
+        {canManageGradeSuggestions && activeJobId && hasActiveBatchJob ? (
           <Button
             type="button"
             variant="destructive"
@@ -685,7 +687,7 @@ export function AssignmentSuggestionPanel({
             Cancelar
           </Button>
         ) : null}
-        {isExpanded && hasSuggestions ? (
+        {canManageGradeSuggestions && isExpanded && hasSuggestions ? (
           <>
             <Button
               type="button"
@@ -710,7 +712,7 @@ export function AssignmentSuggestionPanel({
           </>
         ) : null}
               {/* Modal de confirmação para descartar tudo */}
-              {showDiscardAllConfirm && (
+              {canManageGradeSuggestions && showDiscardAllConfirm && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
                   <div className="rounded-lg bg-white p-6 shadow-xl max-w-sm w-full">
                     <h2 className="text-lg font-semibold mb-2">Descartar todos os feedbacks?</h2>
@@ -722,7 +724,7 @@ export function AssignmentSuggestionPanel({
                   </div>
                 </div>
               )}
-        {pendingCorrectionSubmissions.length > 0 ? (
+        {canManageGradeSuggestions && pendingCorrectionSubmissions.length > 0 ? (
           <Button
             type="button"
             variant="outline"
@@ -748,7 +750,7 @@ export function AssignmentSuggestionPanel({
 
       {isExpanded && (
         <div className="overflow-hidden rounded-md border border-border/70 bg-background/80">
-          {jobState ? (
+          {canManageGradeSuggestions && jobState ? (
             <div className="border-b bg-muted/20 px-4 py-3">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-1">
@@ -776,7 +778,7 @@ export function AssignmentSuggestionPanel({
             </div>
           ) : null}
 
-          {batchError ? (
+          {canManageGradeSuggestions && batchError ? (
             <div className="border-b px-4 py-2 text-sm text-destructive">
               {batchError}
             </div>
@@ -800,8 +802,10 @@ export function AssignmentSuggestionPanel({
                 const student = studentsById.get(submission.studentId);
                 const studentName = student?.name || 'Aluno nao identificado';
                 const suggestionClosed = submissionStatus === 'corrigido' || Boolean(closedSuggestionIds[submission.id]);
-                const row = suggestionClosed ? undefined : rows[submission.id];
-                const jobItem = jobItems[submission.id];
+                const row = canManageGradeSuggestions && !suggestionClosed
+                  ? rows[submission.id]
+                  : undefined;
+                const jobItem = canManageGradeSuggestions ? jobItems[submission.id] : undefined;
                 const parsedGrade = row ? parseEditedGrade(row.editedGrade) : null;
                 const approvalBlocked = row?.result.status === 'error';
                 const canApprove = Boolean(

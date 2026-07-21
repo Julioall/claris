@@ -11,8 +11,8 @@ vi.mock("@/features/students/hooks/useStudentProfile", () => ({
 }));
 
 vi.mock("@/components/student/StudentGradesTab", () => ({
-  StudentGradesTab: ({ studentId }: { studentId: string }) => (
-    <div data-testid="student-grades-tab">{studentId}</div>
+  StudentGradesTab: ({ courses }: { courses: unknown[] }) => (
+    <div data-testid="student-grades-tab">{courses.length}</div>
   ),
 }));
 
@@ -52,14 +52,21 @@ describe("StudentProfile page", () => {
     useStudentProfileMock.mockReturnValue({
       student: {
         id: "s-1",
-        full_name: "Ana Silva",
+        name: "Ana Silva",
         email: "ana@example.com",
-        current_risk_level: "risco",
+        riskLevel: "risco",
         tags: ["falta"],
-        risk_reasons: ["sem_acesso_recente"],
-        moodle_user_id: 99,
-        last_access: "2026-02-20T00:00:00.000Z",
+        riskReasons: ["sem_acesso_recente"],
+        moodleUserId: "99",
+        lastAccessAt: "2026-02-20T00:00:00.000Z",
+        avatarUrl: null,
+        city: null,
+        phone: null,
+        phoneNumber: null,
+        mobilePhone: null,
+        createdAt: null,
       },
+      courses: [],
       isLoading: false,
       error: null,
     });
@@ -68,6 +75,7 @@ describe("StudentProfile page", () => {
   it("shows loading state", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
+      courses: [],
       isLoading: true,
       error: null,
     });
@@ -79,6 +87,7 @@ describe("StudentProfile page", () => {
   it("shows error state when student is missing", () => {
     useStudentProfileMock.mockReturnValue({
       student: null,
+      courses: [],
       isLoading: false,
       error: "Erro ao carregar aluno",
     });

@@ -3,11 +3,11 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 42,
+    "filesWithSupabaseAccess": 37,
     "totals": {
-      "clientImports": 42,
-      "from": 107,
-      "rpc": 14,
+      "clientImports": 37,
+      "from": 96,
+      "rpc": 13,
       "functionsInvoke": 15,
       "auth": 5,
       "storage": 0,
@@ -760,37 +760,6 @@
       }
     },
     {
-      "file": "src/features/reports/api/index.ts",
-      "feature": "reports",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Gerar dados dos relatorios"
-      ],
-      "resources": {
-        "tables": [
-          "student_activities",
-          "student_course_grades",
-          "student_courses"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0505"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 4,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/services/api/myServices.ts",
       "feature": "services",
       "categories": [
@@ -904,126 +873,6 @@
         "from": 3,
         "rpc": 0,
         "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/students/api/gradeSuggestions.ts",
-      "feature": "students",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Acompanhar jobs de sugestao de nota"
-      ],
-      "resources": {
-        "tables": [
-          "ai_grade_suggestion_jobs"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0504"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/students/api/index.ts",
-      "feature": "students",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Obter perfil consolidado do aluno"
-      ],
-      "resources": {
-        "tables": [
-          "student_activities",
-          "student_course_grades"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0502"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/students/api/students.repository.ts",
-      "feature": "students",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Listar alunos com paginacao e escopo autorizado"
-      ],
-      "resources": {
-        "tables": [
-          "students"
-        ],
-        "rpcs": [
-          "list_students_paginated"
-        ],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0501"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 1,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/students/hooks/useStudentHistory.ts",
-      "feature": "students",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Obter historico calculado do aluno"
-      ],
-      "resources": {
-        "tables": [
-          "student_activities",
-          "student_sync_snapshots"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0503"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 2,
-        "rpc": 0,
-        "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,
         "channel": 0

@@ -1,7 +1,6 @@
 import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import {
   cancelGradeSuggestionJob,
-  cancelPendingGradeSuggestionJobItems,
   claimGradeSuggestionJobItem,
   completeGradeSuggestionJob,
   completeGradeSuggestionJobItem,
@@ -233,21 +232,12 @@ async function cancelActivitySuggestionJob(params: {
     return false
   }
 
-  const completedAt = new Date().toISOString()
   const cancelMessage = 'Cancelamento solicitado pelo usuario. Itens pendentes foram interrompidos.'
 
-  await cancelPendingGradeSuggestionJobItems(params.supabase, job.id, completedAt, cancelMessage)
-  const progress = await updateGradeSuggestionJobProgress(params.supabase, job.id)
-  await cancelGradeSuggestionJob(params.supabase, job.id, {
-    completedAt,
+  return cancelGradeSuggestionJob(params.supabase, job.id, {
     errorMessage: cancelMessage,
-    processedItems: progress.processedItems,
-    successCount: progress.successCount,
-    errorCount: progress.errorCount,
-    totalItems: progress.totalItems,
+    userId: params.userId,
   })
-
-  return true
 }
 
 function scheduleActivitySuggestionJobRun(params: {

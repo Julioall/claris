@@ -3,12 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import ReportsPage from "@/features/reports/pages/ReportsPage";
 
-const useAuthMock = vi.fn();
-const fetchTutorCoursesMock = vi.fn();
-const fetchAllReportEnrollmentsMock = vi.fn();
-const fetchAllReportActivityDetailsMock = vi.fn();
-const fetchAllReportActivityGradesMock = vi.fn();
-const fetchAllReportCourseTotalsMock = vi.fn();
+const listAcademicReportCoursesMock = vi.fn();
+const getAcademicGradesReportMock = vi.fn();
+const getAcademicPendingActivitiesReportMock = vi.fn();
 const toastSuccessMock = vi.fn();
 const toastErrorMock = vi.fn();
 const toastInfoMock = vi.fn();
@@ -90,16 +87,10 @@ const buildWorksheet = (rows: Array<Record<string, unknown>>) => {
 
 const daysAgoIso = (days: number) => new Date(Date.now() - (((days * 24) + 1) * 60 * 60 * 1000)).toISOString();
 
-vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => useAuthMock(),
-}));
-
 vi.mock("@/features/reports/api", () => ({
-  fetchTutorCourses: (...args: unknown[]) => fetchTutorCoursesMock(...args),
-  fetchAllReportEnrollments: (...args: unknown[]) => fetchAllReportEnrollmentsMock(...args),
-  fetchAllReportActivityDetails: (...args: unknown[]) => fetchAllReportActivityDetailsMock(...args),
-  fetchAllReportActivityGrades: (...args: unknown[]) => fetchAllReportActivityGradesMock(...args),
-  fetchAllReportCourseTotals: (...args: unknown[]) => fetchAllReportCourseTotalsMock(...args),
+  listAcademicReportCourses: (...args: unknown[]) => listAcademicReportCoursesMock(...args),
+  getAcademicGradesReport: (...args: unknown[]) => getAcademicGradesReportMock(...args),
+  getAcademicPendingActivitiesReport: (...args: unknown[]) => getAcademicPendingActivitiesReportMock(...args),
 }));
 
 vi.mock("sonner", () => ({
@@ -125,146 +116,111 @@ const tutorCoursesResponse = [
   {
     id: "course-1",
     name: "Matematica (1003121 - Matematica)",
-    short_name: "MAT",
+    shortName: "MAT",
     category: "Turma A",
-    start_date: "2020-01-10T00:00:00.000Z",
-    end_date: "2099-12-10T00:00:00.000Z",
+    startsAt: "2020-01-10T00:00:00.000Z",
+    endsAt: "2099-12-10T00:00:00.000Z",
+    effectiveEndsAt: "2099-12-10T00:00:00.000Z",
+    lifecycleStatus: "em_andamento",
   },
 ];
 
-const enrollmentsResponse = [
+const gradeStudentsResponse = [
   {
-    student_id: "student-1",
-    course_id: "course-1",
-    enrollment_status: "ativo",
-    students: { full_name: "Ana Silva", last_access: daysAgoIso(1) },
+    studentId: "student-1",
+    name: "Ana Silva",
+    lastAccessAt: daysAgoIso(1),
+    isSuspended: false,
+    grades: [{ courseId: "course-1", gradeRaw: 18, gradePercentage: 90 }],
   },
   {
-    student_id: "student-2",
-    course_id: "course-1",
-    enrollment_status: "ativo",
-    students: { full_name: "Carla Dias", last_access: daysAgoIso(5) },
+    studentId: "student-2",
+    name: "Carla Dias",
+    lastAccessAt: daysAgoIso(5),
+    isSuspended: false,
+    grades: [{ courseId: "course-1", gradeRaw: 11, gradePercentage: 55 }],
   },
   {
-    student_id: "student-3",
-    course_id: "course-1",
-    enrollment_status: "ativo",
-    students: { full_name: "Diego Lima", last_access: daysAgoIso(9) },
+    studentId: "student-3",
+    name: "Diego Lima",
+    lastAccessAt: daysAgoIso(9),
+    isSuspended: false,
+    grades: [{ courseId: "course-1", gradeRaw: 7, gradePercentage: 35 }],
   },
   {
-    student_id: "student-4",
-    course_id: "course-1",
-    enrollment_status: "suspenso",
-    students: { full_name: "Bruno Souza", last_access: daysAgoIso(12) },
-  },
-];
-
-const activitiesResponse = [
-  {
-    student_id: "student-1",
-    course_id: "course-1",
-    moodle_activity_id: "activity-1",
-    activity_name: "Trabalho Final",
-    activity_type: "assign",
-    grade: null,
-    grade_max: 100,
-    hidden: false,
-    status: "pending",
-    due_date: null,
-    completed_at: null,
-    graded_at: null,
-    submitted_at: null,
-  },
-  {
-    student_id: "student-1",
-    course_id: "course-1",
-    moodle_activity_id: "activity-2",
-    activity_name: "Forum de Apresentacao",
-    activity_type: "forum",
-    grade: null,
-    grade_max: 0,
-    hidden: false,
-    status: "pending",
-    due_date: null,
-    completed_at: null,
-    graded_at: null,
-    submitted_at: null,
-  },
-  {
-    student_id: "student-4",
-    course_id: "course-1",
-    moodle_activity_id: "activity-3",
-    activity_name: "Avaliacao Suspensa",
-    activity_type: "assign",
-    grade: null,
-    grade_max: 100,
-    hidden: false,
-    status: "submitted",
-    due_date: null,
-    completed_at: null,
-    graded_at: null,
-    submitted_at: "2026-03-11T09:00:00.000Z",
-  },
-  {
-    student_id: "student-2",
-    course_id: "course-1",
-    moodle_activity_id: "activity-4",
-    activity_name: "Projeto Aplicado",
-    activity_type: "assign",
-    grade: null,
-    grade_max: 100,
-    hidden: false,
-    status: "completed",
-    due_date: null,
-    completed_at: "2026-03-12T10:00:00.000Z",
-    graded_at: null,
-    submitted_at: "2026-03-12T10:00:00.000Z",
+    studentId: "student-4",
+    name: "Bruno Souza",
+    lastAccessAt: daysAgoIso(12),
+    isSuspended: true,
+    grades: [{ courseId: "course-1", gradeRaw: 16, gradePercentage: 80 }],
   },
 ];
 
-const courseTotalsResponse = [
-  {
-    student_id: "student-1",
-    course_id: "course-1",
-    grade_raw: 18,
-    grade_percentage: 90,
-  },
-  {
-    student_id: "student-2",
-    course_id: "course-1",
-    grade_raw: 11,
-    grade_percentage: 55,
-  },
-  {
-    student_id: "student-3",
-    course_id: "course-1",
-    grade_raw: 7,
-    grade_percentage: 35,
-  },
-  {
-    student_id: "student-4",
-    course_id: "course-1",
-    grade_raw: 16,
-    grade_percentage: 80,
-  },
-];
+const reportMetadata = {
+  contractVersion: 1,
+  generatedAt: "2026-07-21T12:00:00.000Z",
+};
+
+const pendingReportResponse = {
+  details: [
+    {
+      studentId: "student-1",
+      courseId: "course-1",
+      unitName: "Matematica (1003121 - Matematica)",
+      activityName: "Trabalho Final",
+      activityType: "assign",
+      workflowStatus: "pendingSubmission",
+    },
+    {
+      studentId: "student-2",
+      courseId: "course-1",
+      unitName: "Matematica (1003121 - Matematica)",
+      activityName: "Projeto Aplicado",
+      activityType: "assign",
+      workflowStatus: "pendingCorrection",
+    },
+  ],
+  metadata: reportMetadata,
+  students: [
+    {
+      studentId: "student-1",
+      name: "Ana Silva",
+      lastAccessAt: daysAgoIso(1),
+      totalCount: 1,
+      pendingSubmissionCount: 1,
+      pendingCorrectionCount: 0,
+    },
+    {
+      studentId: "student-2",
+      name: "Carla Dias",
+      lastAccessAt: daysAgoIso(5),
+      totalCount: 1,
+      pendingSubmissionCount: 0,
+      pendingCorrectionCount: 1,
+    },
+  ],
+};
 
 describe("Reports page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    useAuthMock.mockReturnValue({ user: { id: "user-1" } });
 
     jsonToSheetMock.mockImplementation((rows: Array<Record<string, unknown>>) => buildWorksheet(rows));
     decodeRangeMock.mockImplementation((worksheetRange: string) => decodeWorksheetRange(worksheetRange));
     encodeCellMock.mockImplementation((cell: { r: number; c: number }) => encodeCellAddress(cell));
     bookNewMock.mockReturnValue({});
 
-    fetchTutorCoursesMock.mockResolvedValue(tutorCoursesResponse);
-    fetchAllReportEnrollmentsMock.mockResolvedValue(enrollmentsResponse);
-    fetchAllReportActivityDetailsMock.mockResolvedValue(activitiesResponse);
-    fetchAllReportActivityGradesMock.mockResolvedValue(activitiesResponse);
-    fetchAllReportCourseTotalsMock.mockResolvedValue(courseTotalsResponse);
+    listAcademicReportCoursesMock.mockResolvedValue(tutorCoursesResponse);
+    getAcademicGradesReportMock.mockImplementation(
+      (_courseIds: string[], includeSuspendedStudents: boolean) => Promise.resolve({
+        metadata: reportMetadata,
+        students: includeSuspendedStudents
+          ? gradeStudentsResponse
+          : gradeStudentsResponse.filter(student => !student.isSuspended),
+        units: tutorCoursesResponse,
+      }),
+    );
+    getAcademicPendingActivitiesReportMock.mockResolvedValue(pendingReportResponse);
   });
 
   const generateReport = async (options?: {
@@ -392,7 +348,7 @@ describe("Reports page", () => {
 
   it("keeps the exported report filename short for long course names", async () => {
     const longCourseGroup = "Senai Escola SENAI Catalao Tecnico em Internet Das Coisas - Iot - Itinerario V - Ensino Medio 1060181 - Tecnico em Internet Das Coisas - Iot - Itinerario V - Ensino Medio - 000022026";
-    fetchTutorCoursesMock.mockResolvedValueOnce([
+    listAcademicReportCoursesMock.mockResolvedValueOnce([
       {
         ...tutorCoursesResponse[0],
         category: longCourseGroup,
@@ -410,7 +366,7 @@ describe("Reports page", () => {
 
   it("uses the class name from the course hierarchy in the exported filename", async () => {
     const courseGroup = "SENAI > Curso Tecnico > Internet das Coisas > Turma A";
-    fetchTutorCoursesMock.mockResolvedValueOnce([
+    listAcademicReportCoursesMock.mockResolvedValueOnce([
       {
         ...tutorCoursesResponse[0],
         category: courseGroup,

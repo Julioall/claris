@@ -24,34 +24,122 @@ export interface Student {
   courses?: Course[];
 }
 
-export interface StudentRecord {
+export interface StudentListItem {
+  avatarUrl: string | null;
+  email: string | null;
+  enrollmentStatus: EnrollmentStatus;
   id: string;
-  moodle_user_id: string | number;
-  full_name: string;
-  email?: string | null;
-  city?: string | null;
-  phone?: string | null;
-  phone_number?: string | null;
-  mobile_phone?: string | null;
-  avatar_url?: string | null;
-  current_risk_level: RiskLevel;
-  risk_reasons?: string[] | null;
-  tags?: string[] | null;
-  last_access?: string | null;
-  created_at: string | null;
-  updated_at: string | null;
-}
-
-export interface StudentListItem extends StudentRecord {
-  enrollment_status: EnrollmentStatus;
+  lastAccessAt: string | null;
+  name: string;
+  riskLevel: RiskLevel;
 }
 
 export interface StudentListPage {
   items: StudentListItem[];
+  metadata: {
+    contractVersion: 1;
+    generatedAt: string;
+  };
+  page: number;
+  pageSize: number;
   totalCount: number;
+  totalPages: number;
 }
 
-export type StudentProfile = StudentRecord;
+export type StudentActivityWorkflowStatus =
+  | 'pendingSubmission'
+  | 'pendingCorrection'
+  | 'completed'
+  | 'corrected';
+
+export interface StudentCourseGrade {
+  formatted: string | null;
+  letter: string | null;
+  maximum: number | null;
+  percentage: number | null;
+  raw: number | null;
+  synchronizedAt: string | null;
+}
+
+export interface StudentCourseActivity {
+  dueAt: string | null;
+  grade: number | null;
+  gradeMaximum: number | null;
+  hidden: boolean;
+  id: string;
+  moodleActivityId: string;
+  name: string;
+  percentage: number | null;
+  type: string | null;
+  workflowStatus: StudentActivityWorkflowStatus;
+}
+
+export interface StudentProfileCourse {
+  activities: StudentCourseActivity[];
+  grade: StudentCourseGrade | null;
+  id: string;
+  name: string;
+  shortName: string | null;
+}
+
+export interface StudentProfileIdentity {
+  avatarUrl: string | null;
+  city: string | null;
+  createdAt: string | null;
+  email: string | null;
+  id: string;
+  lastAccessAt: string | null;
+  mobilePhone: string | null;
+  moodleUserId: string;
+  name: string;
+  phone: string | null;
+  phoneNumber: string | null;
+  riskLevel: RiskLevel;
+  riskReasons: string[];
+  tags: string[];
+  updatedAt: string | null;
+}
+
+export interface StudentProfile {
+  courses: StudentProfileCourse[];
+  metadata: {
+    contractVersion: 1;
+    dataUpdatedAt: string | null;
+    generatedAt: string;
+  };
+  student: StudentProfileIdentity;
+}
+
+export interface StudentHistoryCourse {
+  endsAt: string | null;
+  id: string;
+  name: string;
+  shortName: string | null;
+  startsAt: string | null;
+}
+
+export interface StudentHistorySnapshot {
+  course: StudentHistoryCourse | null;
+  courseId: string;
+  createdAt: string;
+  daysSinceAccess: number | null;
+  enrollmentStatus: string;
+  id: string;
+  lastAccessAt: string | null;
+  overdueActivities: number;
+  pendingActivities: number;
+  riskLevel: RiskLevel;
+  synchronizedAt: string;
+}
+
+export interface StudentHistory {
+  items: StudentHistorySnapshot[];
+  metadata: {
+    contractVersion: 1;
+    dataUpdatedAt: string | null;
+    generatedAt: string;
+  };
+}
 
 export type GradeSuggestionStatus = 'success' | 'invalid' | 'manual_review_required' | 'error';
 export type GradeSuggestionConfidence = 'high' | 'medium' | 'low';

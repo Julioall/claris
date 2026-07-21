@@ -1,63 +1,73 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
-import { useStudentsData } from "@/features/students/hooks/useStudentsData";
-import { createQueryClientWrapper } from "@/test/query-client";
-import type { StudentListItem, StudentListPage } from "@/features/students/types";
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
 
-const useAuthMock = vi.fn();
-const listStudentsForUserMock = vi.fn();
+import { useStudentsData } from '@/features/students/hooks/useStudentsData';
+import type { StudentListItem, StudentListPage } from '@/features/students/types';
+import { createQueryClientWrapper } from '@/test/query-client';
 
-vi.mock("@/contexts/AuthContext", () => ({
+const { listStudentsMock, useAuthMock } = vi.hoisted(() => ({
+  listStudentsMock: vi.fn(),
+  useAuthMock: vi.fn(),
+}));
+
+vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock("@/features/students/api/students.repository", () => ({
-  listStudentsForUser: (...args: unknown[]) => listStudentsForUserMock(...args),
+vi.mock('@/features/students/api/students', () => ({
+  listStudents: (...args: unknown[]) => listStudentsMock(...args),
 }));
 
 const studentsItems: StudentListItem[] = [
   {
-    id: "s-2",
-    moodle_user_id: "11",
-    full_name: "Bruno",
-    current_risk_level: "critico",
-    enrollment_status: "suspenso",
-    created_at: "2026-02-01T00:00:00.000Z",
-    updated_at: "2026-02-01T00:00:00.000Z",
+    avatarUrl: null,
+    email: null,
+    enrollmentStatus: 'suspenso',
+    id: 's-2',
+    lastAccessAt: null,
+    name: 'Bruno',
+    riskLevel: 'critico',
   },
   {
-    id: "s-1",
-    moodle_user_id: "10",
-    full_name: "Ana",
-    current_risk_level: "atencao",
-    enrollment_status: "ativo",
-    created_at: "2026-02-01T00:00:00.000Z",
-    updated_at: "2026-02-01T00:00:00.000Z",
+    avatarUrl: null,
+    email: null,
+    enrollmentStatus: 'ativo',
+    id: 's-1',
+    lastAccessAt: null,
+    name: 'Ana',
+    riskLevel: 'atencao',
   },
   {
-    id: "s-3",
-    moodle_user_id: "12",
-    full_name: "Carla",
-    current_risk_level: "normal",
-    enrollment_status: "concluido",
-    created_at: "2026-02-01T00:00:00.000Z",
-    updated_at: "2026-02-01T00:00:00.000Z",
+    avatarUrl: null,
+    email: null,
+    enrollmentStatus: 'concluido',
+    id: 's-3',
+    lastAccessAt: null,
+    name: 'Carla',
+    riskLevel: 'normal',
   },
 ];
 
 const studentsResponse: StudentListPage = {
   items: studentsItems,
+  metadata: {
+    contractVersion: 1,
+    generatedAt: '2026-02-21T00:00:00.000Z',
+  },
+  page: 1,
+  pageSize: 30,
   totalCount: studentsItems.length,
+  totalPages: 1,
 };
 
-describe("useStudentsData", () => {
+describe('useStudentsData', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-    listStudentsForUserMock.mockResolvedValue(studentsResponse);
+    useAuthMock.mockReturnValue({ user: { id: 'user-1' } });
+    listStudentsMock.mockResolvedValue(studentsResponse);
   });
 
-  it("loads students for the authenticated user", async () => {
+  it('loads students for the authenticated user', async () => {
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useStudentsData(), { wrapper });
 
@@ -68,10 +78,17 @@ describe("useStudentsData", () => {
     expect(result.current.error).toBeNull();
     expect(result.current.students).toEqual(studentsItems);
     expect(result.current.totalCount).toBe(studentsItems.length);
-    expect(listStudentsForUserMock).toHaveBeenCalledWith({ courseId: undefined, page: 1, pageSize: 30, riskFilter: undefined, searchQuery: undefined, statusFilter: undefined });
+    expect(listStudentsMock).toHaveBeenCalledWith({
+      courseId: undefined,
+      enrollmentStatus: undefined,
+      page: 1,
+      pageSize: 30,
+      riskLevel: undefined,
+      search: undefined,
+    }, expect.any(AbortSignal));
   });
 
-  it("returns empty data when user is not authenticated", async () => {
+  it('returns empty data when user is not authenticated', async () => {
     useAuthMock.mockReturnValue({ user: null });
 
     const { wrapper } = createQueryClientWrapper();
@@ -83,28 +100,35 @@ describe("useStudentsData", () => {
 
     expect(result.current.students).toEqual([]);
     expect(result.current.totalCount).toBe(0);
-    expect(listStudentsForUserMock).not.toHaveBeenCalled();
+    expect(listStudentsMock).not.toHaveBeenCalled();
   });
 
-  it("stores an error when loading students fails", async () => {
-    listStudentsForUserMock.mockRejectedValueOnce(new Error("students query failed"));
+  it('stores an error when loading students fails', async () => {
+    listStudentsMock.mockRejectedValueOnce(new Error('students query failed'));
 
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useStudentsData(), { wrapper });
 
     await waitFor(() => {
-      expect(result.current.error).toContain("students query failed");
+      expect(result.current.error).toContain('students query failed');
     });
   });
 
-  it("applies explicit course filter when provided", async () => {
+  it('applies explicit course filter when provided', async () => {
     const { wrapper } = createQueryClientWrapper();
-    const { result } = renderHook(() => useStudentsData({ courseId: "course-fixed" }), { wrapper });
+    const { result } = renderHook(() => useStudentsData({ courseId: 'course-fixed' }), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(listStudentsForUserMock).toHaveBeenCalledWith({ courseId: "course-fixed", page: 1, pageSize: 30, riskFilter: undefined, searchQuery: undefined, statusFilter: undefined });
+    expect(listStudentsMock).toHaveBeenCalledWith({
+      courseId: 'course-fixed',
+      enrollmentStatus: undefined,
+      page: 1,
+      pageSize: 30,
+      riskLevel: undefined,
+      search: undefined,
+    }, expect.any(AbortSignal));
   });
 });

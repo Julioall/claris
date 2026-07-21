@@ -24,6 +24,8 @@ Posturas especiais válidas:
 - `course_activity_visibility_overrides`: acesso exclusivo de `service_role`; o estado manual e reaplicado em sincronizacoes por trigger.
 - `student_course_grades`: leitura por escopo de curso, escrita automática por `service_role`.
 - `dashboard_course_activity_aggregates`: leitura por escopo de curso; escrita automática por `service_role`.
+- `student_sync_snapshots`: acesso direto removido; leitura e escrita somente por `service_role`.
+- `ai_grade_suggestion_jobs`, `ai_grade_suggestion_job_items` e `ai_grade_suggestion_history`: acesso exclusivo do backend `service_role`.
 - `task_action_history`: insert permitido para `service_role` e, no fluxo autenticado, somente com validação de ownership e integridade cruzada.
 - `courses`: insert continua aceitando `auth.uid() IS NOT NULL`; isso depende do fluxo controlado pelas Edge Functions.
 - `user_sync_preferences`: usa `auth.uid()::text` por compatibilidade com o tipo atual da coluna.
@@ -73,6 +75,10 @@ Tabelas:
 - `course_activity_visibility_overrides`
 - `student_course_grades`
 - `dashboard_course_activity_aggregates`
+- `student_sync_snapshots`
+- `ai_grade_suggestion_jobs`
+- `ai_grade_suggestion_job_items`
+- `ai_grade_suggestion_history`
 
 Regra canônica:
 
@@ -83,6 +89,8 @@ Regra canônica:
 - `course_activity_visibility_overrides`: sem acesso direto de browser; leitura e escrita exclusivas de `service_role`.
 - `student_course_grades`: leitura por escopo de curso; escrita automática por `service_role`.
 - `dashboard_course_activity_aggregates`: leitura por escopo de curso; insert/update exclusivos de `service_role`.
+- `student_sync_snapshots`: todos os grants de browser foram revogados; `students/get_history` reaplica permissao e escopo antes da leitura.
+- tabelas `ai_grade_suggestion_*`: todos os grants de browser foram revogados; leitura, criacao, processamento e auditoria passam pelas Edge Functions.
 
 Migrations de referência:
 
@@ -94,6 +102,8 @@ Migrations de referência:
 - `20260326183000_add_dashboard_course_activity_aggregates.sql`
 - `20260721130000_harden_dashboard_backend_queries.sql`
 - `20260721140000_secure_course_management.sql`
+- `20260721150000_secure_students_queries.sql`
+- `20260721152000_secure_grade_suggestion_jobs.sql`
 
 Observações:
 
@@ -103,6 +113,8 @@ Observações:
 - `refresh_course_dashboard_aggregate(uuid)` e `SECURITY DEFINER`, mas seu `EXECUTE` foi revogado de `PUBLIC`, `anon` e `authenticated`; apenas `service_role` pode recalcular agregados.
 - `dashboard-summary` usa `service_role` internamente e, por isso, reaplica em todas as consultas o escopo de cursos `tutor` derivado do usuario autenticado.
 - `backend_set_course_activity_visibility` valida o acesso ao curso e exclui atividades `scorm`; o override persistido e reaplicado por trigger para impedir que um sync reverta a escolha manual.
+- `backend_list_students_page` e a RPC legada de listagem sao executaveis apenas por `service_role`; a primeira recebe a identidade derivada do token e preserva o total mesmo quando a pagina solicitada esta vazia.
+- `backend_create_grade_suggestion_job_with_items` valida curso/atividades e grava job+itens atomicamente. `backend_cancel_grade_suggestion_job` encerra job e itens pendentes na mesma transacao; ambas sao exclusivas de `service_role`.
 
 ## Tarefas E Automação
 

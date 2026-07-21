@@ -7,6 +7,31 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       activity_feed: {
@@ -3393,6 +3418,21 @@ export type Database = {
         }
         Returns: string
       }
+      backend_cancel_grade_suggestion_job: {
+        Args: { p_error_message: string; p_job_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      backend_create_grade_suggestion_job_with_items: {
+        Args: {
+          p_activity_name: string
+          p_course_id: string
+          p_items: Json
+          p_max_grade: number
+          p_moodle_activity_id: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       backend_get_attendance_date_summaries: {
         Args: { p_course_id: string; p_user_id: string }
         Returns: {
@@ -3406,6 +3446,18 @@ export type Database = {
       backend_link_eligible_user_courses: {
         Args: { p_course_ids: string[]; p_user_id: string }
         Returns: number
+      }
+      backend_list_students_page: {
+        Args: {
+          p_course_id?: string
+          p_limit?: number
+          p_offset?: number
+          p_risk_filter?: string
+          p_search?: string
+          p_status_filter?: string
+          p_user_id: string
+        }
+        Returns: Json
       }
       backend_replace_user_course_eligibility: {
         Args: { p_course_ids: string[]; p_user_id: string }
@@ -3782,6 +3834,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       ai_grade_suggestion_job_item_status: [

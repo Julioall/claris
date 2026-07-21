@@ -1,25 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/contexts/AuthContext';
+import { ApiClientError } from '@/integrations/http/edge-function-client';
 
-import { getStudentProfile } from '../api/students.repository';
+import { getStudentProfile } from '../api/students';
+import { studentKeys } from '../query-keys';
 import type { StudentProfile } from '../types';
 
 export function useStudentProfile(studentId: string | undefined) {
   const { user } = useAuth();
 
-  const query = useQuery<StudentProfile | null, Error>({
-    queryKey: ['student', user?.id ?? 'anonymous', studentId ?? 'missing'],
+  const query = useQuery<StudentProfile, Error>({
+    queryKey: studentKeys.profile(user?.id, studentId),
     enabled: !!user && !!studentId,
-    queryFn: () => getStudentProfile(studentId!),
+    queryFn: ({ signal }) => getStudentProfile(studentId!, signal),
   });
+  const notFound = query.error instanceof ApiClientError && query.error.status === 404;
 
   return {
-    student: query.data ?? null,
+    courses: query.data?.courses ?? [],
+    profile: query.data ?? null,
+    student: query.data?.student ?? null,
     isLoading: query.isLoading,
-    error: query.data === null && query.isSuccess
-      ? 'Aluno não encontrado'
-      : query.error?.message ?? null,
+    error: notFound ? 'Aluno não encontrado' : query.error?.message ?? null,
     refetch: query.refetch,
   };
 }

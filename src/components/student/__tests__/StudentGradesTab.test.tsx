@@ -1,273 +1,109 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { StudentGradesTab } from "@/components/student/StudentGradesTab";
+import { describe, expect, it } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
-const fromMock = vi.fn();
-const gradesEqMock = vi.fn();
-const activitiesEqMock = vi.fn();
-const useMoodleSessionMock = vi.fn();
+import { StudentGradesTab } from '@/components/student/StudentGradesTab';
+import type { StudentProfileCourse } from '@/features/students/types';
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
-}));
+function buildCourse(overrides: Partial<StudentProfileCourse> = {}): StudentProfileCourse {
+  return {
+    activities: [],
+    grade: null,
+    id: 'c-1',
+    name: 'Matematica',
+    shortName: 'MAT',
+    ...overrides,
+  };
+}
 
-vi.mock("@/features/auth/context/MoodleSessionContext", () => ({
-  useMoodleSession: () => useMoodleSessionMock(),
-}));
+describe('StudentGradesTab', () => {
+  it('shows empty state when the profile DTO has no grade sections', () => {
+    render(<StudentGradesTab courses={[]} />);
 
-describe("StudentGradesTab", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useMoodleSessionMock.mockReturnValue(null);
-
-    gradesEqMock.mockResolvedValue({ data: [], error: null });
-    activitiesEqMock.mockResolvedValue({ data: [], error: null });
-
-    fromMock.mockImplementation((table: string) => {
-      if (table === "student_course_grades") {
-        return {
-          select: () => ({ eq: gradesEqMock }),
-        };
-      }
-
-      if (table === "student_activities") {
-        return {
-          select: () => ({ eq: activitiesEqMock }),
-        };
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
-    });
-  });
-
-  it("shows empty state when student has no grades", async () => {
-    render(<StudentGradesTab studentId="s-1" />);
-
-    expect(document.querySelector('[data-testid="spinner"]')).toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(screen.getByText(/nenhuma nota encontrada/i)).toBeInTheDocument();
-    });
+    expect(screen.getByText(/nenhuma nota encontrada/i)).toBeInTheDocument();
     expect(screen.getByText(/apos a sincronizacao dos cursos/i)).toBeInTheDocument();
   });
 
-  it("renders the course total from the gradebook instead of summing visible activities", async () => {
+  it('renders the course total from the backend DTO instead of summing activities', async () => {
     const user = userEvent.setup();
-
-    gradesEqMock.mockResolvedValueOnce({
-      data: [
+    render(<StudentGradesTab courses={[buildCourse({
+      grade: {
+        formatted: '18/20',
+        letter: 'A',
+        maximum: 20,
+        percentage: 90,
+        raw: 18,
+        synchronizedAt: '2026-02-23T00:00:00.000Z',
+      },
+      activities: [
         {
-          id: "g-1",
-          course_id: "c-1",
-          grade_raw: 18,
-          grade_max: 20,
-          grade_percentage: 90,
-          grade_formatted: "18/20",
-          letter_grade: "A",
-          last_sync: "2026-02-23T00:00:00.000Z",
-          courses: { name: "Matematica" },
+          dueAt: null, grade: 7, gradeMaximum: 10, hidden: false, id: 'a-1',
+          moodleActivityId: '1', name: 'Trabalho 1', percentage: 70,
+          type: 'assignment', workflowStatus: 'corrected',
+        },
+        {
+          dueAt: null, grade: 8, gradeMaximum: 10, hidden: false, id: 'a-2',
+          moodleActivityId: '2', name: 'Prova 1', percentage: 80,
+          type: 'quiz', workflowStatus: 'corrected',
+        },
+        {
+          dueAt: null, grade: 10, gradeMaximum: 10, hidden: true, id: 'a-3',
+          moodleActivityId: '3', name: 'Atividade Oculta', percentage: 100,
+          type: 'quiz', workflowStatus: 'corrected',
         },
       ],
-      error: null,
-    });
+    })]} />);
 
-    activitiesEqMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: "a-1",
-          course_id: "c-1",
-          activity_name: "Trabalho 1",
-          activity_type: "assignment",
-          grade: 7,
-          grade_max: 10,
-          percentage: 70,
-          status: "graded",
-          due_date: null,
-          hidden: false,
-        },
-        {
-          id: "a-2",
-          course_id: "c-1",
-          activity_name: "Prova 1",
-          activity_type: "quiz",
-          grade: 8,
-          grade_max: 10,
-          percentage: 80,
-          status: "graded",
-          due_date: null,
-          hidden: false,
-        },
-        {
-          id: "a-3",
-          course_id: "c-1",
-          activity_name: "Atividade Oculta",
-          activity_type: "quiz",
-          grade: 10,
-          grade_max: 10,
-          percentage: 100,
-          status: "graded",
-          due_date: null,
-          hidden: true,
-        },
-      ],
-      error: null,
-    });
-
-    render(<StudentGradesTab studentId="s-1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Matematica")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("18/20")).toBeInTheDocument();
-    expect(screen.getByText("90.0%")).toBeInTheDocument();
+    expect(screen.getByText('Matematica')).toBeInTheDocument();
+    expect(screen.getByText('18/20')).toBeInTheDocument();
+    expect(screen.getByText('90.0%')).toBeInTheDocument();
     expect(screen.getByText(/livro de notas/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
-
-    expect(screen.getByText("Trabalho 1")).toBeInTheDocument();
-    expect(screen.getByText("Prova 1")).toBeInTheDocument();
-    expect(screen.getByText("Atividade Oculta")).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /atividades e notas separadas/i }));
+    expect(screen.getByText('Trabalho 1')).toBeInTheDocument();
+    expect(screen.getByText('Prova 1')).toBeInTheDocument();
+    expect(screen.getByText('Atividade Oculta')).toBeInTheDocument();
+    expect(screen.getByText('Oculta das metricas')).toBeInTheDocument();
   });
 
-  it("falls back to empty state when fetch fails", async () => {
-    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    gradesEqMock.mockResolvedValueOnce({ data: null, error: { message: "db fail" } });
-
-    render(<StudentGradesTab studentId="s-1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText(/nenhuma nota encontrada/i)).toBeInTheDocument();
-    });
-    expect(consoleErrorSpy).toHaveBeenCalled();
-
-    consoleErrorSpy.mockRestore();
-  });
-
-  it("renders pending activities even when the course total grade is still unavailable", async () => {
+  it('renders pending weighted activities when the total grade is unavailable', async () => {
     const user = userEvent.setup();
-
-    gradesEqMock.mockResolvedValueOnce({
-      data: [],
-      error: null,
-    });
-
-    activitiesEqMock.mockResolvedValueOnce({
-      data: [
+    render(<StudentGradesTab courses={[buildCourse({
+      activities: [
         {
-          id: "a-1",
-          course_id: "c-1",
-          activity_name: "Trabalho Final",
-          activity_type: "assign",
-          grade: null,
-          grade_max: 20,
-          percentage: null,
-          status: "completed",
-          due_date: "2026-03-10T00:00:00.000Z",
-          hidden: false,
-          completed_at: "2026-03-09T12:00:00.000Z",
-          submitted_at: null,
-          graded_at: null,
-          courses: { name: "Matematica" },
+          dueAt: '2026-03-10T00:00:00.000Z', grade: null, gradeMaximum: 20,
+          hidden: false, id: 'a-1', moodleActivityId: '1', name: 'Trabalho Final',
+          percentage: null, type: 'assign', workflowStatus: 'pendingSubmission',
         },
         {
-          id: "a-2",
-          course_id: "c-1",
-          activity_name: "Projeto 2",
-          activity_type: "assign",
-          grade: null,
-          grade_max: 10,
-          percentage: null,
-          status: "pending",
-          due_date: "2026-03-18T00:00:00.000Z",
-          hidden: false,
-          completed_at: null,
-          submitted_at: null,
-          graded_at: null,
-          courses: { name: "Matematica" },
-        },
-        {
-          id: "a-3",
-          course_id: "c-1",
-          activity_name: "Forum de Boas-vindas",
-          activity_type: "forum",
-          grade: null,
-          grade_max: 0,
-          percentage: null,
-          status: "pending",
-          due_date: "2026-03-18T00:00:00.000Z",
-          hidden: false,
-          completed_at: null,
-          submitted_at: null,
-          graded_at: null,
-          courses: { name: "Matematica" },
+          dueAt: '2026-03-18T00:00:00.000Z', grade: null, gradeMaximum: 10,
+          hidden: false, id: 'a-2', moodleActivityId: '2', name: 'Projeto 2',
+          percentage: null, type: 'assign', workflowStatus: 'pendingSubmission',
         },
       ],
-      error: null,
-    });
+    })]} />);
 
-    render(<StudentGradesTab studentId="s-1" />);
+    expect(screen.getByText('Sem nota total sincronizada')).toBeInTheDocument();
+    expect(screen.getByText('Sem nota total')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /atividades e notas separadas/i }));
 
-    await waitFor(() => {
-      expect(screen.getByText("Matematica")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Sem nota total sincronizada")).toBeInTheDocument();
-    expect(screen.getByText("Sem nota total")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
-
-    expect(screen.getByText("Trabalho Final")).toBeInTheDocument();
-    expect(screen.getByText("Projeto 2")).toBeInTheDocument();
-    expect(screen.queryByText("Forum de Boas-vindas")).not.toBeInTheDocument();
-    // "Trabalho Final" (assignment sem submitted_at) agora deve ser "Pendente de Envio"
-    expect(screen.getAllByText("Pendente de Envio").length).toBeGreaterThanOrEqual(1);
-    // "Pendente de Correcao" só aparece se houver submitted_at
+    expect(screen.getByText('Trabalho Final')).toBeInTheDocument();
+    expect(screen.getByText('Projeto 2')).toBeInTheDocument();
+    expect(screen.getAllByText('Pendente de Envio')).toHaveLength(2);
   });
 
-  it("does not show the AI suggestion action in the student grade screen anymore", async () => {
+  it('does not expose AI suggestion actions in the student grade screen', async () => {
     const user = userEvent.setup();
+    render(<StudentGradesTab courses={[buildCourse({
+      activities: [{
+        dueAt: null, grade: null, gradeMaximum: 10, hidden: false, id: 'a-1',
+        moodleActivityId: '77', name: 'SAP 4', percentage: null,
+        type: 'assign', workflowStatus: 'pendingCorrection',
+      }],
+    })]} />);
 
-    gradesEqMock.mockResolvedValueOnce({
-      data: [],
-      error: null,
-    });
-
-    activitiesEqMock.mockResolvedValueOnce({
-      data: [
-        {
-          id: "a-1",
-          course_id: "c-1",
-          moodle_activity_id: "77",
-          activity_name: "SAP 4",
-          activity_type: "assign",
-          grade: null,
-          grade_max: 10,
-          percentage: null,
-          status: "submitted",
-          due_date: "2026-03-18T00:00:00.000Z",
-          hidden: false,
-          completed_at: "2026-03-18T10:00:00.000Z",
-          submitted_at: "2026-03-18T10:00:00.000Z",
-          graded_at: null,
-          courses: { name: "Matematica" },
-        },
-      ],
-      error: null,
-    });
-
-    render(<StudentGradesTab studentId="s-1" />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Matematica")).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole("button", { name: /atividades e notas separadas/i }));
-
-    expect(screen.queryByRole("button", { name: /gerar sugestao com ia/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /sugerir ia/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /atividades e notas separadas/i }));
+    expect(screen.queryByRole('button', { name: /gerar sugestao com ia/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /sugerir ia/i })).not.toBeInTheDocument();
   });
 });

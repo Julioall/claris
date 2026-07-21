@@ -574,6 +574,28 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'course-attendance',
     },
     {
+      body: { action: 'list_students', page: 1, pageSize: 30 },
+      expectedStatus: 401,
+      name: 'students valid-no-auth',
+      path: 'students',
+    },
+    {
+      body: { action: 'list_courses' },
+      expectedStatus: 401,
+      name: 'academic-reports valid-no-auth',
+      path: 'academic-reports',
+    },
+    {
+      body: {
+        action: 'find_latest_relevant',
+        activityId: '00000000-0000-4000-8000-000000000001',
+        courseId: '00000000-0000-4000-8000-000000000001',
+      },
+      expectedStatus: 401,
+      name: 'grade-suggestion-jobs valid-no-auth',
+      path: 'grade-suggestion-jobs',
+    },
+    {
       body: {},
       expectedStatus: 401,
       name: 'process-scheduled-messages no-secret',
@@ -633,13 +655,24 @@ function runCourseManagementGrantChecks() {
       ),
       protected_tables(table_name) AS (
         VALUES
+          ('ai_grade_suggestion_history'::TEXT),
+          ('ai_grade_suggestion_job_items'::TEXT),
+          ('ai_grade_suggestion_jobs'::TEXT),
           ('attendance_course_settings'::TEXT),
           ('attendance_records'::TEXT),
           ('course_activity_visibility_overrides'::TEXT),
           ('student_activities'::TEXT),
+          ('student_sync_snapshots'::TEXT),
           ('user_course_catalog_eligibility'::TEXT),
           ('user_courses'::TEXT),
           ('user_ignored_courses'::TEXT)
+      ),
+      private_tables(table_name) AS (
+        VALUES
+          ('ai_grade_suggestion_history'::TEXT),
+          ('ai_grade_suggestion_job_items'::TEXT),
+          ('ai_grade_suggestion_jobs'::TEXT),
+          ('student_sync_snapshots'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -660,7 +693,11 @@ function runCourseManagementGrantChecks() {
           ('public.backend_set_course_attendance_enabled(uuid,uuid[],boolean)'::TEXT),
           ('public.backend_set_course_activity_visibility(uuid,uuid,text,boolean)'::TEXT),
           ('public.backend_save_attendance_sheet(uuid,uuid,date,jsonb)'::TEXT),
-          ('public.backend_get_attendance_date_summaries(uuid,uuid)'::TEXT)
+          ('public.backend_get_attendance_date_summaries(uuid,uuid)'::TEXT),
+          ('public.backend_list_students_page(uuid,uuid,text,text,text,integer,integer)'::TEXT),
+          ('public.list_students_paginated(uuid,text,text,text,integer,integer)'::TEXT),
+          ('public.backend_create_grade_suggestion_job_with_items(uuid,uuid,text,text,numeric,jsonb)'::TEXT),
+          ('public.backend_cancel_grade_suggestion_job(uuid,uuid,text)'::TEXT)
       )
     SELECT json_build_object(
       'browserTableGrants', COALESCE((
@@ -670,6 +707,27 @@ function runCourseManagementGrantChecks() {
           FROM browser_roles
           CROSS JOIN protected_tables
           CROSS JOIN protected_privileges
+          WHERE has_table_privilege(
+            role_name,
+            format('public.%I', table_name),
+            privilege_name
+          )
+          ORDER BY role_name, table_name, privilege_name
+        ) AS grant_row
+      ), '[]'::JSON),
+      'browserPrivateTableGrants', COALESCE((
+        SELECT json_agg(grant_row)
+        FROM (
+          SELECT role_name, table_name, privilege_name
+          FROM browser_roles
+          CROSS JOIN private_tables
+          CROSS JOIN (
+            VALUES
+              ('SELECT'::TEXT),
+              ('INSERT'::TEXT),
+              ('UPDATE'::TEXT),
+              ('DELETE'::TEXT)
+          ) AS private_privileges(privilege_name)
           WHERE has_table_privilege(
             role_name,
             format('public.%I', table_name),
@@ -699,6 +757,9 @@ function runCourseManagementGrantChecks() {
   if (result.browserTableGrants?.length > 0) {
     fail(`Roles de browser ainda possuem grants privilegiados: ${JSON.stringify(result.browserTableGrants)}`)
   }
+  if (result.browserPrivateTableGrants?.length > 0) {
+    fail(`Roles de browser ainda acessam tabelas privadas: ${JSON.stringify(result.browserPrivateTableGrants)}`)
+  }
   if (result.browserFunctionGrants?.length > 0) {
     fail(`Roles de browser ainda executam RPCs internas: ${JSON.stringify(result.browserFunctionGrants)}`)
   }
@@ -707,6 +768,195 @@ function runCourseManagementGrantChecks() {
   }
 
   log('Grants internos de cursos bloqueados para roles de browser e liberados para service_role.')
+}
+
+async function runAcademicReadChecks(
+  status,
+  accessToken,
+  authUserId,
+  courseId,
+  studentId,
+  hiddenCourseId,
+  hiddenStudentId,
+) {
+  const spoofCases = [
+    {
+      body: { action: 'list_students', page: 1, pageSize: 30, userId: authUserId },
+      functionName: 'students',
+      correlationId: 'smoke-v1-students-spoof',
+    },
+    {
+      body: { action: 'list_courses', userId: authUserId },
+      functionName: 'academic-reports',
+      correlationId: 'smoke-v1-academic-reports-spoof',
+    },
+    {
+      body: {
+        action: 'find_latest_relevant',
+        activityId: studentId,
+        courseId,
+        userId: authUserId,
+      },
+      functionName: 'grade-suggestion-jobs',
+      correlationId: 'smoke-v1-grade-suggestion-jobs-spoof',
+    },
+  ]
+
+  for (const spoofCase of spoofCases) {
+    const result = await callV1EdgeFunction(
+      status,
+      spoofCase.functionName,
+      spoofCase.body,
+      {
+        acceptStatuses: [422],
+        accessToken,
+        correlationId: spoofCase.correlationId,
+      },
+    )
+    assertV1Response(result, {
+      code: 'validation_failed',
+      correlationId: spoofCase.correlationId,
+      status: 422,
+    })
+  }
+
+  const studentsPage = await callV1EdgeFunction(
+    status,
+    'students',
+    { action: 'list_students', page: 1, pageSize: 30 },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-students-list',
+    },
+  )
+  assertV1Response(studentsPage, { correlationId: 'smoke-v1-students-list', status: 200 })
+  const studentsData = studentsPage.data?.data
+  if (
+    studentsData?.metadata?.contractVersion !== 1
+    || !studentsData?.items?.some((student) => student.id === studentId)
+    || studentsData.items.some((student) => student.id === hiddenStudentId)
+  ) {
+    fail(`students retornou pagina ou escopo inesperado: ${JSON.stringify(studentsPage.data)}`)
+  }
+
+  const profile = await callV1EdgeFunction(
+    status,
+    'students',
+    { action: 'get_profile', studentId },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-students-profile',
+    },
+  )
+  assertV1Response(profile, { correlationId: 'smoke-v1-students-profile', status: 200 })
+  if (
+    profile.data?.data?.student?.id !== studentId
+    || !Array.isArray(profile.data?.data?.courses)
+    || profile.data?.data?.courses?.some((course) => course.id === hiddenCourseId)
+  ) {
+    fail(`students retornou perfil inesperado: ${JSON.stringify(profile.data)}`)
+  }
+
+  const hiddenProfile = await callV1EdgeFunction(
+    status,
+    'students',
+    { action: 'get_profile', studentId: hiddenStudentId },
+    {
+      acceptStatuses: [404],
+      accessToken,
+      correlationId: 'smoke-v1-students-profile-hidden',
+    },
+  )
+  assertV1Response(hiddenProfile, {
+    code: 'not_found',
+    correlationId: 'smoke-v1-students-profile-hidden',
+    status: 404,
+  })
+
+  const history = await callV1EdgeFunction(
+    status,
+    'students',
+    { action: 'get_history', studentId },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-students-history',
+    },
+  )
+  assertV1Response(history, { correlationId: 'smoke-v1-students-history', status: 200 })
+  if (history.data?.data?.metadata?.contractVersion !== 1 || !Array.isArray(history.data?.data?.items)) {
+    fail(`students retornou historico inesperado: ${JSON.stringify(history.data)}`)
+  }
+
+  const reportCourses = await callV1EdgeFunction(
+    status,
+    'academic-reports',
+    { action: 'list_courses' },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-academic-report-courses',
+    },
+  )
+  assertV1Response(reportCourses, {
+    correlationId: 'smoke-v1-academic-report-courses',
+    status: 200,
+  })
+  if (
+    !reportCourses.data?.data?.items?.some((course) => course.id === courseId)
+    || reportCourses.data.data.items.some((course) => course.id === hiddenCourseId)
+  ) {
+    fail(`academic-reports vazou ou omitiu curso: ${JSON.stringify(reportCourses.data)}`)
+  }
+
+  const gradesReport = await callV1EdgeFunction(
+    status,
+    'academic-reports',
+    {
+      action: 'get_grades_report',
+      courseIds: [courseId],
+      includeSuspendedStudents: true,
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-academic-grades-report',
+    },
+  )
+  assertV1Response(gradesReport, {
+    correlationId: 'smoke-v1-academic-grades-report',
+    status: 200,
+  })
+  if (
+    gradesReport.data?.data?.metadata?.contractVersion !== 1
+    || !gradesReport.data?.data?.units?.some((course) => course.id === courseId)
+    || !gradesReport.data?.data?.students?.some((student) => student.studentId === studentId)
+  ) {
+    fail(`academic-reports retornou relatorio de notas inesperado: ${JSON.stringify(gradesReport.data)}`)
+  }
+
+  const mixedScope = await callV1EdgeFunction(
+    status,
+    'academic-reports',
+    {
+      action: 'get_pending_activities_report',
+      courseIds: [courseId, hiddenCourseId],
+    },
+    {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-academic-report-mixed-scope',
+    },
+  )
+  assertV1Response(mixedScope, {
+    code: 'forbidden',
+    correlationId: 'smoke-v1-academic-report-mixed-scope',
+    status: 403,
+  })
+
+  log('Alunos e relatorios validados com identidade derivada, DTO V1 e isolamento por curso.')
 }
 
 async function runCourseManagementChecks(
@@ -847,6 +1097,11 @@ async function runCourseManagementChecks(
     course_id: courseId,
     moodle_activity_id: activityMoodleId,
   }, 'course_id')
+  await deleteRows(status, 'ai_grade_suggestion_jobs', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+    user_id: authUserId,
+  })
   await deleteRows(status, 'student_activities', {
     course_id: courseId,
     moodle_activity_id: activityMoodleId,
@@ -857,7 +1112,7 @@ async function runCourseManagementChecks(
     user_id: authUserId,
   })
 
-  await upsertRows(status, 'student_activities', 'student_id,course_id,moodle_activity_id', {
+  const [smokeActivity] = await upsertRows(status, 'student_activities', 'student_id,course_id,moodle_activity_id', {
     activity_name: 'Atividade Smoke Edge',
     activity_type: 'assign',
     course_id: courseId,
@@ -866,6 +1121,124 @@ async function runCourseManagementChecks(
     status: 'pending',
     student_id: studentId,
   })
+  if (!smokeActivity?.id) {
+    fail('Nao foi possivel seedar a atividade para o job de sugestao de nota.')
+  }
+
+  const createGradeSuggestionJob = async () => requestJson(
+    `${status.REST_URL}/rpc/backend_create_grade_suggestion_job_with_items`,
+    {
+      acceptStatuses: [200],
+      body: {
+        p_activity_name: 'Atividade Smoke Edge',
+        p_course_id: courseId,
+        p_items: [{
+          moodle_activity_id: activityMoodleId,
+          student_activity_id: smokeActivity.id,
+          student_id: studentId,
+          student_name: seed.studentFullName,
+        }],
+        p_max_grade: 10,
+        p_moodle_activity_id: activityMoodleId,
+        p_user_id: authUserId,
+      },
+      headers: adminHeaders(status),
+      method: 'POST',
+    },
+  )
+  const firstGradeJob = await createGradeSuggestionJob()
+  const repeatedGradeJob = await createGradeSuggestionJob()
+  if (
+    typeof firstGradeJob.data !== 'string'
+    || repeatedGradeJob.data !== firstGradeJob.data
+  ) {
+    fail(`RPC de job de sugestao nao foi idempotente: ${JSON.stringify({ firstGradeJob, repeatedGradeJob })}`)
+  }
+
+  const gradeJobs = await selectRows(status, 'ai_grade_suggestion_jobs', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+    user_id: authUserId,
+  })
+  const gradeJobItems = await selectRows(status, 'ai_grade_suggestion_job_items', {
+    job_id: firstGradeJob.data,
+  })
+  if (gradeJobs.length !== 1 || gradeJobItems.length !== 1) {
+    fail(`Criacao atomica de job/itens retornou cardinalidade inesperada: ${JSON.stringify({ gradeJobs, gradeJobItems })}`)
+  }
+
+  const relevantGradeJob = await callV1EdgeFunction(
+    status,
+    'grade-suggestion-jobs',
+    {
+      action: 'find_latest_relevant',
+      activityId: smokeActivity.id,
+      courseId,
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-grade-suggestion-job',
+    },
+  )
+  assertV1Response(relevantGradeJob, {
+    correlationId: 'smoke-v1-grade-suggestion-job',
+    status: 200,
+  })
+  if (
+    relevantGradeJob.data?.data?.job?.jobId !== firstGradeJob.data
+    || relevantGradeJob.data?.data?.job?.courseId !== courseId
+  ) {
+    fail(`grade-suggestion-jobs nao retornou o job do ator: ${JSON.stringify(relevantGradeJob.data)}`)
+  }
+
+  const forbiddenGradeJob = await callV1EdgeFunction(
+    status,
+    'grade-suggestion-jobs',
+    {
+      action: 'find_latest_relevant',
+      activityId: smokeActivity.id,
+      courseId: hiddenCourseId,
+    },
+    {
+      acceptStatuses: [403],
+      accessToken,
+      correlationId: 'smoke-v1-grade-suggestion-job-forbidden',
+    },
+  )
+  assertV1Response(forbiddenGradeJob, {
+    code: 'forbidden',
+    correlationId: 'smoke-v1-grade-suggestion-job-forbidden',
+    status: 403,
+  })
+
+  const cancelledGradeJob = await requestJson(
+    `${status.REST_URL}/rpc/backend_cancel_grade_suggestion_job`,
+    {
+      acceptStatuses: [200],
+      body: {
+        p_error_message: 'Cancelamento do smoke',
+        p_job_id: firstGradeJob.data,
+        p_user_id: authUserId,
+      },
+      headers: adminHeaders(status),
+      method: 'POST',
+    },
+  )
+  const [cancelledJobRow] = await selectRows(status, 'ai_grade_suggestion_jobs', {
+    id: firstGradeJob.data,
+  })
+  const [cancelledItemRow] = await selectRows(status, 'ai_grade_suggestion_job_items', {
+    job_id: firstGradeJob.data,
+  })
+  if (
+    cancelledGradeJob.data !== true
+    || cancelledJobRow?.status !== 'cancelled'
+    || cancelledItemRow?.status !== 'cancelled'
+  ) {
+    fail(`Cancelamento atomico do job falhou: ${JSON.stringify({ cancelledGradeJob, cancelledJobRow, cancelledItemRow })}`)
+  }
+  log('Jobs de sugestao validados com escopo, criacao idempotente e cancelamento atomico.')
 
   const attendanceSetting = await callV1EdgeFunction(
     status,
@@ -1104,6 +1477,11 @@ async function runCourseManagementChecks(
     course_id: courseId,
     moodle_activity_id: activityMoodleId,
   }, 'course_id')
+  await deleteRows(status, 'ai_grade_suggestion_jobs', {
+    course_id: courseId,
+    moodle_activity_id: activityMoodleId,
+    user_id: authUserId,
+  })
   await deleteRows(status, 'student_activities', {
     course_id: courseId,
     moodle_activity_id: activityMoodleId,
@@ -1211,6 +1589,16 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
     enrollment_status: 'ativo',
     student_id: hiddenStudent.id,
   })
+
+  await runAcademicReadChecks(
+    status,
+    accessToken,
+    authUserId,
+    courseId,
+    studentId,
+    hiddenCourse.id,
+    hiddenStudent.id,
+  )
 
   const tagSuggestions = await callV1EdgeFunction(
     status,

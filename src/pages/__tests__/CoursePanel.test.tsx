@@ -986,9 +986,8 @@ describe("CoursePanel page", () => {
 
     await waitFor(() => {
       expect(findLatestRelevantActivityGradeSuggestionJobMock).toHaveBeenCalledWith({
-        userId: "u-1",
+        activityId: "act-1",
         courseId: "c-1",
-        moodleActivityId: "321",
       });
     });
 

@@ -3,7 +3,6 @@ import type {
   Enums,
   Json,
   Tables,
-  TablesInsert,
   TablesUpdate,
 } from '../../db/mod.ts'
 import {
@@ -108,6 +107,35 @@ interface CreateGradeSuggestionJobInput {
   userId: string
 }
 
+interface BackendRpcResult {
+  data: unknown
+  error: unknown | null
+}
+
+interface BackendRpcClient {
+  rpc(functionName: string, args: Record<string, unknown>): PromiseLike<BackendRpcResult>
+}
+
+async function callBackendRpc(
+  supabase: AppSupabaseClient,
+  functionName: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const { data, error } = await (supabase as unknown as BackendRpcClient).rpc(functionName, args)
+  if (error) throw error
+  return data
+}
+
+function parseRpcUuid(value: unknown, operation: string): string {
+  if (
+    typeof value !== 'string'
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+  ) {
+    throw new Error(`Invalid UUID returned by ${operation}`)
+  }
+  return value
+}
+
 export async function findActiveGradeSuggestionJobForActivity(
   supabase: AppSupabaseClient,
   input: { courseId: string; moodleActivityId: string; userId: string },
@@ -137,68 +165,35 @@ export async function createGradeSuggestionJobWithItems(
   supabase: AppSupabaseClient,
   input: CreateGradeSuggestionJobInput,
 ): Promise<GradeSuggestionJob> {
-  let job: GradeSuggestionJob | null = null
+  const jobId = parseRpcUuid(await callBackendRpc(
+    supabase,
+    'backend_create_grade_suggestion_job_with_items',
+    {
+      p_activity_name: input.activityName,
+      p_course_id: input.courseId,
+      p_items: input.items.map((item) => ({
+        moodle_activity_id: item.moodleActivityId,
+        student_activity_id: item.studentActivityId,
+        student_id: item.studentId,
+        student_name: item.studentName,
+      })) as Json,
+      p_max_grade: input.maxGrade,
+      p_moodle_activity_id: input.moodleActivityId,
+      p_user_id: input.userId,
+    },
+  ), 'grade suggestion job creation')
 
-  try {
-    const jobInsert: TablesInsert<'ai_grade_suggestion_jobs'> = {
-      activity_name: input.activityName,
-      course_id: input.courseId,
-      max_grade: input.maxGrade,
-      moodle_activity_id: input.moodleActivityId,
-      total_items: input.items.length,
-      user_id: input.userId,
-    }
+  const [job, items] = await Promise.all([
+    findGradeSuggestionJobForUser(supabase, jobId, input.userId),
+    listGradeSuggestionJobItems(supabase, jobId),
+  ])
+  if (!job) throw new Error('Falha ao carregar job de correcao em lote criado')
 
-    const { data, error } = await supabase
-      .from('ai_grade_suggestion_jobs')
-      .insert(jobInsert)
-      .select('*')
-      .single()
+  await syncBackgroundJob(async () => {
+    await mirrorGradeSuggestionJobCreate(supabase, { job, items })
+  })
 
-    if (error || !data) {
-      throw error ?? new Error('Falha ao criar job de correcao em lote')
-    }
-
-    job = data
-
-    const itemsInsert: TablesInsert<'ai_grade_suggestion_job_items'>[] = input.items.map((item) => ({
-      job_id: job.id,
-      moodle_activity_id: item.moodleActivityId,
-      student_activity_id: item.studentActivityId,
-      student_id: item.studentId,
-      student_name: item.studentName,
-      user_id: input.userId,
-    }))
-
-    const { data: itemsData, error: itemsError } = await supabase
-      .from('ai_grade_suggestion_job_items')
-      .insert(itemsInsert)
-      .select('*')
-
-    if (itemsError) {
-      throw itemsError
-    }
-
-    await syncBackgroundJob(async () => {
-      await mirrorGradeSuggestionJobCreate(supabase, {
-        job,
-        items: (itemsData ?? []) as GradeSuggestionJobItem[],
-      })
-    })
-
-    return job
-  } catch (error) {
-    if (job) {
-      await failGradeSuggestionJob(
-        supabase,
-        job.id,
-        error instanceof Error ? error.message : 'Falha ao preparar job de correcao em lote',
-        new Date().toISOString(),
-      )
-    }
-
-    throw error
-  }
+  return job
 }
 
 export async function findGradeSuggestionJobForUser(
@@ -309,7 +304,7 @@ export async function markGradeSuggestionJobProcessing(
   jobId: string,
   startedAt: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('ai_grade_suggestion_jobs')
     .update({
       error_message: null,
@@ -317,8 +312,12 @@ export async function markGradeSuggestionJobProcessing(
       status: 'processing',
     })
     .eq('id', jobId)
+    .in('status', ['pending', 'processing', 'failed'])
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) return
 
   await syncBackgroundJob(async () => {
     const job = await findGradeSuggestionJobById(supabase, jobId)
@@ -342,14 +341,18 @@ export async function markGradeSuggestionJobPending(
   supabase: AppSupabaseClient,
   jobId: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('ai_grade_suggestion_jobs')
     .update({
       status: 'pending',
     })
     .eq('id', jobId)
+    .eq('status', 'processing')
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) return
 
   await syncBackgroundJob(async () => {
     const job = await findGradeSuggestionJobById(supabase, jobId)
@@ -407,42 +410,49 @@ export async function cancelGradeSuggestionJob(
   supabase: AppSupabaseClient,
   jobId: string,
   input: {
-    completedAt: string
     errorMessage: string
-    processedItems: number
-    successCount: number
-    errorCount: number
-    totalItems: number
+    userId: string
   },
-): Promise<void> {
-  const { error } = await supabase
-    .from('ai_grade_suggestion_jobs')
-    .update({
-      completed_at: input.completedAt,
-      error_message: input.errorMessage,
-      processed_items: input.processedItems,
-      success_count: input.successCount,
-      error_count: input.errorCount,
-      total_items: input.totalItems,
-      status: 'cancelled' as TablesUpdate<'ai_grade_suggestion_jobs'>['status'],
-    })
-    .eq('id', jobId)
-
-  if (error) throw error
+): Promise<boolean> {
+  const cancelled = await callBackendRpc(
+    supabase,
+    'backend_cancel_grade_suggestion_job',
+    {
+      p_error_message: input.errorMessage,
+      p_job_id: jobId,
+      p_user_id: input.userId,
+    },
+  )
+  if (typeof cancelled !== 'boolean') {
+    throw new Error('Invalid result returned by grade suggestion job cancellation')
+  }
+  if (!cancelled) return false
 
   await syncBackgroundJob(async () => {
-    const job = await findGradeSuggestionJobById(supabase, jobId)
+    const [job, items] = await Promise.all([
+      findGradeSuggestionJobForUser(supabase, jobId, input.userId),
+      listGradeSuggestionJobItems(supabase, jobId),
+    ])
     if (!job) return
 
     await updateBackgroundJob(supabase, jobId, {
-      completed_at: input.completedAt,
-      error_message: input.errorMessage,
-      processed_items: input.processedItems,
-      success_count: input.successCount,
-      error_count: input.errorCount,
-      total_items: input.totalItems,
+      completed_at: job.completed_at,
+      error_message: job.error_message,
+      processed_items: job.processed_items,
+      success_count: job.success_count,
+      error_count: job.error_count,
+      total_items: job.total_items,
       status: 'cancelled',
     })
+    for (const item of items.filter((candidate) => candidate.status === 'cancelled')) {
+      await updateBackgroundJobItem(supabase, item.id, {
+        completed_at: item.completed_at,
+        error_message: item.error_message,
+        progress_current: 1,
+        progress_total: 1,
+        status: 'cancelled',
+      })
+    }
     await appendBackgroundJobEvent(supabase, {
       userId: job.user_id,
       jobId,
@@ -451,42 +461,8 @@ export async function cancelGradeSuggestionJob(
       message: input.errorMessage,
     })
   })
-}
 
-export async function cancelPendingGradeSuggestionJobItems(
-  supabase: AppSupabaseClient,
-  jobId: string,
-  completedAt: string,
-  errorMessage: string,
-): Promise<number> {
-  const { data, error } = await supabase
-    .from('ai_grade_suggestion_job_items')
-    .update({
-      completed_at: completedAt,
-      error_message: errorMessage,
-      status: 'cancelled' as TablesUpdate<'ai_grade_suggestion_job_items'>['status'],
-    })
-    .eq('job_id', jobId)
-    .eq('status', 'pending')
-    .select('id')
-
-  if (error) throw error
-
-  const cancelledItems = data ?? []
-
-  await syncBackgroundJob(async () => {
-    for (const row of cancelledItems) {
-      await updateBackgroundJobItem(supabase, row.id, {
-        completed_at: completedAt,
-        error_message: errorMessage,
-        progress_current: 1,
-        progress_total: 1,
-        status: 'cancelled',
-      })
-    }
-  })
-
-  return cancelledItems.length
+  return true
 }
 
 export async function updateGradeSuggestionJobProgress(
@@ -572,7 +548,10 @@ export async function completeGradeSuggestionJob(
     totalItems: number
   },
 ): Promise<void> {
-  const { error } = await supabase
+  const eligibleStatuses: GradeSuggestionJobStatus[] = input.status === 'cancelled'
+    ? ['cancelled']
+    : ['pending', 'processing']
+  const { data, error } = await supabase
     .from('ai_grade_suggestion_jobs')
     .update({
       completed_at: input.completedAt,
@@ -583,8 +562,12 @@ export async function completeGradeSuggestionJob(
       total_items: input.totalItems,
     })
     .eq('id', jobId)
+    .in('status', eligibleStatuses)
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) return
 
   await syncBackgroundJob(async () => {
     const job = await findGradeSuggestionJobById(supabase, jobId)
@@ -623,7 +606,7 @@ export async function failGradeSuggestionJob(
   errorMessage: string,
   completedAt: string,
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('ai_grade_suggestion_jobs')
     .update({
       completed_at: completedAt,
@@ -631,8 +614,12 @@ export async function failGradeSuggestionJob(
       status: 'failed',
     })
     .eq('id', jobId)
+    .in('status', ['pending', 'processing', 'failed'])
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) return
 
   await syncBackgroundJob(async () => {
     const job = await findGradeSuggestionJobById(supabase, jobId)
@@ -662,7 +649,7 @@ export async function completeGradeSuggestionJobItem(
     resultPayload: Json
   },
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('ai_grade_suggestion_job_items')
     .update({
       audit_id: input.auditId,
@@ -672,8 +659,12 @@ export async function completeGradeSuggestionJobItem(
       status: 'completed',
     })
     .eq('id', input.itemId)
+    .eq('status', 'processing')
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) return
 
   await syncBackgroundJob(async () => {
     const item = await loadGradeSuggestionJobItem(supabase, input.itemId)
@@ -713,7 +704,7 @@ export async function failGradeSuggestionJobItem(
     resultPayload: Json
   },
 ): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('ai_grade_suggestion_job_items')
     .update({
       audit_id: input.auditId ?? null,
@@ -723,8 +714,12 @@ export async function failGradeSuggestionJobItem(
       status: 'failed',
     })
     .eq('id', input.itemId)
+    .eq('status', 'processing')
+    .select('id')
+    .maybeSingle()
 
   if (error) throw error
+  if (!data) return
 
   await syncBackgroundJob(async () => {
     const item = await loadGradeSuggestionJobItem(supabase, input.itemId)

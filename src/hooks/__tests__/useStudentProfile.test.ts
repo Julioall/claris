@@ -1,72 +1,66 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { useStudentProfile } from "@/features/students/hooks/useStudentProfile";
-import { createQueryClientWrapper } from "@/test/query-client";
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
-const useAuthMock = vi.fn();
-const fromMock = vi.fn();
+import { useStudentProfile } from '@/features/students/hooks/useStudentProfile';
+import type { StudentProfile } from '@/features/students/types';
+import { ApiClientError } from '@/integrations/http/edge-function-client';
+import { createQueryClientWrapper } from '@/test/query-client';
 
-const studentSelectMock = vi.fn();
-const studentEqMock = vi.fn();
-const studentSingleMock = vi.fn();
+const { getStudentProfileMock, useAuthMock } = vi.hoisted(() => ({
+  getStudentProfileMock: vi.fn(),
+  useAuthMock: vi.fn(),
+}));
 
-const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
-vi.mock("@/contexts/AuthContext", () => ({
+vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
+vi.mock('@/features/students/api/students', () => ({
+  getStudentProfile: (...args: unknown[]) => getStudentProfileMock(...args),
 }));
 
-function setupFromMock() {
-  fromMock.mockImplementation((table: string) => {
-    if (table === "students") {
-      return { select: studentSelectMock };
-    }
+const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    throw new Error(`Unexpected table: ${table}`);
-  });
-}
+const studentProfile: StudentProfile = {
+  courses: [],
+  metadata: {
+    contractVersion: 1,
+    dataUpdatedAt: '2026-02-20T00:00:00.000Z',
+    generatedAt: '2026-02-21T00:00:00.000Z',
+  },
+  student: {
+    avatarUrl: null,
+    city: null,
+    createdAt: '2026-02-01T00:00:00.000Z',
+    email: 'ana@example.com',
+    id: 's-1',
+    lastAccessAt: '2026-02-20T00:00:00.000Z',
+    mobilePhone: null,
+    moodleUserId: '10',
+    name: 'Ana Silva',
+    phone: null,
+    phoneNumber: null,
+    riskLevel: 'risco',
+    riskReasons: ['falta'],
+    tags: ['prioridade'],
+    updatedAt: '2026-02-01T00:00:00.000Z',
+  },
+};
 
-describe("useStudentProfile", () => {
+describe('useStudentProfile', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-
-    setupFromMock();
-
-    studentSelectMock.mockReturnValue({ eq: studentEqMock });
-    studentEqMock.mockReturnValue({ single: studentSingleMock });
-    studentSingleMock.mockResolvedValue({
-      data: {
-        id: "s-1",
-        moodle_user_id: "10",
-        full_name: "Ana Silva",
-        email: "ana@example.com",
-        avatar_url: null,
-        current_risk_level: "risco",
-        risk_reasons: ["falta"],
-        tags: ["prioridade"],
-        last_access: "2026-02-20T00:00:00.000Z",
-        created_at: "2026-02-01T00:00:00.000Z",
-        updated_at: "2026-02-01T00:00:00.000Z",
-      },
-      error: null,
-    });
+    useAuthMock.mockReturnValue({ user: { id: 'user-1' } });
+    getStudentProfileMock.mockResolvedValue(studentProfile);
   });
 
   afterAll(() => {
     consoleErrorSpy.mockRestore();
   });
 
-  it("loads student profile", async () => {
+  it('loads student profile through the backend API', async () => {
     const { wrapper } = createQueryClientWrapper();
-    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
+    const { result } = renderHook(() => useStudentProfile('s-1'), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -74,12 +68,13 @@ describe("useStudentProfile", () => {
 
     expect(result.current.error).toBeNull();
     expect(result.current.student).toMatchObject({
-      id: "s-1",
-      current_risk_level: "risco",
+      id: 's-1',
+      riskLevel: 'risco',
     });
+    expect(getStudentProfileMock).toHaveBeenCalledWith('s-1', expect.any(AbortSignal));
   });
 
-  it("returns early when student id is missing", async () => {
+  it('returns early when student id is missing', async () => {
     const { wrapper } = createQueryClientWrapper();
     const { result } = renderHook(() => useStudentProfile(undefined), { wrapper });
 
@@ -87,32 +82,33 @@ describe("useStudentProfile", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(fromMock).not.toHaveBeenCalled();
+    expect(getStudentProfileMock).not.toHaveBeenCalled();
     expect(result.current.student).toBeNull();
   });
 
-  it("returns early when user is not authenticated", async () => {
+  it('returns early when user is not authenticated', async () => {
     useAuthMock.mockReturnValue({ user: null });
 
     const { wrapper } = createQueryClientWrapper();
-    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
+    const { result } = renderHook(() => useStudentProfile('s-1'), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(fromMock).not.toHaveBeenCalled();
+    expect(getStudentProfileMock).not.toHaveBeenCalled();
     expect(result.current.student).toBeNull();
   });
 
-  it("sets not-found message when student does not exist", async () => {
-    studentSingleMock.mockResolvedValueOnce({
-      data: null,
-      error: { code: "PGRST116", message: "No rows" },
-    });
+  it('sets not-found message when the backend hides an inaccessible student', async () => {
+    getStudentProfileMock.mockRejectedValueOnce(new ApiClientError({
+      code: 'not_found',
+      message: 'Student not found.',
+      status: 404,
+    }));
 
     const { wrapper } = createQueryClientWrapper();
-    const { result } = renderHook(() => useStudentProfile("unknown"), { wrapper });
+    const { result } = renderHook(() => useStudentProfile('unknown'), { wrapper });
 
     await waitFor(() => {
       expect(result.current.error?.toLowerCase()).toMatch(/n.o encontrado/);
@@ -121,23 +117,20 @@ describe("useStudentProfile", () => {
     expect(result.current.student).toBeNull();
   });
 
-  it("handles fetch errors", async () => {
-    studentSingleMock.mockResolvedValueOnce({
-      data: null,
-      error: new Error("fetch failed"),
-    });
+  it('handles backend errors', async () => {
+    getStudentProfileMock.mockRejectedValueOnce(new Error('fetch failed'));
 
     const { wrapper } = createQueryClientWrapper();
-    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
+    const { result } = renderHook(() => useStudentProfile('s-1'), { wrapper });
 
     await waitFor(() => {
-      expect(result.current.error).toBeTruthy();
+      expect(result.current.error).toBe('fetch failed');
     });
   });
 
-  it("supports explicit refetch", async () => {
+  it('supports explicit refetch', async () => {
     const { wrapper } = createQueryClientWrapper();
-    const { result } = renderHook(() => useStudentProfile("s-1"), { wrapper });
+    const { result } = renderHook(() => useStudentProfile('s-1'), { wrapper });
 
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
@@ -147,6 +140,6 @@ describe("useStudentProfile", () => {
       await result.current.refetch();
     });
 
-    expect(studentSelectMock).toHaveBeenCalledTimes(2);
+    expect(getStudentProfileMock).toHaveBeenCalledTimes(2);
   });
 });

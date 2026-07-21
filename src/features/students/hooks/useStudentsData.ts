@@ -2,7 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/contexts/AuthContext';
 
-import { listStudentsForUser } from '../api/students.repository';
+import { listStudents } from '../api/students';
+import {
+  STUDENT_ENROLLMENT_STATUSES,
+  STUDENT_RISK_LEVELS,
+  type StudentEnrollmentStatusDto,
+  type StudentRiskLevelDto,
+} from '../api/contracts/students.contract';
+import { studentKeys } from '../query-keys';
 import type { StudentListPage } from '../types';
 
 interface UseStudentsDataParams {
@@ -23,11 +30,32 @@ export function useStudentsData({
   pageSize = 30,
 }: UseStudentsDataParams = {}) {
   const { user } = useAuth();
+  const riskLevel = STUDENT_RISK_LEVELS.includes(riskFilter as StudentRiskLevelDto)
+    ? riskFilter as StudentRiskLevelDto
+    : undefined;
+  const enrollmentStatus = STUDENT_ENROLLMENT_STATUSES.includes(statusFilter as StudentEnrollmentStatusDto)
+    ? statusFilter as StudentEnrollmentStatusDto
+    : undefined;
+  const search = searchQuery?.trim() || undefined;
 
   const query = useQuery<StudentListPage, Error>({
-    queryKey: ['students', user?.id ?? 'anonymous', courseId ?? 'all', searchQuery ?? '', riskFilter ?? 'all', statusFilter ?? 'all', page, pageSize],
+    queryKey: studentKeys.list(user?.id, {
+      courseId,
+      enrollmentStatus,
+      page,
+      pageSize,
+      riskLevel,
+      search,
+    }),
     enabled: !!user,
-    queryFn: () => listStudentsForUser({ courseId, searchQuery, riskFilter, statusFilter, page, pageSize }),
+    queryFn: ({ signal }) => listStudents({
+      courseId,
+      enrollmentStatus,
+      page,
+      pageSize,
+      riskLevel,
+      search,
+    }, signal),
   });
 
   return {

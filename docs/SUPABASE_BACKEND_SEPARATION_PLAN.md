@@ -276,27 +276,32 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** centralizar consultas academicas e seus calculos.
 
-- [ ] `SB-0501` Migrar listagem paginada de alunos
+- [x] `SB-0501` Migrar listagem paginada de alunos
   - Encapsular RPC, filtros, ordenacao e mapeamento em endpoint.
   - Derivar escopo de cursos do usuario autenticado.
   - AC: client recebe `items`, `page`, `pageSize` e `total`.
+  - Implementado em `students/list_students` com identidade do token, permissao `students.view`, RPC service-only, filtros estritos, total independente da pagina e ordenacao estavel por risco, nome e id.
 
-- [ ] `SB-0502` Migrar perfil do aluno
+- [x] `SB-0502` Migrar perfil do aluno
   - Consolidar dados gerais, cursos e atividades em DTO apropriado para a tela.
   - AC: frontend nao executa joins PostgREST.
+  - Implementado em `students/get_profile`: o backend intersecta matriculas com cursos acessiveis, devolve 404 indistinguivel para inexistencia/falta de acesso e consolida identidade, notas e atividades ponderadas em DTO camelCase.
 
-- [ ] `SB-0503` Migrar historico do aluno
+- [x] `SB-0503` Migrar historico do aluno
   - Mover as duas consultas e o calculo de pendencias/atrasos de `useStudentHistory`.
   - AC: hook limita-se a consumir e apresentar o DTO.
+  - Implementado em `students/get_history` com ate 60 snapshots, paginação interna de atividades, recalculo backend de pendencias/atrasos e ordenacao deterministica; a query key inclui o ator autenticado.
 
-- [ ] `SB-0504` Migrar acompanhamento de jobs de sugestao de nota
+- [x] `SB-0504` Migrar acompanhamento de jobs de sugestao de nota
   - Encapsular tabelas de jobs e suas transicoes.
   - AC: frontend nao consulta `ai_grade_suggestion_jobs` diretamente.
+  - Implementado em `grade-suggestion-jobs/find_latest_relevant`, protegido por permissao e curso. Criacao de job+itens e cancelamento agora usam RPCs transacionais, existe unicidade parcial de job ativo e transicoes concorrentes nao reativam jobs cancelados; tabelas de job/auditoria nao possuem grants de browser.
 
-- [ ] `SB-0505` Migrar relatorios
+- [x] `SB-0505` Migrar relatorios
   - Mover queries paralelas, joins, filtros e consolidacao de `features/reports/api/index.ts`.
   - Definir endpoints por relatorio, evitando endpoint generico que exponha o banco.
   - AC: exportacao usa dados de contrato e mantem o resultado atual.
+  - Implementado em `academic-reports` com actions especificas para cursos, notas e atividades pendentes. Escopo exige associacao tutor para todo o lote, consultas sao paginadas no backend e a exportacao preserva filtros, ordenacoes, estilos e nomes de arquivo existentes.
 
 ## Epic 6 — Tarefas e agenda
 

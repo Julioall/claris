@@ -69,6 +69,15 @@ verify_jwt = false
 [functions.course-attendance]
 verify_jwt = false
 
+[functions.students]
+verify_jwt = false
+
+[functions.academic-reports]
+verify_jwt = false
+
+[functions.grade-suggestion-jobs]
+verify_jwt = false
+
 [functions.moodle-sync-courses]
 verify_jwt = false
 

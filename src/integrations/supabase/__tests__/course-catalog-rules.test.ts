@@ -12,7 +12,6 @@ describe('courses-catalog domain rules', () => {
     expect(allowedPermissionsForCourseCatalogAction('get_catalog')).toEqual([
       'courses.catalog.view',
       'schools.view',
-      'reports.view',
     ]);
     expect(allowedPermissionsForCourseCatalogAction('set_association_role')).toEqual([
       'courses.catalog.view',
@@ -29,7 +28,7 @@ describe('courses-catalog domain rules', () => {
 
   it.each([
     ['get_catalog', 'schools.view', true],
-    ['get_catalog', 'reports.view', true],
+    ['get_catalog', 'reports.view', false],
     ['set_association_role', 'schools.view', true],
     ['set_ignored', 'schools.view', true],
     ['set_attendance_enabled', 'reports.view', false],

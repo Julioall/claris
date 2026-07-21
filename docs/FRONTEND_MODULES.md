@@ -62,6 +62,8 @@ O dashboard consome uma unica API de caso de uso em `features/dashboard/api/dash
 
 O dominio de cursos consome os casos de uso `courses-catalog`, `course-panel` e `course-attendance` por clients HTTP em `features/courses/api/`. Catalogo, associacoes, configuracao de frequencia, painel consolidado, visibilidade de atividades e folhas de presenca usam DTOs proprios; a UI envia intencoes e preserva somente responsabilidades de apresentacao, cache e invalidacao.
 
+Alunos consome `students` por um client HTTP unico: listagem, perfil, notas/atividades e historico chegam como DTOs consolidados. Hooks apenas definem query keys por ator, cancelamento e estados de tela. Relatorios consome `academic-reports`, mantendo no navegador somente a montagem visual das planilhas; filtros academicos, joins, escopo e consolidacao ficam no backend. A reidratacao de jobs de sugestao usa `grade-suggestion-jobs` e so ocorre quando a permissao de IA esta presente.
+
 DTOs de transporte vivem em `src/features/<dominio>/api/contracts/` e descrevem somente o JSON da API. View models permanecem no `types.ts` da feature, e mappers em `api/mappers/` convertem entre os dois quando necessario. Contratos, hooks, pages e components nao importam tipos gerados do banco. `npm run guard:frontend-contracts` protege essa regra e mantem uma allowlist decrescente para duas dividas anteriores.
 
 Essas regras sao definidas na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md). A validacao client-side existe para UX; regras de permissao, elegibilidade e estado persistido sempre sao revalidadas no backend.
