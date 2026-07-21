@@ -575,6 +575,18 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'activity-feed',
     },
     {
+      body: { action: 'list', limit: 30 },
+      expectedStatus: 401,
+      name: 'claris-conversations valid-no-auth',
+      path: 'claris-conversations',
+    },
+    {
+      body: { action: 'list', limit: 30, userId: '00000000-0000-4000-8000-000000000001' },
+      expectedStatus: 422,
+      name: 'claris-conversations rejects-browser-identity',
+      path: 'claris-conversations',
+    },
+    {
       body: { courseId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
       expectedStatus: 401,
       name: 'moodle-sync-students valid-no-auth',
@@ -740,6 +752,7 @@ async function runUnauthenticatedContractChecks(status) {
     ['moodle-sync-jobs', { action: 'list_active_jobs' }],
     ['background-jobs', { action: 'list_active' }],
     ['activity-feed', { action: 'list', limit: 20 }],
+    ['claris-conversations', { action: 'list', limit: 30 }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -2660,6 +2673,100 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
   log('Sincronizacao, risco, preferencias, jobs e activity feed validados pela fronteira backend V1.')
 }
 
+async function runClarisConversationChecks(status, accessToken, authUserId) {
+  const smokeTitle = 'Smoke Claris Conversation'
+  await deleteRows(status, 'claris_conversations', { title: smokeTitle })
+
+  const created = await callV1EdgeFunction(
+    status,
+    'claris-conversations',
+    {
+      action: 'create',
+      lastContextRoute: '/alunos',
+      messages: [{ role: 'user', content: 'Quem precisa de acompanhamento?' }],
+      title: smokeTitle,
+    },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-claris-conversation-create',
+    },
+  )
+  assertV1Response(created, {
+    correlationId: 'smoke-v1-claris-conversation-create',
+    status: 200,
+  })
+  const conversation = created.data?.data?.conversation
+  if (
+    typeof conversation?.id !== 'string'
+    || conversation.title !== smokeTitle
+    || conversation.lastContextRoute !== '/alunos'
+  ) {
+    fail(`claris-conversations nao criou o DTO esperado: ${JSON.stringify(created.data)}`)
+  }
+
+  const [persisted] = await selectRows(status, 'claris_conversations', { id: conversation.id })
+  if (persisted?.user_id !== authUserId) {
+    fail('claris-conversations nao derivou o proprietario do token autenticado.')
+  }
+
+  const listed = await callV1EdgeFunction(
+    status,
+    'claris-conversations',
+    { action: 'list', limit: 30 },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-claris-conversation-list',
+    },
+  )
+  assertV1Response(listed, {
+    correlationId: 'smoke-v1-claris-conversation-list',
+    status: 200,
+  })
+  if (!listed.data?.data?.items?.some((item) => item.id === conversation.id)) {
+    fail(`claris-conversations nao listou a conversa do ator: ${JSON.stringify(listed.data)}`)
+  }
+
+  const updated = await callV1EdgeFunction(
+    status,
+    'claris-conversations',
+    { action: 'update', conversationId: conversation.id, title: `${smokeTitle} Updated` },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-claris-conversation-update',
+    },
+  )
+  assertV1Response(updated, {
+    correlationId: 'smoke-v1-claris-conversation-update',
+    status: 200,
+  })
+  if (updated.data?.data?.conversation?.title !== `${smokeTitle} Updated`) {
+    fail(`claris-conversations nao atualizou a conversa: ${JSON.stringify(updated.data)}`)
+  }
+
+  const deleted = await callV1EdgeFunction(
+    status,
+    'claris-conversations',
+    { action: 'delete', conversationId: conversation.id },
+    {
+      acceptStatuses: [200],
+      accessToken,
+      correlationId: 'smoke-v1-claris-conversation-delete',
+    },
+  )
+  assertV1Response(deleted, {
+    correlationId: 'smoke-v1-claris-conversation-delete',
+    status: 200,
+  })
+  if (deleted.data?.data?.deleted !== true) {
+    fail(`claris-conversations nao confirmou a exclusao: ${JSON.stringify(deleted.data)}`)
+  }
+
+  log('Historico da Claris validado com DTO V1, identidade derivada e CRUD actor-scoped.')
+}
+
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   const settings = await callV1EdgeFunction(
     status,
@@ -2675,6 +2782,8 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
   if (typeof settings.data?.data?.preferenceEnabled !== 'boolean') {
     fail(`moodle-reauth-settings retornou DTO invalido: ${JSON.stringify(settings.data)}`)
   }
+
+  await runClarisConversationChecks(status, accessToken, authUserId)
 
   await runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, courseId)
 

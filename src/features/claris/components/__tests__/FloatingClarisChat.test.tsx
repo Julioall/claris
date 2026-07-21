@@ -15,6 +15,7 @@ vi.mock('@/components/ui/scroll-area', () => ({
 }));
 
 const invokeMock = vi.fn();
+const invokeEdgeFunctionMock = vi.fn();
 const fromMock = vi.fn();
 const usePermissionsMock = vi.fn();
 const WIDGET_OPEN_STORAGE_KEY = 'claris_chat_widget_open';
@@ -36,6 +37,10 @@ vi.mock('@/integrations/supabase/client', () => ({
     },
     from: (...args: unknown[]) => fromMock(...args),
   },
+}));
+
+vi.mock('@/integrations/http/edge-function-client', () => ({
+  invokeEdgeFunction: (...args: unknown[]) => invokeEdgeFunctionMock(...args),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
@@ -64,6 +69,7 @@ const HISTORY_STORAGE_KEY = 'claris_chat_history:user-1';
 
 beforeEach(() => {
   invokeMock.mockReset();
+  invokeEdgeFunctionMock.mockReset();
   fromMock.mockReset();
   localStorage.clear();
   clarisAvailabilityState = 'not_configured';
@@ -74,6 +80,67 @@ beforeEach(() => {
     canAccessAdminSection: () => false,
   });
   conversationsStore = [];
+
+  invokeEdgeFunctionMock.mockImplementation(async (
+    functionName: string,
+    options: { body: Record<string, unknown> },
+  ) => {
+    if (functionName !== 'claris-conversations') {
+      throw new Error(`Unexpected Edge Function: ${functionName}`);
+    }
+    const body = options.body;
+    const toDto = (row: (typeof conversationsStore)[number]) => ({
+      id: row.id,
+      lastContextRoute: row.last_context_route,
+      messages: row.messages,
+      title: row.title,
+      updatedAt: row.updated_at,
+    });
+
+    if (body.action === 'list') {
+      return {
+        contractVersion: 1,
+        items: [...conversationsStore]
+          .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+          .map(toDto),
+      };
+    }
+    if (body.action === 'create') {
+      const now = new Date().toISOString();
+      const row = {
+        id: `conv-${Date.now()}-${Math.random()}`,
+        user_id: 'user-1',
+        title: String(body.title ?? 'Nova conversa'),
+        messages: (body.messages ?? []) as Array<{ role: 'assistant' | 'user'; content: string }>,
+        last_context_route: typeof body.lastContextRoute === 'string' ? body.lastContextRoute : null,
+        updated_at: now,
+        created_at: now,
+      };
+      conversationsStore = [row, ...conversationsStore];
+      return { contractVersion: 1, conversation: toDto(row) };
+    }
+    if (body.action === 'update') {
+      conversationsStore = conversationsStore.map((row) => row.id === body.conversationId
+        ? {
+            ...row,
+            title: typeof body.title === 'string' ? body.title : row.title,
+            messages: Array.isArray(body.messages) ? body.messages as typeof row.messages : row.messages,
+            last_context_route: typeof body.lastContextRoute === 'string'
+              ? body.lastContextRoute
+              : row.last_context_route,
+            updated_at: new Date().toISOString(),
+          }
+        : row);
+      const updated = conversationsStore.find((row) => row.id === body.conversationId);
+      if (!updated) throw new Error('Conversation not found');
+      return { contractVersion: 1, conversation: toDto(updated) };
+    }
+    if (body.action === 'delete') {
+      conversationsStore = conversationsStore.filter((row) => row.id !== body.conversationId);
+      return { contractVersion: 1, deleted: true };
+    }
+    throw new Error(`Unexpected action: ${String(body.action)}`);
+  });
 
   fromMock.mockImplementation((table: string) => {
     if (table === 'app_settings') {
@@ -111,66 +178,7 @@ beforeEach(() => {
       };
     }
 
-    if (table !== 'claris_conversations') {
-      throw new Error(`Unexpected table: ${table}`);
-    }
-
-    return {
-      select: () => ({
-        eq: () => ({
-          order: () => ({
-            limit: async () => ({
-              data: [...conversationsStore].sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
-              error: null,
-            }),
-          }),
-        }),
-      }),
-      insert: (payload: { user_id: string; title?: string; messages?: Array<{ role: 'assistant' | 'user'; content: string }>; last_context_route?: string }) => ({
-        select: () => ({
-          single: async () => {
-            const now = new Date().toISOString();
-            const row = {
-              id: `conv-${Date.now()}-${Math.random()}`,
-              user_id: payload.user_id,
-              title: payload.title ?? 'Nova conversa',
-              messages: payload.messages ?? [],
-              last_context_route: payload.last_context_route ?? null,
-              updated_at: now,
-              created_at: now,
-            };
-            conversationsStore = [row, ...conversationsStore];
-            return { data: row, error: null };
-          },
-        }),
-      }),
-      update: (payload: { title?: string; messages?: Array<{ role: 'assistant' | 'user'; content: string }>; last_context_route?: string }) => ({
-        eq: (_idColumn: string, idValue: string) => ({
-          eq: async () => {
-            conversationsStore = conversationsStore.map((row) =>
-              row.id === idValue
-                ? {
-                    ...row,
-                    title: payload.title ?? row.title,
-                    messages: payload.messages ?? row.messages,
-                    last_context_route: payload.last_context_route ?? row.last_context_route,
-                    updated_at: new Date().toISOString(),
-                  }
-                : row,
-            );
-            return { data: null, error: null };
-          },
-        }),
-      }),
-      delete: () => ({
-        eq: (_idColumn: string, idValue: string) => ({
-          eq: async () => {
-            conversationsStore = conversationsStore.filter((row) => row.id !== idValue);
-            return { data: null, error: null };
-          },
-        }),
-      }),
-    };
+    throw new Error(`Unexpected table: ${table}`);
   });
 });
 

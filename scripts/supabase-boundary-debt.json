@@ -123,18 +123,6 @@
       }
     },
     {
-      "path": "src/features/claris/api/conversations.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 4,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/claris/hooks/useChat.ts",
       "counts": {
         "clientImports": 1,

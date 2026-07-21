@@ -36,6 +36,7 @@ const DEFAULT_FUNCTIONS = [
   'task-tag-suggestions',
   'claris-llm-test',
   'claris-chat',
+  'claris-conversations',
   'whatsapp-instance-manager',
   'receive-whatsapp-webhook',
   'whatsapp-messaging',

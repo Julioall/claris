@@ -501,10 +501,10 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
         fallbackThread = { id: `local-${Date.now()}`, title: deriveConversationTitle(localHistory), history: localHistory, updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true };
       }
       try {
-        const rows = await fetchClarisConversations(userId);
+        const rows = await fetchClarisConversations();
         const remote: ClarisConversationThread[] = rows.map((row) => {
           const history = parseHistoryFromJson(row.messages);
-          return { id: row.id, title: row.title || deriveConversationTitle(history), history, updatedAt: row.updated_at, lastContextRoute: row.last_context_route || activeRouteContext };
+          return { id: row.id, title: row.title || deriveConversationTitle(history), history, updatedAt: row.updatedAt, lastContextRoute: row.lastContextRoute || activeRouteContext };
         });
         if (!isMounted) return;
         if (remote.length > 0) {
@@ -548,13 +548,17 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
       return [...updated].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     });
     if (activeConversationId.startsWith('local-')) {
-      void createClarisConversation(userId, titleToPersist, historyToPersist, activeRouteContext).then((data) => {
-        setConversations((prev) => prev.map((c) => c.id === activeConversationId ? { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updated_at, lastContextRoute: data.last_context_route || activeRouteContext } : c));
+      void createClarisConversation(titleToPersist, historyToPersist, activeRouteContext).then((data) => {
+        setConversations((prev) => prev.map((c) => c.id === activeConversationId ? { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updatedAt, lastContextRoute: data.lastContextRoute || activeRouteContext } : c));
         setActiveConversationId(data.id);
       }).catch(() => {});
       return;
     }
-    void updateClarisConversation(activeConversationId, userId, { title: titleToPersist, messages: historyToPersist, last_context_route: activeRouteContext });
+    void updateClarisConversation(activeConversationId, {
+      title: titleToPersist,
+      messages: historyToPersist,
+      lastContextRoute: activeRouteContext,
+    }).catch(() => {});
   }, [activeConversationId, activeConversationTitle, activeRouteContext, historyStorageKey, isHydratingConversations, messages, userId]);
 
   const selectConversation = (id: string) => {
@@ -570,8 +574,8 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     if (reusable) { setActiveConversationId(reusable.id); setMessages([INITIAL_MESSAGE]); setInputValue(''); return; }
     const localConv: ClarisConversationThread = { id: `local-${Date.now()}`, title: 'Nova conversa', history: [], updatedAt: new Date().toISOString(), lastContextRoute: activeRouteContext, isLocalOnly: true };
     try {
-      const data = await createClarisConversation(userId, 'Nova conversa', [], activeRouteContext);
-      const created: ClarisConversationThread = { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updated_at, lastContextRoute: data.last_context_route || activeRouteContext };
+      const data = await createClarisConversation('Nova conversa', [], activeRouteContext);
+      const created: ClarisConversationThread = { id: data.id, title: data.title, history: parseHistoryFromJson(data.messages), updatedAt: data.updatedAt, lastContextRoute: data.lastContextRoute || activeRouteContext };
       setConversations((prev) => [created, ...prev]); setActiveConversationId(created.id);
     } catch {
       setConversations((prev) => [localConv, ...prev]); setActiveConversationId(localConv.id);
@@ -588,7 +592,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     if (!nextTitle) { setEditingConversationError('O título não pode ficar vazio.'); return; }
     setEditingConversationError('');
     setConversations((prev) => prev.map((c) => c.id === editingConversationId ? { ...c, title: nextTitle, updatedAt: new Date().toISOString() } : c));
-    if (!editingConversationId.startsWith('local-')) await updateClarisConversation(editingConversationId, userId, { title: nextTitle });
+    if (!editingConversationId.startsWith('local-')) await updateClarisConversation(editingConversationId, { title: nextTitle });
     cancelRenameConversation();
   };
 
@@ -599,7 +603,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     if (!confirmed) return;
     const remaining = conversations.filter((c) => c.id !== id);
     setConversations(remaining);
-    if (!id.startsWith('local-')) await deleteClarisConversation(id, userId);
+    if (!id.startsWith('local-')) await deleteClarisConversation(id);
     if (activeConversationId === id) {
       if (remaining.length > 0) { const next = [...remaining].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]; setActiveConversationId(next.id); setMessages([INITIAL_MESSAGE, ...historyToChatMessages(next.history)]); }
       else await createNewConversation();
