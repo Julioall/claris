@@ -1,6 +1,6 @@
 # Architecture
 
-Atualizado em `2026-04-01`.
+Atualizado em `2026-07-21`.
 
 ## Visao Geral
 
@@ -9,7 +9,7 @@ O projeto esta organizado em duas camadas principais:
 - frontend React + TypeScript em `src/`
 - backend Supabase em `supabase/` com schema, RLS e Edge Functions
 
-O objetivo da arquitetura atual e manter o shell da aplicacao pequeno, empurrar regra de negocio para slices de dominio no frontend e concentrar integracoes sensiveis e fluxos multi-etapa nas Edge Functions.
+O objetivo da arquitetura intermediaria e manter o shell da aplicacao pequeno, organizar a UI em slices de dominio e concentrar regras de negocio, autorizacao, persistencia e integracoes sensiveis nas Edge Functions. A decisao e os limites dessa transicao estao formalizados na [ADR-005](./DECISIONS/ADR-005-supabase-backend-boundary.md).
 
 ## Frontend
 
@@ -24,7 +24,7 @@ O objetivo da arquitetura atual e manter o shell da aplicacao pequeno, empurrar 
 
 Cada dominio vive em `src/features/<dominio>/` e pode expor:
 
-- `api/` para queries, mutations e acesso a Edge Functions
+- `api/` para clientes dos casos de uso expostos pelas Edge Functions
 - `components/` para UI especifica do dominio
 - `hooks/` para estado e comportamento do dominio
 - `pages/` para adaptadores de rota
@@ -32,16 +32,16 @@ Cada dominio vive em `src/features/<dominio>/` e pode expor:
 
 Os slices ativos hoje incluem `auth`, `courses`, `students`, `tasks`, `agenda`, `dashboard`, `claris`, `messages`, `campaigns`, `background-jobs`, `services`, `settings`, `reports`, `admin`, `whatsapp`.
 
-### Fronteira de dados
+### Fronteira de backend
 
-O frontend usa Supabase apenas dentro das camadas de fronteira:
+O estado-alvo nao permite `supabase.from()` nem `supabase.rpc()` no frontend. Os slices consomem contratos HTTP independentes do schema do banco, e `api/` representa clientes desses contratos, nao repositories executados no navegador.
 
-- `src/features/**/api`
-- `src/features/auth/application` e `src/features/auth/infrastructure`
-- hooks transversais explicitamente aceitos, como telemetria e sessao
-- `src/components/ui/api/` para primitives compartilhadas que precisam de lookup leve
+As excecoes temporarias sao:
 
-`pages/` e `components/` nao devem importar `@/integrations/supabase/client` diretamente. O guardrail automatizado fica em `scripts/check-supabase-boundary.mjs` e roda no CI via `npm run guard:supabase-boundary`.
+- Supabase Auth encapsulado pelo adapter do dominio de autenticacao
+- Realtime encapsulado por um gateway dedicado, sem consultas ou mutacoes no banco
+
+Os acessos diretos existentes sao legado em migracao conforme [SUPABASE_BACKEND_SEPARATION_PLAN.md](./SUPABASE_BACKEND_SEPARATION_PLAN.md), e nao precedente para codigo novo. O guardrail automatizado atual fica em `scripts/check-supabase-boundary.mjs` e sera endurecido ao longo dessa migracao.
 
 ### Estado e cache
 
@@ -71,7 +71,9 @@ Novos contratos devem nascer no slice do dominio. O antigo barrel central de tip
 
 ### Edge Functions
 
-As Edge Functions seguem um runtime compartilhado em `supabase/functions/_shared/` com:
+As Edge Functions formam a API e a camada de aplicacao do backend Supabase. Elas autenticam e autorizam o ator a partir do token, validam contratos, executam casos de uso e acessam a persistencia. RLS permanece como defesa em profundidade.
+
+As functions seguem um runtime compartilhado em `supabase/functions/_shared/` com:
 
 - `http/` para handler, CORS e respostas padronizadas
 - `db/` para clients e tipos
@@ -83,6 +85,8 @@ O padrao preferencial e:
 - `index.ts` fino
 - `payload.ts` para contrato de entrada
 - services/repositories/mappers em `_shared/` ou no dominio da function
+- DTOs HTTP independentes dos tipos gerados do banco
+- RPC PostgreSQL para comandos com varias escritas que precisam ser atomicas
 
 Mais detalhes estao em [EDGE_FUNCTIONS.md](./EDGE_FUNCTIONS.md).
 
@@ -111,16 +115,18 @@ Isso permite rodar:
 - somente backend local para smoke e migrations
 - stack completa para desenvolvimento manual
 
-## Onde fica cada regra de negocio
+## Onde fica cada responsabilidade
 
-- regras academicas e de acompanhamento: `src/features/students`, `src/features/courses`, `src/features/tasks`, `src/features/agenda`
-- sessao, sincronizacao Moodle e risco: `src/features/auth`
-- configuracao e operacao administrativa: `src/features/admin`, `src/features/settings`, `src/features/services`
-- chat, sugestoes e historico da Claris: `src/features/claris`
-- fluxos multi-etapa, integracoes externas e efeitos colaterais relevantes: Edge Functions em `supabase/functions`
+- apresentacao, interacao, cache e estado de tela: slices em `src/features/<dominio>`
+- contratos de transporte e query keys: `api/` e hooks do respectivo slice
+- regras academicas, autorizacao, sincronizacao, configuracao e demais casos de uso: Edge Functions e modulos server-side de dominio
+- transacoes atomicas: funcoes PostgreSQL chamadas pelo backend
+- acesso ao banco: repositories server-side, protegido por RLS sempre que possivel
+- integracoes externas e efeitos colaterais: Edge Functions, com idempotencia e tratamento explicito de falhas
 
 ## Leitura complementar
 
 - [README.md](./README.md)
 - [FRONTEND_MODULES.md](./FRONTEND_MODULES.md)
 - [auth-architecture.md](./auth-architecture.md)
+- [ADR-005: Edge Functions como fronteira de backend Supabase](./DECISIONS/ADR-005-supabase-backend-boundary.md)

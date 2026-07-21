@@ -122,10 +122,11 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - Registrar feature, arquivo, caso de uso, tabelas/RPC e epic de destino.
   - AC: todo acesso de runtime possui destino definido.
 
-- [ ] `SB-0003` Registrar ADR da arquitetura intermediaria Supabase
+- [x] `SB-0003` Registrar ADR da arquitetura intermediaria Supabase
   - Formalizar Edge Functions como API, RLS como defesa adicional e contratos independentes do banco.
   - Registrar excecoes temporarias para Auth e Realtime.
   - AC: ADR aceita e referenciada por `ARCHITECTURE.md` e `FRONTEND_MODULES.md`.
+  - Implementado em `docs/DECISIONS/ADR-005-supabase-backend-boundary.md`.
 
 ## Epic 1 — Fundacao da API Supabase
 

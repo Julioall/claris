@@ -30,6 +30,7 @@ Este indice organiza os documentos principais do projeto por assunto.
 - [DECISIONS/ADR-002-local-compose-split.md](./DECISIONS/ADR-002-local-compose-split.md)
 - [DECISIONS/ADR-003-public-build-repository.md](./DECISIONS/ADR-003-public-build-repository.md)
 - [DECISIONS/ADR-004-browser-edge-auth.md](./DECISIONS/ADR-004-browser-edge-auth.md)
+- [DECISIONS/ADR-005-supabase-backend-boundary.md](./DECISIONS/ADR-005-supabase-backend-boundary.md)
 
 ## Leitura Recomendada
 
