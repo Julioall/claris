@@ -533,6 +533,48 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'moodle-sync-courses',
     },
     {
+      body: { action: 'list_active_jobs' },
+      expectedStatus: 401,
+      name: 'moodle-sync-jobs valid-no-auth',
+      path: 'moodle-sync-jobs',
+    },
+    {
+      body: { action: 'list_active_jobs', userId: '00000000-0000-4000-8000-000000000001' },
+      expectedStatus: 422,
+      name: 'moodle-sync-jobs rejects-browser-identity',
+      path: 'moodle-sync-jobs',
+    },
+    {
+      body: { action: 'start_initial_sync', courseIds: ['00000000-0000-4000-8000-000000000001'], token: 'browser-token' },
+      expectedStatus: 422,
+      name: 'moodle-sync-jobs rejects-browser-credential',
+      path: 'moodle-sync-jobs',
+    },
+    {
+      body: { action: 'list_active' },
+      expectedStatus: 401,
+      name: 'background-jobs valid-no-auth',
+      path: 'background-jobs',
+    },
+    {
+      body: { action: 'list_active', user_id: '00000000-0000-4000-8000-000000000001' },
+      expectedStatus: 422,
+      name: 'background-jobs rejects-browser-identity',
+      path: 'background-jobs',
+    },
+    {
+      body: { action: 'list', limit: 20 },
+      expectedStatus: 401,
+      name: 'activity-feed valid-no-auth',
+      path: 'activity-feed',
+    },
+    {
+      body: { action: 'list', limit: 20, userId: '00000000-0000-4000-8000-000000000001' },
+      expectedStatus: 422,
+      name: 'activity-feed rejects-browser-identity',
+      path: 'activity-feed',
+    },
+    {
       body: { courseId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
       expectedStatus: 401,
       name: 'moodle-sync-students valid-no-auth',
@@ -695,6 +737,9 @@ async function runUnauthenticatedContractChecks(status) {
     ['message-templates', { action: 'list_templates' }],
     ['campaigns', { action: 'list_bulk_jobs', filters: {}, order: 'createdAtDesc', page: 1, pageSize: 10 }],
     ['whatsapp-messaging', { action: 'list_instances' }],
+    ['moodle-sync-jobs', { action: 'list_active_jobs' }],
+    ['background-jobs', { action: 'list_active' }],
+    ['activity-feed', { action: 'list', limit: 20 }],
   ]
   for (const [path, body] of communicationCases) {
     const correlationId = `smoke-v1-${path}-unauthorized`
@@ -745,6 +790,11 @@ function runCourseManagementGrantChecks() {
           ('message_templates'::TEXT),
           ('bulk_message_jobs'::TEXT),
           ('bulk_message_recipients'::TEXT),
+          ('background_jobs'::TEXT),
+          ('background_job_items'::TEXT),
+          ('background_job_events'::TEXT),
+          ('activity_feed'::TEXT),
+          ('user_sync_preferences'::TEXT),
           ('user_course_catalog_eligibility'::TEXT),
           ('user_courses'::TEXT),
           ('user_ignored_courses'::TEXT)
@@ -763,7 +813,12 @@ function runCourseManagementGrantChecks() {
           ('calendar_events'::TEXT),
           ('message_templates'::TEXT),
           ('bulk_message_jobs'::TEXT),
-          ('bulk_message_recipients'::TEXT)
+          ('bulk_message_recipients'::TEXT),
+          ('background_jobs'::TEXT),
+          ('background_job_items'::TEXT),
+          ('background_job_events'::TEXT),
+          ('activity_feed'::TEXT),
+          ('user_sync_preferences'::TEXT)
       ),
       protected_privileges(privilege_name) AS (
         VALUES
@@ -844,7 +899,8 @@ function runCourseManagementGrantChecks() {
         SELECT json_agg(signature ORDER BY signature)
         FROM protected_functions
         WHERE NOT has_function_privilege('service_role', signature, 'EXECUTE')
-      ), '[]'::JSON)
+      ), '[]'::JSON),
+      'activeSyncIndexPresent', to_regclass('public.idx_background_jobs_active_sync_request') IS NOT NULL
     )::TEXT;
   `))
 
@@ -859,6 +915,9 @@ function runCourseManagementGrantChecks() {
   }
   if (result.missingServiceFunctionGrants?.length > 0) {
     fail(`service_role nao executa RPCs internas: ${JSON.stringify(result.missingServiceFunctionGrants)}`)
+  }
+  if (result.activeSyncIndexPresent !== true) {
+    fail('Indice de idempotencia dos jobs de sincronizacao nao foi aplicado.')
   }
 
   log('Grants internos dos dominios migrados bloqueados para browser e liberados para service_role.')
@@ -2335,6 +2394,272 @@ async function runCommunicationsChecks(status, accessToken, authUserId, studentI
   log('Templates, publico, historico, campanhas e WhatsApp validados no backend real.')
 }
 
+async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, courseId) {
+  const jobId = '00000000-0000-4000-8000-000000000971'
+  const sourceRecordId = '00000000-0000-4000-8000-000000000972'
+  const feedId = '00000000-0000-4000-8000-000000000973'
+
+  await upsertRows(status, 'user_course_catalog_eligibility', 'user_id,course_id', {
+    course_id: courseId,
+    user_id: authUserId,
+  })
+
+  const spoofCases = [
+    {
+      body: { action: 'list_active_jobs', userId: authUserId },
+      correlationId: 'smoke-v1-moodle-sync-spoof',
+      functionName: 'moodle-sync-jobs',
+    },
+    {
+      body: { action: 'start_initial_sync', courseIds: [courseId], token: 'browser-token' },
+      correlationId: 'smoke-v1-moodle-sync-token',
+      functionName: 'moodle-sync-jobs',
+    },
+    {
+      body: { action: 'list_active', user_id: authUserId },
+      correlationId: 'smoke-v1-background-jobs-spoof',
+      functionName: 'background-jobs',
+    },
+    {
+      body: { action: 'list', limit: 20, userId: authUserId },
+      correlationId: 'smoke-v1-activity-feed-spoof',
+      functionName: 'activity-feed',
+    },
+  ]
+
+  for (const spoofCase of spoofCases) {
+    const result = await callV1EdgeFunction(status, spoofCase.functionName, spoofCase.body, {
+      acceptStatuses: [422],
+      accessToken,
+      correlationId: spoofCase.correlationId,
+    })
+    assertV1Response(result, {
+      code: 'validation_failed',
+      correlationId: spoofCase.correlationId,
+      status: 422,
+    })
+  }
+
+  const savedPreferences = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'save_preferences',
+    includeEmptyCourses: true,
+    includeFinished: false,
+    selectedKeys: ['Smoke::Evento'],
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-preferences-save',
+  })
+  assertV1Response(savedPreferences, {
+    correlationId: 'smoke-v1-sync-preferences-save',
+    status: 200,
+  })
+  if (
+    savedPreferences.data?.data?.includeEmptyCourses !== true
+    || savedPreferences.data?.data?.selectedKeys?.[0] !== 'Smoke::Evento'
+  ) {
+    fail(`moodle-sync-jobs nao persistiu preferencias: ${JSON.stringify(savedPreferences.data)}`)
+  }
+
+  const loadedPreferences = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'get_preferences',
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-preferences-get',
+  })
+  assertV1Response(loadedPreferences, {
+    correlationId: 'smoke-v1-sync-preferences-get',
+    status: 200,
+  })
+  if (loadedPreferences.data?.data?.selectedKeys?.[0] !== 'Smoke::Evento') {
+    fail(`moodle-sync-jobs nao retornou preferencias: ${JSON.stringify(loadedPreferences.data)}`)
+  }
+
+  const courseCounts = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'get_course_student_counts',
+    courseIds: [courseId],
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-counts',
+  })
+  assertV1Response(courseCounts, { correlationId: 'smoke-v1-sync-counts', status: 200 })
+  if (courseCounts.data?.data?.counts?.[0]?.courseId !== courseId || courseCounts.data.data.counts[0].studentCount !== 1) {
+    fail(`moodle-sync-jobs retornou contagem inesperada: ${JSON.stringify(courseCounts.data)}`)
+  }
+
+  const risk = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'recalculate_risk',
+    courseIds: [courseId],
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-risk',
+  })
+  assertV1Response(risk, { correlationId: 'smoke-v1-sync-risk', status: 200 })
+  if (risk.data?.data?.contractVersion !== 1 || typeof risk.data?.data?.updatedCount !== 'number') {
+    fail(`moodle-sync-jobs retornou recálculo de risco invalido: ${JSON.stringify(risk.data)}`)
+  }
+
+  await deleteRows(status, 'user_moodle_reauth_credentials', { user_id: authUserId }, 'user_id')
+  const liveJobStart = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'start_course_sync',
+    courseIds: [courseId],
+    entities: ['students'],
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-live-start',
+  })
+  assertV1Response(liveJobStart, { correlationId: 'smoke-v1-sync-live-start', status: 200 })
+  const liveJobId = liveJobStart.data?.data?.job?.id
+  if (!liveJobId || liveJobStart.data?.data?.job?.totalItems !== 2) {
+    fail(`moodle-sync-jobs nao criou a maquina de estados esperada: ${JSON.stringify(liveJobStart.data)}`)
+  }
+
+  const waitForLiveJobFailure = async (phase) => {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const correlationId = `smoke-v1-sync-live-${phase}-${attempt}`
+      const polled = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+        action: 'get_job',
+        jobId: liveJobId,
+      }, {
+        acceptStatuses: [200],
+        accessToken,
+        correlationId,
+      })
+      assertV1Response(polled, { correlationId, status: 200 })
+      const job = polled.data?.data?.job
+      if (job?.status === 'failed') {
+        if (!String(job.errorMessage || '').toLowerCase().includes('reautorizacao')) {
+          fail(`Worker falhou sem erro controlado de reautorizacao: ${JSON.stringify(polled.data)}`)
+        }
+        return job
+      }
+      await sleep(100)
+    }
+    fail(`Worker nao concluiu a falha controlada na fase ${phase}.`)
+  }
+
+  await waitForLiveJobFailure('initial')
+  const retriedLiveJob = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'retry_job',
+    jobId: liveJobId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-live-retry',
+  })
+  assertV1Response(retriedLiveJob, { correlationId: 'smoke-v1-sync-live-retry', status: 200 })
+  if (retriedLiveJob.data?.data?.job?.status !== 'pending') {
+    fail(`moodle-sync-jobs nao reenfileirou o job: ${JSON.stringify(retriedLiveJob.data)}`)
+  }
+  await waitForLiveJobFailure('retry')
+  await deleteRows(status, 'background_jobs', { id: liveJobId })
+  await deleteRows(status, 'activity_feed', { event_type: 'sync_error', user_id: authUserId })
+
+  await deleteRows(status, 'background_jobs', { id: jobId })
+  await deleteRows(status, 'activity_feed', { id: feedId })
+  await upsertRows(status, 'background_jobs', 'id', {
+    course_id: courseId,
+    id: jobId,
+    job_type: 'moodle_sync',
+    metadata: {
+      course_ids: [courseId],
+      entities: ['students'],
+      schema_version: 1,
+      sync_kind: 'incremental',
+    },
+    source: 'sync',
+    source_record_id: sourceRecordId,
+    source_table: 'moodle_sync_request',
+    status: 'pending',
+    title: 'Smoke Moodle Sync Job',
+    total_items: 2,
+    user_id: authUserId,
+  })
+  await upsertRows(status, 'activity_feed', 'id', {
+    description: 'Notificacao isolada do smoke',
+    event_type: 'sync_finish',
+    id: feedId,
+    metadata: { severity: 'info' },
+    title: 'Smoke Sync Feed',
+    user_id: authUserId,
+  })
+
+  const syncJobs = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'list_active_jobs',
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-jobs-list',
+  })
+  assertV1Response(syncJobs, { correlationId: 'smoke-v1-sync-jobs-list', status: 200 })
+  if (!syncJobs.data?.data?.items?.some((job) => job.id === jobId && job.courseIds?.[0] === courseId)) {
+    fail(`moodle-sync-jobs nao retornou o job do ator: ${JSON.stringify(syncJobs.data)}`)
+  }
+
+  const activeJobs = await callV1EdgeFunction(status, 'background-jobs', {
+    action: 'list_active',
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-background-jobs-list',
+  })
+  assertV1Response(activeJobs, { correlationId: 'smoke-v1-background-jobs-list', status: 200 })
+  if (!activeJobs.data?.data?.items?.some((job) => job.id === jobId && job.canCancel === true)) {
+    fail(`background-jobs nao retornou capacidades do backend: ${JSON.stringify(activeJobs.data)}`)
+  }
+
+  const feed = await callV1EdgeFunction(status, 'activity-feed', {
+    action: 'list',
+    limit: 20,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-activity-feed-list',
+  })
+  assertV1Response(feed, { correlationId: 'smoke-v1-activity-feed-list', status: 200 })
+  if (!feed.data?.data?.items?.some((item) => item.id === feedId && item.eventType === 'sync_finish')) {
+    fail(`activity-feed nao retornou a notificacao do ator: ${JSON.stringify(feed.data)}`)
+  }
+
+  const forbiddenAdminList = await callV1EdgeFunction(status, 'background-jobs', {
+    action: 'admin_list',
+    filters: {},
+    page: 1,
+    pageSize: 10,
+  }, {
+    acceptStatuses: [403],
+    accessToken,
+    correlationId: 'smoke-v1-background-jobs-admin-forbidden',
+  })
+  assertV1Response(forbiddenAdminList, {
+    code: 'forbidden',
+    correlationId: 'smoke-v1-background-jobs-admin-forbidden',
+    status: 403,
+  })
+
+  const cancelled = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
+    action: 'cancel_job',
+    jobId,
+  }, {
+    acceptStatuses: [200],
+    accessToken,
+    correlationId: 'smoke-v1-sync-job-cancel',
+  })
+  assertV1Response(cancelled, { correlationId: 'smoke-v1-sync-job-cancel', status: 200 })
+  if (cancelled.data?.data?.job?.status !== 'cancelled') {
+    fail(`moodle-sync-jobs nao aplicou cancelamento condicional: ${JSON.stringify(cancelled.data)}`)
+  }
+
+  await deleteRows(status, 'background_jobs', { id: jobId })
+  await deleteRows(status, 'activity_feed', { id: feedId })
+  runCourseManagementGrantChecks()
+  log('Sincronizacao, risco, preferencias, jobs e activity feed validados pela fronteira backend V1.')
+}
+
 async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
   const settings = await callV1EdgeFunction(
     status,
@@ -2350,6 +2675,8 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
   if (typeof settings.data?.data?.preferenceEnabled !== 'boolean') {
     fail(`moodle-reauth-settings retornou DTO invalido: ${JSON.stringify(settings.data)}`)
   }
+
+  await runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, courseId)
 
   const telemetryEventType = 'smoke_edge_telemetry'
   const telemetryErrorMessage = 'Smoke Edge telemetry error'

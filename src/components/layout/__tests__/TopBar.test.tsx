@@ -14,11 +14,7 @@ const ROUTER_FUTURE = {
 
 const useAuthMock = vi.fn();
 const setIsEditModeMock = vi.fn();
-const fromMock = vi.fn();
-const selectMock = vi.fn();
-const eqMock = vi.fn();
-const orderMock = vi.fn();
-const limitMock = vi.fn();
+const fetchActivityFeedMock = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
@@ -28,10 +24,8 @@ vi.mock("@/hooks/usePermissions", () => ({
   usePermissions: () => ({ isAdmin: false, role: null, permissions: [], canAccessAdminSection: () => false }),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
+vi.mock("@/features/auth/api/activity-feed.repository", () => ({
+  fetchActivityFeed: (...args: unknown[]) => fetchActivityFeedMock(...args),
 }));
 
 vi.mock("@/components/ui/sidebar", () => ({
@@ -81,14 +75,7 @@ function createWrapper() {
 describe("TopBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-
-    limitMock.mockResolvedValue({ data: [], error: null });
-    orderMock.mockReturnValue({ limit: limitMock });
-    eqMock.mockReturnValue({ order: orderMock });
-    selectMock.mockReturnValue({ eq: eqMock });
-    fromMock.mockImplementation(() => ({
-      select: selectMock,
-    }));
+    fetchActivityFeedMock.mockResolvedValue([]);
 
     useAuthMock.mockReturnValue({
       user: { id: "u-1", full_name: "Julio" },
@@ -105,7 +92,7 @@ describe("TopBar", () => {
     expect(screen.getByText(/nunca/i)).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(fromMock).toHaveBeenCalledWith("activity_feed");
+      expect(fetchActivityFeedMock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -135,19 +122,16 @@ describe("TopBar", () => {
   it("opens notifications popover and shows unread badge", async () => {
     const user = userEvent.setup();
 
-    limitMock.mockResolvedValue({
-      data: [
-        {
-          id: "n-1",
-          title: "Alerta Claris",
-          description: "Há alunos em risco crítico.",
-          event_type: "claris_notification",
-          created_at: "2026-03-15T10:00:00.000Z",
-          metadata: { severity: "critical" },
-        },
-      ],
-      error: null,
-    });
+    fetchActivityFeedMock.mockResolvedValue([
+      {
+        id: "n-1",
+        title: "Alerta Claris",
+        description: "Há alunos em risco crítico.",
+        event_type: "claris_notification",
+        created_at: "2026-03-15T10:00:00.000Z",
+        metadata: { severity: "critical" },
+      },
+    ]);
 
     render(<TopBar />, { wrapper: createWrapper() });
 

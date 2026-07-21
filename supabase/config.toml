@@ -54,6 +54,9 @@ verify_jwt = false
 [functions.app-telemetry]
 verify_jwt = false
 
+[functions.activity-feed]
+verify_jwt = false
+
 [functions.task-tag-suggestions]
 verify_jwt = false
 
@@ -96,6 +99,9 @@ verify_jwt = false
 [functions.moodle-sync-grades]
 verify_jwt = false
 
+[functions.moodle-sync-jobs]
+verify_jwt = false
+
 [functions.moodle-grade-suggestions]
 verify_jwt = false
 
@@ -103,6 +109,9 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.bulk-message-send]
+verify_jwt = false
+
+[functions.background-jobs]
 verify_jwt = false
 
 [functions.bulk-message-audience]

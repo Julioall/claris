@@ -53,7 +53,7 @@ export function BackgroundActivitySyncBridge() {
     queryKey: ['background-activity', 'jobs', user?.id],
     queryFn: async () => {
       if (!user?.id) return [];
-      return await listActiveBackgroundJobsForUser(user.id);
+      return await listActiveBackgroundJobsForUser();
     },
     enabled: !!user?.id,
     refetchInterval: 8000,

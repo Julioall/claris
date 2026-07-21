@@ -28,7 +28,7 @@ Posturas especiais válidas:
 - `ai_grade_suggestion_jobs`, `ai_grade_suggestion_job_items` e `ai_grade_suggestion_history`: acesso exclusivo do backend `service_role`.
 - `task_action_history`: insert permitido para `service_role` e, no fluxo autenticado, somente com validação de ownership e integridade cruzada.
 - `courses`: insert continua aceitando `auth.uid() IS NOT NULL`; isso depende do fluxo controlado pelas Edge Functions.
-- `user_sync_preferences`: usa `auth.uid()::text` por compatibilidade com o tipo atual da coluna.
+- `user_sync_preferences`, `activity_feed`, `background_jobs`, `background_job_items` e `background_job_events`: policies contextuais permanecem como defesa, mas os grants de browser foram revogados e o acesso da aplicacao passa por Edge Functions service-only.
 
 ## Usuários E Preferências
 
@@ -47,7 +47,7 @@ Regra canônica:
 - `user_courses` e `user_ignored_courses`: leitura continua protegida por ownership; escritas de `authenticated` e `anon` foram revogadas e passam pelos comandos backend atomicos.
 - `user_course_catalog_eligibility`: sem acesso de browser; registra somente cursos descobertos pelo sync Moodle autenticado e limita a criacao de novos vinculos.
 - `action_types`: o usuário só opera linhas cujo `user_id = auth.uid()`.
-- `user_sync_preferences`: mesmo padrão de posse, com cast para `auth.uid()::text`.
+- `user_sync_preferences`: policies preservam o padrao de posse, com cast para `auth.uid()::text`, mas nao ha grant direto para `anon` ou `authenticated`; leitura e escrita passam por `moodle-sync-jobs`.
 
 Migrations de referência:
 
@@ -55,6 +55,7 @@ Migrations de referência:
 - `20260211041244_0ef98547-ca60-4110-a1de-2cc1df4d6c1b.sql`
 - `20260205003909_72a4c7fd-cd18-4289-90ce-5a5a1c74050f.sql`
 - `20260721140000_secure_course_management.sql`
+- `20260721200000_secure_sync_and_background_jobs.sql`
 
 Observações:
 
@@ -160,7 +161,7 @@ Regra canônica:
 
 - `actions`: user-owned; leitura exclui itens em lixeira por padrão; delete só se o item já estiver marcado como removido logicamente.
 - `notes`: user-owned por `user_id = auth.uid()`.
-- `activity_feed`: leitura pelo dono ou por escopo de curso; insert pelo próprio usuário.
+- `activity_feed`: policies de dono/curso permanecem como defesa adicional, mas os grants de browser foram removidos; `activity-feed` le actor-scoped e workers inserem com `service_role`.
 - `risk_history`: leitura pelo dono ou por vínculo entre aluno e curso acessível; insert pelo próprio usuário.
 
 Migrations de referência:
@@ -169,11 +170,12 @@ Migrations de referência:
 - `20260205214915_add_actions_trash.sql`
 - `20260205183218_fix_rls_remove_null_auth.sql`
 - `20260211041244_0ef98547-ca60-4110-a1de-2cc1df4d6c1b.sql`
+- `20260721200000_secure_sync_and_background_jobs.sql`
 
 Observações:
 
 - A política final de `actions` pressupõe soft delete como regra operacional.
-- `activity_feed` e `risk_history` seguem o mesmo princípio de visibilidade contextual por curso já usado no domínio acadêmico.
+- `risk_history` segue visibilidade contextual por curso. `activity_feed` preserva policies equivalentes como defesa, mas deixou de ser uma porta de dados do browser.
 
 ## Mensageria
 
@@ -216,9 +218,7 @@ Tabelas:
 
 Regra canônica:
 
-- `background_jobs`: leitura por owner ou application admin; insert/update pelo owner ou pelo admin operacional.
-- `background_job_items`: leitura por owner ou application admin; insert/update pelo owner do job ou pelo admin.
-- `background_job_events`: leitura por owner ou application admin; insert pelo owner do job ou pelo admin.
+- `background_jobs`, `background_job_items` e `background_job_events`: policies de owner/admin permanecem como defesa, mas todos os grants de browser foram revogados. Polling actor-scoped e operacoes administrativas passam por `moodle-sync-jobs`/`background-jobs`, que usam `service_role` e reaplicam autorizacao.
 - `scheduled_messages`: continua user-owned, mas application admin pode fazer `SELECT` e `UPDATE` para operações administrativas de cancelamento e reenfileiramento.
 - `user_moodle_reauth_credentials`: leitura apenas pelo owner ou application admin; escritas ficam concentradas nas Edge Functions com `service_role`.
 
@@ -230,12 +230,14 @@ Migrations de referência:
 - `20260327183000_prepare_scheduled_message_execution.sql`
 - `20260327193000_add_moodle_reauth_credentials.sql`
 - `20260327204500_allow_admin_manage_scheduled_messages.sql`
+- `20260721200000_secure_sync_and_background_jobs.sql`
 
 Observações:
 
 - `scheduled_messages` e `background_jobs` compartilham o mesmo `id` quando o job nasce do agendador, preservando rastreabilidade operacional.
 - Cancelar ou reenfileirar jobs agendados deve atuar sobre `scheduled_messages`; alterar apenas `background_jobs` quebraria a fonte de verdade do scheduler.
 - `user_moodle_reauth_credentials` guarda apenas material cifrado; rotacionar `MOODLE_REAUTH_SECRET` invalida credenciais armazenadas e exige novo opt-in dos usuários.
+- Jobs Moodle ativos possuem indice unico parcial por ator, tipo e requisicao canonica. Claims, cancelamentos e retries usam precondicao de status para nao sobrescrever transicoes concorrentes.
 
 ## Referencias
 

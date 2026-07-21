@@ -15,18 +15,6 @@
       }
     },
     {
-      "path": "src/features/admin/api/backgroundJobs.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 8,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/admin/api/conversations.ts",
       "counts": {
         "clientImports": 1,
@@ -99,58 +87,10 @@
       }
     },
     {
-      "path": "src/features/auth/api/activity-feed.repository.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/auth/api/login.ts",
       "counts": {
         "clientImports": 1,
         "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/auth/application/risk.service.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 4,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/auth/application/system-notification.service.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/auth/infrastructure/course-sync.service.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
         "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
@@ -164,19 +104,7 @@
         "clientImports": 1,
         "from": 0,
         "rpc": 0,
-        "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/features/background-jobs/api/backgroundJobs.repository.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 6,
-        "rpc": 0,
-        "functionsInvoke": 0,
+        "functionsInvoke": 1,
         "auth": 0,
         "storage": 0,
         "channel": 0
@@ -231,18 +159,6 @@
       }
     },
     {
-      "path": "src/features/courses/api/sync.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "path": "src/features/services/api/myServices.ts",
       "counts": {
         "clientImports": 1,
@@ -285,18 +201,6 @@
         "from": 3,
         "rpc": 0,
         "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "path": "src/hooks/useMoodleApi.ts",
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 1,
         "auth": 0,
         "storage": 0,
         "channel": 0

@@ -10,15 +10,16 @@ const refreshSessionMock = vi.fn();
 const setSessionMock = vi.fn();
 const signOutMock = vi.fn();
 const invokeMock = vi.fn();
-const rpcMock = vi.fn();
 const toastMock = vi.fn();
 const encryptSessionDataMock = vi.fn();
 const decryptSessionDataMock = vi.fn();
-const fetchMock = vi.fn();
-const fromMock = vi.fn();
-const fromInsertMock = vi.fn();
 const trackUsageMock = vi.fn();
 const telemetryLogErrorMock = vi.fn();
+const listActiveMoodleSyncJobsMock = vi.fn();
+const listAvailableMoodleCoursesMock = vi.fn();
+const startInitialMoodleSyncMock = vi.fn();
+const startCourseMoodleSyncMock = vi.fn();
+const waitForMoodleSyncJobMock = vi.fn();
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
@@ -32,9 +33,15 @@ vi.mock("@/integrations/supabase/client", () => ({
     functions: {
       invoke: (...args: unknown[]) => invokeMock(...args),
     },
-    rpc: (...args: unknown[]) => rpcMock(...args),
-    from: (...args: unknown[]) => fromMock(...args),
   },
+}));
+
+vi.mock("@/features/auth/api/moodle-sync-jobs", () => ({
+  listActiveMoodleSyncJobs: (...args: unknown[]) => listActiveMoodleSyncJobsMock(...args),
+  listAvailableMoodleCourses: (...args: unknown[]) => listAvailableMoodleCoursesMock(...args),
+  startInitialMoodleSync: (...args: unknown[]) => startInitialMoodleSyncMock(...args),
+  startCourseMoodleSync: (...args: unknown[]) => startCourseMoodleSyncMock(...args),
+  waitForMoodleSyncJob: (...args: unknown[]) => waitForMoodleSyncJobMock(...args),
 }));
 
 vi.mock("@/integrations/telemetry/telemetry-client", () => ({
@@ -79,7 +86,6 @@ describe("AuthContext", () => {
     vi.clearAllMocks();
     authRef = null;
     sessionStorage.clear();
-    vi.stubGlobal("fetch", fetchMock);
     currentSession = null;
 
     onAuthStateChangeMock.mockImplementation(() => ({
@@ -98,19 +104,19 @@ describe("AuthContext", () => {
       currentSession = null;
       return { error: null };
     });
-    rpcMock.mockResolvedValue({ data: 2, error: null });
     encryptSessionDataMock.mockResolvedValue("encrypted-session");
     decryptSessionDataMock.mockResolvedValue(null);
-    fromInsertMock.mockResolvedValue({ error: null });
     trackUsageMock.mockResolvedValue(undefined);
     telemetryLogErrorMock.mockResolvedValue(undefined);
-    fromMock.mockImplementation(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({ maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }) })),
-      })),
-      upsert: vi.fn().mockResolvedValue({ error: null }),
-      insert: (...args: unknown[]) => fromInsertMock(...args),
-    }));
+    listActiveMoodleSyncJobsMock.mockResolvedValue([]);
+    listAvailableMoodleCoursesMock.mockResolvedValue([]);
+    waitForMoodleSyncJobMock.mockImplementation(async (
+      job: unknown,
+      onProgress?: (value: unknown) => void,
+    ) => {
+      onProgress?.(job);
+      return job;
+    });
   });
 
   afterAll(() => {
@@ -271,22 +277,25 @@ describe("AuthContext", () => {
   });
 
   it("syncs courses and opens course selector, then allows logout", async () => {
-    invokeMock
-      .mockResolvedValueOnce({
-        data: {
-          user: { id: "u-1", full_name: "Julio Tutor", moodle_user_id: "10", last_sync: null },
-          moodleToken: "token-1",
-          moodleUserId: 10,
-          session: { access_token: "access", refresh_token: "refresh" },
-        },
-        error: null,
-      })
-      .mockResolvedValueOnce({
-        data: {
-          courses: [{ id: "c-1", moodle_course_id: "101", short_name: "Matematica" }],
-        },
-        error: null,
-      });
+    invokeMock.mockResolvedValueOnce({
+      data: {
+        user: { id: "u-1", full_name: "Julio Tutor", moodle_user_id: "10", last_sync: null },
+        moodleToken: "token-1",
+        moodleUserId: 10,
+        session: { access_token: "access", refresh_token: "refresh" },
+      },
+      error: null,
+    });
+    listAvailableMoodleCoursesMock.mockResolvedValueOnce([
+      {
+        id: "c-1",
+        moodle_course_id: "101",
+        name: "Matematica",
+        short_name: "MAT",
+        created_at: "2026-01-01T00:00:00.000Z",
+        updated_at: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
 
     renderWithProviders(
       <AuthProvider>
@@ -308,6 +317,7 @@ describe("AuthContext", () => {
 
     expect(authRef?.courses).toHaveLength(1);
     expect(authRef?.showCourseSelector).toBe(true);
+    expect(listAvailableMoodleCoursesMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       await authRef!.logout();
@@ -366,14 +376,14 @@ describe("AuthContext", () => {
       ]);
     });
 
-    invokeMock.mockClear();
+    listAvailableMoodleCoursesMock.mockClear();
 
     await act(async () => {
       await authRef!.syncData();
     });
 
     expect(authRef?.showCourseSelector).toBe(true);
-    expect(invokeMock).not.toHaveBeenCalled();
+    expect(listAvailableMoodleCoursesMock).not.toHaveBeenCalled();
   });
 
   it("runs syncSelectedCourses end-to-end", async () => {
@@ -394,78 +404,33 @@ describe("AuthContext", () => {
       error: null,
     });
 
-    fetchMock.mockImplementation((input: unknown, init?: RequestInit) => {
-      const url = String(input);
-      const body = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
-
-      if (url.endsWith("/moodle-sync-courses") && body.action === "link_selected_courses") {
-        return Promise.resolve(
-          new Response(JSON.stringify({ ok: true }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
-      }
-
-      if (url.endsWith("/moodle-sync-courses")) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              courses: [
-                {
-                  id: "c-1",
-                  moodle_course_id: "101",
-                  name: "Matematica",
-                  short_name: "MAT",
-                  created_at: "2026-01-01T00:00:00.000Z",
-                  updated_at: "2026-01-01T00:00:00.000Z",
-                },
-                {
-                  id: "c-2",
-                  moodle_course_id: "102",
-                  name: "Fisica",
-                  short_name: "FIS",
-                  created_at: "2026-01-01T00:00:00.000Z",
-                  updated_at: "2026-01-01T00:00:00.000Z",
-                },
-              ],
-            }),
-            {
-              status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
-          ),
-        );
-      }
-
-      if (url.endsWith("/moodle-sync-students")) {
-        return Promise.resolve(
-          new Response(JSON.stringify({ students: [{ id: 1 }, { id: 2 }] }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
-      }
-
-      if (url.endsWith("/moodle-sync-activities")) {
-        return Promise.resolve(
-          new Response(JSON.stringify({ activitiesCount: 3 }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
-      }
-
-      if (url.endsWith("/moodle-sync-grades")) {
-        return Promise.resolve(
-          new Response(JSON.stringify({ gradesCount: 4 }), {
-            status: 200,
-            headers: { "Content-Type": "application/json" },
-          }),
-        );
-      }
-
-      throw new Error(`Unexpected fetch call: ${url}`);
+    const completedJob = {
+      completedAt: "2026-01-01T00:05:00.000Z",
+      courseIds: ["c-1"],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      entities: ["students", "activities", "grades"],
+      errorCount: 0,
+      errorMessage: null,
+      id: "job-1",
+      kind: "initial",
+      processedItems: 12,
+      startedAt: "2026-01-01T00:00:01.000Z",
+      status: "completed",
+      steps: [
+        { entity: "courses", errorMessage: null, processedItems: 1, recordCount: 1, status: "completed", totalItems: 1 },
+        { entity: "students", errorMessage: null, processedItems: 2, recordCount: 2, status: "completed", totalItems: 2 },
+        { entity: "activities", errorMessage: null, processedItems: 3, recordCount: 3, status: "completed", totalItems: 3 },
+        { entity: "grades", errorMessage: null, processedItems: 4, recordCount: 4, status: "completed", totalItems: 4 },
+        { entity: "risk", errorMessage: null, processedItems: 2, recordCount: 2, status: "completed", totalItems: 2 },
+      ],
+      successCount: 5,
+      totalItems: 12,
+      updatedAt: "2026-01-01T00:05:00.000Z",
+    };
+    startInitialMoodleSyncMock.mockResolvedValueOnce({
+      contractVersion: 1,
+      duplicate: false,
+      job: completedJob,
     });
 
     renderWithProviders(
@@ -513,39 +478,10 @@ describe("AuthContext", () => {
 
     expect(authRef?.courses.map((course) => course.id)).toEqual(["c-1", "c-2"]);
 
-    const linkCoursesCall = fetchMock.mock.calls.find(([input, init]) => {
-      if (!String(input).endsWith("/moodle-sync-courses")) return false;
-      const body = JSON.parse(String((init as RequestInit | undefined)?.body ?? "{}"));
-      return body.action === "link_selected_courses";
-    });
-    const linkCoursesBody = JSON.parse(
-      String((linkCoursesCall?.[1] as RequestInit | undefined)?.body ?? "{}"),
-    );
-    expect(linkCoursesBody).toEqual({
-      action: "link_selected_courses",
-      selectedCourseIds: ["c-1"],
-    });
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/moodle-sync-courses$/),
-      expect.anything(),
-    );
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/moodle-sync-students$/),
-      expect.anything(),
-    );
+    expect(startInitialMoodleSyncMock).toHaveBeenCalledWith(["c-1"]);
+    expect(waitForMoodleSyncJobMock).toHaveBeenCalledWith(completedJob, expect.any(Function));
     expect(toastMock).toHaveBeenCalledWith(
       expect.objectContaining({ title: expect.stringMatching(/sincronizacao inicial concluida/i) }),
-    );
-
-    await waitFor(() => {
-      expect(fromMock).toHaveBeenCalledWith("activity_feed");
-    });
-    expect(fromInsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        event_type: "sync_finish",
-        title: "Sincronizacao concluida",
-      }),
     );
   });
 

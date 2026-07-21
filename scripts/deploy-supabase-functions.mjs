@@ -4,6 +4,7 @@ import { dirname, resolve } from 'node:path';
 
 const DEFAULT_FUNCTIONS = [
   'app-telemetry',
+  'activity-feed',
   'dashboard-summary',
   'courses-catalog',
   'course-panel',
@@ -19,10 +20,12 @@ const DEFAULT_FUNCTIONS = [
   'moodle-sync-students',
   'moodle-sync-activities',
   'moodle-sync-grades',
+  'moodle-sync-jobs',
   'moodle-grade-suggestions',
   'moodle-messaging',
   'bulk-message-audience',
   'bulk-message-send',
+  'background-jobs',
   'message-templates',
   'campaigns',
   'data-cleanup',

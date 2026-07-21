@@ -259,3 +259,89 @@ export async function appendBackgroundJobEvent(
 
   if (error) throw error
 }
+
+export async function findBackgroundJobById(
+  supabase: AppSupabaseClient,
+  jobId: string,
+): Promise<BackgroundJobRecord | null> {
+  const { data, error } = await supabase
+    .from(BACKGROUND_JOBS_TABLE)
+    .select('*')
+    .eq('id', jobId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data as BackgroundJobRecord | null
+}
+
+export async function findOwnedBackgroundJobById(
+  supabase: AppSupabaseClient,
+  userId: string,
+  jobId: string,
+): Promise<BackgroundJobRecord | null> {
+  const { data, error } = await supabase
+    .from(BACKGROUND_JOBS_TABLE)
+    .select('*')
+    .eq('id', jobId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data as BackgroundJobRecord | null
+}
+
+export async function findActiveBackgroundJobBySourceRecord(
+  supabase: AppSupabaseClient,
+  userId: string,
+  jobType: string,
+  sourceRecordId: string,
+): Promise<BackgroundJobRecord | null> {
+  const { data, error } = await supabase
+    .from(BACKGROUND_JOBS_TABLE)
+    .select('*')
+    .eq('user_id', userId)
+    .eq('job_type', jobType)
+    .eq('source', 'sync')
+    .eq('source_record_id', sourceRecordId)
+    .in('status', ['pending', 'processing'])
+    .maybeSingle()
+
+  if (error) throw error
+  return data as BackgroundJobRecord | null
+}
+
+export async function listBackgroundJobItems(
+  supabase: AppSupabaseClient,
+  jobId: string,
+): Promise<BackgroundJobItemRecord[]> {
+  const { data, error } = await supabase
+    .from(BACKGROUND_JOB_ITEMS_TABLE)
+    .select('*')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return (data ?? []) as BackgroundJobItemRecord[]
+}
+
+export async function updateBackgroundJobWhenStatus(
+  supabase: AppSupabaseClient,
+  jobId: string,
+  expectedStatuses: BackgroundJobStatus[],
+  updates: BackgroundJobUpdateInput,
+): Promise<BackgroundJobRecord | null> {
+  const payload = {
+    ...updates,
+    updated_at: updates.updated_at ?? new Date().toISOString(),
+  }
+  const { data, error } = await supabase
+    .from(BACKGROUND_JOBS_TABLE)
+    .update(payload)
+    .eq('id', jobId)
+    .in('status', expectedStatuses)
+    .select('*')
+    .maybeSingle()
+
+  if (error) throw error
+  return data as BackgroundJobRecord | null
+}

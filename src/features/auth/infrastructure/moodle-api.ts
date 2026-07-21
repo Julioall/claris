@@ -7,7 +7,6 @@ import {
   resolveMoodleErrorMessage,
 } from '@/lib/moodle-errors';
 import type { User } from '@/features/auth/types';
-import type { Course } from '@/features/courses/types';
 
 import { isInvalidRefreshTokenError } from '../domain/session';
 import type { MoodleSession } from '../domain/session';
@@ -40,13 +39,6 @@ export interface AuthenticateMoodleFailure {
 }
 
 export type AuthenticateMoodleResult = AuthenticateMoodleSuccess | AuthenticateMoodleFailure;
-
-export interface FetchMoodleCoursesResult {
-  courses: Course[];
-  handledError: boolean;
-  errorMessage?: string;
-  isMissingUser?: boolean;
-}
 
 export async function parseFunctionsError(err: unknown): Promise<ParsedFunctionError> {
   const context = (err as { context?: Response })?.context;
@@ -143,43 +135,6 @@ export async function authenticateMoodleUser(params: {
     supabaseSession: payload.session,
     offlineMode: Boolean(payload.offlineMode),
   };
-}
-
-export async function fetchMoodleCoursesFromSession(
-  session: MoodleSession,
-  moodleUserId: number,
-): Promise<FetchMoodleCoursesResult> {
-  try {
-    const { data, error } = await supabase.functions.invoke('moodle-sync-courses', {
-      body: {
-        moodleUrl: session.moodleUrl,
-        token: session.moodleToken,
-        userId: moodleUserId,
-      },
-    });
-
-    const payload = (data ?? null) as { error?: string; courses?: Course[] } | null;
-    if (error || payload?.error) {
-      return {
-        courses: [],
-        handledError: true,
-        errorMessage: error?.message || payload?.error || 'Nao foi possivel obter cursos do Moodle.',
-      };
-    }
-
-    return {
-      courses: payload?.courses || [],
-      handledError: false,
-    };
-  } catch (error) {
-    const parsed = await parseFunctionsError(error);
-    return {
-      courses: [],
-      handledError: true,
-      errorMessage: 'Nao foi possivel conectar ao Moodle.',
-      isMissingUser: parsed.status === 404 && parsed.message === 'User not found in database',
-    };
-  }
 }
 
 export async function invokeMoodleFunctionWithTimeout(params: {

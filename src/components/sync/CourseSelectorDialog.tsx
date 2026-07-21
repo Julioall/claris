@@ -53,18 +53,18 @@ function isCourseFinishedForSyncFilter(course: Course): boolean {
   return !isCourseEffectivelyActive(course);
 }
 
-async function loadPreferencesFromDB(userId: string): Promise<SyncPreferences | null> {
+async function loadPreferencesFromDB(): Promise<SyncPreferences | null> {
   try {
-    return await fetchUserSyncPreferences(userId);
+    return await fetchUserSyncPreferences();
   } catch (e) {
     console.error('Error loading sync preferences:', e);
   }
   return null;
 }
 
-async function savePreferencesToDB(userId: string, prefs: SyncPreferences) {
+async function savePreferencesToDB(prefs: SyncPreferences) {
   try {
-    await saveUserSyncPreferences(userId, prefs);
+    await saveUserSyncPreferences(prefs);
   } catch (e) {
     console.error('Error saving sync preferences:', e);
   }
@@ -93,18 +93,30 @@ export function CourseSelectorDialog({
       setCountsLoaded(false);
       return;
     }
+    let cancelled = false;
 
     const fetchCounts = async () => {
       setCountsLoaded(false);
-      const courseIds = courses.map(c => c.id);
-      const allCounts = await fetchStudentCountsByCourseIds(courseIds);
-
-      setStudentCounts(allCounts);
-      setCountsLoaded(true);
-      console.log(`✓ Loaded student counts for ${allCounts.size} courses out of ${courseIds.length} total courses`);
+      try {
+        const courseIds = courses.map(c => c.id);
+        const allCounts = await fetchStudentCountsByCourseIds(courseIds);
+        if (cancelled) return;
+        setStudentCounts(allCounts);
+        console.log(`✓ Loaded student counts for ${allCounts.size} courses out of ${courseIds.length} total courses`);
+      } catch (error) {
+        if (!cancelled) {
+          setStudentCounts(new Map());
+          console.error('Error loading student counts:', error);
+        }
+      } finally {
+        if (!cancelled) setCountsLoaded(true);
+      }
     };
 
-    fetchCounts();
+    void fetchCounts();
+    return () => {
+      cancelled = true;
+    };
   }, [open, courses]);
 
   // Load preferences when dialog opens
@@ -115,7 +127,7 @@ export function CourseSelectorDialog({
     }
 
     const load = async () => {
-      const prefs = await loadPreferencesFromDB(user.id);
+      const prefs = await loadPreferencesFromDB();
       if (prefs) {
         setSelectedKeys(new Set(prefs.selectedKeys));
         setIncludeEmptyCourses(prefs.includeEmptyCourses);
@@ -308,7 +320,7 @@ export function CourseSelectorDialog({
 
   const handleSync = () => {
     if (user) {
-      savePreferencesToDB(user.id, {
+      savePreferencesToDB({
         selectedKeys: Array.from(selectedKeys),
         includeEmptyCourses,
         includeFinished,

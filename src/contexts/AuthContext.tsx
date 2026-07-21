@@ -34,8 +34,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authSession = useAuthSession();
   const courseSync = useCourseSync({
     userId: authSession.user?.id,
-    resolveSessionContext: authSession.resolveSessionContext,
-    clearInvalidSession: authSession.clearInvalidSession,
     setLastSync: authSession.setLastSync,
   });
   const [isEditMode, setIsEditMode] = useState(false);

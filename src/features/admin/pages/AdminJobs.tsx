@@ -505,8 +505,7 @@ export default function AdminJobs() {
                                     ) : null}
 
                                     <p className="text-xs text-muted-foreground">
-                                      Disponivel apenas para jobs baseados em agendamentos. Jobs reenfileirados voltam para
-                                      a fila e serao executados na proxima rodada automatica.
+                                      Agendamentos e sincronizacoes Moodle usam transicoes condicionais no backend.
                                     </p>
                                   </CardContent>
                                 </Card>

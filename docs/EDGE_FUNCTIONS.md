@@ -181,7 +181,7 @@ Antes de publicar mudancas em functions ou migrations:
 3. atualizar [SUPABASE_RLS.md](./SUPABASE_RLS.md) se houve mudanca de policy
 4. manter contratos do payload versionados quando uma function for consumida por mais de um cliente
 
-O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas e listagem segura de instancias WhatsApp.
+O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e body de correlation ID, envelopes 401/422, leitura autenticada, isolamento por ator e grants service-only. O fluxo real cobre tambem templates, publico de mensagens, paginacao de jobs/recipients, maquina de estados de campanhas, listagem segura de instancias WhatsApp e a fronteira de sync/jobs (preferencias, risco, polling, feed, autorizacao admin e cancelamento condicional).
 
 ## Functions chave
 
@@ -206,6 +206,9 @@ O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e
 - `grade-suggestion-jobs`: localiza o job relevante do ator para uma atividade autorizada, sem acesso direto do browser as tabelas operacionais
 - `tasks`: lista tarefas com filtros e ordenacao estaveis, consolida detalhe/comentarios/tags e executa comandos escopados ao criador ou responsavel
 - `calendar-events`: executa o CRUD de agenda owner-scoped, valida intervalos e deriva proprietario/origem do token
+- `moodle-sync-jobs`: inicia, retoma e consulta sincronizacoes Moodle; tambem concentra preferencias, contagem por curso e recalculo de risco
+- `background-jobs`: entrega polling actor-scoped e operacoes administrativas de lista, detalhe, retry e cancelamento
+- `activity-feed`: lista notificacoes do ator sem expor a tabela ao navegador
 
 As functions de cursos usam DTOs V1 em `camelCase`, rejeitam identidade enviada no payload e reaplicam autorizacao e acesso ao curso no backend. Os comandos multi-registro chamam RPCs `SECURITY DEFINER` exclusivas de `service_role`; o navegador nao recebe permissao de execucao nem de escrita direta nas tabelas envolvidas.
 
@@ -220,6 +223,21 @@ Jobs de sugestao sao criados com seus itens em uma unica RPC e possuem no maximo
 No Epic 6, `tasks` e `calendar-events` substituem os repositories Supabase do browser. Ambos exigem a permissao da rota (`tasks.view` ou `agenda.view`), rejeitam identidade no payload e retornam DTOs V1. A listagem de tarefas define filtros, ordenacao e paginacao no contrato; o detalhe agrega comentarios e tags. Criador, autor de comentario e owner de evento sao sempre derivados do token.
 
 `backend_add_task_tag` combina find-or-create e vinculo em uma transacao, apoiado por indice unico normalizado por ator, label e entidade. Chamadas concorrentes e repetidas retornam a mesma tag e um unico vinculo. As seis tabelas modernas de tarefas/agenda e as RPCs auxiliares nao possuem grants para `anon` ou `authenticated`; `service_role` e a unica porta de dados, com escopo reaplicado pelos services.
+
+### Sincronizacao Moodle e jobs longos
+
+`moodle-sync-jobs` recebe apenas a intencao e o escopo de cursos. O service e independente do runtime; a implementacao Supabase/Moodle e injetada por `runtime.ts`, facilitando uma futura troca do adaptador por uma API .NET sem alterar o contrato consumido pelo React.
+
+```text
+start_* -> pending -> processing -> completed
+                         |             ^
+                         +-> failed ---+ retry
+                         +-> cancelled-+ retry
+```
+
+A chave canonica considera ator, tipo, cursos e entidades. Um indice unico parcial bloqueia dois registros `pending/processing` equivalentes, inclusive em corrida. O worker resolve no servidor a credencial de reautorizacao criptografada e um token Moodle novo; depois executa cursos/vinculo, alunos, atividades, notas e risco, persistindo cada etapa em `background_job_items`. Cancelamento e claim usam updates condicionais de status para que worker, usuario e administrador nao sobrescrevam uma transicao concorrente.
+
+O frontend recebe um DTO agregado em `camelCase` e faz polling. Fechar a aba nao cancela o trabalho; ao reconstruir a sessao, `useCourseSync` consulta jobs ativos e retoma o acompanhamento. `background-jobs` oferece a visao operacional, enquanto `activity-feed` fornece notificacoes. As tabelas `background_jobs`, `background_job_items`, `background_job_events`, `activity_feed` e `user_sync_preferences` sao service-only.
 
 ## Nova function: `moodle-grade-suggestions`
 

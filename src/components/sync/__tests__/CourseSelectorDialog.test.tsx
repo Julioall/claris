@@ -6,13 +6,9 @@ import userEvent from "@testing-library/user-event";
 import { CourseSelectorDialog } from "@/components/sync/CourseSelectorDialog";
 
 const useAuthMock = vi.fn();
-const fromMock = vi.fn();
-const studentCoursesSelectMock = vi.fn();
-const studentCoursesInMock = vi.fn();
-const prefsSelectMock = vi.fn();
-const prefsEqMock = vi.fn();
-const prefsMaybeSingleMock = vi.fn();
-const prefsUpsertMock = vi.fn();
+const fetchStudentCountsByCourseIdsMock = vi.fn();
+const fetchUserSyncPreferencesMock = vi.fn();
+const saveUserSyncPreferencesMock = vi.fn();
 
 const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -22,10 +18,10 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => useAuthMock(),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: (...args: unknown[]) => fromMock(...args),
-  },
+vi.mock("@/features/courses/api", () => ({
+  fetchStudentCountsByCourseIds: (...args: unknown[]) => fetchStudentCountsByCourseIdsMock(...args),
+  fetchUserSyncPreferences: (...args: unknown[]) => fetchUserSyncPreferencesMock(...args),
+  saveUserSyncPreferences: (...args: unknown[]) => saveUserSyncPreferencesMock(...args),
 }));
 
 function buildCourse(overrides: Partial<Course>): Course {
@@ -94,34 +90,14 @@ describe("CourseSelectorDialog", () => {
     vi.clearAllMocks();
 
     useAuthMock.mockReturnValue({ user: { id: "user-1" } });
-
-    fromMock.mockImplementation((table: string) => {
-      if (table === "student_courses") {
-        return { select: studentCoursesSelectMock };
-      }
-
-      if (table === "user_sync_preferences") {
-        return { select: prefsSelectMock, upsert: prefsUpsertMock };
-      }
-
-      throw new Error(`Unexpected table: ${table}`);
-    });
-
-    studentCoursesSelectMock.mockReturnValue({ in: studentCoursesInMock });
-    studentCoursesInMock.mockResolvedValue({
-      data: [
-        { course_id: "c1" },
-        { course_id: "c1" },
-        { course_id: "c2" },
-        { course_id: "c3" },
-      ],
-      error: null,
-    });
-
-    prefsSelectMock.mockReturnValue({ eq: prefsEqMock });
-    prefsEqMock.mockReturnValue({ maybeSingle: prefsMaybeSingleMock });
-    prefsMaybeSingleMock.mockResolvedValue({ data: null });
-    prefsUpsertMock.mockResolvedValue({ error: null });
+    fetchStudentCountsByCourseIdsMock.mockResolvedValue(new Map([
+      ["c1", 2],
+      ["c2", 1],
+      ["c3", 1],
+      ["c4", 0],
+    ]));
+    fetchUserSyncPreferencesMock.mockResolvedValue(null);
+    saveUserSyncPreferencesMock.mockResolvedValue(undefined);
   });
 
   afterAll(() => {
@@ -149,15 +125,11 @@ describe("CourseSelectorDialog", () => {
 
     expect(onSync).toHaveBeenCalledWith(["c1", "c2"]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(prefsUpsertMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        user_id: "user-1",
-        include_empty_courses: false,
-        include_finished: false,
-        selected_keys: expect.arrayContaining(["Escola A::Evento A"]),
-      }),
-      { onConflict: "user_id" },
-    );
+    expect(saveUserSyncPreferencesMock).toHaveBeenCalledWith({
+      includeEmptyCourses: false,
+      includeFinished: false,
+      selectedKeys: ["Escola A::Evento A"],
+    });
   });
 
   it("allows clearing and selecting all events before syncing", async () => {
@@ -181,12 +153,10 @@ describe("CourseSelectorDialog", () => {
 
   it("loads saved preferences and includes finished courses when enabled", async () => {
     const user = userEvent.setup();
-    prefsMaybeSingleMock.mockResolvedValueOnce({
-      data: {
-        selected_keys: ["Escola B::Evento B", "Escola C::Evento C"],
-        include_empty_courses: false,
-        include_finished: true,
-      },
+    fetchUserSyncPreferencesMock.mockResolvedValueOnce({
+      selectedKeys: ["Escola B::Evento B", "Escola C::Evento C"],
+      includeEmptyCourses: true,
+      includeFinished: true,
     });
 
     const { onSync } = renderDialog();

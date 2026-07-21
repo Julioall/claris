@@ -365,31 +365,39 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
 
 **Objetivo:** retirar do browser a orquestracao de processos longos e regras de consistencia.
 
-- [ ] `SB-0801` Mapear o fluxo de `useCourseSync`
+- [x] `SB-0801` Mapear o fluxo de `useCourseSync`
   - Documentar etapas, comandos, progresso, retries, efeitos e invalidacoes.
   - AC: maquina de estados atual possui testes antes da migracao.
+  - O fluxo foi reduzido a comandos (`start_initial_sync`/`start_course_sync`) e polling de um DTO. O hook mantem apenas estado visual, toasts, telemetria, retomada de job ativo e invalidacao apos termino; as etapas autoritativas sao `courses -> students -> activities -> grades -> risk`.
 
-- [ ] `SB-0802` Criar comando backend para iniciar sincronizacao
+- [x] `SB-0802` Criar comando backend para iniciar sincronizacao
   - Cliente envia escopo permitido; backend cria job idempotente e retorna `jobId`.
   - AC: fechar/recarregar o browser nao interrompe o processo.
+  - `moodle-sync-jobs` deriva o ator do token, valida permissao/escopo, usa uma chave canonica SHA-256 e um indice unico parcial para impedir jobs ativos duplicados. O worker e agendado por `EdgeRuntime.waitUntil`; o frontend retoma o job mais recente depois de reload.
 
-- [ ] `SB-0803` Mover orquestracao Moodle para worker/functions
+- [x] `SB-0803` Mover orquestracao Moodle para worker/functions
   - Cursos, alunos, atividades, notas, snapshots, risco e notificacoes.
   - AC: credenciais e regras nao transitam entre etapas controladas pelo browser.
+  - O worker resolve a credencial Moodle criptografada no servidor, renova o token, executa cursos/vinculo, alunos, atividades e notas paginadas, atualiza itens/progresso, recalcula risco, registra eventos/activity feed e toca `last_sync`. URL, senha e token Moodle nao fazem parte do contrato do browser.
 
-- [ ] `SB-0804` Migrar consulta de progresso
+- [x] `SB-0804` Migrar consulta de progresso
   - Polling ou Realtime via gateway usando DTO de job.
   - AC: UI preserva progresso atual sem consultar tabelas diretamente.
+  - Polling e retomada usam DTO V1 agregado por etapa. `BackgroundActivitySyncBridge` consulta `background-jobs.list_active`; `activity-feed` fornece notificacoes actor-scoped. Jobs, itens, eventos e feed perderam grants de browser.
 
-- [ ] `SB-0805` Migrar recalculo de risco
+- [x] `SB-0805` Migrar recalculo de risco
   - Remover RPCs de `features/auth/application/risk.service.ts` do frontend.
   - Tornar recalculo um caso de uso autorizado e idempotente.
   - AC: regra e resultados cobertos no backend.
+  - O backend tenta a RPC por curso com retry de deadlock e preserva o fallback por aluno quando a RPC ainda nao existe. O frontend envia somente UUIDs de cursos unicos ao endpoint autorizado.
 
-- [ ] `SB-0806` Migrar administracao de jobs
+- [x] `SB-0806` Migrar administracao de jobs
   - Listar, detalhar, cancelar e tentar novamente com endpoints administrativos.
   - Implementar transicoes condicionais atomicas.
   - AC: `admin/api/backgroundJobs.ts` nao acessa tabelas.
+  - `background-jobs` exige administrador para lista/detalhe/comandos, calcula `canRetry`/`canCancel` no backend e aplica precondicoes de status para agendamentos e syncs. Eventos registram o ator administrativo; o client da pagina apenas mapeia DTOs.
+
+Resultado da epic: o inventario caiu de 30 para 22 arquivos com acesso Supabase, de 52 para 31 chamadas `.from()`, de 13 para 9 RPCs e de 13 para 11 invocacoes diretas. As reducoes remanescentes pertencem aos Epics 9 e 10.
 
 ## Epic 9 — Claris, configuracoes, servicos e administracao
 

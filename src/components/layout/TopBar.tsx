@@ -94,11 +94,7 @@ export function TopBar() {
 
     setIsLoadingNotifications(true);
     try {
-      const { data, error } = await fetchActivityFeed(user.id);
-
-      if (error) throw error;
-
-      setNotifications((data || []) as NotificationItem[]);
+      setNotifications(await fetchActivityFeed());
     } catch (error) {
       console.error('Falha ao carregar notificações', error);
       setNotifications([]);

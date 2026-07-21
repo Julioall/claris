@@ -3,12 +3,12 @@
   "sourceCommand": "npm run audit:supabase-frontend -- --json",
   "generatedBy": "npm run audit:supabase-frontend:classify -- --write",
   "expectedBaseline": {
-    "filesWithSupabaseAccess": 30,
+    "filesWithSupabaseAccess": 22,
     "totals": {
-      "clientImports": 30,
-      "from": 52,
-      "rpc": 13,
-      "functionsInvoke": 13,
+      "clientImports": 22,
+      "from": 31,
+      "rpc": 9,
+      "functionsInvoke": 11,
       "auth": 5,
       "storage": 0,
       "channel": 1
@@ -45,37 +45,6 @@
         "clientImports": 1,
         "from": 0,
         "rpc": 7,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/admin/api/backgroundJobs.ts",
-      "feature": "admin",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Administrar background jobs"
-      ],
-      "resources": {
-        "tables": [
-          "scheduled_messages",
-          "users"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0806"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 8,
-        "rpc": 0,
         "functionsInvoke": 0,
         "auth": 0,
         "storage": 0,
@@ -268,35 +237,6 @@
       }
     },
     {
-      "file": "src/features/auth/api/activity-feed.repository.ts",
-      "feature": "auth",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Executar sincronizacao Moodle no backend"
-      ],
-      "resources": {
-        "tables": [
-          "activity_feed"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0803"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/auth/api/login.ts",
       "feature": "auth",
       "categories": [
@@ -324,97 +264,6 @@
       }
     },
     {
-      "file": "src/features/auth/application/risk.service.ts",
-      "feature": "auth",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Recalcular risco no backend"
-      ],
-      "resources": {
-        "tables": [
-          "student_courses"
-        ],
-        "rpcs": [
-          "update_course_students_risk",
-          "update_student_risk"
-        ],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0805"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 4,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/auth/application/system-notification.service.ts",
-      "feature": "auth",
-      "categories": [
-        "command"
-      ],
-      "useCases": [
-        "Executar sincronizacao Moodle no backend"
-      ],
-      "resources": {
-        "tables": [
-          "activity_feed"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0803"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/auth/infrastructure/course-sync.service.ts",
-      "feature": "auth",
-      "categories": [
-        "query"
-      ],
-      "useCases": [
-        "Executar sincronizacao Moodle no backend"
-      ],
-      "resources": {
-        "tables": [
-          "courses"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0803"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 1,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/auth/infrastructure/moodle-api.ts",
       "feature": "auth",
       "categories": [
@@ -427,8 +276,7 @@
         "tables": [],
         "rpcs": [],
         "functions": [
-          "moodle-auth",
-          "moodle-sync-courses"
+          "moodle-auth"
         ]
       },
       "destinationTasks": [
@@ -438,35 +286,7 @@
         "clientImports": 1,
         "from": 0,
         "rpc": 0,
-        "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/features/background-jobs/api/backgroundJobs.repository.ts",
-      "feature": "background-jobs",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Consultar progresso de jobs"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0804"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 6,
-        "rpc": 0,
-        "functionsInvoke": 0,
+        "functionsInvoke": 1,
         "auth": 0,
         "storage": 0,
         "channel": 0
@@ -598,37 +418,6 @@
       }
     },
     {
-      "file": "src/features/courses/api/sync.ts",
-      "feature": "courses",
-      "categories": [
-        "command",
-        "query"
-      ],
-      "useCases": [
-        "Executar sincronizacao Moodle no backend"
-      ],
-      "resources": {
-        "tables": [
-          "student_courses",
-          "user_sync_preferences"
-        ],
-        "rpcs": [],
-        "functions": []
-      },
-      "destinationTasks": [
-        "SB-0803"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 3,
-        "rpc": 0,
-        "functionsInvoke": 0,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
       "file": "src/features/services/api/myServices.ts",
       "feature": "services",
       "categories": [
@@ -742,35 +531,6 @@
         "from": 3,
         "rpc": 0,
         "functionsInvoke": 2,
-        "auth": 0,
-        "storage": 0,
-        "channel": 0
-      }
-    },
-    {
-      "file": "src/hooks/useMoodleApi.ts",
-      "feature": "cross-cutting",
-      "categories": [
-        "edge-function"
-      ],
-      "useCases": [
-        "Executar sincronizacao Moodle no backend"
-      ],
-      "resources": {
-        "tables": [],
-        "rpcs": [],
-        "functions": [
-          "moodle-sync-students"
-        ]
-      },
-      "destinationTasks": [
-        "SB-0803"
-      ],
-      "counts": {
-        "clientImports": 1,
-        "from": 0,
-        "rpc": 0,
-        "functionsInvoke": 1,
         "auth": 0,
         "storage": 0,
         "channel": 0
