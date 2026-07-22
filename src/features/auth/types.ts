@@ -1,17 +1,14 @@
 import type { Course } from '@/features/courses/types';
 
 export interface User {
-  background_reauth_enabled?: boolean;
   id: string;
-  moodle_user_id: string;
-  moodle_username: string;
   full_name: string;
   email?: string;
   avatar_url?: string;
   last_login?: string;
   last_sync?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface AuthContextType {
@@ -20,13 +17,8 @@ export interface AuthContextType {
   isSyncing: boolean;
   isAuthenticated: boolean;
   login: (
-    username: string,
+    email: string,
     password: string,
-    moodleUrl: string,
-    service?: string,
-    options?: {
-      backgroundReauthEnabled?: boolean;
-    },
   ) => Promise<boolean>;
   logout: () => Promise<void>;
   syncData: () => Promise<void>;

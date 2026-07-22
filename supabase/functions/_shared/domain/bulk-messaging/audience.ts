@@ -109,12 +109,18 @@ async function queryInBatches<T>(
   return (await Promise.all(chunks(values).map(query))).flat()
 }
 
-async function listCourses(db: AppSupabaseClient, courseIds: string[]): Promise<CourseRow[]> {
+async function listCourses(
+  db: AppSupabaseClient,
+  courseIds: string[],
+  moodleSiteId?: string,
+): Promise<CourseRow[]> {
   return queryInBatches(courseIds, async (batch) => {
-    const { data, error } = await db
+    let query = db
       .from('courses')
       .select('id, name, category, start_date')
       .in('id', batch)
+    if (moodleSiteId) query = query.eq('moodle_site_id', moodleSiteId)
+    const { data, error } = await query
     if (error) throw error
     return (data ?? []) as CourseRow[]
   })
@@ -169,6 +175,7 @@ function resolveEnrollmentStatus(statuses?: {
 export async function listBulkAudience(
   db: AppSupabaseClient,
   actorId: string,
+  moodleSiteId?: string,
   now = new Date(),
 ): Promise<BulkAudienceData> {
   const accessibleCourseIds = await listAccessibleCourseIds(db, actorId, 'tutor')
@@ -176,7 +183,9 @@ export async function listBulkAudience(
     return { gradeLookup: {}, pendingLookup: {}, students: [] }
   }
 
-  const courseMap = new Map((await listCourses(db, accessibleCourseIds)).map((course) => [course.id, course]))
+  const courseMap = new Map(
+    (await listCourses(db, accessibleCourseIds, moodleSiteId)).map((course) => [course.id, course]),
+  )
   const courseIds = [...courseMap.keys()]
   if (courseIds.length === 0) {
     return { gradeLookup: {}, pendingLookup: {}, students: [] }
@@ -259,9 +268,10 @@ export async function listBulkAudience(
 export async function resolveAuthorizedRecipients(
   db: AppSupabaseClient,
   actorId: string,
+  moodleSiteId: string,
   selections: BulkRecipientSelection[],
 ): Promise<BulkMessageRecipientDraft[]> {
-  const audience = await listBulkAudience(db, actorId)
+  const audience = await listBulkAudience(db, actorId, moodleSiteId)
   const byStudentId = new Map(audience.students.map((student) => [student.id, student]))
   const uniqueSelections = new Map<string, BulkRecipientSelection>()
   for (const selection of selections) uniqueSelections.set(selection.studentId, selection)

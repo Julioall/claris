@@ -25,7 +25,7 @@ import type { MoodleSyncJobsPayload } from './payload.ts'
 import type { MoodleSyncJobsRepository } from './repository.ts'
 
 export interface MoodleSyncJobsRuntime {
-  listAvailableCourses(actorId: string): Promise<MoodleSyncCourseDto[]>
+  listAvailableCourses(actorId: string, connectionId: string): Promise<MoodleSyncCourseDto[]>
   recalculateRisk(actorId: string, courseIds: string[]): Promise<{
     failedCount: number
     missingRpc: boolean
@@ -99,6 +99,9 @@ export function mapMoodleSyncJob(
   items: BackgroundJobItemRecord[],
 ): MoodleSyncJobDto {
   const metadata = metadataRecord(job.metadata)
+  if (metadata.schema_version !== 2 || typeof metadata.connection_id !== 'string') {
+    throw ApiError.conflict('Legacy Moodle sync jobs are not supported')
+  }
   const kind = metadata.sync_kind === 'incremental' ? 'incremental' : 'initial'
   const entities = metadataStringArray(metadata.entities).filter(
     (entity): entity is MoodleSyncEntityDto => (
@@ -106,12 +109,12 @@ export function mapMoodleSyncJob(
     ),
   )
   const stepEntities: MoodleSyncStepEntityDto[] = [
-    ...(kind === 'initial' ? ['courses' as const] : []),
     ...entities,
     ...(entities.includes('students') ? ['risk' as const] : []),
   ]
   return {
     completedAt: job.completed_at,
+    connectionId: metadata.connection_id,
     courseIds: metadataStringArray(metadata.course_ids),
     createdAt: job.created_at,
     entities,
@@ -141,12 +144,14 @@ async function loadJobDto(
 
 async function canonicalRequestId(
   actorId: string,
+  connectionId: string,
   kind: 'initial' | 'incremental',
   courseIds: string[],
   entities: MoodleSyncEntityDto[],
 ): Promise<string> {
   const source = JSON.stringify({
     actorId,
+    connectionId,
     courseIds: [...courseIds].sort(),
     entities: [...entities].sort(),
     kind,
@@ -160,7 +165,6 @@ async function canonicalRequestId(
 }
 
 function buildItems(
-  kind: 'initial' | 'incremental',
   courseIds: string[],
   entities: MoodleSyncEntityDto[],
 ): Array<{ itemKey: string; label: string; metadata: Json }> {
@@ -170,9 +174,6 @@ function buildItems(
     grades: 'Sincronizar notas',
   }
   return [
-    ...(kind === 'initial'
-      ? [{ itemKey: 'courses', label: 'Sincronizar e vincular cursos', metadata: { entity: 'courses' } as Json }]
-      : []),
     ...entities.flatMap((entity) => courseIds.map((courseId) => ({
       itemKey: `${entity}:${courseId}`,
       label: labels[entity],
@@ -188,15 +189,26 @@ async function startJob(
   repository: MoodleSyncJobsRepository,
   runtime: MoodleSyncJobsRuntime,
   actorId: string,
+  connectionId: string,
   kind: 'initial' | 'incremental',
   courseIds: string[],
   entities: MoodleSyncEntityDto[],
 ): Promise<MoodleSyncJobResponseDto> {
-  if (!await repository.hasCourseScope(actorId, courseIds, kind)) {
+  if (!await repository.hasCourseScope(actorId, connectionId, courseIds, kind)) {
     throw ApiError.forbidden('One or more courses are outside the authenticated actor scope')
   }
+  if (kind === 'initial') {
+    try {
+      await repository.linkEligibleCourses(actorId, connectionId, courseIds)
+    } catch (error) {
+      if (isRecord(error) && error.code === '42501') {
+        throw ApiError.forbidden('One or more courses are outside the connection eligibility')
+      }
+      throw error
+    }
+  }
 
-  const sourceRecordId = await canonicalRequestId(actorId, kind, courseIds, entities)
+  const sourceRecordId = await canonicalRequestId(actorId, connectionId, kind, courseIds, entities)
   const existing = await repository.findActiveJob(actorId, sourceRecordId)
   if (existing) {
     return {
@@ -210,11 +222,13 @@ async function startJob(
   try {
     job = await repository.createJob({
       actorId,
+      connectionId,
       courseIds,
       entities,
-      itemDefinitions: buildItems(kind, courseIds, entities),
+      itemDefinitions: buildItems(courseIds, entities),
       kind,
       sourceRecordId,
+      trigger: kind === 'initial' ? 'initial' : 'manual',
     })
   } catch (error) {
     const concurrent = await repository.findActiveJob(actorId, sourceRecordId)
@@ -269,7 +283,7 @@ export async function executeMoodleSyncJobs(
 ): Promise<MoodleSyncJobsResponseDto> {
   switch (payload.action) {
     case 'list_available_courses': {
-      const items = await runtime.listAvailableCourses(actorId)
+      const items = await runtime.listAvailableCourses(actorId, payload.connectionId)
       return { contractVersion: MOODLE_SYNC_JOBS_CONTRACT_VERSION, items } satisfies MoodleSyncCoursesDto
     }
     case 'start_initial_sync':
@@ -277,12 +291,21 @@ export async function executeMoodleSyncJobs(
         repository,
         runtime,
         actorId,
+        payload.connectionId,
         'initial',
         payload.courseIds,
         ['students', 'activities', 'grades'],
       )
     case 'start_course_sync':
-      return await startJob(repository, runtime, actorId, 'incremental', payload.courseIds, payload.entities)
+      return await startJob(
+        repository,
+        runtime,
+        actorId,
+        payload.connectionId,
+        'incremental',
+        payload.courseIds,
+        payload.entities,
+      )
     case 'get_job':
       return {
         contractVersion: MOODLE_SYNC_JOBS_CONTRACT_VERSION,
@@ -316,7 +339,7 @@ export async function executeMoodleSyncJobs(
       } satisfies MoodleSyncCommandDto
     }
     case 'get_preferences': {
-      const preferences = await repository.getPreferences(actorId) ?? {
+      const preferences = await repository.getPreferences(actorId, payload.connectionId) ?? {
         includeEmptyCourses: false,
         includeFinished: false,
         selectedKeys: [],
@@ -327,14 +350,14 @@ export async function executeMoodleSyncJobs(
       } satisfies MoodleSyncPreferencesDto
     }
     case 'save_preferences': {
-      const preferences = await repository.savePreferences(actorId, payload)
+      const preferences = await repository.savePreferences(actorId, payload.connectionId, payload)
       return {
         contractVersion: MOODLE_SYNC_JOBS_CONTRACT_VERSION,
         ...preferences,
       } satisfies MoodleSyncPreferencesDto
     }
     case 'get_course_student_counts': {
-      if (!await repository.hasCourseScope(actorId, payload.courseIds, 'initial')) {
+      if (!await repository.hasCourseScope(actorId, payload.connectionId, payload.courseIds, 'initial')) {
         throw ApiError.forbidden('One or more courses are outside the authenticated actor scope')
       }
       const counts = await repository.getCourseStudentCounts(payload.courseIds)
@@ -347,7 +370,7 @@ export async function executeMoodleSyncJobs(
       } satisfies MoodleSyncCourseCountsDto
     }
     case 'recalculate_risk': {
-      if (!await repository.hasCourseScope(actorId, payload.courseIds, 'incremental')) {
+      if (!await repository.hasCourseScope(actorId, payload.connectionId, payload.courseIds, 'incremental')) {
         throw ApiError.forbidden('One or more courses are outside the authenticated actor scope')
       }
       return {

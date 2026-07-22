@@ -22,35 +22,36 @@ const ACTIONS = [
 type Action = typeof ACTIONS[number]
 
 export type MoodleSyncJobsPayload =
-  | { action: 'list_available_courses' }
-  | { action: 'start_initial_sync'; courseIds: string[] }
-  | { action: 'start_course_sync'; courseIds: string[]; entities: MoodleSyncEntityDto[] }
+  | { action: 'list_available_courses'; connectionId: string }
+  | { action: 'start_initial_sync'; connectionId: string; courseIds: string[] }
+  | { action: 'start_course_sync'; connectionId: string; courseIds: string[]; entities: MoodleSyncEntityDto[] }
   | { action: 'get_job'; jobId: string }
   | { action: 'list_active_jobs' }
   | { action: 'retry_job'; jobId: string }
   | { action: 'cancel_job'; jobId: string }
-  | { action: 'get_preferences' }
+  | { action: 'get_preferences'; connectionId: string }
   | {
       action: 'save_preferences'
+      connectionId: string
       includeEmptyCourses: boolean
       includeFinished: boolean
       selectedKeys: string[]
     }
-  | { action: 'get_course_student_counts'; courseIds: string[] }
-  | { action: 'recalculate_risk'; courseIds: string[] }
+  | { action: 'get_course_student_counts'; connectionId: string; courseIds: string[] }
+  | { action: 'recalculate_risk'; connectionId: string; courseIds: string[] }
 
 const ALLOWED_FIELDS: Record<Action, ReadonlySet<string>> = {
-  list_available_courses: new Set(['action']),
-  start_initial_sync: new Set(['action', 'courseIds']),
-  start_course_sync: new Set(['action', 'courseIds', 'entities']),
+  list_available_courses: new Set(['action', 'connectionId']),
+  start_initial_sync: new Set(['action', 'connectionId', 'courseIds']),
+  start_course_sync: new Set(['action', 'connectionId', 'courseIds', 'entities']),
   get_job: new Set(['action', 'jobId']),
   list_active_jobs: new Set(['action']),
   retry_job: new Set(['action', 'jobId']),
   cancel_job: new Set(['action', 'jobId']),
-  get_preferences: new Set(['action']),
-  save_preferences: new Set(['action', 'includeEmptyCourses', 'includeFinished', 'selectedKeys']),
-  get_course_student_counts: new Set(['action', 'courseIds']),
-  recalculate_risk: new Set(['action', 'courseIds']),
+  get_preferences: new Set(['action', 'connectionId']),
+  save_preferences: new Set(['action', 'connectionId', 'includeEmptyCourses', 'includeFinished', 'selectedKeys']),
+  get_course_student_counts: new Set(['action', 'connectionId', 'courseIds']),
+  recalculate_risk: new Set(['action', 'connectionId', 'courseIds']),
 }
 
 function invalid(message: string): never {
@@ -126,16 +127,26 @@ export function parseMoodleSyncJobsPayload(raw: unknown): MoodleSyncJobsPayload 
   assertExactFields(body, action)
 
   switch (action) {
-    case 'list_available_courses':
-    case 'get_preferences':
     case 'list_active_jobs':
       return { action }
+    case 'list_available_courses':
+    case 'get_preferences':
+      return { action, connectionId: readUuid(body.connectionId, 'connectionId') }
     case 'start_initial_sync':
     case 'get_course_student_counts':
     case 'recalculate_risk':
-      return { action, courseIds: readCourseIds(body, action === 'start_initial_sync' ? 200 : 500) }
+      return {
+        action,
+        connectionId: readUuid(body.connectionId, 'connectionId'),
+        courseIds: readCourseIds(body, action === 'start_initial_sync' ? 200 : 500),
+      }
     case 'start_course_sync':
-      return { action, courseIds: readCourseIds(body), entities: readEntities(body.entities) }
+      return {
+        action,
+        connectionId: readUuid(body.connectionId, 'connectionId'),
+        courseIds: readCourseIds(body),
+        entities: readEntities(body.entities),
+      }
     case 'get_job':
     case 'retry_job':
     case 'cancel_job':
@@ -143,6 +154,7 @@ export function parseMoodleSyncJobsPayload(raw: unknown): MoodleSyncJobsPayload 
     case 'save_preferences':
       return {
         action,
+        connectionId: readUuid(body.connectionId, 'connectionId'),
         includeEmptyCourses: readBoolean(body.includeEmptyCourses, 'includeEmptyCourses'),
         includeFinished: readBoolean(body.includeFinished, 'includeFinished'),
         selectedKeys: readSelectedKeys(body.selectedKeys),

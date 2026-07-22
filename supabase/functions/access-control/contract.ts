@@ -35,7 +35,6 @@ export interface AccessUserDto {
   groupName: string | null
   groupSlug: string | null
   isAdmin: boolean
-  moodleUsername: string
   userId: string
 }
 

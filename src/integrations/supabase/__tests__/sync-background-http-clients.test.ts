@@ -17,10 +17,12 @@ vi.mock('@/integrations/http/edge-function-client', () => ({
 }));
 
 const COURSE_ID = '11111111-1111-4111-8111-111111111111';
+const CONNECTION_ID = '55555555-5555-4555-8555-555555555555';
 
 function syncJob() {
   return {
     completedAt: null,
+    connectionId: CONNECTION_ID,
     courseIds: [COURSE_ID],
     createdAt: '2026-07-21T12:00:00.000Z',
     entities: ['students', 'activities', 'grades'],
@@ -32,7 +34,7 @@ function syncJob() {
     startedAt: null,
     status: 'pending',
     steps: [{
-      entity: 'courses',
+      entity: 'students',
       errorMessage: null,
       processedItems: 0,
       recordCount: 0,
@@ -40,7 +42,7 @@ function syncJob() {
       totalItems: 1,
     }],
     successCount: 0,
-    totalItems: 5,
+    totalItems: 4,
     updatedAt: '2026-07-21T12:00:00.000Z',
   };
 }
@@ -80,7 +82,7 @@ describe('sync and background HTTP clients', () => {
 
   it('maps the Moodle course DTO without exposing a token or actor id', async () => {
     invokeEdgeFunctionMock.mockResolvedValue({
-      contractVersion: 1,
+      contractVersion: 2,
       items: [{
         category: 'Instituicao > Escola > Evento',
         createdAt: '2026-07-21T12:00:00.000Z',
@@ -95,30 +97,30 @@ describe('sync and background HTTP clients', () => {
       }],
     });
 
-    await expect(listAvailableMoodleCourses()).resolves.toEqual([
+    await expect(listAvailableMoodleCourses(CONNECTION_ID)).resolves.toEqual([
       expect.objectContaining({ id: COURSE_ID, moodle_course_id: '123', short_name: 'MAT' }),
     ]);
     expect(invokeEdgeFunctionMock).toHaveBeenCalledWith('moodle-sync-jobs', {
-      body: { action: 'list_available_courses' },
+      body: { action: 'list_available_courses', connectionId: CONNECTION_ID },
       timeoutMs: 60_000,
     });
   });
 
   it('starts an initial job with scope only and validates the versioned response', async () => {
-    invokeEdgeFunctionMock.mockResolvedValue({ contractVersion: 1, duplicate: false, job: syncJob() });
+    invokeEdgeFunctionMock.mockResolvedValue({ contractVersion: 2, duplicate: false, job: syncJob() });
 
-    await expect(startInitialMoodleSync([COURSE_ID])).resolves.toMatchObject({
-      contractVersion: 1,
+    await expect(startInitialMoodleSync(CONNECTION_ID, [COURSE_ID])).resolves.toMatchObject({
+      contractVersion: 2,
       duplicate: false,
       job: { id: '22222222-2222-4222-8222-222222222222' },
     });
     expect(invokeEdgeFunctionMock).toHaveBeenCalledWith('moodle-sync-jobs', {
-      body: { action: 'start_initial_sync', courseIds: [COURSE_ID] },
+      body: { action: 'start_initial_sync', connectionId: CONNECTION_ID, courseIds: [COURSE_ID] },
       timeoutMs: 60_000,
     });
 
     invokeEdgeFunctionMock.mockResolvedValueOnce({ contractVersion: 1, job: syncJob() });
-    await expect(startInitialMoodleSync([COURSE_ID])).rejects.toThrow(/resposta invalida/i);
+    await expect(startInitialMoodleSync(CONNECTION_ID, [COURSE_ID])).rejects.toThrow(/resposta invalida/i);
   });
 
   it('uses one owner endpoint and one backend-scoped admin endpoint for jobs', async () => {

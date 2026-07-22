@@ -23,9 +23,8 @@ const metadata = {
 };
 
 const input = {
+  connectionId: '33333333-3333-4333-8333-333333333333',
   messageContent: '  Aviso importante  ',
-  moodleUrl: 'https://moodle.example.com',
-  moodleToken: 'token-123',
   recipients: [
     {
       studentId: '11111111-1111-4111-8111-111111111111',
@@ -57,8 +56,8 @@ describe('bulk messaging repository', () => {
       auth: 'required',
       body: {
         action: 'start_send',
+        connectionId: input.connectionId,
         messageContent: 'Aviso importante',
-        moodleUrl: 'https://moodle.example.com',
         origin: 'manual',
         recipients: [
           {
@@ -66,7 +65,6 @@ describe('bulk messaging repository', () => {
             studentId: '11111111-1111-4111-8111-111111111111',
           },
         ],
-        token: 'token-123',
       },
       timeoutMs: 120_000,
     });
@@ -79,6 +77,8 @@ describe('bulk messaging repository', () => {
 
   it('retorna job iniciado quando a API aceita o envio', async () => {
     invokeEdgeFunctionMock.mockResolvedValueOnce({
+      connectionId: input.connectionId,
+      moodleSiteId: '44444444-4444-4444-8444-444444444444',
       kind: 'started',
       jobId: 'job-started',
       sent: 1,
@@ -95,6 +95,8 @@ describe('bulk messaging repository', () => {
 
   it('carrega e converte a audiencia resolvida pelo backend', async () => {
     invokeEdgeFunctionMock.mockResolvedValueOnce({
+      connectionId: input.connectionId,
+      moodleSiteId: '44444444-4444-4444-8444-444444444444',
       students: [{
         id: '11111111-1111-4111-8111-111111111111',
         fullName: 'Aluno 1',
@@ -125,7 +127,7 @@ describe('bulk messaging repository', () => {
       metadata,
     });
 
-    const result = await listBulkSendAudienceForUser();
+    const result = await listBulkSendAudienceForUser(input.connectionId);
 
     expect(result.students[0]).toMatchObject({
       full_name: 'Aluno 1',
@@ -134,7 +136,7 @@ describe('bulk messaging repository', () => {
     });
     expect(invokeEdgeFunctionMock).toHaveBeenCalledWith('bulk-message-audience', {
       auth: 'required',
-      body: { action: 'get_audience' },
+      body: { action: 'get_audience', connectionId: input.connectionId },
       timeoutMs: 20_000,
     });
   });

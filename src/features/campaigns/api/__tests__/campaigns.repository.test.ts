@@ -22,7 +22,7 @@ const scheduled = {
   executedBulkJobId: null,
   executionAttempts: 0,
   executionContext: {
-    moodleUrl: 'https://moodle.example.com',
+    moodleConnectionId: '33333333-3333-4333-8333-333333333333',
     recipientSnapshot: [{
       moodleUserId: 'moodle-server',
       personalizedMessage: 'Ola',
@@ -81,7 +81,7 @@ describe('campaigns repository', () => {
     const result = await createScheduledMessage({
       channel: 'moodle',
       execution_context: {
-        moodle_url: 'https://moodle.example.com',
+        moodle_connection_id: '33333333-3333-4333-8333-333333333333',
         recipient_snapshot: [{
           moodle_user_id: 'moodle-browser-must-not-be-sent',
           personalized_message: 'Ola',
@@ -107,7 +107,7 @@ describe('campaigns repository', () => {
     });
     expect(JSON.stringify(body)).not.toMatch(/moodleUserId|studentName|userId/);
     expect(result.execution_context).toMatchObject({
-      moodle_url: 'https://moodle.example.com',
+      moodle_connection_id: '33333333-3333-4333-8333-333333333333',
       recipient_snapshot: [{
         moodle_user_id: 'moodle-server',
         student_name: 'Aluno servidor',

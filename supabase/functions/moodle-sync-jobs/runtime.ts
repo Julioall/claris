@@ -1,8 +1,6 @@
 import { createServiceClient } from '../_shared/db/mod.ts'
 import { resolveMoodleAccess, scheduleMoodleSyncJob } from '../_shared/domain/moodle-sync/job-runner.ts'
 import { recalculateRiskForCourses } from '../_shared/domain/risk/recalculation.ts'
-import { findUserById } from '../_shared/domain/users/repository.ts'
-import { ApiError } from '../_shared/http/mod.ts'
 import { syncCourses } from '../moodle-sync-courses/service.ts'
 import type { MoodleSyncCourseDto } from './contract.ts'
 import type { MoodleSyncJobsRuntime } from './service.ts'
@@ -53,19 +51,10 @@ function mapAvailableCourse(value: unknown): MoodleSyncCourseDto | null {
 }
 
 export const moodleSyncJobsRuntime: MoodleSyncJobsRuntime = {
-  async listAvailableCourses(actorId) {
+  async listAvailableCourses(actorId, connectionId) {
     const supabase = createServiceClient()
-    const [access, user] = await Promise.all([
-      resolveMoodleAccess(supabase, actorId),
-      findUserById(supabase, actorId),
-    ])
-    if (!user?.moodle_user_id) throw ApiError.conflict('Authenticated user has no Moodle profile')
-    const payload = await parseResponse(await syncCourses(
-      access.moodleUrl,
-      access.token,
-      String(user.moodle_user_id),
-      { autoLinkTutorCourses: false },
-    ))
+    const access = await resolveMoodleAccess(supabase, actorId, connectionId)
+    const payload = await parseResponse(await syncCourses(access, { autoLinkTutorCourses: false }))
     return (Array.isArray(payload.courses) ? payload.courses : [])
       .map(mapAvailableCourse)
       .filter((course): course is MoodleSyncCourseDto => Boolean(course))

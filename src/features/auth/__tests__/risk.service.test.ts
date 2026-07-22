@@ -9,22 +9,23 @@ vi.mock('@/features/auth/api/moodle-sync-jobs', () => ({
 }));
 
 describe('risk.service', () => {
+  const connectionId = 'connection-1';
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('delegates unique course ids to the backend', async () => {
     recalculateMoodleRiskMock.mockResolvedValue({
-      contractVersion: 1,
+      contractVersion: 2,
       failedCount: 1,
       missingRpc: false,
       updatedCount: 5,
       usedFallback: true,
     });
 
-    const result = await recalculateRiskForCourses(['course-1', 'course-1', 'course-2']);
+    const result = await recalculateRiskForCourses(connectionId, ['course-1', 'course-1', 'course-2']);
 
-    expect(recalculateMoodleRiskMock).toHaveBeenCalledWith(['course-1', 'course-2']);
+    expect(recalculateMoodleRiskMock).toHaveBeenCalledWith(connectionId, ['course-1', 'course-2']);
     expect(result).toEqual({
       failedCount: 1,
       missingRpc: false,
@@ -34,7 +35,7 @@ describe('risk.service', () => {
   });
 
   it('does not call the backend when no course was provided', async () => {
-    await expect(recalculateRiskForCourses([])).resolves.toEqual({
+    await expect(recalculateRiskForCourses(connectionId, [])).resolves.toEqual({
       failedCount: 0,
       missingRpc: false,
       updatedCount: 0,

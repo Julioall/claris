@@ -18,8 +18,6 @@ const response = {
   contractVersion: 1,
   publicSettings: {
     contractVersion: 1,
-    moodleConnectionUrl: 'https://ead.fieg.com.br',
-    moodleConnectionService: 'moodle_mobile_app',
   },
   riskThresholdDays: { atencao: 7, risco: 14, critico: 30 },
   clarisSettings: {

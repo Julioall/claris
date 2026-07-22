@@ -187,7 +187,6 @@ export default function AdminUsuarios() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Usuario</TableHead>
-                  <TableHead>Moodle</TableHead>
                   <TableHead>Contato</TableHead>
                   <TableHead>Acesso</TableHead>
                   <TableHead className="w-[120px] text-right">Acao</TableHead>
@@ -196,13 +195,13 @@ export default function AdminUsuarios() {
               <TableBody>
                 {usersQuery.isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
                       Carregando usuarios...
                     </TableCell>
                   </TableRow>
                 ) : users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="py-10 text-center text-muted-foreground">
+                    <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
                       Nenhum usuario encontrado para o filtro informado.
                     </TableCell>
                   </TableRow>
@@ -212,7 +211,6 @@ export default function AdminUsuarios() {
                       <TableCell className="align-top">
                         <div className="font-medium">{user.fullName}</div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs align-top">{user.moodleUsername}</TableCell>
                       <TableCell className="text-sm text-muted-foreground align-top">
                         {user.email || 'Sem email'}
                       </TableCell>
@@ -273,7 +271,6 @@ export default function AdminUsuarios() {
             <div className="space-y-5 py-2">
               <div className="rounded-lg border bg-muted/30 p-3">
                 <p className="font-medium">{selectedUser.fullName}</p>
-                <p className="font-mono text-xs text-muted-foreground">{selectedUser.moodleUsername}</p>
                 <p className="text-sm text-muted-foreground">{selectedUser.email || 'Sem email'}</p>
               </div>
 

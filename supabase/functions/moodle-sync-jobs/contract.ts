@@ -1,4 +1,4 @@
-export const MOODLE_SYNC_JOBS_CONTRACT_VERSION = 1 as const
+export const MOODLE_SYNC_JOBS_CONTRACT_VERSION = 2 as const
 
 export const MOODLE_SYNC_JOB_STATUSES = [
   'pending',
@@ -44,6 +44,7 @@ export interface MoodleSyncJobStepDto {
 
 export interface MoodleSyncJobDto {
   completedAt: string | null
+  connectionId: string
   courseIds: string[]
   createdAt: string
   entities: MoodleSyncEntityDto[]

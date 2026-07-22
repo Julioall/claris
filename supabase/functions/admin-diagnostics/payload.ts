@@ -6,9 +6,9 @@ import {
 } from '../_shared/http/mod.ts'
 
 export type AdminDiagnosticsPayload =
-  | { action: 'list_grade_courses' }
-  | { action: 'list_grade_students'; courseId: string }
-  | { action: 'run_grade_diagnostic'; courseId: string; studentId: string }
+  | { action: 'list_grade_courses'; connectionId: string }
+  | { action: 'list_grade_students'; connectionId: string; courseId: string }
+  | { action: 'run_grade_diagnostic'; connectionId: string; courseId: string; studentId: string }
 
 const ACTIONS = [
   'list_grade_courses',
@@ -17,9 +17,9 @@ const ACTIONS = [
 ] as const
 
 const ACTION_FIELDS: Record<AdminDiagnosticsPayload['action'], ReadonlySet<string>> = {
-  list_grade_courses: new Set(['action']),
-  list_grade_students: new Set(['action', 'courseId']),
-  run_grade_diagnostic: new Set(['action', 'courseId', 'studentId']),
+  list_grade_courses: new Set(['action', 'connectionId']),
+  list_grade_students: new Set(['action', 'connectionId', 'courseId']),
+  run_grade_diagnostic: new Set(['action', 'connectionId', 'courseId', 'studentId']),
 }
 
 export function parseAdminDiagnosticsPayload(rawBody: unknown): AdminDiagnosticsPayload {
@@ -29,12 +29,14 @@ export function parseAdminDiagnosticsPayload(rawBody: unknown): AdminDiagnostics
     throw new RequestBodyValidationError('Invalid request fields', 422)
   }
 
-  if (action === 'list_grade_courses') return { action }
+  const connectionId = readRequiredUuid(body, 'connectionId')
+  if (action === 'list_grade_courses') return { action, connectionId }
   if (action === 'list_grade_students') {
-    return { action, courseId: readRequiredUuid(body, 'courseId') }
+    return { action, connectionId, courseId: readRequiredUuid(body, 'courseId') }
   }
   return {
     action,
+    connectionId,
     courseId: readRequiredUuid(body, 'courseId'),
     studentId: readRequiredUuid(body, 'studentId'),
   }

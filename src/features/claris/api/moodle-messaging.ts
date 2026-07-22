@@ -51,9 +51,9 @@ function invalidResponse(): never {
   throw new Error('A API de mensagens do Moodle retornou uma resposta invalida.');
 }
 
-export async function fetchMoodleConversations(): Promise<MoodleConversationsDto> {
+export async function fetchMoodleConversations(connectionId: string): Promise<MoodleConversationsDto> {
   const response = await invokeEdgeFunction<MoodleConversationsDto>(FUNCTION_NAME, {
-    body: { action: 'get_conversations' },
+    body: { action: 'get_conversations', connectionId },
   });
 
   if (
@@ -70,11 +70,12 @@ export async function fetchMoodleConversations(): Promise<MoodleConversationsDto
 }
 
 export async function fetchMoodleMessages(
+  connectionId: string,
   moodleUserId: number,
   limit = 50,
 ): Promise<MoodleMessagesDto> {
   const response = await invokeEdgeFunction<MoodleMessagesDto>(FUNCTION_NAME, {
-    body: { action: 'get_messages', moodleUserId, limit },
+    body: { action: 'get_messages', connectionId, moodleUserId, limit },
   });
 
   if (
@@ -92,11 +93,12 @@ export async function fetchMoodleMessages(
 }
 
 export async function sendMoodleMessage(
+  connectionId: string,
   moodleUserId: number,
   message: string,
 ): Promise<MoodleMessageSentDto> {
   const response = await invokeEdgeFunction<MoodleMessageSentDto>(FUNCTION_NAME, {
-    body: { action: 'send_message', moodleUserId, message },
+    body: { action: 'send_message', connectionId, moodleUserId, message },
   });
 
   if (

@@ -2,14 +2,11 @@ import React, { createContext, useContext, useMemo, useState } from 'react';
 
 import type { AuthContextType } from '@/features/auth/types';
 import type { Course } from '@/features/courses/types';
-import { MoodleSessionProvider } from '@/features/auth/context/MoodleSessionContext';
-import type { MoodleSession } from '@/features/auth/domain/session';
 import type { CourseScopedSyncEntity, SyncProgress } from '@/features/auth/domain/sync';
 import { useAuthSession } from '@/features/auth/hooks/useAuthSession';
 import { useCourseSync } from '@/features/auth/hooks/useCourseSync';
 
 interface ExtendedAuthContextType extends AuthContextType {
-  moodleSession: MoodleSession | null;
   courses: Course[];
   setCourses: (courses: Course[]) => void;
   syncProgress: SyncProgress;
@@ -47,7 +44,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout: authSession.logout,
     syncData: courseSync.syncData,
     lastSync: authSession.lastSync,
-    moodleSession: authSession.moodleSession,
     courses: courseSync.courses,
     setCourses: courseSync.setCourses,
     syncProgress: courseSync.syncProgress,
@@ -59,16 +55,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setShowCourseSelector: courseSync.setShowCourseSelector,
     isEditMode,
     setIsEditMode,
-    isOfflineMode: !!authSession.user && !authSession.moodleSession,
+    isOfflineMode: false,
   }), [authSession, courseSync, isEditMode]);
 
-  return (
-    <MoodleSessionProvider value={authSession.moodleSession}>
-      <AuthContext.Provider value={value}>
-        {children}
-      </AuthContext.Provider>
-    </MoodleSessionProvider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components

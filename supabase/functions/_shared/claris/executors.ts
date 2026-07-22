@@ -25,6 +25,7 @@ import {
 } from '../domain/student-activity-status.ts'
 import { listTutorSuggestionCourseIds } from './suggestion-course-scope.ts'
 import { callMoodleApi } from '../moodle/mod.ts'
+import { resolveMoodleAccess } from '../domain/moodle-connections/access.ts'
 
 // ---------------------------------------------------------------------------
 // AI action audit helpers
@@ -172,8 +173,7 @@ export interface ToolCallArgs {
 
 export interface ToolExecutionContext {
   latestUserMessage: string
-  moodleUrl?: string
-  moodleToken?: string
+  moodleConnectionId?: string
   actionKind?: 'quick_reply'
   actionJobId?: string
 }
@@ -246,7 +246,7 @@ export async function executeToolCall(
     case 'find_students_for_messaging':
       return findStudentsForMessaging(userId, args, supabase)
     case 'prepare_single_student_message_send':
-      return prepareSingleStudentMessageSend(userId, args, supabase)
+      return prepareSingleStudentMessageSend(userId, args, context, supabase)
     case 'confirm_single_student_message_send':
       return confirmSingleStudentMessageSend(userId, args, context, supabase)
     case 'list_message_templates':
@@ -256,7 +256,7 @@ export async function executeToolCall(
     case 'notify_user':
       return notifyUser(userId, args, supabase)
     case 'prepare_bulk_message_send':
-      return prepareBulkMessageSend(userId, args, supabase)
+      return prepareBulkMessageSend(userId, args, context, supabase)
     case 'confirm_bulk_message_send':
       return confirmBulkMessageSend(userId, args, context, supabase)
     case 'cancel_bulk_message_send':
@@ -725,11 +725,15 @@ async function resolveSingleStudentForMessaging(
 async function prepareSingleStudentMessageSend(
   userId: string,
   args: ToolCallArgs,
+  context: ToolExecutionContext,
   supabase: Supabase,
 ): Promise<unknown> {
   const message = (args.message ?? '').trim()
   if (!message) {
     return { error: 'Campo message é obrigatório para envio individual.' }
+  }
+  if (!context.moodleConnectionId) {
+    return { error: 'Selecione uma conexao Moodle antes de preparar o envio.' }
   }
 
   const resolvedStudent = await resolveSingleStudentForMessaging(userId, args, supabase)
@@ -752,7 +756,13 @@ async function prepareSingleStudentMessageSend(
 
   let duplicateJob
   try {
-    duplicateJob = await findDuplicateActiveJob(supabase, userId, message, 1)
+    duplicateJob = await findDuplicateActiveJob(
+      supabase,
+      userId,
+      context.moodleConnectionId,
+      message,
+      1,
+    )
   } catch {
     return { error: 'Falha ao validar duplicidade do envio individual.' }
   }
@@ -771,6 +781,7 @@ async function prepareSingleStudentMessageSend(
   try {
     job = await createJobWithRecipients(supabase, {
       messageContent: message,
+      moodleConnectionId: context.moodleConnectionId,
       origin: 'ia',
       recipients: [{
         moodleUserId: student.moodle_user_id,
@@ -1209,7 +1220,12 @@ async function getRecipientsForAudience(
   return []
 }
 
-async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supabase: Supabase) {
+async function prepareBulkMessageSend(
+  userId: string,
+  args: ToolCallArgs,
+  context: ToolExecutionContext,
+  supabase: Supabase,
+) {
   const audience = args.audience
   const directMessage = (args.message ?? '').trim()
   const templateId = (args.template_id ?? '').trim()
@@ -1217,6 +1233,9 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
 
   if (!audience) {
     return { error: 'Campo audience é obrigatório.' }
+  }
+  if (!context.moodleConnectionId) {
+    return { error: 'Selecione uma conexao Moodle antes de preparar o envio.' }
   }
 
   const usingTemplate = Boolean(templateId || templateTitleQuery)
@@ -1429,7 +1448,13 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
 
   let duplicateJob
   try {
-    duplicateJob = await findDuplicateActiveJob(supabase, userId, canonicalMessage, recipients.length)
+    duplicateJob = await findDuplicateActiveJob(
+      supabase,
+      userId,
+      context.moodleConnectionId,
+      canonicalMessage,
+      recipients.length,
+    )
   } catch {
     return { error: 'Falha ao validar duplicidade de envio.' }
   }
@@ -1448,6 +1473,7 @@ async function prepareBulkMessageSend(userId: string, args: ToolCallArgs, supaba
   try {
     job = await createJobWithRecipients(supabase, {
       messageContent: canonicalMessage,
+      moodleConnectionId: context.moodleConnectionId,
       origin: 'ia',
       recipients: rows.map((row) => ({
         moodleUserId: row.moodle_user_id,
@@ -1605,14 +1631,19 @@ async function confirmBulkMessageSend(
     }
   }
 
-  if (!context.moodleUrl || !context.moodleToken) {
+  if (!context.moodleConnectionId) {
     return {
       error:
         'Sessão Moodle indisponível para envio. Peça para o usuário reautenticar e tentar novamente.',
     }
   }
 
-  const result = await runBulkMessageJob(jobId, userId, context.moodleUrl, context.moodleToken, supabase)
+  const job = await findJobForUser(supabase, jobId, userId)
+  if (!job || job.moodle_connection_id !== context.moodleConnectionId) {
+    return { error: 'Job pertence a outra conexao Moodle.' }
+  }
+  const access = await resolveMoodleAccess(supabase, userId, context.moodleConnectionId)
+  const result = await runBulkMessageJob(jobId, userId, access.moodleUrl, access.token, supabase)
   await auditAiAction(userId, 'confirm_bulk_message_send', args, `bulk message job dispatched: id=${jobId}`, supabase)
   return result
 }

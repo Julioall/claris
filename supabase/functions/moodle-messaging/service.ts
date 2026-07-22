@@ -1,5 +1,5 @@
-import type { MoodleAccess } from '../_shared/domain/moodle-reauth/access.ts'
-import { ApiError, errorResponse, jsonResponse } from '../_shared/http/mod.ts'
+import type { MoodleAccess } from '../_shared/domain/moodle-connections/access.ts'
+import { ApiError } from '../_shared/http/mod.ts'
 import { callMoodleApi, callMoodleApiPost, getSiteInfo } from '../_shared/moodle/mod.ts'
 import {
   MOODLE_MESSAGING_CONTRACT_VERSION,
@@ -9,12 +9,7 @@ import {
   type MoodleMessagesDto,
   type MoodleMessagingResponseDto,
 } from './contract.ts'
-import type {
-  GetConversationsPayload,
-  GetMessagesPayload,
-  MessagingV1Payload,
-  SendMessagePayload,
-} from './payload.ts'
+import type { MessagingPayload } from './payload.ts'
 import type { MoodleMessagingRepository } from './repository.ts'
 
 interface MoodleMessageRecord {
@@ -202,13 +197,14 @@ function toConversationDto(
   }
 }
 
-export async function executeMessagingV1(
+export async function executeMessaging(
   repository: MoodleMessagingRepository,
   actorId: string,
   access: MoodleAccess,
-  body: MessagingV1Payload,
+  body: MessagingPayload,
 ): Promise<MoodleMessagingResponseDto> {
   if (body.action === 'send_message') {
+    await repository.assertAccessibleMoodleUser(actorId, access.moodleSiteId, body.moodleUserId)
     const result = await sendMessageToMoodle(access, body.moodleUserId, body.message)
     if (result.errorMessage) throw ApiError.unprocessable(result.errorMessage)
 
@@ -221,6 +217,7 @@ export async function executeMessagingV1(
   }
 
   if (body.action === 'get_messages') {
+    await repository.assertAccessibleMoodleUser(actorId, access.moodleSiteId, body.moodleUserId)
     const result = await fetchMessagesFromMoodle(access, body.moodleUserId, body.limit)
     const items = result.messages
       .map((message) => ({
@@ -243,6 +240,7 @@ export async function executeMessagingV1(
   const result = await fetchConversationsFromMoodle(access)
   const moodleToStudentId = await repository.listAccessibleStudentIds(
     actorId,
+    access.moodleSiteId,
     result.conversations.flatMap((conversation) => conversation.members.map((member) => member.id)),
   )
   const items = result.conversations
@@ -256,27 +254,4 @@ export async function executeMessagingV1(
     currentMoodleUserId: result.currentUserId,
     items,
   } satisfies MoodleConversationsDto
-}
-
-export async function sendMessage(body: SendMessagePayload): Promise<Response> {
-  const result = await sendMessageToMoodle(body, body.moodleUserId, body.message)
-  if (result.errorMessage) return errorResponse(result.errorMessage)
-  return jsonResponse({ success: true, message_id: result.messageId })
-}
-
-export async function getConversations(body: GetConversationsPayload): Promise<Response> {
-  const result = await fetchConversationsFromMoodle(body)
-  return jsonResponse({
-    conversations: result.conversations,
-    current_user_id: result.currentUserId,
-  })
-}
-
-export async function getMessages(body: GetMessagesPayload): Promise<Response> {
-  const result = await fetchMessagesFromMoodle(body, body.moodleUserId, body.limitNum ?? 50)
-  return jsonResponse({
-    messages: result.messages,
-    current_user_id: result.currentUserId,
-    conversation_id: result.conversationId,
-  })
 }

@@ -15,7 +15,7 @@ const gateway = createGradeDiagnosticGateway(supabase)
 
 Deno.serve(createHandler(async ({ body, correlationId, user }) => {
   return apiSuccessResponse(
-    await executeAdminDiagnostics(repository, gateway, user.id, correlationId, body),
+    await executeAdminDiagnostics(repository, gateway, supabase, user.id, correlationId, body),
     correlationId,
   )
 }, {

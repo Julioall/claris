@@ -9,6 +9,8 @@ import type { GradeDiagnosticGateway } from './gateway.ts'
 import { mapGradeDiagnosticResult } from './mapper.ts'
 import type { AdminDiagnosticsPayload } from './payload.ts'
 import type { AdminDiagnosticsRepository } from './repository.ts'
+import type { AppSupabaseClient } from '../_shared/db/mod.ts'
+import { resolveOwnedMoodleConnectionScope } from '../_shared/domain/moodle-connections/scope.ts'
 
 type AdminDiagnosticsResult =
   | GradeDiagnosticCoursesDto
@@ -18,14 +20,16 @@ type AdminDiagnosticsResult =
 export async function executeAdminDiagnostics(
   repository: AdminDiagnosticsRepository,
   gateway: GradeDiagnosticGateway,
+  db: AppSupabaseClient,
   actorId: string,
   correlationId: string,
   payload: AdminDiagnosticsPayload,
 ): Promise<AdminDiagnosticsResult> {
+  const scope = await resolveOwnedMoodleConnectionScope(db, actorId, payload.connectionId)
   if (payload.action === 'list_grade_courses') {
     return {
       contractVersion: ADMIN_DIAGNOSTICS_CONTRACT_VERSION,
-      items: (await repository.listGradeCourses()).map((course) => ({
+      items: (await repository.listGradeCourses(scope.moodleSiteId)).map((course) => ({
         id: course.id,
         name: course.name,
       })),
@@ -33,7 +37,7 @@ export async function executeAdminDiagnostics(
   }
 
   if (payload.action === 'list_grade_students') {
-    const students = await repository.listGradeStudents(payload.courseId)
+    const students = await repository.listGradeStudents(scope.moodleSiteId, payload.courseId)
     if (!students) throw ApiError.notFound('Curso não encontrado.')
     return {
       contractVersion: ADMIN_DIAGNOSTICS_CONTRACT_VERSION,
@@ -45,6 +49,7 @@ export async function executeAdminDiagnostics(
   }
 
   const target = await repository.findGradeDiagnosticTarget(
+    scope.moodleSiteId,
     payload.courseId,
     payload.studentId,
   )
@@ -63,7 +68,7 @@ export async function executeAdminDiagnostics(
 
   try {
     const result = mapGradeDiagnosticResult(
-      await gateway.fetchGrades(actorId, target),
+      await gateway.fetchGrades(actorId, scope.connectionId, target),
       operationId,
       target,
     )

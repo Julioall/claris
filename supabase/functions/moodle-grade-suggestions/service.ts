@@ -18,6 +18,8 @@ import {
   updateGradeSuggestionJobProgress,
 } from '../_shared/domain/grade-suggestion-jobs/repository.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
+import { resolveMoodleAccess } from '../_shared/domain/moodle-connections/access.ts'
+import { assertMoodleCourseConnectionScope } from '../_shared/domain/moodle-connections/scope.ts'
 import { executeAiEvaluation } from '../_shared/grade-suggestions/ai-evaluation.ts'
 import { resolveGradeSuggestionRuntimeConfig } from '../_shared/grade-suggestions/config.ts'
 import { buildActivityEvaluationContext } from '../_shared/grade-suggestions/context-builder.ts'
@@ -241,9 +243,8 @@ async function cancelActivitySuggestionJob(params: {
 }
 
 function scheduleActivitySuggestionJobRun(params: {
+  connectionId: string
   jobId: string
-  moodleUrl: string
-  token: string
   userId: string
 }) {
   queueBackgroundTask((async () => {
@@ -299,6 +300,7 @@ function createAuditFinalizer(
 async function runSuggestionGeneration(params: {
   supabase: ReturnType<typeof createServiceClient>
   payload: { moodleUrl: string; token: string }
+  moodleConnectionId: string
   userId: string
   courseId: string
   studentId: string
@@ -328,6 +330,7 @@ async function runSuggestionGeneration(params: {
         course_id: input.courseId,
         student_activity_id: input.studentActivityId,
         moodle_activity_id: input.moodleActivityId,
+        moodle_connection_id: params.moodleConnectionId,
         status: 'processing',
         warnings: [],
         sources_used: [],
@@ -492,9 +495,8 @@ async function loadActivitySuggestionJobResponse(
 }
 
 async function processActivitySuggestionJob(params: {
+  connectionId: string
   jobId: string
-  moodleUrl: string
-  token: string
   userId: string
 }) {
   const supabase = createServiceClient()
@@ -543,6 +545,23 @@ async function processActivitySuggestionJob(params: {
       )
       return
     }
+
+    if (job.moodle_connection_id !== params.connectionId) {
+      await failGradeSuggestionJob(
+        supabase,
+        job.id,
+        'Job pertence a outra conexao Moodle.',
+        new Date().toISOString(),
+      )
+      return
+    }
+    await assertMoodleCourseConnectionScope(
+      supabase,
+      params.userId,
+      params.connectionId,
+      job.course_id,
+    )
+    const access = await resolveMoodleAccess(supabase, params.userId, params.connectionId)
 
     const config = resolveGradeSuggestionRuntimeConfig(storedSettings, storedSettings.aiGradingSettings)
     if (!config.enabled) {
@@ -614,8 +633,8 @@ async function processActivitySuggestionJob(params: {
     }
 
     const getContext = createContextLoader({
-      moodleUrl: params.moodleUrl,
-      token: params.token,
+      moodleUrl: access.moodleUrl,
+      token: access.token,
       courseId: job.course_id,
       moodleCourseId: Number(course.moodle_course_id),
       moodleActivityId: job.moodle_activity_id,
@@ -679,7 +698,8 @@ async function processActivitySuggestionJob(params: {
         const ITEM_TIMEOUT_MS = config.timeoutMs + 60_000
         const output = await withItemTimeout(runSuggestionGeneration({
           supabase,
-          payload: { moodleUrl: params.moodleUrl, token: params.token },
+          payload: { moodleUrl: access.moodleUrl, token: access.token },
+          moodleConnectionId: access.connectionId,
           userId: params.userId,
           courseId: job.course_id,
           studentId: item.student_id,
@@ -852,6 +872,14 @@ export async function handleGradeSuggestionRequest(
       return jsonResponse({ success: false, message: 'A atividade selecionada nao e um assign compativel com a correcao por IA.' }, 400)
     }
 
+    await assertMoodleCourseConnectionScope(
+      supabase,
+      userId,
+      payload.connectionId,
+      payload.courseId,
+    )
+    const access = await resolveMoodleAccess(supabase, userId, payload.connectionId)
+
     const config = resolveGradeSuggestionRuntimeConfig(storedSettings, storedSettings.aiGradingSettings)
     if (!config.enabled) {
       return jsonResponse(buildErrorResult('A analise automatica de notas esta desabilitada no ambiente.'), 200)
@@ -867,8 +895,8 @@ export async function handleGradeSuggestionRequest(
     }
 
     const getContext = createContextLoader({
-      moodleUrl: payload.moodleUrl,
-      token: payload.token,
+      moodleUrl: access.moodleUrl,
+      token: access.token,
       courseId: payload.courseId,
       moodleCourseId: Number(course.moodle_course_id),
       moodleActivityId: payload.moodleActivityId,
@@ -878,7 +906,8 @@ export async function handleGradeSuggestionRequest(
 
     const output = await runSuggestionGeneration({
       supabase,
-      payload,
+      payload: { moodleUrl: access.moodleUrl, token: access.token },
+      moodleConnectionId: access.connectionId,
       userId,
       courseId: payload.courseId,
       studentId: payload.studentId,
@@ -923,6 +952,14 @@ export async function handleGradeSuggestionRequest(
       return jsonResponse({ success: false, message: 'Curso nao encontrado ou sem acesso para este usuario.' }, 404)
     }
 
+    await assertMoodleCourseConnectionScope(
+      supabase,
+      userId,
+      payload.connectionId,
+      payload.courseId,
+    )
+    const access = await resolveMoodleAccess(supabase, userId, payload.connectionId)
+
     if (targets.length === 0) {
       return jsonResponse(buildBatchErrorResult('Nenhuma entrega pendente de correcao foi encontrada para esta atividade.'), 200)
     }
@@ -942,6 +979,7 @@ export async function handleGradeSuggestionRequest(
     }
 
     const existingJob = await findActiveGradeSuggestionJobForActivity(supabase, {
+      connectionId: access.connectionId,
       courseId: payload.courseId,
       moodleActivityId: payload.moodleActivityId,
       userId,
@@ -968,9 +1006,8 @@ export async function handleGradeSuggestionRequest(
       if (shouldResumeExistingJob) {
         await markGradeSuggestionJobProcessing(supabase, refreshedExistingJob.id, new Date().toISOString())
         scheduleActivitySuggestionJobRun({
+          connectionId: access.connectionId,
           jobId: refreshedExistingJob.id,
-          moodleUrl: payload.moodleUrl,
-          token: payload.token,
           userId,
         })
       }
@@ -989,6 +1026,7 @@ export async function handleGradeSuggestionRequest(
         studentName: target.student?.full_name ?? 'Aluno nao identificado',
       })),
       maxGrade: sampleActivity.gradeMax ?? null,
+      moodleConnectionId: access.connectionId,
       moodleActivityId: payload.moodleActivityId,
       userId,
     })
@@ -996,9 +1034,8 @@ export async function handleGradeSuggestionRequest(
     await markGradeSuggestionJobProcessing(supabase, job.id, new Date().toISOString())
 
     scheduleActivitySuggestionJobRun({
+      connectionId: access.connectionId,
       jobId: job.id,
-      moodleUrl: payload.moodleUrl,
-      token: payload.token,
       userId,
     })
 
@@ -1048,6 +1085,16 @@ export async function handleGradeSuggestionRequest(
       return jsonResponse({ success: false, message: 'Job de correcao em lote nao encontrado.' }, 404)
     }
 
+    if (job.moodle_connection_id !== payload.connectionId) {
+      return jsonResponse({ success: false, message: 'Job pertence a outra conexao Moodle.' }, 409)
+    }
+    await assertMoodleCourseConnectionScope(
+      supabase,
+      userId,
+      payload.connectionId,
+      job.course_id,
+    )
+
     if (job.status === 'cancelled') {
       const response = await loadActivitySuggestionJobResponse(supabase, job.id, userId)
       return jsonResponse(response ?? { success: false, jobId: job.id, status: 'cancelled' }, 200)
@@ -1071,9 +1118,8 @@ export async function handleGradeSuggestionRequest(
     await markGradeSuggestionJobProcessing(supabase, job.id, new Date().toISOString())
 
     scheduleActivitySuggestionJobRun({
+      connectionId: payload.connectionId,
       jobId: job.id,
-      moodleUrl: payload.moodleUrl,
-      token: payload.token,
       userId,
     })
 
@@ -1123,6 +1169,17 @@ export async function handleGradeSuggestionRequest(
     return jsonResponse({ success: false, message: 'Nao foi possivel validar curso/aluno desta sugestao.' }, 400)
   }
 
+  if (storedAudit.moodle_connection_id !== payload.connectionId) {
+    return jsonResponse({ success: false, message: 'Sugestao pertence a outra conexao Moodle.' }, 409)
+  }
+  await assertMoodleCourseConnectionScope(
+    supabase,
+    userId,
+    payload.connectionId,
+    storedAudit.course_id,
+  )
+  const access = await resolveMoodleAccess(supabase, userId, payload.connectionId)
+
   const studentMoodleUserId = Number(student.moodle_user_id)
   if (!Number.isFinite(studentMoodleUserId)) {
     return jsonResponse({ success: false, message: 'O aluno nao possui identificador Moodle valido.' }, 400)
@@ -1150,7 +1207,7 @@ export async function handleGradeSuggestionRequest(
         throw new Error('Sugestao sem referencia valida de assign no Moodle.')
       }
 
-      const response = await callMoodleApiPost(payload.moodleUrl, payload.token, 'mod_assign_save_grade', {
+      const response = await callMoodleApiPost(access.moodleUrl, access.token, 'mod_assign_save_grade', {
         assignmentid: audit.moodleAssignId,
         userid: studentMoodleUserId,
         grade: approvedGrade,

@@ -10,9 +10,11 @@ const apiMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/features/settings/api', () => apiMocks);
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 'user-1' } }) }));
 
 const COURSE_ID = '11111111-1111-4111-8111-111111111111';
 const STUDENT_ID = '22222222-2222-4222-8222-222222222222';
+const CONNECTION_ID = '33333333-3333-4333-8333-333333333333';
 const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
 async function pickComboboxOption(index: number, optionName: RegExp) {
@@ -24,6 +26,7 @@ async function pickComboboxOption(index: number, optionName: RegExp) {
 describe('GradeDebugCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.sessionStorage.setItem('claris:selected-moodle-connection:user-1', CONNECTION_ID);
     apiMocks.listGradeDebugCourses.mockResolvedValue([
       { id: COURSE_ID, name: 'Matematica' },
     ]);
@@ -64,13 +67,14 @@ describe('GradeDebugCard', () => {
     await user.click(screen.getByText(/Diagnóstico de Notas/i));
     await pickComboboxOption(0, /Matematica/i);
     await waitFor(() => {
-      expect(apiMocks.listGradeDebugStudents).toHaveBeenCalledWith(COURSE_ID);
+      expect(apiMocks.listGradeDebugStudents).toHaveBeenCalledWith(CONNECTION_ID, COURSE_ID);
     });
     await pickComboboxOption(1, /Ana Silva/i);
     await user.click(screen.getByRole('button', { name: /Executar diagnóstico/i }));
 
     await waitFor(() => {
       expect(apiMocks.debugStudentGrades).toHaveBeenCalledWith({
+        connectionId: CONNECTION_ID,
         courseId: COURSE_ID,
         studentId: STUDENT_ID,
       });

@@ -248,7 +248,7 @@ export function AppSidebar() {
             {!isCollapsed && (
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-sidebar-foreground">{user.full_name}</p>
-                <p className="truncate text-xs text-sidebar-foreground/60">{user.moodle_username}</p>
+                <p className="truncate text-xs text-sidebar-foreground/60">{user.email || 'Conta Claris'}</p>
               </div>
             )}
             <Button

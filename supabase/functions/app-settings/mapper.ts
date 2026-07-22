@@ -9,8 +9,6 @@ import { APP_SETTINGS_CONTRACT_VERSION } from './contract.ts'
 import type { AppSettingsState, PublicAppSettingsState } from './repository.ts'
 import { resolveGradeSuggestionRuntimeConfig } from '../_shared/grade-suggestions/config.ts'
 
-const DEFAULT_MOODLE_URL = 'https://ead.fieg.com.br'
-const DEFAULT_MOODLE_SERVICE = 'moodle_mobile_app'
 const DEFAULT_BASE_URL = 'https://api.openai.com/v1'
 
 const DEFAULT_RISK_THRESHOLDS: RiskThresholdDaysDto = {
@@ -31,10 +29,9 @@ const positiveInteger = (value: unknown, fallback: number): number =>
   typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : fallback
 
 export function mapPublicAppSettings(state?: PublicAppSettingsState | null): PublicAppSettingsDto {
+  void state
   return {
     contractVersion: APP_SETTINGS_CONTRACT_VERSION,
-    moodleConnectionUrl: asTrimmedString(state?.moodleConnectionUrl) || DEFAULT_MOODLE_URL,
-    moodleConnectionService: asTrimmedString(state?.moodleConnectionService) || DEFAULT_MOODLE_SERVICE,
   }
 }
 

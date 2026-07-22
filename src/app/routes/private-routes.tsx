@@ -9,6 +9,7 @@ import {
   CoursePanelPage,
   DashboardPage,
   MessagesPage,
+  MoodleOnboardingPage,
   MyCoursesPage,
   MyServicesPage,
   NoAccessPage,
@@ -27,6 +28,8 @@ import { featureFlags } from '@/lib/feature-flags';
 
 export function renderPrivateRoutes() {
   return (
+    <>
+    <Route path="/onboarding/moodle" element={<ProtectedRoute><MoodleOnboardingPage /></ProtectedRoute>} />
     <Route
       element={(
         <ProtectedRoute>
@@ -52,5 +55,6 @@ export function renderPrivateRoutes() {
       {featureFlags.evolution && <Route path="/meus-servicos" element={<PermissionRoute permission={APP_PERMISSIONS.SERVICES_VIEW}><MyServicesPage /></PermissionRoute>} />}
       <Route path="/sem-acesso" element={<NoAccessPage />} />
     </Route>
+    </>
   );
 }

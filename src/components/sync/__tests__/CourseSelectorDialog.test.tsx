@@ -88,6 +88,7 @@ function renderDialog(
 describe("CourseSelectorDialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.setItem("claris:selected-moodle-connection:user-1", "connection-1");
 
     useAuthMock.mockReturnValue({ user: { id: "user-1" } });
     fetchStudentCountsByCourseIdsMock.mockResolvedValue(new Map([
@@ -125,7 +126,7 @@ describe("CourseSelectorDialog", () => {
 
     expect(onSync).toHaveBeenCalledWith(["c1", "c2"]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(saveUserSyncPreferencesMock).toHaveBeenCalledWith({
+    expect(saveUserSyncPreferencesMock).toHaveBeenCalledWith("connection-1", {
       includeEmptyCourses: false,
       includeFinished: false,
       selectedKeys: ["Escola A::Evento A"],

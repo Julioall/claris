@@ -8,6 +8,7 @@ import {
   AdminGroupEditorPage,
   AdminGroupsPage,
   AdminJobsPage,
+  AdminInvitationsPage,
   AdminMetricsPage,
   AdminSettingsPage,
   AdminSupportPage,
@@ -33,6 +34,7 @@ export function renderAdminRoutes() {
       <Route path="/admin/configuracoes" element={<AdminSettingsPage />} />
       <Route path="/admin/jobs" element={<AdminJobsPage />} />
       <Route path="/admin/usuarios" element={<AdminUsersPage />} />
+      <Route path="/admin/users/invitations" element={<AdminInvitationsPage />} />
       <Route path="/admin/grupos" element={<AdminGroupsPage />} />
       <Route path="/admin/grupos/novo" element={<AdminGroupEditorPage />} />
       <Route path="/admin/grupos/:groupId" element={<AdminGroupEditorPage />} />

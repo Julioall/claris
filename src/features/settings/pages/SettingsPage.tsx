@@ -1,28 +1,18 @@
-import { useQuery } from '@tanstack/react-query';
 import { Clock, LogOut, MessageSquare, RefreshCw, User } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchGlobalSettings } from '@/features/settings/api';
 import { MessagePreferencesCard } from '@/features/settings/components/MessagePreferencesCard';
-import { MoodleReauthCard } from '@/features/settings/components/MoodleReauthCard';
 import { ThemeCard } from '@/features/settings/components/ThemeCard';
-import { DEFAULT_MOODLE_URL } from '@/lib/global-app-settings';
+import { MoodleConnectionsCard } from '@/features/moodle-connections/components/MoodleConnectionsCard';
 
 export default function SettingsPage() {
   const { user, logout, lastSync, syncData, isSyncing, isOfflineMode, courses } = useAuth();
-  const { data: globalSettings } = useQuery({
-    queryKey: ['settings', 'global'],
-    queryFn: fetchGlobalSettings,
-  });
-
-  const moodleConnectionUrl = globalSettings?.moodleConnectionUrl || DEFAULT_MOODLE_URL;
 
   const formatDate = (date: string | null) => {
     if (!date) return 'Nunca';
@@ -56,7 +46,7 @@ export default function SettingsPage() {
                   <User className="h-5 w-5" />
                   Perfil
                 </CardTitle>
-                <CardDescription>Informacoes da sua conta Moodle</CardDescription>
+                <CardDescription>Informacoes da sua conta Claris</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center gap-4">
@@ -65,7 +55,6 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <p className="text-lg font-medium">{user?.full_name}</p>
-                    <p className="text-muted-foreground">{user?.moodle_username}</p>
                     {user?.email && <p className="text-sm text-muted-foreground">{user.email}</p>}
                   </div>
                 </div>
@@ -73,7 +62,7 @@ export default function SettingsPage() {
             </Card>
 
             <ThemeCard />
-            {user ? <MoodleReauthCard userId={user.id} /> : null}
+            {user ? <MoodleConnectionsCard /> : null}
           </div>
 
           <Card>
@@ -92,14 +81,6 @@ export default function SettingsPage() {
                   <Clock className="h-4 w-4 text-muted-foreground" />
                   <span className="text-muted-foreground">Ultima sincronizacao:</span>
                   <span className="font-medium">{formatDate(lastSync)}</span>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm">
-                  <MoodleIcon className="h-4 w-4" />
-                  <span className="text-muted-foreground">URL do Moodle:</span>
-                  <span className="font-medium">{moodleConnectionUrl}</span>
                 </div>
               </div>
 

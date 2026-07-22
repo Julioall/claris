@@ -3,10 +3,13 @@ import { createServiceClient, type AppSupabaseClient, type Json } from '../_shar
 import {
   appendBackgroundJobEvent,
   findBackgroundJobById,
-  updateBackgroundJobWhenStatus,
   type BackgroundJobRecord,
 } from '../_shared/domain/background-jobs/repository.ts'
 import { scheduleMoodleSyncJob } from '../_shared/domain/moodle-sync/job-runner.ts'
+import {
+  cancelMoodleSyncJob,
+  retryMoodleSyncJob,
+} from '../_shared/domain/moodle-sync/worker-repository.ts'
 import type {
   BackgroundJobEventDto,
   BackgroundJobItemDto,
@@ -15,9 +18,9 @@ import type {
 import type { BackgroundJobsPayload } from './payload.ts'
 
 interface UserRow {
+  email: string | null
   full_name: string
   id: string
-  moodle_username: string
 }
 
 export interface BackgroundJobsRepository {
@@ -39,7 +42,7 @@ export interface BackgroundJobsRepository {
 }
 
 function mapUser(row: UserRow): BackgroundJobUserDto {
-  return { fullName: row.full_name, id: row.id, moodleUsername: row.moodle_username }
+  return { email: row.email, fullName: row.full_name, id: row.id }
 }
 
 async function loadUsers(
@@ -50,7 +53,7 @@ async function loadUsers(
   if (unique.length === 0) return new Map()
   const { data, error } = await supabase
     .from('users')
-    .select('id, full_name, moodle_username')
+    .select('id, full_name, email')
     .in('id', unique)
   if (error) throw error
   return new Map(((data ?? []) as UserRow[]).map((row) => [row.id, mapUser(row)]))
@@ -207,24 +210,9 @@ export function createBackgroundJobsRepository(
       }
 
       if (job.job_type !== 'moodle_sync' || job.source !== 'sync') return null
-      const reset = await updateBackgroundJobWhenStatus(supabase, job.id, ['failed', 'cancelled'], {
-        completed_at: null,
-        error_count: 0,
-        error_message: null,
-        processed_items: 0,
-        started_at: null,
-        status: 'pending',
-        success_count: 0,
-      })
+      if (!await retryMoodleSyncJob(supabase, job.id, job.user_id)) return null
+      const reset = await findBackgroundJobById(supabase, job.id)
       if (!reset) return null
-      const { error } = await supabase.from('background_job_items').update({
-        completed_at: null,
-        error_message: null,
-        progress_current: 0,
-        started_at: null,
-        status: 'pending',
-      }).eq('job_id', job.id)
-      if (error) throw error
       await appendAdminEvent(supabase, actorId, reset, 'job_requeued', 'Sincronizacao Moodle reenfileirada pelo administrador.')
       scheduleMoodleSyncJob(reset.id)
       return reset
@@ -251,12 +239,10 @@ export function createBackgroundJobsRepository(
       }
 
       if (job.job_type !== 'moodle_sync' || job.source !== 'sync') return null
-      const cancelled = await updateBackgroundJobWhenStatus(supabase, job.id, ['pending', 'processing'], {
-        completed_at: new Date().toISOString(),
-        status: 'cancelled',
-      })
+      if (!await cancelMoodleSyncJob(supabase, job.id, job.user_id)) return null
+      const cancelled = await findBackgroundJobById(supabase, job.id)
       if (!cancelled) return null
-      await appendAdminEvent(supabase, actorId, cancelled, 'job_cancelled', 'Sincronizacao Moodle cancelada pelo administrador.')
+      await appendAdminEvent(supabase, actorId, cancelled, 'admin_job_cancelled', 'Sincronizacao Moodle cancelada pelo administrador.')
       return cancelled
     },
   }

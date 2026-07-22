@@ -12,7 +12,8 @@ import { useBackgroundActivityFlag } from '@/contexts/BackgroundActivityContext'
 import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import { Textarea } from '@/components/ui/textarea';
-import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { loadSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
 import {
   approveStudentGradeSuggestion,
   cancelActivityGradeSuggestionJob,
@@ -100,7 +101,11 @@ export function AssignmentSuggestionPanel({
   onToggleExpand,
   onApproved,
 }: AssignmentSuggestionPanelProps) {
-  const moodleSession = useMoodleSession();
+  const { user } = useAuth();
+  const connectionId = useMemo(
+    () => user?.id ? loadSelectedMoodleConnectionId(user.id) : null,
+    [user?.id],
+  );
   const { toast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isResumingJob, setIsResumingJob] = useState(false);
@@ -245,12 +250,11 @@ export function AssignmentSuggestionPanel({
   }, [activeJobId, closedSuggestionIds]);
 
   const loadJob = useCallback(async (jobId: string) => {
-    if (!canManageGradeSuggestions || !moodleSession) {
+    if (!canManageGradeSuggestions) {
       return;
     }
 
     const { data, error } = await getActivityGradeSuggestionJob({
-      session: moodleSession,
       jobId,
     });
 
@@ -263,10 +267,10 @@ export function AssignmentSuggestionPanel({
     }
 
     applyJobResponse(data);
-  }, [applyJobResponse, canManageGradeSuggestions, moodleSession]);
+  }, [applyJobResponse, canManageGradeSuggestions]);
 
   const resumeJob = useCallback(async (jobId: string) => {
-    if (!canManageGradeSuggestions || !moodleSession) {
+    if (!canManageGradeSuggestions || !connectionId) {
       return;
     }
 
@@ -274,7 +278,7 @@ export function AssignmentSuggestionPanel({
 
     try {
       const { data, error } = await resumeActivityGradeSuggestionJob({
-        session: moodleSession,
+        connectionId,
         jobId,
       });
 
@@ -293,7 +297,7 @@ export function AssignmentSuggestionPanel({
     } finally {
       setIsResumingJob(false);
     }
-  }, [applyJobResponse, canManageGradeSuggestions, moodleSession]);
+  }, [applyJobResponse, canManageGradeSuggestions, connectionId]);
 
   const cancelJob = useCallback(async (jobId: string) => {
     if (!canManageGradeSuggestions) return;
@@ -329,7 +333,7 @@ export function AssignmentSuggestionPanel({
   }, [applyJobResponse, canManageGradeSuggestions, toast]);
 
   const handleGenerateSuggestions = async () => {
-    if (!canManageGradeSuggestions || !moodleSession || !activity.moodleActivityId) {
+    if (!canManageGradeSuggestions || !connectionId || !activity.moodleActivityId) {
       setBatchError('A sessao Moodle nao esta disponivel para gerar as sugestoes.');
       return;
     }
@@ -348,7 +352,7 @@ export function AssignmentSuggestionPanel({
 
     try {
       const { data, error } = await generateActivityGradeSuggestions({
-        session: moodleSession,
+        connectionId,
         courseId: activity.courseId,
         moodleActivityId: activity.moodleActivityId,
       });
@@ -512,7 +516,7 @@ export function AssignmentSuggestionPanel({
   }, [closedSuggestionIds, rows, submissions]);
 
   const canApproveAll = Boolean(
-    moodleSession &&
+    connectionId &&
     !isApprovingAll &&
     approveEligibleSubmissionIds.length > 0,
   );
@@ -522,7 +526,7 @@ export function AssignmentSuggestionPanel({
     options?: { toastOnSuccess?: boolean; toastOnError?: boolean; triggerRefresh?: boolean },
   ): Promise<{ success: boolean; message?: string }> => {
     const row = rows[submission.id];
-    if (!row?.auditId || !moodleSession) {
+    if (!row?.auditId || !connectionId) {
       return { success: false, message: 'A sessao Moodle nao esta disponivel para aprovacao.' };
     }
 
@@ -547,7 +551,7 @@ export function AssignmentSuggestionPanel({
 
     try {
       const { data, error } = await approveStudentGradeSuggestion({
-        session: moodleSession,
+        connectionId,
         auditId: row.auditId,
         approvedGrade: parsedGrade,
         approvedFeedback: row.editedFeedback.trim(),
@@ -618,7 +622,7 @@ export function AssignmentSuggestionPanel({
   };
 
   const handleApproveAll = async () => {
-    if (!moodleSession || approveEligibleSubmissionIds.length === 0 || isApprovingAll) {
+    if (!connectionId || approveEligibleSubmissionIds.length === 0 || isApprovingAll) {
       return;
     }
 
@@ -730,7 +734,7 @@ export function AssignmentSuggestionPanel({
             variant="outline"
             size="sm"
             onClick={() => void handleGenerateSuggestions()}
-            disabled={!moodleSession || !activity.moodleActivityId || isGenerating || isResumingJob || isApprovingAll || isCancellingJob}
+            disabled={!connectionId || !activity.moodleActivityId || isGenerating || isResumingJob || isApprovingAll || isCancellingJob}
           >
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
             Corrigir

@@ -21,9 +21,8 @@ import {
 import { mapBulkAudience } from './mappers/bulk-messaging.mapper';
 
 interface StartBulkMessageSendInput {
+  connectionId: string;
   messageContent: string;
-  moodleToken: string;
-  moodleUrl: string;
   recipients: BulkMessageRecipientInput[];
 }
 
@@ -105,6 +104,8 @@ function parseAudience(value: unknown): BulkMessageAudienceDto {
   const audience = asRecord(value);
   if (!(
     audience
+    && typeof audience.connectionId === 'string'
+    && typeof audience.moodleSiteId === 'string'
     && Array.isArray(audience.students)
     && audience.students.every(isStudent)
     && isLookup(audience.gradeLookup, true)
@@ -134,10 +135,10 @@ export function buildStudentCourseKey(studentId: string, courseId: string): stri
   return `${studentId}:${courseId}`;
 }
 
-export async function listBulkSendAudienceForUser(): Promise<BulkSendAudienceData> {
+export async function listBulkSendAudienceForUser(connectionId: string): Promise<BulkSendAudienceData> {
   const response = await invokeEdgeFunction<unknown>('bulk-message-audience', {
     auth: 'required',
-    body: { action: 'get_audience' },
+    body: { action: 'get_audience', connectionId },
     timeoutMs: 20_000,
   });
   return mapBulkAudience(parseAudience(response));
@@ -163,14 +164,13 @@ export async function startBulkMessageSend(
     auth: 'required',
     body: {
       action: 'start_send',
+      connectionId: input.connectionId,
       messageContent: input.messageContent.trim(),
-      moodleUrl: input.moodleUrl,
       origin: 'manual',
       recipients: input.recipients.map((recipient) => ({
         personalizedMessage: recipient.personalizedMessage,
         studentId: recipient.studentId,
       })),
-      token: input.moodleToken,
     },
     timeoutMs: 120_000,
   }));

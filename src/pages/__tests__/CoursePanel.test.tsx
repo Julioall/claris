@@ -17,6 +17,7 @@ const approveStudentGradeSuggestionMock = vi.fn();
 const useMoodleSessionMock = vi.fn();
 const syncCourseIncrementalMock = vi.fn();
 const refetchCoursePanelMock = vi.fn();
+const CONNECTION_ID = "11111111-1111-4111-8111-111111111111";
 
 vi.mock("@/features/courses/hooks/useCoursePanel", () => ({
   useCoursePanel: (...args: unknown[]) => adaptCoursePanelMock(useCoursePanelMock(...args)),
@@ -206,6 +207,7 @@ describe("CoursePanel page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     window.sessionStorage.clear();
+    window.sessionStorage.setItem("claris:selected-moodle-connection:u-1", CONNECTION_ID);
     useMoodleSessionMock.mockReturnValue({
       moodleToken: "token-1",
       moodleUrl: "https://moodle.example.com",
@@ -811,11 +813,7 @@ describe("CoursePanel page", () => {
 
     await waitFor(() => {
       expect(generateActivityGradeSuggestionsMock).toHaveBeenCalledWith({
-        session: {
-          moodleToken: "token-1",
-          moodleUrl: "https://moodle.example.com",
-          moodleUserId: 12,
-        },
+        connectionId: CONNECTION_ID,
         courseId: "c-1",
         moodleActivityId: "321",
       });
@@ -823,11 +821,6 @@ describe("CoursePanel page", () => {
 
     await waitFor(() => {
       expect(getActivityGradeSuggestionJobMock).toHaveBeenCalledWith({
-        session: {
-          moodleToken: "token-1",
-          moodleUrl: "https://moodle.example.com",
-          moodleUserId: 12,
-        },
         jobId: "job-1",
       });
     });
@@ -993,11 +986,6 @@ describe("CoursePanel page", () => {
 
     await waitFor(() => {
       expect(getActivityGradeSuggestionJobMock).toHaveBeenCalledWith({
-        session: {
-          moodleToken: "token-1",
-          moodleUrl: "https://moodle.example.com",
-          moodleUserId: 12,
-        },
         jobId: "job-77",
       });
     });
@@ -1133,11 +1121,7 @@ describe("CoursePanel page", () => {
 
     await waitFor(() => {
       expect(approveStudentGradeSuggestionMock).toHaveBeenCalledWith({
-        session: {
-          moodleToken: "token-1",
-          moodleUrl: "https://moodle.example.com",
-          moodleUserId: 12,
-        },
+        connectionId: CONNECTION_ID,
         auditId: "audit-2",
         approvedGrade: 8.5,
         approvedFeedback: "A resposta apresenta boa cobertura dos pontos solicitados.",

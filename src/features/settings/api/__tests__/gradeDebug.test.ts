@@ -14,6 +14,7 @@ import {
 
 const COURSE_ID = '11111111-1111-4111-8111-111111111111';
 const STUDENT_ID = '22222222-2222-4222-8222-222222222222';
+const CONNECTION_ID = '33333333-3333-4333-8333-333333333333';
 
 describe('grade diagnostics API', () => {
   beforeEach(() => {
@@ -22,12 +23,12 @@ describe('grade diagnostics API', () => {
   });
 
   it('uses explicit admin list intents', async () => {
-    await listGradeDebugCourses();
-    await listGradeDebugStudents(COURSE_ID);
+    await listGradeDebugCourses(CONNECTION_ID);
+    await listGradeDebugStudents(CONNECTION_ID, COURSE_ID);
 
     expect(invokeEdgeFunctionMock.mock.calls.map(([, options]) => options.body)).toEqual([
-      { action: 'list_grade_courses' },
-      { action: 'list_grade_students', courseId: COURSE_ID },
+      { action: 'list_grade_courses', connectionId: CONNECTION_ID },
+      { action: 'list_grade_students', connectionId: CONNECTION_ID, courseId: COURSE_ID },
     ]);
   });
 
@@ -42,11 +43,12 @@ describe('grade diagnostics API', () => {
       summary: { returnedItems: 0, totalItems: 0, truncated: false },
     });
 
-    await debugStudentGrades({ courseId: COURSE_ID, studentId: STUDENT_ID });
+    await debugStudentGrades({ connectionId: CONNECTION_ID, courseId: COURSE_ID, studentId: STUDENT_ID });
 
     const body = invokeEdgeFunctionMock.mock.calls[0][1].body;
     expect(body).toEqual({
       action: 'run_grade_diagnostic',
+      connectionId: CONNECTION_ID,
       courseId: COURSE_ID,
       studentId: STUDENT_ID,
     });

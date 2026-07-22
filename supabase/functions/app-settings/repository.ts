@@ -7,12 +7,9 @@ import {
 
 const APP_SETTINGS_ID = 'global'
 
-export interface PublicAppSettingsState {
-  moodleConnectionService: string
-  moodleConnectionUrl: string
-}
+export type PublicAppSettingsState = Record<string, never>
 
-export interface AppSettingsState extends PublicAppSettingsState {
+export interface AppSettingsState {
   aiGradingSettings: unknown
   clarisSettings: unknown
   riskThresholdDays: unknown
@@ -42,24 +39,13 @@ export function createAppSettingsRepository(
     },
 
     async readPublicSettings() {
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('moodle_connection_url, moodle_connection_service')
-        .eq('singleton_id', APP_SETTINGS_ID)
-        .maybeSingle()
-
-      if (error) throw error
-      if (!data) return null
-      return {
-        moodleConnectionUrl: data.moodle_connection_url,
-        moodleConnectionService: data.moodle_connection_service,
-      }
+      return {}
     },
 
     async readAdminSettings() {
       const { data, error } = await supabase
         .from('app_settings')
-        .select('moodle_connection_url, moodle_connection_service, risk_threshold_days, claris_llm_settings, ai_grading_settings')
+        .select('risk_threshold_days, claris_llm_settings, ai_grading_settings')
         .eq('singleton_id', APP_SETTINGS_ID)
         .maybeSingle()
 
@@ -67,8 +53,6 @@ export function createAppSettingsRepository(
       if (!data) return null
 
       return {
-        moodleConnectionUrl: data.moodle_connection_url,
-        moodleConnectionService: data.moodle_connection_service,
         riskThresholdDays: data.risk_threshold_days,
         clarisSettings: data.claris_llm_settings,
         aiGradingSettings: data.ai_grading_settings,

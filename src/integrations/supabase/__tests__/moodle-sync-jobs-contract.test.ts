@@ -15,6 +15,7 @@ import {
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111';
 const COURSE_ID = '22222222-2222-4222-8222-222222222222';
 const JOB_ID = '33333333-3333-4333-8333-333333333333';
+const CONNECTION_ID = '66666666-6666-4666-8666-666666666666';
 
 function backgroundJob(overrides: Partial<BackgroundJobRecord> = {}): BackgroundJobRecord {
   return {
@@ -27,10 +28,12 @@ function backgroundJob(overrides: Partial<BackgroundJobRecord> = {}): Background
     id: JOB_ID,
     job_type: 'moodle_sync',
     metadata: {
+      connection_id: CONNECTION_ID,
       course_ids: [COURSE_ID],
       entities: ['students'],
-      schema_version: 1,
+      schema_version: 2,
       sync_kind: 'incremental',
+      trigger: 'manual',
     },
     processed_items: 0,
     source: 'sync',
@@ -81,8 +84,9 @@ function createRepository(): MoodleSyncJobsRepository {
     hasCourseScope: vi.fn(async () => true),
     hasPermission: vi.fn(async () => true),
     listActiveJobs: vi.fn(async () => []),
+    linkEligibleCourses: vi.fn(async () => 1),
     resetOwnedJob: vi.fn(async () => null),
-    savePreferences: vi.fn(async (_actorId, preferences) => preferences),
+    savePreferences: vi.fn(async (_actorId, _connectionId, preferences) => preferences),
   };
 }
 
@@ -99,7 +103,7 @@ function runtime() {
   };
 }
 
-describe('moodle-sync-jobs V1 contract', () => {
+describe('moodle-sync-jobs V2 contract', () => {
   let repository: MoodleSyncJobsRepository;
 
   beforeEach(() => {
@@ -109,21 +113,24 @@ describe('moodle-sync-jobs V1 contract', () => {
   it('accepts only use-case fields and rejects identity, credentials and persistence names', () => {
     expect(parseMoodleSyncJobsPayload({
       action: 'start_course_sync',
+      connectionId: CONNECTION_ID,
       courseIds: [COURSE_ID],
       entities: ['students', 'grades'],
     })).toEqual({
       action: 'start_course_sync',
+      connectionId: CONNECTION_ID,
       courseIds: [COURSE_ID],
       entities: ['students', 'grades'],
     });
 
     for (const payload of [
-      { action: 'list_available_courses', userId: ACTOR_ID },
-      { action: 'start_initial_sync', courseIds: [COURSE_ID], moodleUrl: 'https://moodle.test' },
-      { action: 'start_initial_sync', courseIds: [COURSE_ID], token: 'browser-token' },
-      { action: 'start_initial_sync', courseIds: [COURSE_ID], password: 'secret' },
-      { action: 'start_initial_sync', course_ids: [COURSE_ID] },
-      { action: 'start_course_sync', courseIds: [COURSE_ID], entities: ['risk'] },
+      { action: 'list_available_courses', connectionId: CONNECTION_ID, userId: ACTOR_ID },
+      { action: 'start_initial_sync', connectionId: CONNECTION_ID, courseIds: [COURSE_ID], moodleUrl: 'https://moodle.test' },
+      { action: 'start_initial_sync', connectionId: CONNECTION_ID, courseIds: [COURSE_ID], token: 'browser-token' },
+      { action: 'start_initial_sync', connectionId: CONNECTION_ID, courseIds: [COURSE_ID], password: 'secret' },
+      { action: 'start_initial_sync', connectionId: CONNECTION_ID, course_ids: [COURSE_ID] },
+      { action: 'start_course_sync', connectionId: CONNECTION_ID, courseIds: [COURSE_ID], entities: ['risk'] },
+      { action: 'start_course_sync', courseIds: [COURSE_ID], entities: ['students'] },
     ]) {
       expect(() => parseMoodleSyncJobsPayload(payload)).toThrowError(
         expect.objectContaining({ status: 422 }),
@@ -132,9 +139,14 @@ describe('moodle-sync-jobs V1 contract', () => {
   });
 
   it('authorizes catalog and incremental operations with backend permissions', async () => {
-    const initial = parseMoodleSyncJobsPayload({ action: 'start_initial_sync', courseIds: [COURSE_ID] });
+    const initial = parseMoodleSyncJobsPayload({
+      action: 'start_initial_sync',
+      connectionId: CONNECTION_ID,
+      courseIds: [COURSE_ID],
+    });
     const incremental = parseMoodleSyncJobsPayload({
       action: 'start_course_sync',
+      connectionId: CONNECTION_ID,
       courseIds: [COURSE_ID],
       entities: ['students'],
     });
@@ -151,6 +163,7 @@ describe('moodle-sync-jobs V1 contract', () => {
 
     await expect(executeMoodleSyncJobs(repository, ACTOR_ID, {
       action: 'start_course_sync',
+      connectionId: CONNECTION_ID,
       courseIds: [COURSE_ID],
       entities: ['students'],
     }, worker)).rejects.toMatchObject({ code: 'forbidden', status: 403 });
@@ -165,12 +178,13 @@ describe('moodle-sync-jobs V1 contract', () => {
 
     const result = await executeMoodleSyncJobs(repository, ACTOR_ID, {
       action: 'start_course_sync',
+      connectionId: CONNECTION_ID,
       courseIds: [COURSE_ID],
       entities: ['students'],
     }, worker);
 
     expect(result).toMatchObject({
-      contractVersion: 1,
+      contractVersion: 2,
       duplicate: true,
       job: {
         id: JOB_ID,
@@ -187,25 +201,28 @@ describe('moodle-sync-jobs V1 contract', () => {
     const worker = runtime();
     vi.mocked(repository.createJob).mockImplementation(async (input) => backgroundJob({
       metadata: {
+        connection_id: input.connectionId,
         course_ids: input.courseIds,
         entities: input.entities,
-        schema_version: 1,
+        schema_version: 2,
         sync_kind: input.kind,
+        trigger: input.trigger,
       },
       total_items: input.itemDefinitions.length,
     }));
 
     const result = await executeMoodleSyncJobs(repository, ACTOR_ID, {
       action: 'start_initial_sync',
+      connectionId: CONNECTION_ID,
       courseIds: [COURSE_ID],
     }, worker);
 
     expect(repository.createJob).toHaveBeenCalledWith(expect.objectContaining({
       actorId: ACTOR_ID,
+      connectionId: CONNECTION_ID,
       courseIds: [COURSE_ID],
       entities: ['students', 'activities', 'grades'],
       itemDefinitions: expect.arrayContaining([
-        expect.objectContaining({ itemKey: 'courses' }),
         expect.objectContaining({ itemKey: `students:${COURSE_ID}` }),
         expect.objectContaining({ itemKey: `activities:${COURSE_ID}` }),
         expect.objectContaining({ itemKey: `grades:${COURSE_ID}` }),
@@ -213,7 +230,8 @@ describe('moodle-sync-jobs V1 contract', () => {
       ]),
     }));
     expect(worker.schedule).toHaveBeenCalledOnce();
-    expect(result).toMatchObject({ contractVersion: 1, duplicate: false, job: { totalItems: 5 } });
+    expect(repository.linkEligibleCourses).toHaveBeenCalledWith(ACTOR_ID, CONNECTION_ID, [COURSE_ID]);
+    expect(result).toMatchObject({ contractVersion: 2, duplicate: false, job: { totalItems: 4 } });
   });
 
   it('aggregates item records into a camelCase polling DTO', () => {
@@ -224,6 +242,7 @@ describe('moodle-sync-jobs V1 contract', () => {
 
     expect(dto).toMatchObject({
       courseIds: [COURSE_ID],
+      connectionId: CONNECTION_ID,
       kind: 'incremental',
       processedItems: 1,
       steps: expect.arrayContaining([
@@ -236,5 +255,16 @@ describe('moodle-sync-jobs V1 contract', () => {
       ]),
     });
     expect(JSON.stringify(dto)).not.toMatch(/course_ids|processed_items|total_count/);
+  });
+
+  it('rejects legacy job metadata instead of running it implicitly', () => {
+    expect(() => mapMoodleSyncJob(backgroundJob({
+      metadata: {
+        course_ids: [COURSE_ID],
+        entities: ['students'],
+        schema_version: 1,
+        sync_kind: 'incremental',
+      },
+    }), [])).toThrowError(expect.objectContaining({ status: 409 }));
   });
 });

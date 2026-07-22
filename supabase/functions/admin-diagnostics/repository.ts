@@ -22,9 +22,9 @@ export interface GradeDiagnosticTarget {
 }
 
 export interface AdminDiagnosticsRepository {
-  findGradeDiagnosticTarget(courseId: string, studentId: string): Promise<GradeDiagnosticTarget | null>
-  listGradeCourses(): Promise<GradeDiagnosticCourseRow[]>
-  listGradeStudents(courseId: string): Promise<GradeDiagnosticStudentRow[] | null>
+  findGradeDiagnosticTarget(moodleSiteId: string, courseId: string, studentId: string): Promise<GradeDiagnosticTarget | null>
+  listGradeCourses(moodleSiteId: string): Promise<GradeDiagnosticCourseRow[]>
+  listGradeStudents(moodleSiteId: string, courseId: string): Promise<GradeDiagnosticStudentRow[] | null>
   recordAudit(input: AdminOperationAuditInput): Promise<void>
 }
 
@@ -47,11 +47,12 @@ function mapStudent(row: StudentJoinRow): GradeDiagnosticStudentRow {
 export function createAdminDiagnosticsRepository(
   supabase: AppSupabaseClient,
 ): AdminDiagnosticsRepository {
-  async function findCourse(courseId: string): Promise<GradeDiagnosticCourseRow | null> {
+  async function findCourse(moodleSiteId: string, courseId: string): Promise<GradeDiagnosticCourseRow | null> {
     const { data, error } = await supabase
       .from('courses')
       .select('id, name, moodle_course_id')
       .eq('id', courseId)
+      .eq('moodle_site_id', moodleSiteId)
       .maybeSingle()
 
     if (error) throw error
@@ -61,8 +62,8 @@ export function createAdminDiagnosticsRepository(
   }
 
   return {
-    async findGradeDiagnosticTarget(courseId, studentId) {
-      const course = await findCourse(courseId)
+    async findGradeDiagnosticTarget(moodleSiteId, courseId, studentId) {
+      const course = await findCourse(moodleSiteId, courseId)
       if (!course) return null
 
       const { data, error } = await supabase
@@ -77,10 +78,11 @@ export function createAdminDiagnosticsRepository(
       return { course, student: mapStudent(data as unknown as StudentJoinRow) }
     },
 
-    async listGradeCourses() {
+    async listGradeCourses(moodleSiteId) {
       const { data, error } = await supabase
         .from('courses')
         .select('id, name, moodle_course_id')
+        .eq('moodle_site_id', moodleSiteId)
         .order('name')
         .limit(200)
 
@@ -92,8 +94,8 @@ export function createAdminDiagnosticsRepository(
       }))
     },
 
-    async listGradeStudents(courseId) {
-      if (!await findCourse(courseId)) return null
+    async listGradeStudents(moodleSiteId, courseId) {
+      if (!await findCourse(moodleSiteId, courseId)) return null
 
       const { data, error } = await supabase
         .from('student_courses')

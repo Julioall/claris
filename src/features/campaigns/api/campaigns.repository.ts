@@ -293,8 +293,8 @@ function scheduledInput(values: ScheduledMessageFormValues) {
   return {
     channel: values.channel,
     messageContent: values.message_content,
-    ...(values.execution_context?.moodle_url
-      ? { moodleUrl: values.execution_context.moodle_url }
+    ...(values.execution_context?.moodle_connection_id
+      ? { moodleConnectionId: values.execution_context.moodle_connection_id }
       : {}),
     ...(values.notes?.trim() ? { notes: values.notes.trim() } : {}),
     schedule: readSchedule(values.execution_context),

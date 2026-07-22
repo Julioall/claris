@@ -41,8 +41,6 @@ describe("AdminConfiguracoes page", () => {
     contractVersion: 1,
     publicSettings: {
       contractVersion: 1,
-      moodleConnectionUrl: "https://ead.fieg.com.br",
-      moodleConnectionService: "moodle_mobile_app",
     },
     riskThresholdDays: { atencao: 7, risco: 14, critico: 30 },
     clarisSettings: {
@@ -102,9 +100,7 @@ describe("AdminConfiguracoes page", () => {
       });
     });
 
-    expect(screen.getByRole("heading", { name: /conexao moodle/i })).toBeInTheDocument();
-    expect(screen.getByText("https://ead.fieg.com.br")).toBeInTheDocument();
-    expect(screen.getByText("moodle_mobile_app")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /conexao moodle/i })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /limiares de risco/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /salvar limiares de risco/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /^claris ia$/i })).toBeInTheDocument();

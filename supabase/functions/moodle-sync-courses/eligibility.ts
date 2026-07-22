@@ -9,6 +9,7 @@ export interface CourseEligibilityPersistenceDependencies {
   replaceUserCourseEligibility(
     supabase: AppSupabaseClient,
     userId: string,
+    connectionId: string,
     courseIds: string[],
   ): Promise<number>
   upsertCourses(
@@ -20,6 +21,7 @@ export interface CourseEligibilityPersistenceDependencies {
 export async function upsertCoursesAndReplaceEligibility(
   supabase: AppSupabaseClient,
   userId: string,
+  connectionId: string,
   payload: CourseInsert[],
   dependencies: CourseEligibilityPersistenceDependencies,
 ): Promise<Tables<'courses'>[]> {
@@ -27,6 +29,7 @@ export async function upsertCoursesAndReplaceEligibility(
   await dependencies.replaceUserCourseEligibility(
     supabase,
     userId,
+    connectionId,
     syncedCourses.map((course) => course.id),
   )
   return syncedCourses
@@ -40,6 +43,7 @@ export interface LinkSelectedCoursesDependencies {
   linkEligibleUserCourses(
     supabase: AppSupabaseClient,
     userId: string,
+    connectionId: string,
     courseIds: string[],
   ): Promise<number>
   now(): Date
@@ -72,6 +76,7 @@ function courseLinkErrorResponse(error: unknown): Response | null {
 export async function executeEligibleCourseLink(
   supabase: AppSupabaseClient,
   userId: string,
+  connectionId: string,
   selectedCourseIds: string[],
   dependencies: LinkSelectedCoursesDependencies,
 ): Promise<Response> {
@@ -83,6 +88,7 @@ export async function executeEligibleCourseLink(
     linkedCourseCount = await dependencies.linkEligibleUserCourses(
       supabase,
       linkUser.id,
+      connectionId,
       selectedCourseIds,
     )
   } catch (error) {
@@ -98,5 +104,11 @@ export async function executeEligibleCourseLink(
   )
 
   console.log(`Linked ${linkedCourseCount} courses for user ${linkUser.id}`)
-  return jsonResponse({ success: true, added: linkedCourseCount, removed: 0 })
+  return jsonResponse({
+    success: true,
+    contractVersion: 2,
+    connectionId,
+    added: linkedCourseCount,
+    removed: 0,
+  })
 }

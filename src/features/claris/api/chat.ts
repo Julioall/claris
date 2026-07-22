@@ -14,6 +14,7 @@ export type { ClarisAvailabilityStatus } from './contracts/claris-chat.contract'
 const FUNCTION_NAME = 'claris-chat';
 
 export interface ClarisChatInvokePayload {
+  connectionId?: string;
   action?: {
     kind: 'quick_reply';
     value: string;
@@ -98,6 +99,7 @@ export async function invokeClarisChat(
       operation: 'send_message',
       message: payload.message,
       history: payload.history,
+      ...(payload.connectionId ? { connectionId: payload.connectionId } : {}),
       ...(payload.action ? { action: payload.action } : {}),
     },
     timeoutMs: 125_000,

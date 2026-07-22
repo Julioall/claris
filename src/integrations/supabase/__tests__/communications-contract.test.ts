@@ -26,6 +26,8 @@ import { toWhatsAppApiResponse } from '../../../../supabase/functions/whatsapp-m
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111';
 const STUDENT_ID = '22222222-2222-4222-8222-222222222222';
 const MESSAGE_ID = '33333333-3333-4333-8333-333333333333';
+const CONNECTION_ID = '44444444-4444-4444-8444-444444444444';
+const SITE_ID = '55555555-5555-4555-8555-555555555555';
 
 const template: MessageTemplateRecord = {
   category: 'geral',
@@ -98,6 +100,7 @@ function campaignsRepository(): CampaignsRepository {
       studentId: STUDENT_ID,
       studentName: 'Nome do backend',
     }]),
+    resolveMoodleScope: vi.fn(async () => ({ connectionId: CONNECTION_ID, moodleSiteId: SITE_ID })),
     transitionScheduledMessage: vi.fn(async (input) => ({
       ...scheduledMessage,
       status: input.nextStatus,
@@ -121,17 +124,17 @@ describe('communications backend contracts', () => {
 
   it.each([
     () => parseMessageTemplatesPayload({ action: 'list_templates', userId: ACTOR_ID }),
-    () => parseBulkMessageAudiencePayload({ action: 'get_audience', userId: ACTOR_ID }),
+    () => parseBulkMessageAudiencePayload({ action: 'get_audience', connectionId: CONNECTION_ID, userId: ACTOR_ID }),
     () => parseBulkMessageSendPayload({
       action: 'start_send',
       messageContent: 'Aviso',
-      moodleUrl: 'https://moodle.example.com',
+      connectionId: CONNECTION_ID,
       recipients: [{
         studentId: STUDENT_ID,
         studentName: 'Nome controlado',
         moodleUserId: 'moodle-controlado',
       }],
-      token: 'token',
+      token: 'browser-token',
     }),
     () => parseCampaignsPayload({
       action: 'list_bulk_jobs',
@@ -161,15 +164,16 @@ describe('communications backend contracts', () => {
   it('resolves the audience with the authenticated actor and permission', async () => {
     const repository: BulkMessageAudienceRepository = {
       listAudience: vi.fn(async () => ({ gradeLookup: {}, pendingLookup: {}, students: [] })),
+      resolveOwnedConnectionScope: vi.fn(async () => ({ connectionId: CONNECTION_ID, moodleSiteId: SITE_ID })),
       userHasPermission: vi.fn(async () => true),
     };
-    const payload = parseBulkMessageAudiencePayload({ action: 'get_audience' });
+    const payload = parseBulkMessageAudiencePayload({ action: 'get_audience', connectionId: CONNECTION_ID });
     await expect(authorizeBulkMessageAudience(repository, ACTOR_ID, payload)).resolves.toBe(true);
     await expect(executeBulkMessageAudience(repository, ACTOR_ID, payload)).resolves.toMatchObject({
       metadata: { contractVersion: 1 },
     });
     expect(repository.userHasPermission).toHaveBeenCalledWith(ACTOR_ID, 'messages.bulk_send');
-    expect(repository.listAudience).toHaveBeenCalledWith(ACTOR_ID);
+    expect(repository.listAudience).toHaveBeenCalledWith(ACTOR_ID, SITE_ID);
   });
 
   it('recalculates Moodle recipients and persists only the authoritative snapshot', async () => {
@@ -178,7 +182,7 @@ describe('communications backend contracts', () => {
       input: {
         channel: 'moodle',
         messageContent: 'Aviso',
-        moodleUrl: 'https://moodle.example.com',
+        moodleConnectionId: CONNECTION_ID,
         schedule: { type: 'specific_date' },
         scheduledAt: '2026-07-22T10:00:00.000Z',
         selectedRecipients: [{ personalizedMessage: 'Ola', studentId: STUDENT_ID }],
@@ -187,13 +191,14 @@ describe('communications backend contracts', () => {
     });
 
     const result = await executeCampaigns(campaigns, ACTOR_ID, payload);
-    expect(campaigns.resolveRecipients).toHaveBeenCalledWith(ACTOR_ID, [{
+    expect(campaigns.resolveRecipients).toHaveBeenCalledWith(ACTOR_ID, SITE_ID, [{
       personalizedMessage: 'Ola',
       studentId: STUDENT_ID,
     }]);
     const write = vi.mocked(campaigns.createScheduledMessage).mock.calls[0][1] as ScheduledMessageWriteRecord;
     expect(write.recipientCount).toBe(1);
     expect(write.executionContext).toMatchObject({
+      moodle_connection_id: CONNECTION_ID,
       recipient_snapshot: [{
         moodle_user_id: 'moodle-authoritative',
         student_name: 'Nome do backend',

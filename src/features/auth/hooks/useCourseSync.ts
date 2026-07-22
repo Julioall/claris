@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { Course } from '@/features/courses/types';
+import { loadSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
 import { useBackgroundActivity } from '@/contexts/BackgroundActivityContext';
 import { toast } from '@/hooks/use-toast';
 import { logError, trackEvent } from '@/lib/tracking';
@@ -104,6 +105,7 @@ export function useCourseSync(params: {
   setLastSync: (value: string | null) => void;
 }): UseCourseSyncResult {
   const { userId, setLastSync } = params;
+  const connectionId = userId ? loadSelectedMoodleConnectionId(userId) : null;
   const { trackActivity } = useBackgroundActivity();
   const [courses, setCourses] = useState<Course[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -120,8 +122,8 @@ export function useCourseSync(params: {
   }, []);
 
   useEffect(() => {
-    if (!userId) resetSyncState();
-  }, [resetSyncState, userId]);
+    if (!userId || !connectionId) resetSyncState();
+  }, [connectionId, resetSyncState, userId]);
 
   const closeSyncProgress = useCallback(() => {
     setSyncProgress((previous) => ({ ...previous, isOpen: false }));
@@ -154,12 +156,12 @@ export function useCourseSync(params: {
   }, [setLastSync]);
 
   useEffect(() => {
-    if (!userId || monitoredJobIdRef.current) return;
+    if (!userId || !connectionId || monitoredJobIdRef.current) return;
     let cancelled = false;
 
     void listActiveMoodleSyncJobs()
       .then(async (jobs) => {
-        const latest = jobs[0];
+        const latest = jobs.find((job) => job.connectionId === connectionId);
         if (!latest || cancelled || monitoredJobIdRef.current) return;
         try {
           await monitorJob(latest, { openProgress: true });
@@ -174,13 +176,21 @@ export function useCourseSync(params: {
     return () => {
       cancelled = true;
     };
-  }, [monitorJob, userId]);
+  }, [connectionId, monitorJob, userId]);
 
   const syncData = useCallback(async () => {
     if (!userId) {
       toast({
         title: 'Erro',
         description: 'Sessao expirada. Faca login novamente.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (!connectionId) {
+      toast({
+        title: 'Conexao Moodle necessaria',
+        description: 'Selecione uma conexao Moodle antes de sincronizar.',
         variant: 'destructive',
       });
       return;
@@ -192,7 +202,7 @@ export function useCourseSync(params: {
 
     setIsSyncing(true);
     try {
-      const availableCourses = await listAvailableMoodleCourses();
+      const availableCourses = await listAvailableMoodleCourses(connectionId);
       setCourses(availableCourses);
       if (availableCourses.length > 0) {
         setShowCourseSelector(true);
@@ -212,10 +222,10 @@ export function useCourseSync(params: {
     } finally {
       setIsSyncing(false);
     }
-  }, [courses.length, userId]);
+  }, [connectionId, courses.length, userId]);
 
   const syncSelectedCourses = useCallback(async (courseIds: string[]) => {
-    if (courseIds.length === 0) return;
+    if (courseIds.length === 0 || !connectionId) return;
 
     await trackActivity({
       label: 'Sincronizando dados do Moodle',
@@ -232,7 +242,7 @@ export function useCourseSync(params: {
       void trackEvent('sync_start', { metadata: { courseCount: courseIds.length } });
 
       try {
-        const started = await startInitialMoodleSync(courseIds);
+        const started = await startInitialMoodleSync(connectionId, courseIds);
         const finalJob = await monitorJob(started.job);
         const summary = summaryFromJob(finalJob);
 
@@ -267,13 +277,21 @@ export function useCourseSync(params: {
         });
       }
     });
-  }, [monitorJob, trackActivity]);
+  }, [connectionId, monitorJob, trackActivity]);
 
   const syncEntitiesIncremental = useCallback(async (
     courseIds: string[],
     entities: CourseScopedSyncEntity[],
     labels?: { successTitle?: string; emptyMessage?: string; silent?: boolean },
   ): Promise<ScopedSyncSummary | null> => {
+    if (!connectionId) {
+      toast({
+        title: 'Conexao Moodle necessaria',
+        description: 'Selecione uma conexao Moodle antes de sincronizar.',
+        variant: 'destructive',
+      });
+      return null;
+    }
     if (courseIds.length === 0) {
       toast({
         title: 'Nenhum curso selecionado',
@@ -290,7 +308,7 @@ export function useCourseSync(params: {
     }, async () => {
       setIsSyncing(true);
       try {
-        const started = await startCourseMoodleSync(courseIds, entities);
+        const started = await startCourseMoodleSync(connectionId, courseIds, entities);
         const finalJob = await monitorJob(started.job, { openProgress: !labels?.silent });
         const summary = summaryFromJob(finalJob);
 
@@ -322,7 +340,7 @@ export function useCourseSync(params: {
         return null;
       }
     });
-  }, [monitorJob, trackActivity]);
+  }, [connectionId, monitorJob, trackActivity]);
 
   const syncStudentsIncremental = useCallback(async (courseIds: string[]) => {
     await syncEntitiesIncremental(courseIds, ['students'], {

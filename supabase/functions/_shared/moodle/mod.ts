@@ -7,13 +7,18 @@ export {
   callMoodleApiPost,
   getSiteInfo,
   getUserCourses,
+  getCourseUpdatesSince,
   getCategories,
   buildCategoryPath,
   resolveCourseCategoryName,
   getCourseEnrolledUsers,
   getCourseSuspendedUserIds,
   getUserProfilesByIds,
+  MoodleApiError,
 } from './client.ts'
+
+export type { MoodleApiErrorCategory } from './client.ts'
+export { normalizeApprovedMoodleBaseUrl } from './site-url.ts'
 
 export type {
   MoodleTokenResponse,
@@ -23,4 +28,5 @@ export type {
   MoodleEnrolledUser,
   MoodleUserProfile,
   MoodleSiteInfo,
+  MoodleCourseUpdatesSince,
 } from './types.ts'

@@ -15,21 +15,15 @@ export interface GlobalRiskThresholdDays {
 
 export interface GlobalAppSettings {
   singletonId: string;
-  moodleConnectionUrl: string;
-  moodleConnectionService: string;
   riskThresholdDays: GlobalRiskThresholdDays;
   clarisSettings: ClarisLlmSettings;
   aiGradingSettings: AiGradingSettings;
 }
 
 export const GLOBAL_APP_SETTINGS_ID = 'global';
-export const DEFAULT_MOODLE_URL = 'https://ead.fieg.com.br';
-export const DEFAULT_MOODLE_SERVICE = 'moodle_mobile_app';
 
 export const DEFAULT_GLOBAL_APP_SETTINGS: GlobalAppSettings = {
   singletonId: GLOBAL_APP_SETTINGS_ID,
-  moodleConnectionUrl: DEFAULT_MOODLE_URL,
-  moodleConnectionService: DEFAULT_MOODLE_SERVICE,
   riskThresholdDays: {
     atencao: 7,
     risco: 14,

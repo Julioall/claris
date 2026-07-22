@@ -14,14 +14,10 @@ describe('global settings API client', () => {
   it('loads only the authenticated public configuration DTO', async () => {
     invokeMock.mockResolvedValue({
       contractVersion: 1,
-      moodleConnectionUrl: 'https://ead.fieg.com.br',
-      moodleConnectionService: 'moodle_mobile_app',
     });
 
     await expect(fetchGlobalSettings()).resolves.toEqual({
       contractVersion: 1,
-      moodleConnectionUrl: 'https://ead.fieg.com.br',
-      moodleConnectionService: 'moodle_mobile_app',
     });
     expect(invokeMock).toHaveBeenCalledWith('app-settings', {
       body: { action: 'get_public' },
@@ -31,8 +27,6 @@ describe('global settings API client', () => {
   it('rejects unexpected fields in the public response', async () => {
     invokeMock.mockResolvedValue({
       contractVersion: 1,
-      moodleConnectionUrl: 'https://ead.fieg.com.br',
-      moodleConnectionService: 'moodle_mobile_app',
       clarisSettings: { apiKey: 'server-secret' },
     });
 

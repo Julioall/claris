@@ -7,7 +7,7 @@ import type {
   PublicAppSettingsDto,
 } from '../contracts/app-settings.contract';
 
-const PUBLIC_FIELDS = new Set(['contractVersion', 'moodleConnectionUrl', 'moodleConnectionService']);
+const PUBLIC_FIELDS = new Set(['contractVersion']);
 const ADMIN_FIELDS = new Set(['contractVersion', 'publicSettings', 'riskThresholdDays', 'clarisSettings', 'aiGradingSettings']);
 const CLARIS_FIELDS = new Set([
   'provider',
@@ -51,16 +51,12 @@ export function parsePublicAppSettingsDto(value: unknown): PublicAppSettingsDto 
     !isRecord(value)
     || !hasOnlyFields(value, PUBLIC_FIELDS)
     || value.contractVersion !== 1
-    || typeof value.moodleConnectionUrl !== 'string'
-    || typeof value.moodleConnectionService !== 'string'
   ) {
     invalidResponse();
   }
 
   return {
     contractVersion: 1,
-    moodleConnectionUrl: value.moodleConnectionUrl,
-    moodleConnectionService: value.moodleConnectionService,
   };
 }
 

@@ -7,11 +7,17 @@ import {
   replaceUserCourseEligibility,
   upsertCourses,
 } from '../_shared/domain/moodle-sync/repository.ts'
+import { computeContentHash } from '../_shared/domain/moodle-sync/content-hash.ts'
+import type { MoodleAccess } from '../_shared/domain/moodle-connections/mod.ts'
+import {
+  findFreshMoodleCategoryCache,
+  updateMoodleConnectionDiscovery,
+  updateMoodleSiteObservation,
+  upsertMoodleCategoryCache,
+} from '../_shared/domain/moodle-connections/mod.ts'
 import {
   findUserById,
-  findUserByMoodleUserId,
   touchUserLastSync,
-  updateUserProfile,
 } from '../_shared/domain/users/repository.ts'
 import {
   getCategories,
@@ -20,37 +26,68 @@ import {
   getUserCourses,
   resolveCourseCategoryName,
 } from '../_shared/moodle/mod.ts'
+import type { MoodleCategory } from '../_shared/moodle/mod.ts'
 import {
   executeEligibleCourseLink,
   upsertCoursesAndReplaceEligibility,
 } from './eligibility.ts'
 
-const PRIMARY_MOODLE_URL = 'https://ead.fieg.com.br'
 const TUTOR_ROLE_KEYWORDS = ['teacher', 'editingteacher', 'tutor', 'monitor']
 const ENROLLED_USERS_POOL_SIZE = 2
 const ENROLLED_USERS_BATCH_DELAY_MS = 500
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+async function sha256(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+async function loadConnectionCategories(
+  supabase: ReturnType<typeof createServiceClient>,
+  access: MoodleAccess,
+): Promise<MoodleCategory[]> {
+  const now = new Date()
+  try {
+    const cached = await findFreshMoodleCategoryCache(supabase, access.connectionId, now.toISOString())
+    if (cached && Array.isArray(cached.categories)) {
+      return cached.categories as unknown as MoodleCategory[]
+    }
+  } catch (error) {
+    console.warn('[moodle-sync-courses] Category cache read failed.', {
+      connectionId: access.connectionId,
+      errorType: error instanceof Error ? error.name : 'unknown',
+    })
+  }
+
+  const categories = await getCategories(access.moodleUrl, access.token)
+  const serialized = JSON.stringify(categories)
+  const byteSize = new TextEncoder().encode(serialized).byteLength
+  if (byteSize <= 4 * 1024 * 1024) {
+    const observedAt = now.toISOString()
+    await upsertMoodleCategoryCache(supabase, {
+      byteSize,
+      categories: JSON.parse(serialized),
+      connectionId: access.connectionId,
+      contentHash: await sha256(serialized),
+      expiresAt: new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString(),
+      observedAt,
+    }).catch((error) => {
+      console.warn('[moodle-sync-courses] Category cache write failed.', {
+        connectionId: access.connectionId,
+        errorType: error instanceof Error ? error.name : 'unknown',
+      })
+    })
+  }
+  return categories
+}
+
 function normalizeEmail(value: string | null | undefined): string | null {
   if (typeof value !== 'string') return null
   const normalized = value.trim().toLowerCase()
   return normalized.length > 0 ? normalized : null
-}
-
-/**
- * Validates email format using a simple regex.
- * Returns true if email looks valid (has @ and domain).
- */
-function isValidEmail(email: string | null): email is string {
-  if (!email) return false
-  // Simple validation: must have @ and at least one char before/after
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  return emailRegex.test(email)
-}
-
-function normalizeUrl(value: string): string {
-  return value.trim().replace(/\/+$/, '').toLowerCase()
 }
 
 function normalizeRoleValue(value: string): string {
@@ -118,19 +155,21 @@ async function listCoursesWithTutorRole(params: {
 }
 
 export async function syncCourses(
-  _moodleUrl: string,
-  token: string,
-  userId: string,
+  access: MoodleAccess,
   options: { autoLinkTutorCourses?: boolean } = {},
 ): Promise<Response> {
   const supabase = createServiceClient()
 
-  const dbUser = await findUserByMoodleUserId(supabase, userId)
+  const dbUser = await findUserById(supabase, access.userId)
 
   if (!dbUser) return errorResponse('User not found in database', 404)
 
-  const numericUserId = parseInt(userId, 10)
-  const moodleBaseUrl = normalizeUrl(PRIMARY_MOODLE_URL)
+  const numericUserId = Number.parseInt(access.moodleUserId, 10)
+  if (!Number.isSafeInteger(numericUserId) || numericUserId <= 0) {
+    return errorResponse('Moodle connection has an invalid external user id', 409)
+  }
+  const moodleBaseUrl = access.moodleUrl
+  const token = access.token
 
   let siteInfo: Awaited<ReturnType<typeof getSiteInfo>>
   let moodleCourses: Awaited<ReturnType<typeof getUserCourses>>
@@ -139,7 +178,7 @@ export async function syncCourses(
     ;[siteInfo, moodleCourses, categories] = await Promise.all([
       getSiteInfo(moodleBaseUrl, token),
       getUserCourses(moodleBaseUrl, token, numericUserId),
-      getCategories(moodleBaseUrl, token),
+      loadConnectionCategories(supabase, access),
     ])
     if (moodleCourses.length === 0) {
       throw new Error(`No courses returned for ${moodleBaseUrl}`)
@@ -152,38 +191,47 @@ export async function syncCourses(
   try {
     const now = new Date().toISOString()
     const profileEmail = normalizeEmail(siteInfo.email)
+    const functionNames = (siteInfo.functions ?? [])
+      .map((entry) => entry.name)
+      .filter((name): name is string => typeof name === 'string' && name.length > 0)
 
-    await updateUserProfile(supabase, dbUser.id, {
-      moodle_username: siteInfo.username,
-      full_name: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`,
-      email: profileEmail,
-      avatar_url: siteInfo.profileimageurl || null,
-      updated_at: now,
-    })
-
-    if (profileEmail && isValidEmail(profileEmail)) {
-      const updateAuthUserResult = await supabase.auth.admin.updateUserById(dbUser.id, {
+    await Promise.all([
+      updateMoodleConnectionDiscovery(supabase, {
+        capabilities: {
+          functions: functionNames,
+          observedAt: now,
+          release: siteInfo.release ?? null,
+          version: siteInfo.version ?? null,
+        },
+        connectionId: access.connectionId,
         email: profileEmail,
-        email_confirm: true,
-        user_metadata: { moodle_user_id: String(siteInfo.userid) },
-      })
-
-      if (updateAuthUserResult.error) {
-        console.warn('[moodle-sync-courses] Failed to sync auth email:', updateAuthUserResult.error)
-      }
-    } else if (profileEmail) {
-      console.warn(
-        `[moodle-sync-courses] Email from Moodle failed validation: "${profileEmail}". Skipping auth update.`,
-      )
-    }
+        fullName: siteInfo.fullname || `${siteInfo.firstname} ${siteInfo.lastname}`.trim() || null,
+        moodleUserId: String(siteInfo.userid),
+        username: siteInfo.username || null,
+      }),
+      updateMoodleSiteObservation(
+        supabase,
+        access.moodleSiteId,
+        siteInfo.release ?? null,
+        siteInfo.version ?? null,
+      ),
+    ])
   } catch (profileSyncError) {
-    console.warn('[moodle-sync-courses] Failed to sync tutor profile metadata:', profileSyncError)
+    console.warn('[moodle-sync-courses] Failed to persist sanitized Moodle discovery metadata.', {
+      connectionId: access.connectionId,
+      errorType: profileSyncError instanceof Error ? profileSyncError.name : 'unknown',
+    })
   }
 
-  console.log(`Found ${moodleCourses.length} courses for user ${userId}`)
-  console.log(`Found ${categories.length} categories`)
+  console.log('[moodle-sync-courses] Discovery completed.', {
+    categoryCount: categories.length,
+    connectionId: access.connectionId,
+    courseCount: moodleCourses.length,
+    siteSlug: access.siteSlug,
+  })
   const existingCourseCategories = await listCourseCategoriesByMoodleCourseIds(
     supabase,
+    access.moodleSiteId,
     moodleCourses.map((course) => String(course.id)),
   )
 
@@ -194,7 +242,7 @@ export async function syncCourses(
   const now = new Date().toISOString()
   const unresolvedCourseIds: string[] = []
 
-  const coursesData = moodleCourses.map((course) => {
+  const coursesData = await Promise.all(moodleCourses.map(async (course) => {
     const moodleCourseId = String(course.id)
     const categoryName = resolveCourseCategoryName(
       course.category,
@@ -206,17 +254,25 @@ export async function syncCourses(
       unresolvedCourseIds.push(moodleCourseId)
     }
 
-    return {
+    const normalizedCourse = {
       moodle_course_id: moodleCourseId,
+      moodle_site_id: access.moodleSiteId,
       name: course.fullname,
       short_name: course.shortname,
       category: categoryName,
       start_date: course.startdate ? new Date(course.startdate * 1000).toISOString() : null,
       end_date: course.enddate ? new Date(course.enddate * 1000).toISOString() : null,
+    }
+
+    return {
+      ...normalizedCourse,
+      content_hash: await computeContentHash(normalizedCourse),
+      observed_at: now,
+      last_synced_connection_id: access.connectionId,
       last_sync: now,
       updated_at: now,
     }
-  })
+  }))
 
   if (unresolvedCourseIds.length > 0) {
     console.error(
@@ -233,6 +289,7 @@ export async function syncCourses(
     const syncedCourses = await upsertCoursesAndReplaceEligibility(
       supabase,
       dbUser.id,
+      access.connectionId,
       coursesData,
       {
         replaceUserCourseEligibility,
@@ -269,6 +326,7 @@ export async function syncCourses(
         await linkEligibleUserCourses(
           supabase,
           dbUser.id,
+          access.connectionId,
           eligibleCourseIds.slice(i, i + LINK_BATCH_SIZE),
         )
       }
@@ -290,7 +348,13 @@ export async function syncCourses(
 
     await touchUserLastSync(supabase, dbUser.id, now)
 
-    return jsonResponse({ success: true, courses: syncedCourses || [] })
+    return jsonResponse({
+      success: true,
+      contractVersion: 2,
+      connectionId: access.connectionId,
+      siteSlug: access.siteSlug,
+      courses: syncedCourses || [],
+    })
   } catch (upsertError) {
     console.error('Error upserting courses:', upsertError)
     return errorResponse('Failed to sync courses', 500)
@@ -299,11 +363,13 @@ export async function syncCourses(
 
 export async function linkSelectedCourses(
   userId: string,
+  connectionId: string,
   selectedCourseIds: string[],
 ): Promise<Response> {
   return executeEligibleCourseLink(
     createServiceClient(),
     userId,
+    connectionId,
     selectedCourseIds,
     {
       findUserById,

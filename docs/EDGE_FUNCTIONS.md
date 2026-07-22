@@ -216,7 +216,8 @@ O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e
 - `grade-suggestion-jobs`: localiza o job relevante do ator para uma atividade autorizada, sem acesso direto do browser as tabelas operacionais
 - `tasks`: lista tarefas com filtros e ordenacao estaveis, consolida detalhe/comentarios/tags e executa comandos escopados ao criador ou responsavel
 - `calendar-events`: executa o CRUD de agenda owner-scoped, valida intervalos e deriva proprietario/origem do token
-- `moodle-sync-jobs`: inicia, retoma e consulta sincronizacoes Moodle; tambem concentra preferencias, contagem por curso e recalculo de risco
+- `moodle-sync-jobs`: contrato V2 que inicia, retoma e consulta sincronizacoes por `connectionId`; tambem concentra preferencias, contagem por curso e recalculo de risco
+- `moodle-sync-worker`: dispatcher protegido por `MOODLE_SYNC_WORKER_CRON_SECRET`; executa claims curtos com budget, lease, heartbeat e checkpoint
 - `background-jobs`: entrega polling actor-scoped e operacoes administrativas de lista, detalhe, retry e cancelamento
 - `activity-feed`: lista notificacoes do ator sem expor a tabela ao navegador
 
@@ -236,7 +237,7 @@ No Epic 6, `tasks` e `calendar-events` substituem os repositories Supabase do br
 
 ### Sincronizacao Moodle e jobs longos
 
-`moodle-sync-jobs` recebe apenas a intencao e o escopo de cursos. O service e independente do runtime; a implementacao Supabase/Moodle e injetada por `runtime.ts`, facilitando uma futura troca do adaptador por uma API .NET sem alterar o contrato consumido pelo React.
+`moodle-sync-jobs` recebe apenas `connectionId`, intencao e IDs internos de cursos. A criacao V2 grava job, contexto imutavel e itens em uma RPC atomica; payload e job V1 sao rejeitados.
 
 ```text
 start_* -> pending -> processing -> completed
@@ -245,9 +246,11 @@ start_* -> pending -> processing -> completed
                          +-> cancelled-+ retry
 ```
 
-A chave canonica considera ator, tipo, cursos e entidades. Um indice unico parcial bloqueia dois registros `pending/processing` equivalentes, inclusive em corrida. O worker resolve no servidor a credencial de reautorizacao criptografada e um token Moodle novo; depois executa cursos/vinculo, alunos, atividades, notas e risco, persistindo cada etapa em `background_job_items`. Cancelamento e claim usam updates condicionais de status para que worker, usuario e administrador nao sobrescrevam uma transicao concorrente.
+A chave canonica considera ator, conexao, tipo, cursos e entidades. Um indice unico parcial bloqueia dois registros `pending/processing` equivalentes, inclusive em corrida. O worker resolve no servidor a conexao, o site aprovado e um token Moodle; cada claim usa `FOR UPDATE SKIP LOCKED`, lease e limites por conexao/site. Paginas de atividades/notas salvam cursor e liberam a lease, e o watermark so avanca na mesma transacao da conclusao do item.
 
-O frontend recebe um DTO agregado em `camelCase` e faz polling. Fechar a aba nao cancela o trabalho; ao reconstruir a sessao, `useCourseSync` consulta jobs ativos e retoma o acompanhamento. `background-jobs` oferece a visao operacional, enquanto `activity-feed` fornece notificacoes. As tabelas `background_jobs`, `background_job_items`, `background_job_events`, `activity_feed` e `user_sync_preferences` sao service-only.
+`EdgeRuntime.waitUntil` apenas acelera o primeiro ciclo. Um agendador duravel deve chamar `moodle-sync-worker` periodicamente com um segredo aleatorio de no minimo 32 caracteres em `MOODLE_SYNC_WORKER_CRON_SECRET`. A chamada usa `{}` por padrao; budget, lease e limites possuem tetos validados no endpoint. Sem esse agendamento, retries e leases expiradas continuam persistidos, mas nao progridem autonomamente.
+
+O frontend recebe um DTO V2 agregado em `camelCase` e faz polling. Fechar a aba nao cancela o trabalho; ao reconstruir a sessao, `useCourseSync` retoma somente jobs da conexao explicitamente selecionada. `background-jobs` oferece a visao operacional. Jobs e contexto, itens, eventos, watermarks e `user_moodle_sync_preferences` sao service-only.
 
 ## Nova function: `moodle-grade-suggestions`
 

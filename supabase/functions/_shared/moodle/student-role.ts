@@ -39,7 +39,8 @@ export function isStudentLikeUser(user: { roles?: MoodleUserRole[] }): boolean {
     .map((roleLabel) => normalizeRoleLabel(String(roleLabel || '')))
     .filter(Boolean)
 
-  if (roleLabels.length === 0) return true
+  // Missing roles are ambiguous and must not be treated as proof of a student.
+  if (roleLabels.length === 0) return false
 
   if (roleLabels.some((role) => isStaffRoleLabel(role))) return false
 

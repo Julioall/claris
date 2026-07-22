@@ -1,7 +1,7 @@
 import {
   expectBodyObject,
-  readRequiredMoodleUrl,
   readRequiredString,
+  readRequiredUuid,
 } from '../_shared/http/mod.ts'
 import { RequestBodyValidationError } from '../_shared/http/body.ts'
 
@@ -14,30 +14,36 @@ const ACTIONS = [
   'approve_suggestion',
 ] as const
 
+const ACTION_FIELDS: Record<(typeof ACTIONS)[number], ReadonlySet<string>> = {
+  generate_suggestion: new Set(['action', 'connectionId', 'courseId', 'studentId', 'moodleActivityId']),
+  generate_activity_suggestions: new Set(['action', 'connectionId', 'courseId', 'moodleActivityId']),
+  get_activity_suggestion_job: new Set(['action', 'jobId']),
+  resume_activity_suggestion_job: new Set(['action', 'connectionId', 'jobId']),
+  cancel_activity_suggestion_job: new Set(['action', 'jobId']),
+  approve_suggestion: new Set(['action', 'connectionId', 'auditId', 'approvedGrade', 'approvedFeedback']),
+}
+
 export interface GenerateGradeSuggestionPayload {
   action: 'generate_suggestion'
+  connectionId: string
   courseId: string
   studentId: string
   moodleActivityId: string
-  moodleUrl: string
-  token: string
 }
 
 export interface ApproveGradeSuggestionPayload {
   action: 'approve_suggestion'
   auditId: string
-  moodleUrl: string
-  token: string
+  connectionId: string
   approvedGrade: number
   approvedFeedback: string
 }
 
 export interface GenerateActivityGradeSuggestionsPayload {
   action: 'generate_activity_suggestions'
+  connectionId: string
   courseId: string
   moodleActivityId: string
-  moodleUrl: string
-  token: string
 }
 
 export interface GetActivityGradeSuggestionJobPayload {
@@ -47,9 +53,8 @@ export interface GetActivityGradeSuggestionJobPayload {
 
 export interface ResumeActivityGradeSuggestionJobPayload {
   action: 'resume_activity_suggestion_job'
+  connectionId: string
   jobId: string
-  moodleUrl: string
-  token: string
 }
 
 export interface CancelActivityGradeSuggestionJobPayload {
@@ -88,13 +93,15 @@ function readRequiredFiniteNumber(body: Record<string, unknown>, fieldName: stri
 export function parseMoodleGradeSuggestionPayload(rawBody: unknown): MoodleGradeSuggestionPayload {
   const body = expectBodyObject(rawBody)
   const action = readRequiredAction(body)
+  if (Object.keys(body).some((field) => !ACTION_FIELDS[action].has(field))) {
+    throw new RequestBodyValidationError('Invalid request fields', 422)
+  }
 
   if (action === 'approve_suggestion') {
     return {
       action,
       auditId: readRequiredString(body, 'auditId', 200),
-      moodleUrl: readRequiredMoodleUrl(body),
-      token: readRequiredString(body, 'token', 4096),
+      connectionId: readRequiredUuid(body, 'connectionId'),
       approvedGrade: readRequiredFiniteNumber(body, 'approvedGrade'),
       approvedFeedback: readRequiredString(body, 'approvedFeedback', 12000),
     }
@@ -117,28 +124,25 @@ export function parseMoodleGradeSuggestionPayload(rawBody: unknown): MoodleGrade
   if (action === 'resume_activity_suggestion_job') {
     return {
       action,
+      connectionId: readRequiredUuid(body, 'connectionId'),
       jobId: readRequiredString(body, 'jobId', 200),
-      moodleUrl: readRequiredMoodleUrl(body),
-      token: readRequiredString(body, 'token', 4096),
     }
   }
 
   if (action === 'generate_activity_suggestions') {
     return {
       action,
+      connectionId: readRequiredUuid(body, 'connectionId'),
       courseId: readRequiredString(body, 'courseId', 200),
       moodleActivityId: readRequiredString(body, 'moodleActivityId', 200),
-      moodleUrl: readRequiredMoodleUrl(body),
-      token: readRequiredString(body, 'token', 4096),
     }
   }
 
   return {
     action,
+    connectionId: readRequiredUuid(body, 'connectionId'),
     courseId: readRequiredString(body, 'courseId', 200),
     studentId: readRequiredString(body, 'studentId', 200),
     moodleActivityId: readRequiredString(body, 'moodleActivityId', 200),
-    moodleUrl: readRequiredMoodleUrl(body),
-    token: readRequiredString(body, 'token', 4096),
   }
 }

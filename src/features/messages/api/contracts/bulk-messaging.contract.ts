@@ -28,11 +28,13 @@ export interface BulkAudienceStudentDto {
 }
 
 export interface BulkMessageAudienceDto {
+  connectionId: string;
   gradeLookup: Record<string, {
     gradeFormatted: string | null;
     gradePercentage: number | null;
   }>;
   metadata: BulkMessagingMetadataDto;
+  moodleSiteId: string;
   pendingLookup: Record<string, number>;
   students: BulkAudienceStudentDto[];
 }

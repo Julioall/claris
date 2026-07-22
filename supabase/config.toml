@@ -38,17 +38,25 @@ enabled = true
 site_url = "http://127.0.0.1:8080"
 additional_redirect_urls = [
   "http://localhost:8080",
+  "http://localhost:8080/auth/accept-invite",
+  "http://localhost:8080/reset-password",
   "http://127.0.0.1:8080",
+  "http://127.0.0.1:8080/auth/accept-invite",
+  "http://127.0.0.1:8080/reset-password",
   "http://localhost:3000",
-  "http://127.0.0.1:3000"
+  "http://localhost:3000/auth/accept-invite",
+  "http://localhost:3000/reset-password",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3000/auth/accept-invite",
+  "http://127.0.0.1:3000/reset-password"
 ]
 jwt_expiry = 3600
-enable_signup = true
+enable_signup = false
 
-[functions.moodle-auth]
+[functions.moodle-connections]
 verify_jwt = false
 
-[functions.moodle-reauth-settings]
+[functions.claris-invitations]
 verify_jwt = false
 
 [functions.app-telemetry]
@@ -103,6 +111,12 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.moodle-sync-jobs]
+verify_jwt = false
+
+[functions.moodle-sync-worker]
+verify_jwt = false
+
+[functions.moodle-course-snapshot]
 verify_jwt = false
 
 [functions.moodle-grade-suggestions]

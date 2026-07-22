@@ -6,6 +6,7 @@ const SCHEDULED_MESSAGES_SECRET =
   process.env.SCHEDULED_MESSAGES_CRON_SECRET || 'claris-scheduled-messages-local-secret'
 
 const seed = {
+  connectionId: '10000000-0000-4000-8000-000000000001',
   courseMoodleId: 'smoke-course-001',
   courseName: 'Curso Smoke Edge',
   courseShortName: 'SMOKE-EDGE',
@@ -42,11 +43,26 @@ function extractJsonBlock(rawOutput) {
 }
 
 function getLocalSupabaseStatus() {
-  const rawOutput = execFileSync(
-    'docker',
-    ['exec', RUNNER_CONTAINER, 'supabase', 'status', '--output', 'json'],
-    { encoding: 'utf8' },
-  )
+  let rawOutput
+  try {
+    rawOutput = execFileSync(
+      'docker',
+      ['exec', RUNNER_CONTAINER, 'supabase', 'status', '--output', 'json'],
+      { encoding: 'utf8' },
+    )
+  } catch {
+    rawOutput = process.platform === 'win32'
+      ? execFileSync(
+        'cmd.exe',
+        ['/d', '/s', '/c', 'npx --yes supabase@2.76.8 status --output json'],
+        { encoding: 'utf8' },
+      )
+      : execFileSync(
+        'npx',
+        ['--yes', 'supabase@2.76.8', 'status', '--output', 'json'],
+        { encoding: 'utf8' },
+      )
+  }
 
   return JSON.parse(extractJsonBlock(rawOutput))
 }
@@ -75,8 +91,8 @@ async function getLocalSupabaseStatusWithRetry() {
 
 async function waitForEdgeFunctions(status) {
   const maxAttempts = 20
-  const testUrl = `${status.FUNCTIONS_URL}/moodle-auth`
-  const testBody = { moodleUrl: 'https://example.com', username: 'warmup', password: 'warmup' }
+  const testUrl = `${status.FUNCTIONS_URL}/moodle-connections`
+  const testBody = { action: 'list_sites' }
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
@@ -292,12 +308,26 @@ async function seedGenerateAutomatedTasksScenario(status, authUserId) {
     email: seed.email,
     full_name: seed.fullName,
     id: authUserId,
-    moodle_user_id: seed.moodleUserId,
-    moodle_username: seed.username,
   })
 
-  const [course] = await upsertRows(status, 'courses', 'moodle_course_id', {
+  const [site] = await selectRows(status, 'moodle_sites', { slug: 'fieg' })
+  if (!site?.id) fail('Nao foi possivel encontrar o site FIEG para o smoke.')
+
+  await upsertRows(status, 'user_moodle_connections', 'id', {
+    alias: 'FIEG Smoke',
+    can_write: false,
+    id: seed.connectionId,
+    moodle_site_id: site.id,
+    moodle_user_id: seed.moodleUserId,
+    moodle_username: seed.username,
+    reauth_enabled: false,
+    status: 'active',
+    user_id: authUserId,
+  })
+
+  const [course] = await upsertRows(status, 'courses', 'moodle_site_id,moodle_course_id', {
     moodle_course_id: seed.courseMoodleId,
+    moodle_site_id: site.id,
     name: seed.courseName,
     short_name: seed.courseShortName,
   })
@@ -306,10 +336,11 @@ async function seedGenerateAutomatedTasksScenario(status, authUserId) {
     fail('Nao foi possivel seedar o curso de smoke.')
   }
 
-  const [student] = await upsertRows(status, 'students', 'moodle_user_id', {
+  const [student] = await upsertRows(status, 'students', 'moodle_site_id,moodle_user_id', {
     current_risk_level: 'risco',
     full_name: seed.studentFullName,
     moodle_user_id: seed.studentMoodleUserId,
+    moodle_site_id: site.id,
   })
 
   if (!student?.id) {
@@ -340,7 +371,7 @@ async function seedGenerateAutomatedTasksScenario(status, authUserId) {
     user_id: authUserId,
   })
 
-  return { courseId: course.id, studentId: student.id }
+  return { connectionId: seed.connectionId, courseId: course.id, siteId: site.id, studentId: student.id }
 }
 
 async function cleanupAutomatedTaskArtifacts(status, authUserId, studentId) {
@@ -425,10 +456,50 @@ async function callScheduledMessageProcessor(status, body, secret) {
 async function runUnauthenticatedContractChecks(status) {
   const cases = [
     {
-      body: { moodleUrl: 'foo', password: 'demo123', username: 'demo' },
-      expectedStatus: 400,
-      name: 'moodle-auth invalid-url',
-      path: 'moodle-auth',
+      body: {
+        action: 'get_course_snapshot',
+        connectionId: '00000000-0000-4000-8000-000000000001',
+        courseId: '00000000-0000-4000-8000-000000000002',
+        entities: ['grades'],
+        refreshPolicy: 'never',
+      },
+      expectedStatus: 401,
+      name: 'moodle-course-snapshot valid-no-auth',
+      path: 'moodle-course-snapshot',
+    },
+    {
+      body: {
+        action: 'get_course_snapshot',
+        connectionId: '00000000-0000-4000-8000-000000000001',
+        courseId: '00000000-0000-4000-8000-000000000002',
+        entities: ['grades'],
+        moodleUrl: 'https://attacker.example',
+        refreshPolicy: 'never',
+        token: 'never-sent',
+      },
+      expectedStatus: 422,
+      name: 'moodle-course-snapshot rejects-browser-routing',
+      path: 'moodle-course-snapshot',
+    },
+    {
+      body: { action: 'list_sites' },
+      expectedStatus: 401,
+      name: 'moodle-connections valid-no-auth',
+      path: 'moodle-connections',
+    },
+    {
+      body: {
+        action: 'create_connection',
+        alias: 'invalid',
+        canWrite: false,
+        moodlePassword: 'never-sent',
+        moodleUsername: 'demo',
+        moodleUrl: 'https://attacker.example',
+        siteId: '00000000-0000-4000-8000-000000000001',
+      },
+      expectedStatus: 422,
+      name: 'moodle-connections rejects-browser-routing',
+      path: 'moodle-connections',
     },
     {
       body: { action: 'unknown' },
@@ -439,9 +510,8 @@ async function runUnauthenticatedContractChecks(status) {
     {
       body: {
         action: 'retry_send',
+        connectionId: '00000000-0000-4000-8000-000000000001',
         jobId: '00000000-0000-4000-8000-000000000001',
-        moodleUrl: 'https://example.com',
-        token: 'token-demo',
       },
       expectedStatus: 401,
       name: 'bulk-message-send valid-no-auth',
@@ -450,21 +520,20 @@ async function runUnauthenticatedContractChecks(status) {
     {
       body: {
         action: 'start_send',
+        connectionId: '00000000-0000-4000-8000-000000000001',
         messageContent: 'Mensagem smoke',
-        moodleUrl: 'https://example.com',
         origin: 'manual',
         recipients: [{
           personalizedMessage: 'Mensagem smoke',
           studentId: '00000000-0000-4000-8000-000000000001',
         }],
-        token: 'token-demo',
       },
       expectedStatus: 401,
       name: 'bulk-message-send create-no-auth',
       path: 'bulk-message-send',
     },
     {
-      body: { action: 'get_audience' },
+      body: { action: 'get_audience', connectionId: '00000000-0000-4000-8000-000000000001' },
       expectedStatus: 401,
       name: 'bulk-message-audience valid-no-auth',
       path: 'bulk-message-audience',
@@ -522,7 +591,7 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'data-cleanup',
     },
     {
-      body: { action: 'list_grade_courses' },
+      body: { action: 'list_grade_courses', connectionId: '00000000-0000-4000-8000-000000000001' },
       expectedStatus: 401,
       name: 'admin-diagnostics valid-no-auth',
       path: 'admin-diagnostics',
@@ -547,6 +616,7 @@ async function runUnauthenticatedContractChecks(status) {
     {
       body: {
         action: 'link_selected_courses',
+        connectionId: '00000000-0000-4000-8000-000000000001',
         selectedCourseIds: [
           '00000000-0000-4000-8000-000000000001',
           '00000000-0000-4000-8000-000000000002',
@@ -623,19 +693,29 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'claris-suggestions',
     },
     {
-      body: { courseId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
+      body: {
+        connectionId: '00000000-0000-4000-8000-000000000001',
+        courseId: '00000000-0000-4000-8000-000000000002',
+      },
       expectedStatus: 401,
       name: 'moodle-sync-students valid-no-auth',
       path: 'moodle-sync-students',
     },
     {
-      body: { courseId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
+      body: {
+        connectionId: '00000000-0000-4000-8000-000000000001',
+        courseId: '00000000-0000-4000-8000-000000000002',
+      },
       expectedStatus: 401,
       name: 'moodle-sync-activities valid-no-auth',
       path: 'moodle-sync-activities',
     },
     {
-      body: { action: 'sync_grades', courseId: 1, moodleUrl: 'https://example.com', token: 'token-demo' },
+      body: {
+        action: 'sync_grades',
+        connectionId: '00000000-0000-4000-8000-000000000001',
+        courseId: '00000000-0000-4000-8000-000000000002',
+      },
       expectedStatus: 401,
       name: 'moodle-sync-grades sync-no-auth',
       path: 'moodle-sync-grades',
@@ -648,7 +728,12 @@ async function runUnauthenticatedContractChecks(status) {
       path: 'moodle-messaging',
     },
     {
-      body: { action: 'get_messages', limit: 10, moodleUserId: 1 },
+      body: {
+        action: 'get_messages',
+        connectionId: '00000000-0000-4000-8000-000000000001',
+        limit: 10,
+        moodleUserId: 1,
+      },
       expectedStatus: 401,
       headers: { 'x-claris-api-version': '1' },
       name: 'moodle-messaging valid-no-auth',
@@ -765,32 +850,11 @@ async function runUnauthenticatedContractChecks(status) {
     fail(`Falhas nos contratos HTTP sem auth: ${JSON.stringify(failures)}`)
   }
 
-  const unauthorized = await callV1EdgeFunction(
-    status,
-    'moodle-reauth-settings',
-    { action: 'get_settings' },
-    { acceptStatuses: [401], correlationId: 'smoke-v1-unauthorized' },
-  )
-  assertV1Response(unauthorized, {
-    code: 'unauthorized',
-    correlationId: 'smoke-v1-unauthorized',
-    status: 401,
-  })
-
-  const invalid = await callV1EdgeFunction(
-    status,
-    'moodle-reauth-settings',
-    { action: 'update_settings', enabled: 'invalid' },
-    { acceptStatuses: [422], correlationId: 'smoke-v1-validation' },
-  )
-  assertV1Response(invalid, {
-    code: 'validation_failed',
-    correlationId: 'smoke-v1-validation',
-    status: 422,
-  })
-
   const communicationCases = [
-    ['bulk-message-audience', { action: 'get_audience' }],
+    ['bulk-message-audience', {
+      action: 'get_audience',
+      connectionId: '00000000-0000-4000-8000-000000000001',
+    }],
     ['message-templates', { action: 'list_templates' }],
     ['campaigns', { action: 'list_bulk_jobs', filters: {}, order: 'createdAtDesc', page: 1, pageSize: 10 }],
     ['whatsapp-messaging', { action: 'list_instances' }],
@@ -2599,9 +2663,22 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
   const jobId = '00000000-0000-4000-8000-000000000971'
   const sourceRecordId = '00000000-0000-4000-8000-000000000972'
   const feedId = '00000000-0000-4000-8000-000000000973'
+  const connectionId = '00000000-0000-4000-8000-000000000974'
 
-  await upsertRows(status, 'user_course_catalog_eligibility', 'user_id,course_id', {
+  const [smokeCourse] = await selectRows(status, 'courses', { id: courseId })
+  if (!smokeCourse?.moodle_site_id) fail('Curso do smoke nao possui moodle_site_id.')
+  await upsertRows(status, 'user_moodle_connections', 'id', {
+    alias: 'Smoke Moodle',
+    id: connectionId,
+    moodle_site_id: smokeCourse.moodle_site_id,
+    moodle_user_id: `smoke-${authUserId}`,
+    status: 'active',
+    user_id: authUserId,
+  })
+
+  await upsertRows(status, 'user_course_catalog_eligibility', 'user_id,moodle_connection_id,course_id', {
     course_id: courseId,
+    moodle_connection_id: connectionId,
     user_id: authUserId,
   })
 
@@ -2612,7 +2689,7 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
       functionName: 'moodle-sync-jobs',
     },
     {
-      body: { action: 'start_initial_sync', courseIds: [courseId], token: 'browser-token' },
+      body: { action: 'start_initial_sync', connectionId, courseIds: [courseId], token: 'browser-token' },
       correlationId: 'smoke-v1-moodle-sync-token',
       functionName: 'moodle-sync-jobs',
     },
@@ -2643,6 +2720,7 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
 
   const savedPreferences = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
     action: 'save_preferences',
+    connectionId,
     includeEmptyCourses: true,
     includeFinished: false,
     selectedKeys: ['Smoke::Evento'],
@@ -2664,6 +2742,7 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
 
   const loadedPreferences = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
     action: 'get_preferences',
+    connectionId,
   }, {
     acceptStatuses: [200],
     accessToken,
@@ -2679,6 +2758,7 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
 
   const courseCounts = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
     action: 'get_course_student_counts',
+    connectionId,
     courseIds: [courseId],
   }, {
     acceptStatuses: [200],
@@ -2692,6 +2772,7 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
 
   const risk = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
     action: 'recalculate_risk',
+    connectionId,
     courseIds: [courseId],
   }, {
     acceptStatuses: [200],
@@ -2699,13 +2780,13 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
     correlationId: 'smoke-v1-sync-risk',
   })
   assertV1Response(risk, { correlationId: 'smoke-v1-sync-risk', status: 200 })
-  if (risk.data?.data?.contractVersion !== 1 || typeof risk.data?.data?.updatedCount !== 'number') {
+  if (risk.data?.data?.contractVersion !== 2 || typeof risk.data?.data?.updatedCount !== 'number') {
     fail(`moodle-sync-jobs retornou recálculo de risco invalido: ${JSON.stringify(risk.data)}`)
   }
 
-  await deleteRows(status, 'user_moodle_reauth_credentials', { user_id: authUserId }, 'user_id')
   const liveJobStart = await callV1EdgeFunction(status, 'moodle-sync-jobs', {
     action: 'start_course_sync',
+    connectionId,
     courseIds: [courseId],
     entities: ['students'],
   }, {
@@ -2733,8 +2814,8 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
       assertV1Response(polled, { correlationId, status: 200 })
       const job = polled.data?.data?.job
       if (job?.status === 'failed') {
-        if (!String(job.errorMessage || '').toLowerCase().includes('reautorizacao')) {
-          fail(`Worker falhou sem erro controlado de reautorizacao: ${JSON.stringify(polled.data)}`)
+        if (!(job.errorCount > 0)) {
+          fail(`Worker falhou sem contabilizar o erro controlado: ${JSON.stringify(polled.data)}`)
         }
         return job
       }
@@ -2767,10 +2848,12 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
     id: jobId,
     job_type: 'moodle_sync',
     metadata: {
+      connection_id: connectionId,
       course_ids: [courseId],
       entities: ['students'],
-      schema_version: 1,
+      schema_version: 2,
       sync_kind: 'incremental',
+      trigger: 'manual',
     },
     source: 'sync',
     source_record_id: sourceRecordId,
@@ -2779,6 +2862,12 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
     title: 'Smoke Moodle Sync Job',
     total_items: 2,
     user_id: authUserId,
+  })
+  await upsertRows(status, 'moodle_sync_job_context', 'job_id', {
+    job_id: jobId,
+    moodle_connection_id: connectionId,
+    schema_version: 2,
+    sync_policy: { trigger: 'manual' },
   })
   await upsertRows(status, 'activity_feed', 'id', {
     description: 'Notificacao isolada do smoke',
@@ -2857,8 +2946,9 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
 
   await deleteRows(status, 'background_jobs', { id: jobId })
   await deleteRows(status, 'activity_feed', { id: feedId })
+  await deleteRows(status, 'user_moodle_connections', { id: connectionId })
   runCourseManagementGrantChecks()
-  log('Sincronizacao, risco, preferencias, jobs e activity feed validados pela fronteira backend V1.')
+  log('Sincronizacao V2, risco, preferencias por conexao, jobs e activity feed validados.')
 }
 
 async function runClarisConversationChecks(status, accessToken, authUserId) {
@@ -4346,27 +4436,12 @@ async function runAdminDiagnosticsAndCleanupChecks(
   log('Limpeza e diagnosticos admin validados com confirmacao, DTO seguro e auditoria imutavel.')
 }
 
-async function runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId) {
+async function runAuthenticatedServiceCheck(status, accessToken, authUserId, connectionId, siteId, courseId, studentId) {
   await runAccessControlChecks(status, accessToken, authUserId)
   await runServiceIntegrationChecks(status, accessToken, authUserId)
   await runAppSettingsChecks(status, accessToken, authUserId)
   await runAdminObservabilityChecks(status, accessToken, authUserId)
   await runAdminDiagnosticsAndCleanupChecks(status, accessToken, authUserId, courseId, studentId)
-
-  const settings = await callV1EdgeFunction(
-    status,
-    'moodle-reauth-settings',
-    { action: 'get_settings' },
-    {
-      acceptStatuses: [200],
-      accessToken,
-      correlationId: 'smoke-v1-settings',
-    },
-  )
-  assertV1Response(settings, { correlationId: 'smoke-v1-settings', status: 200 })
-  if (typeof settings.data?.data?.preferenceEnabled !== 'boolean') {
-    fail(`moodle-reauth-settings retornou DTO invalido: ${JSON.stringify(settings.data)}`)
-  }
 
   const clarisAvailability = await callV1EdgeFunction(
     status,
@@ -4449,15 +4524,17 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, cou
   await deleteRows(status, 'app_error_logs', { message: telemetryErrorMessage })
   log('app-telemetry validado com identidade autenticada e persistencia real.')
 
-  const [hiddenCourse] = await upsertRows(status, 'courses', 'moodle_course_id', {
+  const [hiddenCourse] = await upsertRows(status, 'courses', 'moodle_site_id,moodle_course_id', {
     moodle_course_id: 'smoke-hidden-course-001',
+    moodle_site_id: siteId,
     name: 'Curso Smoke Oculto',
     short_name: 'SMOKE-HIDDEN',
   })
-  const [hiddenStudent] = await upsertRows(status, 'students', 'moodle_user_id', {
+  const [hiddenStudent] = await upsertRows(status, 'students', 'moodle_site_id,moodle_user_id', {
     current_risk_level: 'critico',
     full_name: 'Aluno Smoke Edge Oculto',
     moodle_user_id: 'smoke-hidden-student-001',
+    moodle_site_id: siteId,
   })
   if (!hiddenCourse?.id || !hiddenStudent?.id) {
     fail('Nao foi possivel seedar o cenario de isolamento das sugestoes de tag.')
@@ -4715,10 +4792,10 @@ async function main() {
   log('Seedando usuario local autenticado e dados minimos de dominio...')
   const authUserId = await ensureAuthUser(status)
   const accessToken = await signInSeedUser(status)
-  const { courseId, studentId } = await seedGenerateAutomatedTasksScenario(status, authUserId)
+  const { connectionId, courseId, siteId, studentId } = await seedGenerateAutomatedTasksScenario(status, authUserId)
 
   log('Executando smoke autenticado ate a camada de servico...')
-  await runAuthenticatedServiceCheck(status, accessToken, authUserId, courseId, studentId)
+  await runAuthenticatedServiceCheck(status, accessToken, authUserId, connectionId, siteId, courseId, studentId)
 
   log('Smoke test de Edge Functions concluido com sucesso.')
 }

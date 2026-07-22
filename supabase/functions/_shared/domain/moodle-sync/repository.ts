@@ -4,7 +4,10 @@ import type {
   TablesInsert,
 } from '../../db/mod.ts'
 
-export type CourseSyncRecord = Pick<Tables<'courses'>, 'id' | 'start_date'>
+export type CourseSyncRecord = Pick<
+  Tables<'courses'>,
+  'id' | 'moodle_course_id' | 'moodle_site_id' | 'start_date'
+>
 export type ExistingCourseCategoryRecord = Pick<Tables<'courses'>, 'moodle_course_id' | 'category'>
 export type CourseInsert = TablesInsert<'courses'>
 export type StudentInsert = TablesInsert<'students'>
@@ -16,12 +19,28 @@ export type StudentSyncSnapshotInsert = TablesInsert<'student_sync_snapshots'>
 
 export async function findCourseByMoodleCourseId(
   supabase: AppSupabaseClient,
+  moodleSiteId: string,
   moodleCourseId: string,
 ): Promise<CourseSyncRecord | null> {
   const { data, error } = await supabase
     .from('courses')
-    .select('id, start_date')
+    .select('id, moodle_course_id, moodle_site_id, start_date')
+    .eq('moodle_site_id', moodleSiteId)
     .eq('moodle_course_id', moodleCourseId)
+    .maybeSingle()
+
+  if (error) throw error
+  return data
+}
+
+export async function findCourseById(
+  supabase: AppSupabaseClient,
+  courseId: string,
+): Promise<CourseSyncRecord | null> {
+  const { data, error } = await supabase
+    .from('courses')
+    .select('id, moodle_course_id, moodle_site_id, start_date')
+    .eq('id', courseId)
     .maybeSingle()
 
   if (error) throw error
@@ -32,10 +51,39 @@ export async function upsertCourses(
   supabase: AppSupabaseClient,
   payload: CourseInsert[],
 ): Promise<Tables<'courses'>[]> {
+  if (payload.length === 0) return []
+  const siteIds = new Set(payload.map((course) => course.moodle_site_id))
+  if (siteIds.size !== 1) throw new Error('Course upsert batch must belong to one Moodle site')
+  const moodleSiteId = payload[0].moodle_site_id
+  const moodleCourseIds = payload.map((course) => course.moodle_course_id)
+
+  const { data: existing, error: existingError } = await supabase
+    .from('courses')
+    .select('moodle_course_id, content_hash')
+    .eq('moodle_site_id', moodleSiteId)
+    .in('moodle_course_id', moodleCourseIds)
+  if (existingError) throw existingError
+
+  const existingHashes = new Map(
+    (existing ?? []).map((course) => [course.moodle_course_id, course.content_hash]),
+  )
+  const changed = payload.filter((course) => (
+    !existingHashes.has(course.moodle_course_id)
+    || existingHashes.get(course.moodle_course_id) !== (course.content_hash ?? null)
+  ))
+
+  if (changed.length > 0) {
+    const { error } = await supabase
+      .from('courses')
+      .upsert(changed, { onConflict: 'moodle_site_id,moodle_course_id', ignoreDuplicates: false })
+    if (error) throw error
+  }
+
   const { data, error } = await supabase
     .from('courses')
-    .upsert(payload, { onConflict: 'moodle_course_id', ignoreDuplicates: false })
-    .select()
+    .select('*')
+    .eq('moodle_site_id', moodleSiteId)
+    .in('moodle_course_id', moodleCourseIds)
 
   if (error) throw error
   return data ?? []
@@ -57,10 +105,12 @@ function affectedRowCount(value: unknown, operation: string): number {
 export async function replaceUserCourseEligibility(
   supabase: AppSupabaseClient,
   userId: string,
+  connectionId: string,
   courseIds: string[],
 ): Promise<number> {
   const { data, error } = await supabase.rpc('backend_replace_user_course_eligibility', {
     p_course_ids: courseIds,
+    p_moodle_connection_id: connectionId,
     p_user_id: userId,
   })
 
@@ -71,10 +121,12 @@ export async function replaceUserCourseEligibility(
 export async function linkEligibleUserCourses(
   supabase: AppSupabaseClient,
   userId: string,
+  connectionId: string,
   courseIds: string[],
 ): Promise<number> {
   const { data, error } = await supabase.rpc('backend_link_eligible_user_courses', {
     p_course_ids: courseIds,
+    p_moodle_connection_id: connectionId,
     p_user_id: userId,
   })
 
@@ -84,6 +136,7 @@ export async function linkEligibleUserCourses(
 
 export async function listCourseCategoriesByMoodleCourseIds(
   supabase: AppSupabaseClient,
+  moodleSiteId: string,
   moodleCourseIds: string[],
 ): Promise<ExistingCourseCategoryRecord[]> {
   if (moodleCourseIds.length === 0) return []
@@ -91,6 +144,7 @@ export async function listCourseCategoriesByMoodleCourseIds(
   const { data, error } = await supabase
     .from('courses')
     .select('moodle_course_id, category')
+    .eq('moodle_site_id', moodleSiteId)
     .in('moodle_course_id', moodleCourseIds)
 
   if (error) throw error
@@ -191,10 +245,39 @@ export async function upsertStudents(
   supabase: AppSupabaseClient,
   payload: StudentInsert[],
 ): Promise<Tables<'students'>[]> {
+  if (payload.length === 0) return []
+  const siteIds = new Set(payload.map((student) => student.moodle_site_id))
+  if (siteIds.size !== 1) throw new Error('Student upsert batch must belong to one Moodle site')
+  const moodleSiteId = payload[0].moodle_site_id
+  const moodleUserIds = payload.map((student) => student.moodle_user_id)
+
+  const { data: existing, error: existingError } = await supabase
+    .from('students')
+    .select('moodle_user_id, content_hash')
+    .eq('moodle_site_id', moodleSiteId)
+    .in('moodle_user_id', moodleUserIds)
+  if (existingError) throw existingError
+
+  const existingHashes = new Map(
+    (existing ?? []).map((student) => [student.moodle_user_id, student.content_hash]),
+  )
+  const changed = payload.filter((student) => (
+    !existingHashes.has(student.moodle_user_id)
+    || existingHashes.get(student.moodle_user_id) !== (student.content_hash ?? null)
+  ))
+
+  if (changed.length > 0) {
+    const { error } = await supabase
+      .from('students')
+      .upsert(changed, { onConflict: 'moodle_site_id,moodle_user_id', ignoreDuplicates: false })
+    if (error) throw error
+  }
+
   const { data, error } = await supabase
     .from('students')
-    .upsert(payload, { onConflict: 'moodle_user_id', ignoreDuplicates: false })
-    .select()
+    .select('*')
+    .eq('moodle_site_id', moodleSiteId)
+    .in('moodle_user_id', moodleUserIds)
 
   if (error) throw error
   return data ?? []

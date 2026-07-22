@@ -25,7 +25,7 @@ const permanentAdapters = new Map([
     from: 0,
     rpc: 0,
     functionsInvoke: 0,
-    auth: 5,
+    auth: 9,
     storage: 0,
     channel: 0,
   }],

@@ -1,5 +1,6 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient, createAnonClient } from '../_shared/db/mod.ts'
+import { crypto } from 'jsr:@std/crypto'
 import { getMoodleToken, getSiteInfo } from '../_shared/moodle/mod.ts'
 import {
   createUserProfile,
@@ -164,6 +165,7 @@ export async function login(params: LoginParams): Promise<Response> {
     const fallbackAuthEmail = `moodle_${siteInfo.userid}@moodle.local`
     const preferredAuthEmail = normalizeEmail(siteInfo.email)
     const anonClient = createAnonClient()
+    const tempSupabasePassword = crypto.randomUUID() + crypto.randomUUID()
 
     let existingUser
     try {
@@ -212,14 +214,14 @@ export async function login(params: LoginParams): Promise<Response> {
           const createResult = await supabase.auth.admin.createUser({
             id: existingUser.id,
             email: preferredAuthEmail ?? fallbackAuthEmail,
-            password,
+            password: tempSupabasePassword,
             email_confirm: true,
             user_metadata: { moodle_user_id: String(siteInfo.userid) },
           })
 
           if (createResult.error) {
             const updateResult = await supabase.auth.admin.updateUserById(existingUser.id, {
-              password,
+              password: tempSupabasePassword,
               ...(preferredAuthEmail ? { email: preferredAuthEmail, email_confirm: true } : {}),
             })
             if (updateResult.error) throw updateResult.error
@@ -227,7 +229,7 @@ export async function login(params: LoginParams): Promise<Response> {
         } catch (createError) {
           console.warn('Auth user setup fallback failed, trying password update:', createError)
           const updateResult = await supabase.auth.admin.updateUserById(existingUser.id, {
-            password,
+            password: tempSupabasePassword,
             ...(preferredAuthEmail ? { email: preferredAuthEmail, email_confirm: true } : {}),
           })
           if (updateResult.error) {
@@ -242,7 +244,7 @@ export async function login(params: LoginParams): Promise<Response> {
           }
         }
 
-        signInResult = await signInWithAnyEmail(anonClient, signInEmails, password)
+        signInResult = await signInWithAnyEmail(anonClient, signInEmails, tempSupabasePassword)
 
         if (signInResult.error) {
           console.error('Failed to sign in after auth user setup:', signInResult.error)
@@ -287,14 +289,14 @@ export async function login(params: LoginParams): Promise<Response> {
 
       const { data: newAuthUser, error: createAuthError } = await supabase.auth.admin.createUser({
         email: preferredAuthEmail ?? fallbackAuthEmail,
-        password,
+        password: tempSupabasePassword,
         email_confirm: true,
         user_metadata: { moodle_user_id: String(siteInfo.userid) },
       })
 
       if (createAuthError) {
         console.warn('Failed to create auth user, trying to recover existing auth account:', createAuthError)
-        const recoveredAuthUser = await findAuthUserByEmail(supabase, authEmail)
+        const recoveredAuthUser = await findAuthUserByEmail(supabase, preferredAuthEmail ?? fallbackAuthEmail)
 
         if (!recoveredAuthUser) {
           return jsonResponse(
@@ -309,7 +311,7 @@ export async function login(params: LoginParams): Promise<Response> {
         authUserId = recoveredAuthUser.id
 
         const updateRecoveredUser = await supabase.auth.admin.updateUserById(recoveredAuthUser.id, {
-          password,
+          password: tempSupabasePassword,
           ...(preferredAuthEmail ? { email: preferredAuthEmail, email_confirm: true } : {}),
           user_metadata: { moodle_user_id: String(siteInfo.userid) },
         })
@@ -342,7 +344,7 @@ export async function login(params: LoginParams): Promise<Response> {
       }
 
       const signInEmails = buildSignInEmailCandidates(preferredAuthEmail, fallbackAuthEmail)
-      const signInResult = await signInWithAnyEmail(anonClient, signInEmails, password)
+      const signInResult = await signInWithAnyEmail(anonClient, signInEmails, tempSupabasePassword)
       if (signInResult.error) {
         console.error('Failed to sign in after creating local user:', signInResult.error)
         return jsonResponse(

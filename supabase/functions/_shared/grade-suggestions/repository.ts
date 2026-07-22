@@ -172,7 +172,7 @@ export async function findUserFullName(
 
 export async function insertGradeSuggestionAuditDraft(
   supabase: AppSupabaseClient,
-  input: TablesInsert<'ai_grade_suggestion_history'>,
+  input: TablesInsert<'ai_grade_suggestion_history'> & { moodle_connection_id: string },
 ): Promise<string> {
   const { data, error } = await supabase
     .from('ai_grade_suggestion_history')

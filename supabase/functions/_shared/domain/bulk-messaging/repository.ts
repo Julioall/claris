@@ -12,7 +12,7 @@ import {
   upsertBackgroundJob,
 } from '../background-jobs/repository.ts'
 
-export type BulkMessageJob = Tables<'bulk_message_jobs'>
+export type BulkMessageJob = Tables<'bulk_message_jobs'> & { moodle_connection_id: string }
 export type BulkMessageRecipient = Tables<'bulk_message_recipients'>
 export type BulkMessageJobOrigin = 'manual' | 'ia'
 
@@ -50,6 +50,7 @@ async function mirrorBulkMessageJobCreate(
     completedAt: input.job.completed_at,
     errorMessage: input.job.error_message,
     metadata: {
+      moodle_connection_id: input.job.moodle_connection_id,
       origin: input.job.origin,
       template_id: input.job.template_id,
     },
@@ -93,6 +94,7 @@ export interface BulkMessageRecipientDraft {
 
 interface CreateBulkMessageJobInput {
   messageContent: string
+  moodleConnectionId: string
   origin: BulkMessageJobOrigin
   recipients: BulkMessageRecipientDraft[]
   templateId?: string | null
@@ -112,12 +114,13 @@ export async function findJobForUser(
     .maybeSingle()
 
   if (error) throw error
-  return data
+  return data as BulkMessageJob | null
 }
 
 export async function findDuplicateActiveJob(
   supabase: AppSupabaseClient,
   userId: string,
+  moodleConnectionId: string,
   messageContent: string,
   totalRecipients: number,
 ): Promise<Pick<BulkMessageJob, 'created_at' | 'id' | 'status'> | null> {
@@ -125,6 +128,7 @@ export async function findDuplicateActiveJob(
     .from('bulk_message_jobs')
     .select('id, status, created_at')
     .eq('user_id', userId)
+    .eq('moodle_connection_id', moodleConnectionId)
     .eq('message_content', messageContent)
     .eq('total_recipients', totalRecipients)
     .in('status', ['pending', 'processing'])
@@ -143,8 +147,9 @@ export async function createJobWithRecipients(
   let job: BulkMessageJob | null = null
 
   try {
-    const jobInsert: TablesInsert<'bulk_message_jobs'> = {
+    const jobInsert: TablesInsert<'bulk_message_jobs'> & { moodle_connection_id: string } = {
       message_content: input.messageContent,
+      moodle_connection_id: input.moodleConnectionId,
       origin: input.origin,
       status: 'pending',
       template_id: input.templateId ?? null,
@@ -162,7 +167,7 @@ export async function createJobWithRecipients(
       throw error ?? new Error('Falha ao criar job de envio em massa')
     }
 
-    job = data
+    job = data as BulkMessageJob
 
     const recipientsInsert: TablesInsert<'bulk_message_recipients'>[] = input.recipients.map((recipient) => ({
       job_id: job.id,

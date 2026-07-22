@@ -7,6 +7,7 @@ import {
 } from '@/features/claris/api/moodle-messaging';
 
 const invokeEdgeFunctionMock = vi.fn();
+const CONNECTION_ID = '11111111-1111-4111-8111-111111111111';
 
 vi.mock('@/integrations/http/edge-function-client', () => ({
   invokeEdgeFunction: (...args: unknown[]) => invokeEdgeFunctionMock(...args),
@@ -26,14 +27,14 @@ describe('Moodle messaging API client', () => {
       })
       .mockResolvedValueOnce({ contractVersion: 1, messageId: '99' });
 
-    await fetchMoodleConversations();
-    await fetchMoodleMessages(20, 25);
-    await sendMoodleMessage(20, 'Ola');
+    await fetchMoodleConversations(CONNECTION_ID);
+    await fetchMoodleMessages(CONNECTION_ID, 20, 25);
+    await sendMoodleMessage(CONNECTION_ID, 20, 'Ola');
 
     expect(invokeEdgeFunctionMock.mock.calls.map(([, options]) => options.body)).toEqual([
-      { action: 'get_conversations' },
-      { action: 'get_messages', moodleUserId: 20, limit: 25 },
-      { action: 'send_message', moodleUserId: 20, message: 'Ola' },
+      { action: 'get_conversations', connectionId: CONNECTION_ID },
+      { action: 'get_messages', connectionId: CONNECTION_ID, moodleUserId: 20, limit: 25 },
+      { action: 'send_message', connectionId: CONNECTION_ID, moodleUserId: 20, message: 'Ola' },
     ]);
   });
 
@@ -51,7 +52,7 @@ describe('Moodle messaging API client', () => {
     };
     invokeEdgeFunctionMock.mockResolvedValueOnce(response);
 
-    await expect(fetchMoodleConversations()).resolves.toEqual(response);
+    await expect(fetchMoodleConversations(CONNECTION_ID)).resolves.toEqual(response);
   });
 
   it('rejects malformed responses at the frontend boundary', async () => {
@@ -62,6 +63,6 @@ describe('Moodle messaging API client', () => {
       items: [{ id: 1, text: 'sem campos normalizados' }],
     });
 
-    await expect(fetchMoodleMessages(20)).rejects.toThrow('resposta invalida');
+    await expect(fetchMoodleMessages(CONNECTION_ID, 20)).rejects.toThrow('resposta invalida');
   });
 });

@@ -27,8 +27,8 @@ describe('moodle-sync-students role classification', () => {
     })).toBe(false);
   });
 
-  it('keeps users with no role metadata as students for legacy Moodle responses', () => {
-    expect(isStudentLikeUser({ roles: [] })).toBe(true);
-    expect(isStudentLikeUser({})).toBe(true);
+  it('excludes users without role metadata because the identity is ambiguous', () => {
+    expect(isStudentLikeUser({ roles: [] })).toBe(false);
+    expect(isStudentLikeUser({})).toBe(false);
   });
 });

@@ -13,9 +13,9 @@ import type {
 export type AdminBackgroundJobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
 
 export interface AdminBackgroundJobUser {
+  email: string | null;
   id: string;
   full_name: string;
-  moodle_username: string;
 }
 
 export interface AdminBackgroundJobRow {
@@ -120,7 +120,7 @@ function mapJob(job: BackgroundJobDto): AdminBackgroundJobRow {
     user: job.user ? {
       id: job.user.id,
       full_name: job.user.fullName,
-      moodle_username: job.user.moodleUsername,
+      email: job.user.email,
     } : null,
     can_cancel: job.canCancel,
     can_retry: job.canRetry,

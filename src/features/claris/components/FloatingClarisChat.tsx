@@ -22,6 +22,7 @@ import {
   updateClarisConversation,
 } from '@/features/claris/api/conversations';
 import { usePermissions } from '@/hooks/usePermissions';
+import { loadSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -386,6 +387,10 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
   const navigate = useNavigate();
   const location = useLocation();
   const userId = auth.user?.id ?? 'anonymous';
+  const connectionId = useMemo(
+    () => auth.user?.id ? loadSelectedMoodleConnectionId(auth.user.id) : null,
+    [auth.user?.id],
+  );
   const isFloating = variant === 'floating';
   const historyStorageKey = `${CLARIS_HISTORY_STORAGE_PREFIX}:${userId}`;
   const contextFromQuery = new URLSearchParams(location.search).get('context')?.trim() ?? '';
@@ -637,6 +642,7 @@ export function FloatingClarisChat({ variant = 'floating' }: FloatingClarisChatP
     setIsSending(true);
     try {
       const typedData = await invokeClarisChat({
+        ...(connectionId ? { connectionId } : {}),
         message: trimmed,
         history,
         action: action ? { kind: action.kind, value: action.value, jobId: action.jobId } : undefined,

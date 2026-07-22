@@ -1,9 +1,7 @@
 import {
   RequestBodyValidationError,
   expectBodyObject,
-  readRequiredMoodleUrl,
-  readRequiredPositiveInteger,
-  readRequiredString,
+  readRequiredUuid,
 } from '../_shared/http/mod.ts'
 import { validateUuid } from '../_shared/validation/mod.ts'
 
@@ -13,19 +11,18 @@ const MAX_SELECTED_COURSE_IDS = 500
 type CourseSyncAction = typeof COURSE_SYNC_ACTIONS[number]
 
 const ALLOWED_FIELDS: Record<CourseSyncAction, ReadonlySet<string>> = {
-  sync_courses: new Set(['action', 'moodleUrl', 'token', 'userId']),
-  link_selected_courses: new Set(['action', 'selectedCourseIds']),
+  sync_courses: new Set(['action', 'connectionId']),
+  link_selected_courses: new Set(['action', 'connectionId', 'selectedCourseIds']),
 }
 
 export interface SyncCoursesPayload {
   action: 'sync_courses'
-  moodleUrl: string
-  token: string
-  userId: string
+  connectionId: string
 }
 
 export interface LinkSelectedCoursesPayload {
   action: 'link_selected_courses'
+  connectionId: string
   selectedCourseIds: string[]
 }
 
@@ -81,14 +78,13 @@ export function parseMoodleSyncCoursesPayload(rawBody: unknown): MoodleSyncCours
   if (action === 'link_selected_courses') {
     return {
       action,
+      connectionId: readRequiredUuid(body, 'connectionId'),
       selectedCourseIds: readSelectedCourseIds(body),
     }
   }
 
   return {
     action,
-    moodleUrl: readRequiredMoodleUrl(body),
-    token: readRequiredString(body, 'token'),
-    userId: String(readRequiredPositiveInteger(body, 'userId')),
+    connectionId: readRequiredUuid(body, 'connectionId'),
   }
 }

@@ -1,7 +1,5 @@
 export interface PublicAppSettingsDto {
   contractVersion: 1;
-  moodleConnectionService: string;
-  moodleConnectionUrl: string;
 }
 
 export interface RiskThresholdDaysDto {

@@ -59,17 +59,23 @@ async function buildScheduledMessageWrite(
   await assertOwnedTemplate(repository, actorId, input.templateId)
 
   if (input.channel === 'moodle') {
-    if (!input.moodleUrl || input.selectedRecipients.length === 0) {
-      throw ApiError.unprocessable('Moodle campaigns require a URL and at least one recipient')
+    if (!input.moodleConnectionId || input.selectedRecipients.length === 0) {
+      throw ApiError.unprocessable('Moodle campaigns require a connection and at least one recipient')
     }
-    const recipients = await repository.resolveRecipients(actorId, input.selectedRecipients)
+    const scope = await repository.resolveMoodleScope(actorId, input.moodleConnectionId)
+    if (!scope) throw ApiError.forbidden('Moodle connection is not available to this user.')
+    const recipients = await repository.resolveRecipients(
+      actorId,
+      scope.moodleSiteId,
+      input.selectedRecipients,
+    )
     return {
       executionContext: {
         automatic_execution_supported: true,
         channel: 'moodle',
         created_via: 'campaigns_v1',
         mode: 'bulk_message_snapshot',
-        moodle_url: input.moodleUrl,
+        moodle_connection_id: scope.connectionId,
         recipient_snapshot: recipients.map((recipient) => ({
           moodle_user_id: recipient.moodleUserId,
           personalized_message: recipient.personalizedMessage ?? null,
@@ -77,7 +83,7 @@ async function buildScheduledMessageWrite(
           student_name: recipient.studentName,
         })),
         schedule: scheduleJson(input.schedule),
-        schema_version: 3,
+        schema_version: 4,
       } as Json,
       filterContext: { channel: 'moodle', whatsapp_instance_id: null },
       messageContent: input.messageContent,

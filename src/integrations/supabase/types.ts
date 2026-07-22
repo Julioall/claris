@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -7,6 +7,31 @@ export type Json =
   | Json[]
 
 export type Database = {
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       activity_feed: {
@@ -129,6 +154,7 @@ export type Database = {
           model: string | null
           moodle_activity_id: string
           moodle_assign_id: number | null
+          moodle_connection_id: string
           prompt_payload: Json
           provider: string | null
           sources_used: Json
@@ -158,6 +184,7 @@ export type Database = {
           model?: string | null
           moodle_activity_id: string
           moodle_assign_id?: number | null
+          moodle_connection_id: string
           prompt_payload?: Json
           provider?: string | null
           sources_used?: Json
@@ -187,6 +214,7 @@ export type Database = {
           model?: string | null
           moodle_activity_id?: string
           moodle_assign_id?: number | null
+          moodle_connection_id?: string
           prompt_payload?: Json
           provider?: string | null
           sources_used?: Json
@@ -206,6 +234,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_history_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
             referencedColumns: ["id"]
           },
           {
@@ -332,6 +367,7 @@ export type Database = {
           id: string
           max_grade: number | null
           moodle_activity_id: string
+          moodle_connection_id: string
           processed_items: number
           started_at: string | null
           status: Database["public"]["Enums"]["ai_grade_suggestion_job_status"]
@@ -350,6 +386,7 @@ export type Database = {
           id?: string
           max_grade?: number | null
           moodle_activity_id: string
+          moodle_connection_id: string
           processed_items?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["ai_grade_suggestion_job_status"]
@@ -368,6 +405,7 @@ export type Database = {
           id?: string
           max_grade?: number | null
           moodle_activity_id?: string
+          moodle_connection_id?: string
           processed_items?: number
           started_at?: string | null
           status?: Database["public"]["Enums"]["ai_grade_suggestion_job_status"]
@@ -382,6 +420,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_grade_suggestion_jobs_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
             referencedColumns: ["id"]
           },
           {
@@ -992,8 +1037,6 @@ export type Database = {
           ai_grading_settings: Json
           claris_llm_settings: Json
           created_at: string
-          moodle_connection_service: string
-          moodle_connection_url: string
           risk_threshold_days: Json
           singleton_id: string
           sync_category_ids: Json
@@ -1003,8 +1046,6 @@ export type Database = {
           ai_grading_settings?: Json
           claris_llm_settings?: Json
           created_at?: string
-          moodle_connection_service?: string
-          moodle_connection_url?: string
           risk_threshold_days?: Json
           singleton_id?: string
           sync_category_ids?: Json
@@ -1014,8 +1055,6 @@ export type Database = {
           ai_grading_settings?: Json
           claris_llm_settings?: Json
           created_at?: string
-          moodle_connection_service?: string
-          moodle_connection_url?: string
           risk_threshold_days?: Json
           singleton_id?: string
           sync_category_ids?: Json
@@ -1215,13 +1254,21 @@ export type Database = {
       }
       background_job_items: {
         Row: {
+          attempt_count: number
+          available_at: string
           completed_at: string | null
           created_at: string
+          cursor: Json | null
           error_message: string | null
+          heartbeat_at: string | null
           id: string
           item_key: string | null
           job_id: string
           label: string
+          last_error_code: string | null
+          lease_owner: string | null
+          leased_until: string | null
+          max_attempts: number
           metadata: Json
           progress_current: number
           progress_total: number
@@ -1233,13 +1280,21 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          attempt_count?: number
+          available_at?: string
           completed_at?: string | null
           created_at?: string
+          cursor?: Json | null
           error_message?: string | null
+          heartbeat_at?: string | null
           id?: string
           item_key?: string | null
           job_id: string
           label: string
+          last_error_code?: string | null
+          lease_owner?: string | null
+          leased_until?: string | null
+          max_attempts?: number
           metadata?: Json
           progress_current?: number
           progress_total?: number
@@ -1251,13 +1306,21 @@ export type Database = {
           user_id: string
         }
         Update: {
+          attempt_count?: number
+          available_at?: string
           completed_at?: string | null
           created_at?: string
+          cursor?: Json | null
           error_message?: string | null
+          heartbeat_at?: string | null
           id?: string
           item_key?: string | null
           job_id?: string
           label?: string
+          last_error_code?: string | null
+          lease_owner?: string | null
+          leased_until?: string | null
+          max_attempts?: number
           metadata?: Json
           progress_current?: number
           progress_total?: number
@@ -1377,6 +1440,7 @@ export type Database = {
           failed_count: number
           id: string
           message_content: string
+          moodle_connection_id: string
           origin: string
           sent_count: number
           started_at: string | null
@@ -1393,6 +1457,7 @@ export type Database = {
           failed_count?: number
           id?: string
           message_content: string
+          moodle_connection_id: string
           origin?: string
           sent_count?: number
           started_at?: string | null
@@ -1409,6 +1474,7 @@ export type Database = {
           failed_count?: number
           id?: string
           message_content?: string
+          moodle_connection_id?: string
           origin?: string
           sent_count?: number
           started_at?: string | null
@@ -1419,6 +1485,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "bulk_message_jobs_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bulk_message_jobs_template_id_fkey"
             columns: ["template_id"]
@@ -1615,6 +1688,56 @@ export type Database = {
           },
         ]
       }
+      claris_invitations: {
+        Row: {
+          accepted_at: string | null
+          app_role: string
+          auth_user_id: string | null
+          created_at: string
+          email_normalized: string
+          expires_at: string
+          full_name: string
+          id: string
+          invited_by: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          app_role?: string
+          auth_user_id?: string | null
+          created_at?: string
+          email_normalized: string
+          expires_at: string
+          full_name: string
+          id?: string
+          invited_by: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          app_role?: string
+          auth_user_id?: string | null
+          created_at?: string
+          email_normalized?: string
+          expires_at?: string
+          full_name?: string
+          id?: string
+          invited_by?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "claris_invitations_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       claris_suggestion_cooldowns: {
         Row: {
           created_at: string
@@ -1785,41 +1908,71 @@ export type Database = {
       courses: {
         Row: {
           category: string | null
+          content_hash: string | null
           created_at: string | null
           end_date: string | null
           id: string
           last_sync: string | null
+          last_synced_connection_id: string | null
           moodle_course_id: string
+          moodle_site_id: string
           name: string
+          observed_at: string | null
           short_name: string | null
+          source_updated_at: string | null
           start_date: string | null
           updated_at: string | null
         }
         Insert: {
           category?: string | null
+          content_hash?: string | null
           created_at?: string | null
           end_date?: string | null
           id?: string
           last_sync?: string | null
+          last_synced_connection_id?: string | null
           moodle_course_id: string
+          moodle_site_id: string
           name: string
+          observed_at?: string | null
           short_name?: string | null
+          source_updated_at?: string | null
           start_date?: string | null
           updated_at?: string | null
         }
         Update: {
           category?: string | null
+          content_hash?: string | null
           created_at?: string | null
           end_date?: string | null
           id?: string
           last_sync?: string | null
+          last_synced_connection_id?: string | null
           moodle_course_id?: string
+          moodle_site_id?: string
           name?: string
+          observed_at?: string | null
           short_name?: string | null
+          source_updated_at?: string | null
           start_date?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "courses_last_synced_connection_id_fkey"
+            columns: ["last_synced_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "courses_moodle_site_id_fkey"
+            columns: ["moodle_site_id"]
+            isOneToOne: false
+            referencedRelation: "moodle_sites"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dashboard_course_activity_aggregates: {
         Row: {
@@ -1901,6 +2054,53 @@ export type Database = {
         }
         Relationships: []
       }
+      moodle_category_cache: {
+        Row: {
+          byte_size: number
+          cache_key: string
+          categories: Json
+          content_hash: string
+          created_at: string
+          expires_at: string
+          id: string
+          moodle_connection_id: string
+          observed_at: string
+          updated_at: string
+        }
+        Insert: {
+          byte_size: number
+          cache_key?: string
+          categories?: Json
+          content_hash: string
+          created_at?: string
+          expires_at: string
+          id?: string
+          moodle_connection_id: string
+          observed_at?: string
+          updated_at?: string
+        }
+        Update: {
+          byte_size?: number
+          cache_key?: string
+          categories?: Json
+          content_hash?: string
+          created_at?: string
+          expires_at?: string
+          id?: string
+          moodle_connection_id?: string
+          observed_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_category_cache_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       moodle_conversations: {
         Row: {
           created_at: string
@@ -1936,6 +2136,69 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      moodle_course_sync_state: {
+        Row: {
+          course_id: string
+          created_at: string
+          id: string
+          last_claris_access_at: string | null
+          last_error_codes: Json
+          last_full_sync_at: string | null
+          last_manual_refresh_at: string | null
+          last_successful_sync_at: string | null
+          moodle_connection_id: string
+          next_incremental_at: string | null
+          reason_codes: string[]
+          temperature: string
+          updated_at: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          id?: string
+          last_claris_access_at?: string | null
+          last_error_codes?: Json
+          last_full_sync_at?: string | null
+          last_manual_refresh_at?: string | null
+          last_successful_sync_at?: string | null
+          moodle_connection_id: string
+          next_incremental_at?: string | null
+          reason_codes?: string[]
+          temperature?: string
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          id?: string
+          last_claris_access_at?: string | null
+          last_error_codes?: Json
+          last_full_sync_at?: string | null
+          last_manual_refresh_at?: string | null
+          last_successful_sync_at?: string | null
+          moodle_connection_id?: string
+          next_incremental_at?: string | null
+          reason_codes?: string[]
+          temperature?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_course_sync_state_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moodle_course_sync_state_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       moodle_messages: {
         Row: {
@@ -1977,6 +2240,182 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "moodle_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moodle_sites: {
+        Row: {
+          base_url: string
+          created_at: string
+          id: string
+          limits: Json
+          name: string
+          release: string | null
+          service: string
+          slug: string
+          status: string
+          updated_at: string
+          version: string | null
+        }
+        Insert: {
+          base_url: string
+          created_at?: string
+          id?: string
+          limits?: Json
+          name: string
+          release?: string | null
+          service?: string
+          slug: string
+          status?: string
+          updated_at?: string
+          version?: string | null
+        }
+        Update: {
+          base_url?: string
+          created_at?: string
+          id?: string
+          limits?: Json
+          name?: string
+          release?: string | null
+          service?: string
+          slug?: string
+          status?: string
+          updated_at?: string
+          version?: string | null
+        }
+        Relationships: []
+      }
+      moodle_sync_job_context: {
+        Row: {
+          job_id: string
+          moodle_connection_id: string
+          schema_version: number
+          sync_policy: Json
+        }
+        Insert: {
+          job_id: string
+          moodle_connection_id: string
+          schema_version?: number
+          sync_policy?: Json
+        }
+        Update: {
+          job_id?: string
+          moodle_connection_id?: string
+          schema_version?: number
+          sync_policy?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_sync_job_context_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: true
+            referencedRelation: "background_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moodle_sync_job_context_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moodle_sync_policies: {
+        Row: {
+          created_at: string
+          enabled: boolean
+          entity: string
+          full_reconcile_after_seconds: number
+          id: string
+          manual_cooldown_seconds: number
+          moodle_site_id: string | null
+          stale_after_seconds: number
+          temperature: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          enabled?: boolean
+          entity: string
+          full_reconcile_after_seconds: number
+          id?: string
+          manual_cooldown_seconds?: number
+          moodle_site_id?: string | null
+          stale_after_seconds: number
+          temperature: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          enabled?: boolean
+          entity?: string
+          full_reconcile_after_seconds?: number
+          id?: string
+          manual_cooldown_seconds?: number
+          moodle_site_id?: string | null
+          stale_after_seconds?: number
+          temperature?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_sync_policies_moodle_site_id_fkey"
+            columns: ["moodle_site_id"]
+            isOneToOne: false
+            referencedRelation: "moodle_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moodle_sync_watermarks: {
+        Row: {
+          course_id: string
+          created_at: string
+          entity: string
+          id: string
+          last_successful_sync_at: string | null
+          moodle_connection_id: string
+          moodle_since: string | null
+          source_release: string | null
+          updated_at: string
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          entity: string
+          id?: string
+          last_successful_sync_at?: string | null
+          moodle_connection_id: string
+          moodle_since?: string | null
+          source_release?: string | null
+          updated_at?: string
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          entity?: string
+          id?: string
+          last_successful_sync_at?: string | null
+          moodle_connection_id?: string
+          moodle_since?: string | null
+          source_release?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_sync_watermarks_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moodle_sync_watermarks_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
             referencedColumns: ["id"]
           },
         ]
@@ -2307,6 +2746,7 @@ export type Database = {
           activity_name: string
           activity_type: string | null
           completed_at: string | null
+          content_hash: string | null
           course_id: string
           created_at: string
           due_date: string | null
@@ -2316,8 +2756,11 @@ export type Database = {
           hidden: boolean
           id: string
           is_recovery: boolean
+          last_synced_connection_id: string | null
           moodle_activity_id: string
+          observed_at: string | null
           percentage: number | null
+          source_updated_at: string | null
           status: string | null
           student_id: string
           submitted_at: string | null
@@ -2327,6 +2770,7 @@ export type Database = {
           activity_name: string
           activity_type?: string | null
           completed_at?: string | null
+          content_hash?: string | null
           course_id: string
           created_at?: string
           due_date?: string | null
@@ -2336,8 +2780,11 @@ export type Database = {
           hidden?: boolean
           id?: string
           is_recovery?: boolean
+          last_synced_connection_id?: string | null
           moodle_activity_id: string
+          observed_at?: string | null
           percentage?: number | null
+          source_updated_at?: string | null
           status?: string | null
           student_id: string
           submitted_at?: string | null
@@ -2347,6 +2794,7 @@ export type Database = {
           activity_name?: string
           activity_type?: string | null
           completed_at?: string | null
+          content_hash?: string | null
           course_id?: string
           created_at?: string
           due_date?: string | null
@@ -2356,8 +2804,11 @@ export type Database = {
           hidden?: boolean
           id?: string
           is_recovery?: boolean
+          last_synced_connection_id?: string | null
           moodle_activity_id?: string
+          observed_at?: string | null
           percentage?: number | null
+          source_updated_at?: string | null
           status?: string | null
           student_id?: string
           submitted_at?: string | null
@@ -2372,6 +2823,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "student_activities_last_synced_connection_id_fkey"
+            columns: ["last_synced_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "student_activities_student_id_fkey"
             columns: ["student_id"]
             isOneToOne: false
@@ -2382,6 +2840,7 @@ export type Database = {
       }
       student_course_grades: {
         Row: {
+          content_hash: string | null
           course_id: string
           created_at: string
           grade_formatted: string | null
@@ -2390,11 +2849,15 @@ export type Database = {
           grade_raw: number | null
           id: string
           last_sync: string
+          last_synced_connection_id: string | null
           letter_grade: string | null
+          observed_at: string | null
+          source_updated_at: string | null
           student_id: string
           updated_at: string
         }
         Insert: {
+          content_hash?: string | null
           course_id: string
           created_at?: string
           grade_formatted?: string | null
@@ -2403,11 +2866,15 @@ export type Database = {
           grade_raw?: number | null
           id?: string
           last_sync?: string
+          last_synced_connection_id?: string | null
           letter_grade?: string | null
+          observed_at?: string | null
+          source_updated_at?: string | null
           student_id: string
           updated_at?: string
         }
         Update: {
+          content_hash?: string | null
           course_id?: string
           created_at?: string
           grade_formatted?: string | null
@@ -2416,7 +2883,10 @@ export type Database = {
           grade_raw?: number | null
           id?: string
           last_sync?: string
+          last_synced_connection_id?: string | null
           letter_grade?: string | null
+          observed_at?: string | null
+          source_updated_at?: string | null
           student_id?: string
           updated_at?: string
         }
@@ -2426,6 +2896,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_course_grades_last_synced_connection_id_fkey"
+            columns: ["last_synced_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
             referencedColumns: ["id"]
           },
           {
@@ -2546,55 +3023,88 @@ export type Database = {
         Row: {
           avatar_url: string | null
           city: string | null
+          content_hash: string | null
           created_at: string | null
           current_risk_level: Database["public"]["Enums"]["risk_level"] | null
           email: string | null
           full_name: string
           id: string
           last_access: string | null
+          last_synced_at: string | null
+          last_synced_connection_id: string | null
           mobile_phone: string | null
+          moodle_site_id: string
           moodle_user_id: string
+          observed_at: string | null
           phone: string | null
           phone_number: string | null
           risk_reasons: string[] | null
+          source_updated_at: string | null
           tags: string[] | null
           updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
           city?: string | null
+          content_hash?: string | null
           created_at?: string | null
           current_risk_level?: Database["public"]["Enums"]["risk_level"] | null
           email?: string | null
           full_name: string
           id?: string
           last_access?: string | null
+          last_synced_at?: string | null
+          last_synced_connection_id?: string | null
           mobile_phone?: string | null
+          moodle_site_id: string
           moodle_user_id: string
+          observed_at?: string | null
           phone?: string | null
           phone_number?: string | null
           risk_reasons?: string[] | null
+          source_updated_at?: string | null
           tags?: string[] | null
           updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
           city?: string | null
+          content_hash?: string | null
           created_at?: string | null
           current_risk_level?: Database["public"]["Enums"]["risk_level"] | null
           email?: string | null
           full_name?: string
           id?: string
           last_access?: string | null
+          last_synced_at?: string | null
+          last_synced_connection_id?: string | null
           mobile_phone?: string | null
+          moodle_site_id?: string
           moodle_user_id?: string
+          observed_at?: string | null
           phone?: string | null
           phone_number?: string | null
           risk_reasons?: string[] | null
+          source_updated_at?: string | null
           tags?: string[] | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "students_last_synced_connection_id_fkey"
+            columns: ["last_synced_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "students_moodle_site_id_fkey"
+            columns: ["moodle_site_id"]
+            isOneToOne: false
+            referencedRelation: "moodle_sites"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       support_tickets: {
         Row: {
@@ -3096,16 +3606,19 @@ export type Database = {
         Row: {
           course_id: string
           discovered_at: string
+          moodle_connection_id: string
           user_id: string
         }
         Insert: {
           course_id: string
           discovered_at?: string
+          moodle_connection_id: string
           user_id: string
         }
         Update: {
           course_id?: string
           discovered_at?: string
+          moodle_connection_id?: string
           user_id?: string
         }
         Relationships: [
@@ -3114,6 +3627,13 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_course_catalog_eligibility_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
             referencedColumns: ["id"]
           },
           {
@@ -3246,51 +3766,133 @@ export type Database = {
           },
         ]
       }
-      user_moodle_reauth_credentials: {
+      user_moodle_connections: {
         Row: {
+          alias: string
+          can_write: boolean
+          capabilities: Json | null
           created_at: string
           credential_ciphertext: string | null
+          id: string
           last_error: string | null
           last_reauth_at: string | null
           last_token_issued_at: string | null
-          moodle_service: string
-          moodle_url: string
-          moodle_username: string
+          moodle_avatar_url: string | null
+          moodle_email: string | null
+          moodle_full_name: string | null
+          moodle_site_id: string
+          moodle_user_id: string
+          moodle_username: string | null
           reauth_enabled: boolean
+          status: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          alias: string
+          can_write?: boolean
+          capabilities?: Json | null
           created_at?: string
           credential_ciphertext?: string | null
+          id?: string
           last_error?: string | null
           last_reauth_at?: string | null
           last_token_issued_at?: string | null
-          moodle_service?: string
-          moodle_url: string
-          moodle_username: string
+          moodle_avatar_url?: string | null
+          moodle_email?: string | null
+          moodle_full_name?: string | null
+          moodle_site_id: string
+          moodle_user_id: string
+          moodle_username?: string | null
           reauth_enabled?: boolean
+          status?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          alias?: string
+          can_write?: boolean
+          capabilities?: Json | null
           created_at?: string
           credential_ciphertext?: string | null
+          id?: string
           last_error?: string | null
           last_reauth_at?: string | null
           last_token_issued_at?: string | null
-          moodle_service?: string
-          moodle_url?: string
-          moodle_username?: string
+          moodle_avatar_url?: string | null
+          moodle_email?: string | null
+          moodle_full_name?: string | null
+          moodle_site_id?: string
+          moodle_user_id?: string
+          moodle_username?: string | null
           reauth_enabled?: boolean
+          status?: string
           updated_at?: string
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "user_moodle_reauth_credentials_user_id_fkey"
+            foreignKeyName: "user_moodle_connections_moodle_site_id_fkey"
+            columns: ["moodle_site_id"]
+            isOneToOne: false
+            referencedRelation: "moodle_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_moodle_connections_user_id_fkey"
             columns: ["user_id"]
-            isOneToOne: true
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_moodle_sync_preferences: {
+        Row: {
+          created_at: string
+          display_preferences: Json
+          id: string
+          include_empty_courses: boolean
+          include_finished_courses: boolean
+          moodle_connection_id: string
+          selected_keys: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_preferences?: Json
+          id?: string
+          include_empty_courses?: boolean
+          include_finished_courses?: boolean
+          moodle_connection_id: string
+          selected_keys?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          display_preferences?: Json
+          id?: string
+          include_empty_courses?: boolean
+          include_finished_courses?: boolean
+          moodle_connection_id?: string
+          selected_keys?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_moodle_sync_preferences_moodle_connection_id_fkey"
+            columns: ["moodle_connection_id"]
+            isOneToOne: false
+            referencedRelation: "user_moodle_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_moodle_sync_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
           },
@@ -3350,7 +3952,6 @@ export type Database = {
       users: {
         Row: {
           avatar_url: string | null
-          background_reauth_enabled: boolean
           created_at: string | null
           email: string | null
           full_name: string
@@ -3358,13 +3959,10 @@ export type Database = {
           last_login: string | null
           last_sync: string | null
           message_templates_seeded_at: string | null
-          moodle_user_id: string
-          moodle_username: string
           updated_at: string | null
         }
         Insert: {
           avatar_url?: string | null
-          background_reauth_enabled?: boolean
           created_at?: string | null
           email?: string | null
           full_name: string
@@ -3372,13 +3970,10 @@ export type Database = {
           last_login?: string | null
           last_sync?: string | null
           message_templates_seeded_at?: string | null
-          moodle_user_id: string
-          moodle_username: string
           updated_at?: string | null
         }
         Update: {
           avatar_url?: string | null
-          background_reauth_enabled?: boolean
           created_at?: string | null
           email?: string | null
           full_name?: string
@@ -3386,8 +3981,6 @@ export type Database = {
           last_login?: string | null
           last_sync?: string | null
           message_templates_seeded_at?: string | null
-          moodle_user_id?: string
-          moodle_username?: string
           updated_at?: string | null
         }
         Relationships: []
@@ -3428,20 +4021,6 @@ export type Database = {
           sort_order: number
         }[]
       }
-      admin_search_users: {
-        Args: { p_limit?: number; p_offset?: number; p_query?: string }
-        Returns: {
-          email: string
-          full_name: string
-          group_id: string
-          group_name: string
-          group_slug: string
-          is_admin: boolean
-          moodle_username: string
-          total_count: number
-          user_id: string
-        }[]
-      }
       admin_set_user_admin: {
         Args: { p_is_admin: boolean; p_target_user_id: string }
         Returns: undefined
@@ -3478,13 +4057,88 @@ export type Database = {
         Args: { p_error_message: string; p_job_id: string; p_user_id: string }
         Returns: boolean
       }
-      backend_create_grade_suggestion_job_with_items: {
+      backend_cancel_moodle_sync_job: {
+        Args: { p_job_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      backend_checkpoint_moodle_sync_item: {
         Args: {
-          p_activity_name: string
-          p_course_id: string
+          p_cursor: Json
+          p_item_id: string
+          p_progress_current?: number
+          p_resume_after_seconds?: number
+          p_worker_id: string
+        }
+        Returns: boolean
+      }
+      backend_claim_moodle_sync_item: {
+        Args: {
+          p_job_id?: string
+          p_lease_seconds?: number
+          p_max_connection_leases?: number
+          p_max_site_leases?: number
+          p_worker_id: string
+        }
+        Returns: {
+          attempt_count: number
+          item_cursor: Json
+          item_id: string
+          item_key: string
+          item_metadata: Json
+          job_id: string
+          job_metadata: Json
+          label: string
+          leased_until: string
+          max_attempts: number
+          moodle_connection_id: string
+          moodle_site_id: string
+          sync_policy: Json
+          user_id: string
+        }[]
+      }
+      backend_complete_moodle_sync_item: {
+        Args: {
+          p_cursor?: Json
+          p_item_id: string
+          p_progress_current?: number
+          p_result_metadata?: Json
+          p_worker_id: string
+        }
+        Returns: string
+      }
+      backend_create_grade_suggestion_job_with_items:
+        | {
+            Args: {
+              p_activity_name: string
+              p_course_id: string
+              p_items: Json
+              p_max_grade: number
+              p_moodle_activity_id: string
+              p_user_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_activity_name: string
+              p_course_id: string
+              p_items: Json
+              p_max_grade: number
+              p_moodle_activity_id: string
+              p_moodle_connection_id: string
+              p_user_id: string
+            }
+            Returns: string
+          }
+      backend_create_moodle_sync_job_v2: {
+        Args: {
+          p_course_ids: string[]
+          p_entities: string[]
           p_items: Json
-          p_max_grade: number
-          p_moodle_activity_id: string
+          p_moodle_connection_id: string
+          p_source_record_id: string
+          p_sync_kind: string
+          p_trigger: string
           p_user_id: string
         }
         Returns: string
@@ -3496,6 +4150,22 @@ export type Database = {
           p_reassign_to_group_id?: string
         }
         Returns: Json
+      }
+      backend_fail_moodle_sync_item: {
+        Args: {
+          p_cursor?: Json
+          p_error_code: string
+          p_error_message: string
+          p_item_id: string
+          p_retry_after_seconds?: number
+          p_retryable?: boolean
+          p_worker_id: string
+        }
+        Returns: string
+      }
+      backend_finalize_moodle_sync_job: {
+        Args: { p_job_id: string }
+        Returns: string
       }
       backend_get_attendance_date_summaries: {
         Args: { p_course_id: string; p_user_id: string }
@@ -3511,8 +4181,22 @@ export type Database = {
         Args: { p_actor_id: string }
         Returns: Json
       }
+      backend_heartbeat_moodle_sync_item: {
+        Args: {
+          p_cursor?: Json
+          p_item_id: string
+          p_lease_seconds?: number
+          p_progress_current?: number
+          p_worker_id: string
+        }
+        Returns: boolean
+      }
       backend_link_eligible_user_courses: {
-        Args: { p_course_ids: string[]; p_user_id: string }
+        Args: {
+          p_course_ids: string[]
+          p_moodle_connection_id: string
+          p_user_id: string
+        }
         Returns: number
       }
       backend_list_access_groups: {
@@ -3562,9 +4246,46 @@ export type Database = {
         }
         Returns: Json
       }
+      backend_provision_claris_account: {
+        Args: { p_auth_user_id: string; p_email: string }
+        Returns: Json
+      }
+      backend_reclassify_moodle_course_sync_state: {
+        Args: {
+          p_course_id: string
+          p_moodle_connection_id: string
+          p_now?: string
+        }
+        Returns: string
+      }
       backend_replace_user_course_eligibility: {
-        Args: { p_course_ids: string[]; p_user_id: string }
+        Args: {
+          p_course_ids: string[]
+          p_moodle_connection_id: string
+          p_user_id: string
+        }
         Returns: number
+      }
+      backend_request_course_refresh: {
+        Args: {
+          p_course_id: string
+          p_entities: string[]
+          p_moodle_connection_id: string
+          p_trigger: string
+          p_user_id: string
+        }
+        Returns: {
+          accepted_entities: string[]
+          job_id: string
+          moodle_site_id: string
+          refresh_status: string
+          requested_at: string
+          retry_after_seconds: number
+        }[]
+      }
+      backend_retry_moodle_sync_job: {
+        Args: { p_job_id: string; p_user_id: string }
+        Returns: boolean
       }
       backend_save_attendance_sheet: {
         Args: {
@@ -3589,7 +4310,6 @@ export type Database = {
           group_name: string
           group_slug: string
           is_admin: boolean
-          moodle_username: string
           total_count: number
           user_id: string
         }[]
@@ -3989,6 +4709,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       ai_grade_suggestion_job_item_status: [

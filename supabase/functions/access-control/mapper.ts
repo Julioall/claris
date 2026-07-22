@@ -58,7 +58,6 @@ export function mapAccessUser(row: AccessUserRow): AccessUserDto {
   return {
     userId: row.user_id,
     fullName: row.full_name,
-    moodleUsername: row.moodle_username,
     email: row.email,
     isAdmin: row.is_admin === true,
     groupId: row.group_id,

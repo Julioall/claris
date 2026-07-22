@@ -5,12 +5,16 @@ import type {
   MoodleEnrolledUser,
   MoodleSiteInfo,
   MoodleUserProfile,
+  MoodleCourseUpdatesSince,
 } from './types.ts'
 
 const INVALID_PARAMETER_MESSAGE = 'valor invalido de parametro'
 const NUMERIC_CATEGORY_PATTERN = /^\d+$/
 const USER_PROFILE_BATCH_SIZE = 25
 const USER_PROFILE_BATCH_DELAY_MS = 300
+const DEFAULT_PAGE_SIZE = 100
+const DEFAULT_RESPONSE_LIMIT_BYTES = 16 * 1024 * 1024
+const DEFAULT_MAX_RETRIES = 3
 const ENROLLED_USERS_OPTIONAL_FIELDS = [
   'id',
   'username',
@@ -28,6 +32,9 @@ const ENROLLED_USERS_OPTIONAL_FIELDS = [
   'profileimageurl',
   'lastaccess',
   'lastcourseaccess',
+  'roles',
+  'groups',
+  'suspended',
 ].join(',')
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -39,17 +46,98 @@ function normalizeForComparison(value: string): string {
     .toLowerCase()
 }
 
+export type MoodleApiErrorCategory =
+  | 'authentication'
+  | 'permission'
+  | 'rate_limit'
+  | 'transient'
+  | 'invalid_payload'
+  | 'response_too_large'
+  | 'unknown'
+
+export class MoodleApiError extends Error {
+  readonly category: MoodleApiErrorCategory
+  readonly code: string
+  readonly retryAfterMs: number | null
+  readonly status: number | null
+
+  constructor(input: {
+    category: MoodleApiErrorCategory
+    code: string
+    message: string
+    retryAfterMs?: number | null
+    status?: number | null
+    cause?: unknown
+  }) {
+    super(input.message, { cause: input.cause })
+    this.name = 'MoodleApiError'
+    this.category = input.category
+    this.code = input.code
+    this.retryAfterMs = input.retryAfterMs ?? null
+    this.status = input.status ?? null
+  }
+}
+
 function isInvalidParameterError(error: unknown): boolean {
+  if (error instanceof MoodleApiError && error.category === 'invalid_payload') return true
   const message = error instanceof Error ? normalizeForComparison(error.message) : ''
   return message.includes(INVALID_PARAMETER_MESSAGE)
 }
 
-function isExceptionPayload(value: unknown): value is { exception: unknown; message?: unknown } {
+function isExceptionPayload(
+  value: unknown,
+): value is { errorcode?: unknown; exception: unknown; message?: unknown } {
   return Boolean(value) && typeof value === 'object' && 'exception' in value
 }
 
-async function parseMoodleResponseBody(response: Response): Promise<unknown> {
+function parseRetryAfter(value: string | null): number | null {
+  if (!value) return null
+  const seconds = Number(value)
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? Math.max(0, timestamp - Date.now()) : null
+}
+
+function classifyMoodleException(errorCode: string, exceptionName: string): MoodleApiErrorCategory {
+  const normalized = `${errorCode} ${exceptionName}`.toLowerCase()
+  if (/invalidtoken|requirelogin|servicenotavailable/.test(normalized)) return 'authentication'
+  if (/accesscontrol|nopermissions|permission|forbidden/.test(normalized)) return 'permission'
+  if (/invalidparam|missingparam|invalid_parameter/.test(normalized)) return 'invalid_payload'
+  if (/ratelimit|too_many_requests/.test(normalized)) return 'rate_limit'
+  return 'unknown'
+}
+
+function statusCategory(status: number): MoodleApiErrorCategory {
+  if (status === 401) return 'authentication'
+  if (status === 403) return 'permission'
+  if (status === 429) return 'rate_limit'
+  if (status >= 500) return 'transient'
+  if (status >= 400) return 'invalid_payload'
+  return 'unknown'
+}
+
+async function parseMoodleResponseBody(
+  response: Response,
+  maxResponseBytes = DEFAULT_RESPONSE_LIMIT_BYTES,
+): Promise<unknown> {
+  const declaredLength = Number(response.headers.get('content-length'))
+  if (Number.isFinite(declaredLength) && declaredLength > maxResponseBytes) {
+    throw new MoodleApiError({
+      category: 'response_too_large',
+      code: 'response_too_large',
+      message: 'Moodle response exceeded the configured size limit.',
+      status: response.status,
+    })
+  }
   const rawText = await response.text()
+  if (new TextEncoder().encode(rawText).byteLength > maxResponseBytes) {
+    throw new MoodleApiError({
+      category: 'response_too_large',
+      code: 'response_too_large',
+      message: 'Moodle response exceeded the configured size limit.',
+      status: response.status,
+    })
+  }
   const trimmed = rawText.trim()
 
   if (!trimmed) {
@@ -59,11 +147,15 @@ async function parseMoodleResponseBody(response: Response): Promise<unknown> {
   try {
     return JSON.parse(trimmed)
   } catch {
-    if (!response.ok) {
-      throw new Error(`Moodle API returned status ${response.status}`)
-    }
-
-    throw new Error('Moodle retornou uma resposta invalida.')
+    throw new MoodleApiError({
+      category: response.ok ? 'invalid_payload' : statusCategory(response.status),
+      code: response.ok ? 'invalid_json' : `http_${response.status}`,
+      message: response.ok
+        ? 'Moodle returned an invalid JSON response.'
+        : `Moodle API returned HTTP ${response.status}.`,
+      retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
+      status: response.status,
+    })
   }
 }
 
@@ -90,22 +182,33 @@ export async function getMoodleToken(
   const tokenUrl = `${moodleUrl}/login/token.php`
   const params = new URLSearchParams({ username, password, service })
 
-  console.log(`Requesting token from: ${tokenUrl} with service: ${service}`)
+  console.log('[moodle] Requesting token.', { service })
 
   try {
-    const response = await fetch(`${tokenUrl}?${params.toString()}`)
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString(),
+      redirect: 'manual',
+      signal: AbortSignal.timeout(25_000),
+    })
+    if (response.status >= 300 && response.status < 400) {
+      return {
+        error: 'O endpoint Moodle tentou redirecionar para outro endereco.',
+        errorcode: 'redirect_not_allowed',
+      }
+    }
     const contentType = response.headers.get('content-type') || ''
     const text = await response.text()
 
-    console.log(`Response status: ${response.status}, content-type: ${contentType}`)
-    console.log(`Response body (first 500 chars): ${text.substring(0, 500)}`)
+    console.log('[moodle] Token request completed.', { status: response.status })
 
     if (
       contentType.includes('text/html') ||
       text.trim().startsWith('<!DOCTYPE') ||
       text.trim().startsWith('<html')
     ) {
-      console.error('Moodle returned HTML instead of JSON')
+      console.error('[moodle] Token endpoint returned a non-JSON response.', { status: response.status })
       return {
         error: `O servico "${service}" nao esta disponivel neste Moodle. Verifique com o administrador se os Web Services estao habilitados.`,
         errorcode: 'service_unavailable',
@@ -114,19 +217,21 @@ export async function getMoodleToken(
 
     try {
       const data = JSON.parse(text)
-      console.log('Moodle token request completed.', {
+      console.log('[moodle] Token response parsed.', {
         errorCode: typeof data?.errorcode === 'string' ? data.errorcode : null,
         success: typeof data?.token === 'string' && data.token.length > 0,
       })
       return data
     } catch {
-      console.error('Failed to parse JSON response:', text.substring(0, 200))
+      console.error('[moodle] Token endpoint returned invalid JSON.', { status: response.status })
       return { error: 'Resposta invalida do Moodle. Verifique a URL.', errorcode: 'parse_error' }
     }
   } catch (fetchError) {
-    console.error('Fetch error:', fetchError)
+    console.error('[moodle] Token request failed.', {
+      errorType: fetchError instanceof Error ? fetchError.name : 'unknown',
+    })
     return {
-      error: `Erro de conexao: ${fetchError instanceof Error ? fetchError.message : 'Unknown error'}`,
+      error: 'Nao foi possivel conectar ao Moodle.',
       errorcode: 'network_error',
     }
   }
@@ -140,7 +245,7 @@ export async function callMoodleApi(
   timeoutMs = 25_000,
 ): Promise<unknown> {
   return callMoodleApiWithRetry(() =>
-    performMoodleApiFetch(moodleUrl, token, wsfunction, params, timeoutMs, 'GET'),
+    performMoodleApiRequest(moodleUrl, token, wsfunction, params, timeoutMs),
   )
 }
 
@@ -152,7 +257,7 @@ export async function callMoodleApiPost(
   timeoutMs = 25_000,
 ): Promise<unknown> {
   return callMoodleApiWithRetry(() =>
-    performMoodleApiPost(moodleUrl, token, wsfunction, params, timeoutMs),
+    performMoodleApiRequest(moodleUrl, token, wsfunction, params, timeoutMs),
   )
 }
 
@@ -163,7 +268,7 @@ export async function callMoodleApiPost(
  */
 async function callMoodleApiWithRetry<T>(
   apiFn: () => Promise<T>,
-  maxRetries = 3,
+  maxRetries = DEFAULT_MAX_RETRIES,
   baseDelayMs = 500,
 ): Promise<T> {
   let lastError: Error | null = null
@@ -172,21 +277,25 @@ async function callMoodleApiWithRetry<T>(
     try {
       return await apiFn()
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error))
-      
-      // Don't retry on 4xx errors (client errors, auth, validation)
-      if (lastError.message.includes('returned status 4')) {
+      lastError = error instanceof Error ? error : new Error('Unknown Moodle request failure')
+      const retryable = error instanceof MoodleApiError
+        ? error.category === 'transient' || error.category === 'rate_limit'
+        : error instanceof TypeError || error instanceof DOMException
+
+      if (!retryable) {
         throw lastError
       }
 
       if (attempt < maxRetries) {
-        // Exponential backoff: 500ms, 1s, 2s, 4s
-        const delayMs = baseDelayMs * Math.pow(2, attempt)
-        console.warn(
-          `[callMoodleApiWithRetry] Attempt ${attempt + 1} failed, retrying in ${delayMs}ms:`,
-          lastError.message,
+        const retryAfterMs = error instanceof MoodleApiError ? error.retryAfterMs : null
+        const delayMs = retryAfterMs ?? Math.round(
+          baseDelayMs * Math.pow(2, attempt) * (0.75 + Math.random() * 0.5),
         )
-        await new Promise((resolve) => setTimeout(resolve, delayMs))
+        console.warn(
+          '[moodle] Transient request failure; retry scheduled.',
+          { attempt: attempt + 1, delayMs },
+        )
+        await wait(delayMs)
       }
     }
   }
@@ -194,42 +303,7 @@ async function callMoodleApiWithRetry<T>(
   throw lastError || new Error('Unknown error in Moodle API retry loop')
 }
 
-async function performMoodleApiFetch(
-  moodleUrl: string,
-  token: string,
-  wsfunction: string,
-  params: Record<string, string | number>,
-  timeoutMs: number,
-  _method: string,
-): Promise<unknown> {
-  const apiUrl = `${moodleUrl}/webservice/rest/server.php`
-  const queryParams = new URLSearchParams({
-    wstoken: token,
-    wsfunction,
-    moodlewsrestformat: 'json',
-    ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
-  })
-
-  console.log(`Calling Moodle API: ${wsfunction}`)
-
-  const response = await fetch(`${apiUrl}?${queryParams.toString()}`, {
-    signal: AbortSignal.timeout(timeoutMs),
-  })
-  const data = await parseMoodleResponseBody(response)
-
-  if (isExceptionPayload(data)) {
-    console.error(`Moodle API error: ${String(data.message ?? '')}`)
-    throw new Error(typeof data.message === 'string' ? data.message : 'Moodle API error')
-  }
-
-  if (!response.ok) {
-    throw new Error(`Moodle API returned status ${response.status}`)
-  }
-
-  return data
-}
-
-async function performMoodleApiPost(
+async function performMoodleApiRequest(
   moodleUrl: string,
   token: string,
   wsfunction: string,
@@ -244,23 +318,50 @@ async function performMoodleApiPost(
     ...Object.fromEntries(Object.entries(params).map(([k, v]) => [k, String(v)])),
   })
 
-  console.log(`Calling Moodle API (POST): ${wsfunction}`)
+  console.log('[moodle] Calling API.', { wsfunction })
 
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: formData.toString(),
+    redirect: 'manual',
     signal: AbortSignal.timeout(timeoutMs),
   })
+  if (response.status >= 300 && response.status < 400) {
+    throw new MoodleApiError({
+      category: 'invalid_payload',
+      code: 'redirect_not_allowed',
+      message: 'Moodle API redirects are not allowed.',
+      status: response.status,
+    })
+  }
   const data = await parseMoodleResponseBody(response)
 
   if (isExceptionPayload(data)) {
-    console.error(`Moodle API error: ${String(data.message ?? '')}`)
-    throw new Error(typeof data.message === 'string' ? data.message : 'Moodle API error')
+    const errorCode = typeof data.errorcode === 'string' ? data.errorcode : 'moodle_exception'
+    const exceptionName = typeof data.exception === 'string' ? data.exception : 'moodle_exception'
+    const category = classifyMoodleException(errorCode, exceptionName)
+    console.error('[moodle] API returned a functional exception.', {
+      category,
+      errorCode,
+      wsfunction,
+    })
+    throw new MoodleApiError({
+      category,
+      code: errorCode,
+      message: `Moodle API rejected ${wsfunction} (${errorCode}).`,
+      status: response.status,
+    })
   }
 
   if (!response.ok) {
-    throw new Error(`Moodle API returned status ${response.status}`)
+    throw new MoodleApiError({
+      category: statusCategory(response.status),
+      code: `http_${response.status}`,
+      message: `Moodle API returned HTTP ${response.status}.`,
+      retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
+      status: response.status,
+    })
   }
 
   return data
@@ -278,14 +379,47 @@ export async function getUserCourses(
   return await callMoodleApi(moodleUrl, token, 'core_enrol_get_users_courses', { userid: userId }) as MoodleCourse[]
 }
 
-export async function getCategories(moodleUrl: string, token: string): Promise<MoodleCategory[]> {
-  try {
-    const data = await callMoodleApi(moodleUrl, token, 'core_course_get_categories')
-    return Array.isArray(data) ? data as MoodleCategory[] : []
-  } catch (error) {
-    console.error('Error fetching categories:', error)
-    return []
+/** Consultative delta signal; warnings or ambiguity must keep full sync enabled. */
+export async function getCourseUpdatesSince(
+  moodleUrl: string,
+  token: string,
+  courseId: number,
+  since: Date,
+): Promise<MoodleCourseUpdatesSince> {
+  const sinceSeconds = Math.floor(since.getTime() / 1000)
+  if (!Number.isSafeInteger(courseId) || courseId <= 0 || !Number.isSafeInteger(sinceSeconds)) {
+    throw new MoodleApiError({
+      category: 'invalid_payload',
+      code: 'invalid_updates_since_parameters',
+      message: 'Invalid course delta parameters.',
+    })
   }
+  const response = await callMoodleApiPost(
+    moodleUrl,
+    token,
+    'core_course_get_updates_since',
+    { courseid: courseId, since: sinceSeconds },
+  )
+  if (!response || typeof response !== 'object' || Array.isArray(response)) {
+    throw new MoodleApiError({
+      category: 'invalid_payload',
+      code: 'invalid_updates_since_response',
+      message: 'Moodle returned an invalid course delta response.',
+    })
+  }
+  return response as MoodleCourseUpdatesSince
+}
+
+export async function getCategories(moodleUrl: string, token: string): Promise<MoodleCategory[]> {
+  const data = await callMoodleApi(moodleUrl, token, 'core_course_get_categories')
+  if (!Array.isArray(data)) {
+    throw new MoodleApiError({
+      category: 'invalid_payload',
+      code: 'invalid_categories_payload',
+      message: 'Moodle returned an invalid category list.',
+    })
+  }
+  return data as MoodleCategory[]
 }
 
 export function buildCategoryPath(categoryId: number, categories: MoodleCategory[]): string {
@@ -340,57 +474,60 @@ export async function getCourseEnrolledUsers(
   moodleUrl: string,
   token: string,
   courseId: number,
+  pageSize = DEFAULT_PAGE_SIZE,
 ): Promise<MoodleEnrolledUser[]> {
-  const optionsWithUserFields: Record<string, string | number> = {
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 1000) {
+    throw new RangeError('pageSize must be between 1 and 1000')
+  }
+
+  const baseOptions: Record<string, string | number> = {
     'options[0][name]': 'onlyactive',
     'options[0][value]': 0,
     'options[1][name]': 'userfields',
     'options[1][value]': ENROLLED_USERS_OPTIONAL_FIELDS,
   }
 
-  const onlyActiveWithUserFields: Record<string, string | number> = {
-    onlyactive: 0,
-    'options[0][name]': 'userfields',
-    'options[0][value]': ENROLLED_USERS_OPTIONAL_FIELDS,
-  }
+  const usersById = new Map<number, MoodleEnrolledUser>()
+  let offset = 0
 
-  try {
-    return await callGetEnrolledUsers(moodleUrl, token, courseId, optionsWithUserFields) as MoodleEnrolledUser[]
-  } catch (error) {
-    if (isInvalidParameterError(error)) {
-      console.warn(
-        `Moodle for course ${courseId} rejected options format with userfields. Retrying with onlyactive=0 plus userfields.`,
-      )
-
-      try {
-        return await callGetEnrolledUsers(moodleUrl, token, courseId, onlyActiveWithUserFields) as MoodleEnrolledUser[]
-      } catch {
-        console.warn(
-          `Moodle for course ${courseId} rejected mixed onlyactive/userfields. Retrying with onlyactive fallback variants.`,
-        )
-      }
-
-      try {
-        return await callGetEnrolledUsers(moodleUrl, token, courseId, {
-          'options[0][name]': 'onlyactive',
-          'options[0][value]': 0,
-        }) as MoodleEnrolledUser[]
-      } catch {
-        console.warn(
-          `Moodle for course ${courseId} also rejected options[onlyactive]. Retrying without filter options.`,
-        )
-        try {
-          return await callGetEnrolledUsers(moodleUrl, token, courseId) as MoodleEnrolledUser[]
-        } catch (fallbackError) {
-          console.error(`Fallback failed fetching enrolled users for course ${courseId}:`, fallbackError)
-          return []
-        }
-      }
+  while (true) {
+    let page: unknown[]
+    try {
+      page = await callGetEnrolledUsers(moodleUrl, token, courseId, {
+        ...baseOptions,
+        limitfrom: offset,
+        limitnumber: pageSize,
+      })
+    } catch (error) {
+      if (!isInvalidParameterError(error)) throw error
+      console.warn('[moodle] Enrolment endpoint rejected userfields; using minimal paginated fields.', {
+        courseId,
+      })
+      page = await callGetEnrolledUsers(moodleUrl, token, courseId, {
+        'options[0][name]': 'onlyactive',
+        'options[0][value]': 0,
+        limitfrom: offset,
+        limitnumber: pageSize,
+      })
     }
 
-    console.error(`Error fetching enrolled users for course ${courseId}:`, error)
-    return []
+    for (const rawUser of page) {
+      const user = rawUser as MoodleEnrolledUser
+      if (typeof user.id !== 'number' || !Number.isFinite(user.id)) {
+        throw new MoodleApiError({
+          category: 'invalid_payload',
+          code: 'invalid_enrolled_user',
+          message: 'Moodle returned an enrolled user without a valid id.',
+        })
+      }
+      usersById.set(user.id, user)
+    }
+
+    if (page.length < pageSize) break
+    offset += pageSize
   }
+
+  return Array.from(usersById.values()).sort((left, right) => left.id - right.id)
 }
 
 export async function getCourseSuspendedUserIds(
@@ -398,44 +535,16 @@ export async function getCourseSuspendedUserIds(
   token: string,
   courseId: number,
 ): Promise<Set<number>> {
-  try {
-    const users = await callGetEnrolledUsers(moodleUrl, token, courseId, { onlysuspended: 1 })
+  const suspendedViaOptions = await callGetEnrolledUsers(moodleUrl, token, courseId, {
+    'options[0][name]': 'onlysuspended',
+    'options[0][value]': 1,
+  })
 
-    return new Set<number>(
-      users
-        .map((user: { id?: number }) => user.id)
-        .filter((id): id is number => typeof id === 'number'),
-    )
-  } catch (error) {
-    if (isInvalidParameterError(error)) {
-      console.warn(
-        `Moodle for course ${courseId} does not accept onlysuspended=1. Retrying with options[onlysuspended]=1.`,
-      )
-
-      try {
-        const suspendedViaOptions = await callGetEnrolledUsers(moodleUrl, token, courseId, {
-          'options[0][name]': 'onlysuspended',
-          'options[0][value]': 1,
-        })
-
-        const suspendedIds = new Set<number>(
-          suspendedViaOptions
-            .map((user: { id?: number }) => user.id)
-            .filter((id): id is number => typeof id === 'number'),
-        )
-        console.log(
-          `Fetched suspended users via options for course ${courseId}: suspended=${suspendedIds.size}`,
-        )
-        return suspendedIds
-      } catch (fallbackError) {
-        console.error(`Fallback failed fetching suspended users for course ${courseId}:`, fallbackError)
-        return new Set<number>()
-      }
-    }
-
-    console.error(`Error fetching suspended users for course ${courseId}:`, error)
-    return new Set<number>()
-  }
+  return new Set<number>(
+    suspendedViaOptions
+      .map((user: { id?: number }) => user.id)
+      .filter((id): id is number => typeof id === 'number'),
+  )
 }
 
 export async function getUserProfilesByIds(
@@ -456,17 +565,20 @@ export async function getUserProfilesByIds(
       params[`values[${index}]`] = String(batch[index])
     }
 
-    try {
-      const response = await callMoodleApi(moodleUrl, token, 'core_user_get_users_by_field', params)
-      const users = Array.isArray(response) ? response as MoodleUserProfile[] : []
+    const response = await callMoodleApi(moodleUrl, token, 'core_user_get_users_by_field', params)
+    if (!Array.isArray(response)) {
+      throw new MoodleApiError({
+        category: 'invalid_payload',
+        code: 'invalid_user_profiles_payload',
+        message: 'Moodle returned an invalid user profile list.',
+      })
+    }
+    const users = response as MoodleUserProfile[]
 
-      for (const user of users) {
-        if (typeof user?.id === 'number' && Number.isFinite(user.id)) {
-          profilesById.set(user.id, user)
-        }
+    for (const user of users) {
+      if (typeof user?.id === 'number' && Number.isFinite(user.id)) {
+        profilesById.set(user.id, user)
       }
-    } catch (error) {
-      console.error('[moodle] Failed to fetch user profiles by ids batch:', error)
     }
 
     if (i + USER_PROFILE_BATCH_SIZE < uniqueIds.length) {

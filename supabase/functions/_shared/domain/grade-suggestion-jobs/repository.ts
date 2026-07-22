@@ -13,7 +13,7 @@ import {
   upsertBackgroundJob,
 } from '../background-jobs/repository.ts'
 
-export type GradeSuggestionJob = Tables<'ai_grade_suggestion_jobs'>
+export type GradeSuggestionJob = Tables<'ai_grade_suggestion_jobs'> & { moodle_connection_id: string }
 export type GradeSuggestionJobItem = Tables<'ai_grade_suggestion_job_items'>
 export type GradeSuggestionJobStatus = Enums<'ai_grade_suggestion_job_status'> | 'cancelled'
 export type GradeSuggestionJobItemStatus = Enums<'ai_grade_suggestion_job_item_status'> | 'cancelled'
@@ -53,6 +53,7 @@ async function mirrorGradeSuggestionJobCreate(
     errorMessage: input.job.error_message,
     metadata: {
       activity_name: input.job.activity_name,
+      moodle_connection_id: input.job.moodle_connection_id,
       max_grade: input.job.max_grade,
       moodle_activity_id: input.job.moodle_activity_id,
     },
@@ -103,6 +104,7 @@ interface CreateGradeSuggestionJobInput {
   courseId: string
   items: GradeSuggestionJobItemDraft[]
   maxGrade: number | null
+  moodleConnectionId: string
   moodleActivityId: string
   userId: string
 }
@@ -138,13 +140,14 @@ function parseRpcUuid(value: unknown, operation: string): string {
 
 export async function findActiveGradeSuggestionJobForActivity(
   supabase: AppSupabaseClient,
-  input: { courseId: string; moodleActivityId: string; userId: string },
+  input: { connectionId: string; courseId: string; moodleActivityId: string; userId: string },
 ): Promise<GradeSuggestionJob | null> {
   const { data, error } = await supabase
     .from('ai_grade_suggestion_jobs')
     .select('*')
     .eq('user_id', input.userId)
     .eq('course_id', input.courseId)
+    .eq('moodle_connection_id', input.connectionId)
     .eq('moodle_activity_id', input.moodleActivityId)
     .in('status', ['pending', 'processing', 'failed'])
     .order('created_at', { ascending: false })
@@ -178,6 +181,7 @@ export async function createGradeSuggestionJobWithItems(
         student_name: item.studentName,
       })) as Json,
       p_max_grade: input.maxGrade,
+      p_moodle_connection_id: input.moodleConnectionId,
       p_moodle_activity_id: input.moodleActivityId,
       p_user_id: input.userId,
     },
@@ -209,7 +213,7 @@ export async function findGradeSuggestionJobForUser(
     .maybeSingle()
 
   if (error) throw error
-  return data
+  return data as GradeSuggestionJob | null
 }
 
 export async function listGradeSuggestionJobItems(

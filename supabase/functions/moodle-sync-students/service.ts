@@ -1,7 +1,6 @@
 import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import {
-  findCourseByMoodleCourseId,
   insertStudentSyncSnapshots,
   listExistingCourseStudentLinks,
   removeStudentCourseLinks,
@@ -9,8 +8,11 @@ import {
   upsertStudentCourseLinks,
   upsertStudents,
 } from '../_shared/domain/moodle-sync/repository.ts'
+import type { CourseSyncRecord } from '../_shared/domain/moodle-sync/repository.ts'
+import type { MoodleAccess } from '../_shared/domain/moodle-connections/mod.ts'
+import { computeContentHash } from '../_shared/domain/moodle-sync/content-hash.ts'
 import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
-import { getCourseEnrolledUsers, getCourseSuspendedUserIds, getUserProfilesByIds } from '../_shared/moodle/mod.ts'
+import { getCourseEnrolledUsers, getCourseSuspendedUserIds } from '../_shared/moodle/mod.ts'
 import { isStudentLikeUser } from '../_shared/moodle/student-role.ts'
 
 const MOBILE_CUSTOM_FIELD_KEYS = new Set([
@@ -41,10 +43,6 @@ const INVALID_CITY_VALUES = new Set([
   'brasileiro',
   'brasil',
 ])
-const MOODLE_REQUEST_SPACING_MS = 300
-
-const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
 function normalizeCustomFieldKey(value: string): string {
   return value
     .trim()
@@ -247,16 +245,20 @@ function resolveEnrollmentStatus(args: {
   return 'ativo'
 }
 
-export async function syncStudents(moodleUrl: string, token: string, courseId: number): Promise<Response> {
+export async function syncStudents(
+  access: MoodleAccess,
+  dbCourse: CourseSyncRecord,
+): Promise<Response> {
   const supabase = createServiceClient()
+  const courseId = Number.parseInt(dbCourse.moodle_course_id, 10)
+  if (!Number.isSafeInteger(courseId) || courseId <= 0) {
+    return errorResponse('Course has an invalid Moodle id', 409)
+  }
 
-  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
-
-  if (!dbCourse) return errorResponse('Course not found in database', 404)
-
-  const enrolledUsers = await getCourseEnrolledUsers(moodleUrl, token, courseId)
-  await wait(MOODLE_REQUEST_SPACING_MS)
-  const suspendedUserIds = await getCourseSuspendedUserIds(moodleUrl, token, courseId)
+  const [enrolledUsers, suspendedUserIds] = await Promise.all([
+    getCourseEnrolledUsers(access.moodleUrl, access.token, courseId),
+    getCourseSuspendedUserIds(access.moodleUrl, access.token, courseId),
+  ])
   console.log(`Found ${enrolledUsers.length} enrolled users in course ${courseId}`)
 
   const usersWithoutRoles = enrolledUsers.filter((u) => !u.roles || u.roles.length === 0).length
@@ -308,12 +310,6 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
     return jsonResponse({ success: true, students: [] })
   }
 
-  const studentIds = students
-    .map((student) => Number(student.id))
-    .filter((id): id is number => Number.isFinite(id) && id > 0)
-
-  const profilesById = await getUserProfilesByIds(moodleUrl, token, studentIds)
-
   const now = new Date().toISOString()
   let suspendedByStudentStatusCount = 0
   let suspendedByStudentFlagCount = 0
@@ -321,7 +317,7 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
   let suspendedByEnrolledCourseFlagCount = 0
   let suspendedByOnlySuspendedCount = 0
 
-  const studentsData = students.map((student) => {
+  const studentsData = await Promise.all(students.map(async (student) => {
     const courseEnrolment = student.enrolments?.find((e) => Number(e.courseid) === Number(courseId))
     const courseInfo = student.enrolledcourses?.find((c) => Number(c.id) === Number(courseId))
 
@@ -396,20 +392,18 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       hasRecentCourseAccess,
     })
 
-    const fallbackProfile = profilesById.get(Number(student.id))
-    const city = resolveStudentCity(student, fallbackProfile)
+    const city = resolveStudentCity(student, undefined)
     const phoneSource = {
-      phone1: student.phone1 ?? fallbackProfile?.phone1,
-      phone2: student.phone2 ?? fallbackProfile?.phone2,
-      customfields: Array.isArray(student.customfields) && student.customfields.length > 0
-        ? student.customfields
-        : fallbackProfile?.customfields,
+      phone1: student.phone1,
+      phone2: student.phone2,
+      customfields: student.customfields,
     }
 
     const { phone, phone_number, mobile_phone } = resolveStudentPhones(phoneSource)
 
-    return {
+    const normalizedStudent = {
       moodle_user_id: String(student.id),
+      moodle_site_id: access.moodleSiteId,
       full_name: student.fullname || `${student.firstname} ${student.lastname}`,
       email: student.email || null,
       city,
@@ -418,11 +412,19 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
       mobile_phone,
       avatar_url: student.profileimageurl || null,
       last_access: student.lastaccess ? new Date(student.lastaccess * 1000).toISOString() : null,
+    }
+
+    return {
+      ...normalizedStudent,
+      content_hash: await computeContentHash(normalizedStudent),
+      observed_at: now,
+      last_synced_at: now,
+      last_synced_connection_id: access.connectionId,
       updated_at: now,
       _enrollment_status: enrollmentStatus,
       _last_course_access: lastCourseAccess,
     }
-  })
+  }))
 
   const suspendedByFinalStatus = studentsData.filter((student) => student._enrollment_status === 'suspenso').length
   console.log(
@@ -563,7 +565,13 @@ export async function syncStudents(moodleUrl: string, token: string, courseId: n
   await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
   await touchCourseLastSync(supabase, dbCourse.id, now)
 
-  return jsonResponse({ success: true, students: syncedStudents || [] })
+  return jsonResponse({
+    success: true,
+    contractVersion: 2,
+    connectionId: access.connectionId,
+    siteSlug: access.siteSlug,
+    students: syncedStudents || [],
+  })
 }
 
 async function refreshDashboardAggregatesForCourse(

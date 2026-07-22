@@ -24,6 +24,8 @@ Este indice organiza os documentos principais do projeto por assunto.
 ## Integracao Moodle
 
 - [MOODLE_API.md](./MOODLE_API.md): referencia da integracao Moodle (mantido separadamente).
+- [MOODLE_SYNC_OPTIMIZATION_PLAN.md](./MOODLE_SYNC_OPTIMIZATION_PLAN.md): diagnostico e plano greenfield para conta Claris por convite e centralizacao de N conexoes Moodle, inicialmente FIEG/SENAI.
+- [MOODLE_SYNC_IMPLEMENTATION_SPEC.md](./MOODLE_SYNC_IMPLEMENTATION_SPEC.md): spec/epic com conta Claris, escopos, proveniencia, contratos, historias, criterios de aceite e rollout da sincronizacao multi-site.
 
 ## Decisoes Arquiteturais
 

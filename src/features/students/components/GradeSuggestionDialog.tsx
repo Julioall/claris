@@ -8,7 +8,6 @@ import {
   Upload,
 } from "lucide-react";
 
-import type { MoodleSession } from "@/features/auth/domain/session";
 import {
   approveStudentGradeSuggestion,
   generateStudentGradeSuggestion,
@@ -43,7 +42,7 @@ interface ActivityReference {
 interface GradeSuggestionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  session: MoodleSession | null;
+  connectionId: string | null;
   studentId: string;
   activity: ActivityReference | null;
   onApproved?: () => Promise<void> | void;
@@ -68,7 +67,7 @@ function buildGradeInputValue(result: StudentGradeSuggestionResult | null) {
 export function GradeSuggestionDialog({
   open,
   onOpenChange,
-  session,
+  connectionId,
   studentId,
   activity,
   onApproved,
@@ -125,7 +124,7 @@ export function GradeSuggestionDialog({
   };
 
   const handleGenerateSuggestion = async () => {
-    if (!activity?.moodle_activity_id || !session) {
+    if (!activity?.moodle_activity_id || !connectionId) {
       setRequestError("A sessao Moodle nao esta disponivel para gerar a sugestao.");
       return;
     }
@@ -135,7 +134,7 @@ export function GradeSuggestionDialog({
 
     try {
       const { data, error } = await generateStudentGradeSuggestion({
-        session,
+        connectionId,
         courseId: activity.course_id,
         studentId,
         moodleActivityId: activity.moodle_activity_id,
@@ -175,7 +174,7 @@ export function GradeSuggestionDialog({
   };
 
   const handleApprove = async () => {
-    if (!activity || !session || !auditId || parsedGrade === null || !Number.isFinite(parsedGrade)) {
+    if (!activity || !connectionId || !auditId || parsedGrade === null || !Number.isFinite(parsedGrade)) {
       return;
     }
 
@@ -183,7 +182,7 @@ export function GradeSuggestionDialog({
 
     try {
       const { data, error } = await approveStudentGradeSuggestion({
-        session,
+        connectionId,
         auditId,
         approvedGrade: parsedGrade,
         approvedFeedback: editedFeedback.trim(),

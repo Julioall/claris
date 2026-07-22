@@ -67,7 +67,7 @@ import {
 } from "./DynamicVariableInput";
 import { useAuth } from "@/contexts/AuthContext";
 import { useBackgroundActivityFlag } from "@/contexts/BackgroundActivityContext";
-import { useMoodleSession } from "@/features/auth/context/MoodleSessionContext";
+import { loadSelectedMoodleConnectionId } from "@/features/moodle-connections/state/selected-connection";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
@@ -260,7 +260,10 @@ interface BulkSendTabProps {
 export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const moodleSession = useMoodleSession();
+  const connectionId = useMemo(
+    () => user?.id ? loadSelectedMoodleConnectionId(user.id) : null,
+    [user?.id],
+  );
   const [students, setStudents] = useState<StudentOption[]>([]);
   const [gradeLookup, setGradeLookup] = useState<
     Record<string, GradeLookupValue>
@@ -316,12 +319,16 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
   );
 
   const fetchStudents = useCallback(async () => {
-    if (!user) return;
+    if (!user || !connectionId) {
+      setStudents([]);
+      setIsLoadingStudents(false);
+      return;
+    }
 
     setIsLoadingStudents(true);
 
     try {
-      const audience = await listBulkSendAudienceForUser();
+      const audience = await listBulkSendAudienceForUser(connectionId);
       setStudents(audience.students);
       setGradeLookup(audience.gradeLookup);
       setPendingLookup(audience.pendingLookup);
@@ -334,7 +341,7 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
     } finally {
       setIsLoadingStudents(false);
     }
-  }, [user]);
+  }, [connectionId, user]);
 
   const fetchTemplates = useCallback(async () => {
     if (!user) return;
@@ -835,7 +842,7 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
           channel: "moodle",
           created_via: "campaigns_bulk_send_tab",
           automatic_execution_supported: true,
-          moodle_url: moodleSession?.moodleUrl,
+          moodle_connection_id: connectionId,
           schedule: {
             type: scheduleMode,
             start_date:
@@ -872,7 +879,7 @@ export function BulkSendTab({ compactTrigger = false }: BulkSendTabProps) {
   }, [
     buildStudentVariableData,
     messageContent,
-    moodleSession,
+    connectionId,
     navigate,
     routineEndDate,
     routineMonthlyDay,

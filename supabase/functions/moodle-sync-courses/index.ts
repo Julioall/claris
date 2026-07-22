@@ -1,7 +1,10 @@
 import { createHandler, errorResponse } from '../_shared/http/mod.ts'
 import { userHasPermission } from '../_shared/auth/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
-import { findUserById } from '../_shared/domain/users/repository.ts'
+import {
+  MoodleConnectionError,
+  resolveMoodleAccess,
+} from '../_shared/domain/moodle-connections/mod.ts'
 import { syncCourses, linkSelectedCourses } from './service.ts'
 import { parseMoodleSyncCoursesPayload } from './payload.ts'
 
@@ -14,19 +17,17 @@ Deno.serve(createHandler(async ({ body, user }) => {
   }
 
   if (body.action === 'link_selected_courses') {
-    return await linkSelectedCourses(user.id, body.selectedCourseIds)
+    return await linkSelectedCourses(user.id, body.connectionId, body.selectedCourseIds)
   }
 
-  const dbUser = await findUserById(supabase, user.id)
-  const authenticatedMoodleUserId = dbUser?.moodle_user_id ? String(dbUser.moodle_user_id) : null
-
-  if (!authenticatedMoodleUserId) {
-    return errorResponse('Authenticated user has no Moodle profile.', 409)
+  try {
+    const access = await resolveMoodleAccess(supabase, user.id, body.connectionId)
+    return await syncCourses(access)
+  } catch (error) {
+    if (error instanceof MoodleConnectionError) {
+      const status = error.code === 'connection_not_found' ? 404 : 409
+      return errorResponse(error.message, status)
+    }
+    throw error
   }
-
-  if (String(body.userId) !== authenticatedMoodleUserId) {
-    return errorResponse('Forbidden for another Moodle user.', 403)
-  }
-
-  return await syncCourses(body.moodleUrl, body.token, authenticatedMoodleUserId)
 }, { requireAuth: true, parseBody: parseMoodleSyncCoursesPayload }))

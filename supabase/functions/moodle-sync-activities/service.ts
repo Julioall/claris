@@ -2,13 +2,14 @@ import { jsonResponse, errorResponse } from '../_shared/http/mod.ts'
 import { createServiceClient } from '../_shared/db/mod.ts'
 import type { AppSupabaseClient } from '../_shared/db/mod.ts'
 import {
-  findCourseByMoodleCourseId,
   listExistingStudentActivityStatuses,
   listRecentlySyncedActivityStudentIds,
   listStudentIdsByCourseId,
   listStudentsWithMoodleUserId,
   upsertStudentActivities,
 } from '../_shared/domain/moodle-sync/repository.ts'
+import type { CourseSyncRecord } from '../_shared/domain/moodle-sync/repository.ts'
+import type { MoodleAccess } from '../_shared/domain/moodle-connections/mod.ts'
 import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 
@@ -50,16 +51,17 @@ function resolveStudentBatch(
 }
 
 export async function syncActivities(
-  moodleUrl: string,
-  token: string,
-  courseId: number,
+  access: MoodleAccess,
+  dbCourse: CourseSyncRecord,
   options: StudentBatchOptions = {},
 ): Promise<Response> {
   const supabase = createServiceClient()
-
-  const dbCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
-
-  if (!dbCourse) return errorResponse('Course not found in database', 404)
+  const courseId = Number.parseInt(dbCourse.moodle_course_id, 10)
+  if (!Number.isSafeInteger(courseId) || courseId <= 0) {
+    return errorResponse('Course has an invalid Moodle id', 409)
+  }
+  const moodleUrl = access.moodleUrl
+  const token = access.token
 
   let courseContents: unknown[] = []
   let activitiesFromFallback: unknown[] | null = null
@@ -75,13 +77,25 @@ export async function syncActivities(
   const studentIds = await listStudentIdsByCourseId(supabase, dbCourse.id)
   if (studentIds.length === 0) {
     await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
-    return jsonResponse({ success: true, activitiesCount: 0, hasMore: false, processedStudents: 0, totalStudents: 0 })
+    return jsonResponse({
+      success: true,
+      contractVersion: 2,
+      connectionId: access.connectionId,
+      siteSlug: access.siteSlug,
+      activitiesCount: 0,
+      hasMore: false,
+      processedStudents: 0,
+      totalStudents: 0,
+    })
   }
 
   const studentBatch = resolveStudentBatch(studentIds, options)
   if (studentBatch.selectedStudentIds.length === 0) {
     return jsonResponse({
       success: true,
+      contractVersion: 2,
+      connectionId: access.connectionId,
+      siteSlug: access.siteSlug,
       activitiesCount: 0,
       hasMore: false,
       nextStudentBatchPage: null,
@@ -97,6 +111,9 @@ export async function syncActivities(
     await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
     return jsonResponse({
       success: true,
+      contractVersion: 2,
+      connectionId: access.connectionId,
+      siteSlug: access.siteSlug,
       activitiesCount: 0,
       hasMore: false,
       nextStudentBatchPage: null,
@@ -106,8 +123,10 @@ export async function syncActivities(
   }
 
   // Fetch due dates
-  const assignDueDates = await fetchAssignDueDates(moodleUrl, token, courseId, activities)
-  const quizDueDates = await fetchQuizDueDates(moodleUrl, token, courseId, activities)
+  const [assignDueDates, quizDueDates] = await Promise.all([
+    fetchAssignDueDates(moodleUrl, token, courseId, activities),
+    fetchQuizDueDates(moodleUrl, token, courseId, activities),
+  ])
 
   // Fetch per-student completion status
   const completionByStudent = await fetchCompletionStatuses(moodleUrl, token, courseId, studentBatch.selectedStudentIds, dbCourse.id, supabase)
@@ -133,6 +152,9 @@ export async function syncActivities(
   console.log(`Upserted ${activitiesCount} activity records`)
   return jsonResponse({
     success: true,
+    contractVersion: 2,
+    connectionId: access.connectionId,
+    siteSlug: access.siteSlug,
     activitiesCount,
     hasMore: studentBatch.hasMore,
     nextStudentBatchPage: studentBatch.nextStudentBatchPage,

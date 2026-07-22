@@ -31,7 +31,7 @@ function user(value: unknown): value is BackgroundJobUserDto | null {
     isRecord(value)
     && typeof value.id === 'string'
     && typeof value.fullName === 'string'
-    && typeof value.moodleUsername === 'string'
+    && nullableString(value.email)
   );
 }
 

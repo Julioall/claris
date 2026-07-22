@@ -16,6 +16,15 @@ import {
   type BulkRecipientSelection,
 } from '../_shared/domain/bulk-messaging/audience.ts'
 import type { BulkMessageRecipientDraft } from '../_shared/domain/bulk-messaging/repository.ts'
+import {
+  findMoodleSiteById,
+  findOwnedMoodleConnection,
+} from '../_shared/domain/moodle-connections/repository.ts'
+
+export interface CampaignMoodleScope {
+  connectionId: string
+  moodleSiteId: string
+}
 
 export interface ScheduledMessageWriteRecord {
   executionContext: Json
@@ -54,7 +63,8 @@ export interface CampaignsRepository {
     search?: string
     statuses?: ScheduledMessageStatusDto[]
   }): Promise<{ items: ScheduledMessageDto[]; totalCount: number }>
-  resolveRecipients(actorId: string, selections: BulkRecipientSelection[]): Promise<BulkMessageRecipientDraft[]>
+  resolveMoodleScope(actorId: string, connectionId: string): Promise<CampaignMoodleScope | null>
+  resolveRecipients(actorId: string, moodleSiteId: string, selections: BulkRecipientSelection[]): Promise<BulkMessageRecipientDraft[]>
   transitionScheduledMessage(input: {
     actorId: string
     expectedStatus: ScheduledMessageStatusDto
@@ -222,7 +232,16 @@ export function createCampaignsRepository(
 ): CampaignsRepository {
   return {
     userHasPermission: (actorId, permission) => checkPermission(db, actorId, permission),
-    resolveRecipients: (actorId, selections) => resolveAuthorizedRecipients(db, actorId, selections),
+    resolveRecipients: (actorId, moodleSiteId, selections) => (
+      resolveAuthorizedRecipients(db, actorId, moodleSiteId, selections)
+    ),
+    async resolveMoodleScope(actorId, connectionId) {
+      const connection = await findOwnedMoodleConnection(db, actorId, connectionId)
+      if (!connection || connection.status !== 'active') return null
+      const site = await findMoodleSiteById(db, connection.moodle_site_id)
+      if (!site || site.status !== 'approved') return null
+      return { connectionId: connection.id, moodleSiteId: site.id }
+    },
 
     async listBulkJobs(input) {
       let query = db

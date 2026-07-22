@@ -4,16 +4,19 @@ import {
 } from '../_shared/auth/mod.ts'
 import { createServiceClient, type AppSupabaseClient, type Json } from '../_shared/db/mod.ts'
 import {
-  createBackgroundJobItems,
   findActiveBackgroundJobBySourceRecord,
+  findBackgroundJobById,
   findOwnedBackgroundJobById,
   listBackgroundJobItems,
-  updateBackgroundJobWhenStatus,
-  upsertBackgroundJob,
   type BackgroundJobItemRecord,
   type BackgroundJobRecord,
-  type BackgroundJobStatus,
 } from '../_shared/domain/background-jobs/repository.ts'
+import {
+  cancelMoodleSyncJob,
+  createMoodleSyncJobV2,
+  retryMoodleSyncJob,
+} from '../_shared/domain/moodle-sync/worker-repository.ts'
+import { linkEligibleUserCourses } from '../_shared/domain/moodle-sync/repository.ts'
 
 export interface SyncPreferencesRecord {
   includeEmptyCourses: boolean
@@ -25,22 +28,25 @@ export interface MoodleSyncJobsRepository {
   cancelOwnedJob(actorId: string, jobId: string): Promise<BackgroundJobRecord | null>
   createJob(input: {
     actorId: string
+    connectionId: string
     courseIds: string[]
-    entities: string[]
+    entities: Array<'students' | 'activities' | 'grades'>
     itemDefinitions: Array<{ itemKey: string; label: string; metadata: Json }>
     kind: 'initial' | 'incremental'
     sourceRecordId: string
+    trigger: 'initial' | 'manual'
   }): Promise<BackgroundJobRecord>
   findActiveJob(actorId: string, sourceRecordId: string): Promise<BackgroundJobRecord | null>
   getCourseStudentCounts(courseIds: string[]): Promise<Map<string, number>>
   getJob(actorId: string, jobId: string): Promise<BackgroundJobRecord | null>
   getJobItems(jobId: string): Promise<BackgroundJobItemRecord[]>
   listActiveJobs(actorId: string): Promise<BackgroundJobRecord[]>
-  getPreferences(actorId: string): Promise<SyncPreferencesRecord | null>
-  hasCourseScope(actorId: string, courseIds: string[], kind: 'initial' | 'incremental'): Promise<boolean>
+  linkEligibleCourses(actorId: string, connectionId: string, courseIds: string[]): Promise<number>
+  getPreferences(actorId: string, connectionId: string): Promise<SyncPreferencesRecord | null>
+  hasCourseScope(actorId: string, connectionId: string, courseIds: string[], kind: 'initial' | 'incremental'): Promise<boolean>
   hasPermission(actorId: string, permission: string): Promise<boolean>
   resetOwnedJob(actorId: string, jobId: string): Promise<BackgroundJobRecord | null>
-  savePreferences(actorId: string, preferences: SyncPreferencesRecord): Promise<SyncPreferencesRecord>
+  savePreferences(actorId: string, connectionId: string, preferences: SyncPreferencesRecord): Promise<SyncPreferencesRecord>
 }
 
 export function createMoodleSyncJobsRepository(
@@ -51,20 +57,34 @@ export function createMoodleSyncJobsRepository(
       return checkPermission(supabase, actorId, permission)
     },
 
-    async hasCourseScope(actorId, courseIds, kind) {
+    async hasCourseScope(actorId, connectionId, courseIds, kind) {
+      const { data: connection, error: connectionError } = await supabase
+        .from('user_moodle_connections')
+        .select('moodle_site_id')
+        .eq('id', connectionId)
+        .eq('user_id', actorId)
+        .in('status', ['active', 'reauth_required'])
+        .maybeSingle()
+      if (connectionError) throw connectionError
+      if (!connection) return false
+
+      const { data: scopedCourses, error: courseError } = await supabase
+        .from('courses')
+        .select('id')
+        .eq('moodle_site_id', connection.moodle_site_id)
+        .in('id', courseIds)
+      if (courseError) throw courseError
+      if (new Set((scopedCourses ?? []).map((course) => course.id)).size !== courseIds.length) {
+        return false
+      }
+
       if (kind === 'incremental') {
         const accessible = new Set(await listAccessibleCourseIds(supabase, actorId))
         return courseIds.every((courseId) => accessible.has(courseId))
       }
-
-      const { data, error } = await supabase
-        .from('user_course_catalog_eligibility')
-        .select('course_id')
-        .eq('user_id', actorId)
-        .in('course_id', courseIds)
-      if (error) throw error
-      const eligible = new Set((data ?? []).map((row) => row.course_id))
-      return courseIds.every((courseId) => eligible.has(courseId))
+      // The connection-scoped eligibility RPC invoked immediately before job
+      // creation is the atomic authority for initial selections.
+      return true
     },
 
     findActiveJob(actorId, sourceRecordId) {
@@ -77,47 +97,23 @@ export function createMoodleSyncJobsRepository(
     },
 
     async createJob(input) {
-      const jobId = crypto.randomUUID()
-      const totalItems = input.itemDefinitions.length
-      const job = await upsertBackgroundJob(supabase, {
-        id: jobId,
-        userId: input.actorId,
-        courseId: input.courseIds.length === 1 ? input.courseIds[0] : null,
-        jobType: 'moodle_sync',
-        source: 'sync',
-        sourceTable: 'moodle_sync_request',
+      const jobId = await createMoodleSyncJobV2(supabase, {
+        connectionId: input.connectionId,
+        courseIds: input.courseIds,
+        entities: input.entities,
+        items: input.itemDefinitions,
         sourceRecordId: input.sourceRecordId,
-        title: input.kind === 'initial'
-          ? 'Sincronizacao inicial do Moodle'
-          : 'Atualizacao de unidade curricular',
-        description: `${input.courseIds.length} curso(s) em processamento pelo servidor.`,
-        status: 'pending',
-        totalItems,
-        metadata: {
-          course_ids: input.courseIds,
-          entities: input.entities,
-          schema_version: 1,
-          sync_kind: input.kind,
-        },
+        syncKind: input.kind,
+        trigger: input.trigger,
+        userId: input.actorId,
       })
-
-      try {
-        await createBackgroundJobItems(supabase, input.itemDefinitions.map((item) => ({
-          id: crypto.randomUUID(),
-          jobId: job.id,
-          userId: input.actorId,
-          itemKey: item.itemKey,
-          label: item.label,
-          status: 'pending',
-          progressCurrent: 0,
-          progressTotal: 1,
-          metadata: item.metadata,
-        })))
-      } catch (error) {
-        await supabase.from('background_jobs').delete().eq('id', job.id)
-        throw error
-      }
+      const job = await findBackgroundJobById(supabase, jobId)
+      if (!job) throw new Error('Schema-v2 Moodle job was not persisted')
       return job
+    },
+
+    linkEligibleCourses(actorId, connectionId, courseIds) {
+      return linkEligibleUserCourses(supabase, actorId, connectionId, courseIds)
     },
 
     getJob(actorId, jobId) {
@@ -144,43 +140,15 @@ export function createMoodleSyncJobsRepository(
     async cancelOwnedJob(actorId, jobId) {
       const job = await findOwnedBackgroundJobById(supabase, actorId, jobId)
       if (!job || job.job_type !== 'moodle_sync' || job.source !== 'sync') return null
-      return await updateBackgroundJobWhenStatus(supabase, jobId, ['pending', 'processing'], {
-        completed_at: new Date().toISOString(),
-        status: 'cancelled',
-      })
+      if (!await cancelMoodleSyncJob(supabase, jobId, actorId)) return null
+      return await findOwnedBackgroundJobById(supabase, actorId, jobId)
     },
 
     async resetOwnedJob(actorId, jobId) {
       const job = await findOwnedBackgroundJobById(supabase, actorId, jobId)
       if (!job || job.job_type !== 'moodle_sync' || job.source !== 'sync') return null
-      const reset = await updateBackgroundJobWhenStatus(
-        supabase,
-        jobId,
-        ['failed', 'cancelled'] satisfies BackgroundJobStatus[],
-        {
-          completed_at: null,
-          error_count: 0,
-          error_message: null,
-          processed_items: 0,
-          started_at: null,
-          status: 'pending',
-          success_count: 0,
-        },
-      )
-      if (!reset) return null
-      const { error } = await supabase
-        .from('background_job_items')
-        .update({
-          completed_at: null,
-          error_message: null,
-          metadata: {},
-          progress_current: 0,
-          started_at: null,
-          status: 'pending',
-        })
-        .eq('job_id', jobId)
-      if (error) throw error
-      return reset
+      if (!await retryMoodleSyncJob(supabase, jobId, actorId)) return null
+      return await findOwnedBackgroundJobById(supabase, actorId, jobId)
     },
 
     async getCourseStudentCounts(courseIds) {
@@ -196,37 +164,43 @@ export function createMoodleSyncJobsRepository(
       return counts
     },
 
-    async getPreferences(actorId) {
+    async getPreferences(actorId, connectionId) {
       const { data, error } = await supabase
-        .from('user_sync_preferences')
-        .select('selected_keys, include_empty_courses, include_finished')
+        .from('user_moodle_sync_preferences')
+        .select('selected_keys, include_empty_courses, include_finished_courses')
         .eq('user_id', actorId)
+        .eq('moodle_connection_id', connectionId)
         .maybeSingle()
       if (error) throw error
       if (!data) return null
       return {
         includeEmptyCourses: data.include_empty_courses,
-        includeFinished: data.include_finished,
-        selectedKeys: data.selected_keys ?? [],
+        includeFinished: data.include_finished_courses,
+        selectedKeys: Array.isArray(data.selected_keys)
+          ? data.selected_keys.filter((item): item is string => typeof item === 'string')
+          : [],
       }
     },
 
-    async savePreferences(actorId, preferences) {
+    async savePreferences(actorId, connectionId, preferences) {
       const { data, error } = await supabase
-        .from('user_sync_preferences')
+        .from('user_moodle_sync_preferences')
         .upsert({
           user_id: actorId,
+          moodle_connection_id: connectionId,
           selected_keys: preferences.selectedKeys,
           include_empty_courses: preferences.includeEmptyCourses,
-          include_finished: preferences.includeFinished,
-        }, { onConflict: 'user_id' })
-        .select('selected_keys, include_empty_courses, include_finished')
+          include_finished_courses: preferences.includeFinished,
+        }, { onConflict: 'user_id,moodle_connection_id' })
+        .select('selected_keys, include_empty_courses, include_finished_courses')
         .single()
       if (error || !data) throw error ?? new Error('Failed to persist sync preferences')
       return {
         includeEmptyCourses: data.include_empty_courses,
-        includeFinished: data.include_finished,
-        selectedKeys: data.selected_keys ?? [],
+        includeFinished: data.include_finished_courses,
+        selectedKeys: Array.isArray(data.selected_keys)
+          ? data.selected_keys.filter((item): item is string => typeof item === 'string')
+          : [],
       }
     },
   }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Bug, ChevronDown, ChevronUp, GraduationCap } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
@@ -14,8 +14,15 @@ import {
   type GradeDebugResult,
   type GradeDebugStudentOption,
 } from '../api';
+import { useAuth } from '@/contexts/AuthContext';
+import { loadSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
 
 export function GradeDebugCard() {
+  const { user } = useAuth();
+  const connectionId = useMemo(
+    () => user?.id ? loadSelectedMoodleConnectionId(user.id) : null,
+    [user?.id],
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [courses, setCourses] = useState<GradeDebugCourseOption[]>([]);
   const [students, setStudents] = useState<GradeDebugStudentOption[]>([]);
@@ -26,18 +33,19 @@ export function GradeDebugCard() {
   const [error, setError] = useState<string | null>(null);
 
   const loadCourses = async () => {
-    if (courses.length > 0) return;
+    if (courses.length > 0 || !connectionId) return;
 
     try {
-      setCourses(await listGradeDebugCourses());
+      setCourses(await listGradeDebugCourses(connectionId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar cursos');
     }
   };
 
   const loadStudents = async (courseId: string) => {
+    if (!connectionId) return;
     try {
-      setStudents(await listGradeDebugStudents(courseId));
+      setStudents(await listGradeDebugStudents(connectionId, courseId));
     } catch (err) {
       setStudents([]);
       setError(err instanceof Error ? err.message : 'Erro ao carregar alunos');
@@ -53,7 +61,7 @@ export function GradeDebugCard() {
   };
 
   const fetchGradeDebug = async () => {
-    if (!selectedCourse || !selectedStudent) return;
+    if (!connectionId || !selectedCourse || !selectedStudent) return;
 
     setIsLoading(true);
     setDebugResponse(null);
@@ -61,6 +69,7 @@ export function GradeDebugCard() {
 
     try {
       const data = await debugStudentGrades({
+        connectionId,
         courseId: selectedCourse,
         studentId: selectedStudent,
       });

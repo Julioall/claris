@@ -22,13 +22,7 @@ import {
   listRecipientsForJob,
 } from '../_shared/domain/bulk-messaging/repository.ts'
 import { processBulkMessageJob } from '../_shared/domain/bulk-messaging/service.ts'
-import {
-  findMoodleReauthCredentialByUserId,
-  markMoodleReauthFailure,
-  markMoodleReauthSuccess,
-} from '../_shared/domain/moodle-reauth/repository.ts'
-import { decryptMoodleReauthPayload } from '../_shared/security/moodle-reauth-crypto.ts'
-import { getMoodleToken } from '../_shared/moodle/mod.ts'
+import { resolveMoodleAccess } from '../_shared/domain/moodle-connections/access.ts'
 
 interface RequestBody {
   dryRun: boolean
@@ -41,7 +35,7 @@ interface ScheduledMessageExecutionContext {
   blocking_reason?: string
   channel?: 'moodle' | 'whatsapp'
   mode?: string
-  moodle_url?: string
+  moodle_connection_id?: string
   recipient_snapshot?: ScheduledMessageRecipientSnapshot[]
   schedule?: ScheduleMetadata
   whatsapp_instance_id?: string | null
@@ -236,7 +230,7 @@ function readExecutionContext(message: ScheduledMessageRow): ScheduledMessageExe
     blocking_reason: readString(executionContext.blocking_reason),
     channel: channel === 'whatsapp' ? 'whatsapp' : 'moodle',
     mode: readString(executionContext.mode),
-    moodle_url: readString(executionContext.moodle_url),
+    moodle_connection_id: readString(executionContext.moodle_connection_id),
     recipient_snapshot: recipientSnapshot,
     schedule: readScheduleMetadata(executionContext.schedule),
     whatsapp_instance_id: readString(executionContext.whatsapp_instance_id) ?? null,
@@ -275,11 +269,11 @@ function buildStaticFailure(
     }
   }
 
-  if (!executionContext.moodle_url) {
+  if (!executionContext.moodle_connection_id) {
     return {
       errorMessage:
-        'O agendamento possui destinatarios congelados, mas nao possui moodle_url no contexto de execucao.',
-      failureCode: 'moodle_url_missing',
+        'O agendamento possui destinatarios congelados, mas nao possui uma conexao Moodle no contexto de execucao.',
+      failureCode: 'moodle_connection_missing',
       failedCount: recipients.length,
     }
   }
@@ -660,50 +654,11 @@ async function processScheduledMessage(
   }
 
   try {
-    const reauthCredential = await findMoodleReauthCredentialByUserId(supabase, claimedMessage.user_id)
-    if (!reauthCredential?.reauth_enabled || !reauthCredential.credential_ciphertext) {
-      await finalizeScheduledMessageFailure(supabase, claimedMessage, items, {
-        errorMessage:
-          'O usuario nao habilitou a reautorizacao automatica do Moodle para jobs em segundo plano.',
-        failedCount: recipients.length,
-        failureCode: 'reauthorization_not_enabled',
-        timestamp,
-      })
-
-      return {
-        messageId: claimedMessage.id,
-        reason: 'reauthorization_not_enabled',
-        status: 'failed',
-      }
-    }
-
-    const reauthPayload = await decryptMoodleReauthPayload(reauthCredential.credential_ciphertext)
-    const moodleUrl = executionContext.moodle_url || reauthCredential.moodle_url
-    const tokenResponse = await getMoodleToken(
-      moodleUrl,
-      reauthCredential.moodle_username,
-      reauthPayload.password,
-      reauthCredential.moodle_service,
+    const access = await resolveMoodleAccess(
+      supabase,
+      claimedMessage.user_id,
+      executionContext.moodle_connection_id as string,
     )
-
-    if (tokenResponse.error || !tokenResponse.token) {
-      const errorMessage = tokenResponse.error || 'Falha ao renovar o token do Moodle.'
-      await markMoodleReauthFailure(supabase, claimedMessage.user_id, errorMessage)
-      await finalizeScheduledMessageFailure(supabase, claimedMessage, items, {
-        errorMessage,
-        failedCount: recipients.length,
-        failureCode: executionContext.blocking_reason || 'reauthorization_failed',
-        timestamp,
-      })
-
-      return {
-        messageId: claimedMessage.id,
-        reason: 'reauthorization_failed',
-        status: 'failed',
-      }
-    }
-
-    await markMoodleReauthSuccess(supabase, claimedMessage.user_id, timestamp)
     await appendBackgroundJobEvent(supabase, {
       userId: claimedMessage.user_id,
       jobId: claimedMessage.id,
@@ -713,6 +668,7 @@ async function processScheduledMessage(
 
     const bulkJob = await createJobWithRecipients(supabase, {
       messageContent: claimedMessage.message_content,
+      moodleConnectionId: access.connectionId,
       origin: claimedMessage.origin as 'manual' | 'ia',
       recipients: recipients.map((recipient) => ({
         moodleUserId: recipient.moodle_user_id,
@@ -737,8 +693,8 @@ async function processScheduledMessage(
       supabase,
       claimedMessage.user_id,
       bulkJob,
-      moodleUrl,
-      tokenResponse.token,
+      access.moodleUrl,
+      access.token,
     )
 
     await syncScheduledItemsFromBulkJob(supabase, claimedMessage.id, bulkJob.id, timestamp)
@@ -756,7 +712,6 @@ async function processScheduledMessage(
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Erro inesperado ao executar agendamento.'
-    await markMoodleReauthFailure(supabase, claimedMessage.user_id, errorMessage).catch(() => undefined)
     await finalizeScheduledMessageFailure(supabase, claimedMessage, items, {
       errorMessage,
       failedCount: recipients.length,

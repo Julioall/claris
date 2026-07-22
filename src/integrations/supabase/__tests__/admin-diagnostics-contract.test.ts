@@ -28,6 +28,26 @@ import { parseMoodleSyncGradesPayload } from '../../../../supabase/functions/moo
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111';
 const COURSE_ID = '22222222-2222-4222-8222-222222222222';
 const STUDENT_ID = '33333333-3333-4333-8333-333333333333';
+const CONNECTION_ID = '44444444-4444-4444-8444-444444444444';
+const SITE_ID = '55555555-5555-4555-8555-555555555555';
+
+function diagnosticsDb() {
+  return {
+    from: vi.fn((table: string) => {
+      const query = {
+        select: vi.fn(() => query),
+        eq: vi.fn(() => query),
+        maybeSingle: vi.fn(async () => ({
+          data: table === 'user_moodle_connections'
+            ? { id: CONNECTION_ID, moodle_site_id: SITE_ID, status: 'active', user_id: ACTOR_ID }
+            : { id: SITE_ID, status: 'approved' },
+          error: null,
+        })),
+      };
+      return query;
+    }),
+  } as never;
+}
 
 const target: GradeDiagnosticTarget = {
   course: { id: COURSE_ID, moodleCourseId: '101', name: 'Matematica' },
@@ -171,10 +191,12 @@ describe('admin grade diagnostics backend contract', () => {
   it('accepts internal IDs and rejects credentials or provider IDs from the browser', () => {
     expect(parseAdminDiagnosticsPayload({
       action: 'run_grade_diagnostic',
+      connectionId: CONNECTION_ID,
       courseId: COURSE_ID,
       studentId: STUDENT_ID,
     })).toEqual({
       action: 'run_grade_diagnostic',
+      connectionId: CONNECTION_ID,
       courseId: COURSE_ID,
       studentId: STUDENT_ID,
     });
@@ -182,12 +204,14 @@ describe('admin grade diagnostics backend contract', () => {
     for (const payload of [
       {
         action: 'run_grade_diagnostic',
+        connectionId: CONNECTION_ID,
         courseId: COURSE_ID,
         studentId: STUDENT_ID,
         token: 'browser-token',
       },
       {
         action: 'run_grade_diagnostic',
+        connectionId: CONNECTION_ID,
         courseId: COURSE_ID,
         studentId: STUDENT_ID,
         moodleUserId: 5001,
@@ -203,9 +227,10 @@ describe('admin grade diagnostics backend contract', () => {
     const result = await executeAdminDiagnostics(
       diagnosticsRepository(),
       diagnosticGateway(),
+      diagnosticsDb(),
       ACTOR_ID,
       'diagnostic-correlation',
-      { action: 'list_grade_courses' },
+      { action: 'list_grade_courses', connectionId: CONNECTION_ID },
     );
     expect(result).toEqual({
       contractVersion: 1,
@@ -214,7 +239,7 @@ describe('admin grade diagnostics backend contract', () => {
     expect(JSON.stringify(result)).not.toContain('101');
 
     const mapped = mapGradeDiagnosticResult(
-      await diagnosticGateway().fetchGrades(ACTOR_ID, target),
+      await diagnosticGateway().fetchGrades(ACTOR_ID, CONNECTION_ID, target),
       '44444444-4444-4444-8444-444444444444',
       target,
     );
@@ -232,12 +257,13 @@ describe('admin grade diagnostics backend contract', () => {
     const result = await executeAdminDiagnostics(
       repository,
       gateway,
+      diagnosticsDb(),
       ACTOR_ID,
       'diagnostic-correlation',
-      { action: 'run_grade_diagnostic', courseId: COURSE_ID, studentId: STUDENT_ID },
+      { action: 'run_grade_diagnostic', connectionId: CONNECTION_ID, courseId: COURSE_ID, studentId: STUDENT_ID },
     );
 
-    expect(gateway.fetchGrades).toHaveBeenCalledWith(ACTOR_ID, target);
+    expect(gateway.fetchGrades).toHaveBeenCalledWith(ACTOR_ID, CONNECTION_ID, target);
     expect(repository.recordAudit).toHaveBeenNthCalledWith(1, expect.objectContaining({
       actorId: ACTOR_ID,
       correlationId: 'diagnostic-correlation',

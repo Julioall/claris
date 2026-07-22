@@ -4,19 +4,15 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { useChat } from '@/features/claris/hooks/useChat';
 
 const useAuthMock = vi.fn();
-const useMoodleSessionMock = vi.fn();
 const fetchMoodleConversationsMock = vi.fn();
 const fetchMoodleMessagesMock = vi.fn();
 const sendMoodleMessageMock = vi.fn();
 const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 let authUserCounter = 0;
+const CONNECTION_ID = '11111111-1111-4111-8111-111111111111';
 
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => useAuthMock(),
-}));
-
-vi.mock('@/features/auth/context/MoodleSessionContext', () => ({
-  useMoodleSession: () => useMoodleSessionMock(),
 }));
 
 vi.mock('@/features/claris/api/moodle-messaging', () => ({
@@ -65,11 +61,9 @@ describe('useChat', () => {
     window.sessionStorage.clear();
 
     authUserCounter += 1;
-    useAuthMock.mockReturnValue({ user: { id: `user-${authUserCounter}` } });
-    useMoodleSessionMock.mockReturnValue({
-      moodleUrl: 'https://moodle.example.com',
-      moodleToken: 'browser-token-not-forwarded',
-    });
+    const userId = `user-${authUserCounter}`;
+    useAuthMock.mockReturnValue({ user: { id: userId } });
+    window.sessionStorage.setItem(`claris:selected-moodle-connection:${userId}`, CONNECTION_ID);
   });
 
   afterAll(() => {
@@ -92,7 +86,7 @@ describe('useChat', () => {
     const { result } = renderHook(() => useChat());
     await act(async () => result.current.fetchConversations());
 
-    expect(fetchMoodleConversationsMock).toHaveBeenCalledWith();
+    expect(fetchMoodleConversationsMock).toHaveBeenCalledWith(CONNECTION_ID);
     expect(result.current.currentMoodleUserId).toBe(10);
     expect(result.current.conversations).toEqual([{
       id: 7,
@@ -129,7 +123,7 @@ describe('useChat', () => {
     const { result } = renderHook(() => useChat());
     await act(async () => result.current.fetchMessages(20, 10));
 
-    expect(fetchMoodleMessagesMock).toHaveBeenCalledWith(20, 10);
+    expect(fetchMoodleMessagesMock).toHaveBeenCalledWith(CONNECTION_ID, 20, 10);
     expect(result.current.messages).toEqual([
       {
         id: '1',
@@ -235,7 +229,7 @@ describe('useChat', () => {
     });
 
     expect(sent).toBe(true);
-    expect(sendMoodleMessageMock).toHaveBeenCalledWith(20, 'mensagem enviada');
+    expect(sendMoodleMessageMock).toHaveBeenCalledWith(CONNECTION_ID, 20, 'mensagem enviada');
     expect(result.current.messages.at(-1)).toMatchObject({
       id: '99',
       text: 'mensagem enviada',
@@ -249,7 +243,7 @@ describe('useChat', () => {
   });
 
   it('does not call the API without a local session or with a blank message', async () => {
-    useMoodleSessionMock.mockReturnValue(null);
+    window.sessionStorage.clear();
     const { result } = renderHook(() => useChat());
 
     let noSessionResult = true;
@@ -259,7 +253,8 @@ describe('useChat', () => {
     expect(noSessionResult).toBe(false);
     expect(sendMoodleMessageMock).not.toHaveBeenCalled();
 
-    useMoodleSessionMock.mockReturnValue({ moodleUrl: 'https://moodle.example.com', moodleToken: 'token' });
+    const userId = `user-${authUserCounter}`;
+    window.sessionStorage.setItem(`claris:selected-moodle-connection:${userId}`, CONNECTION_ID);
     const { result: withSession } = renderHook(() => useChat());
     let blankResult = true;
     await act(async () => {

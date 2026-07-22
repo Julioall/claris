@@ -101,7 +101,7 @@ export interface ScheduledMessageExecutionContext {
   created_via?: string;
   automatic_execution_supported?: boolean;
   blocking_reason?: string;
-  moodle_url?: string;
+  moodle_connection_id?: string;
   whatsapp_instance_id?: string | null;
   recipient_snapshot?: ScheduledMessageRecipientSnapshot[];
   [key: string]: CampaignJson | undefined;

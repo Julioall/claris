@@ -1,27 +1,24 @@
 import {
   RequestBodyValidationError,
   expectBodyObject,
-  readRequiredMoodleUrl,
 } from '../_shared/http/mod.ts'
 
 export interface StartBulkMessageSendPayload {
   action: 'start_send'
+  connectionId: string
   messageContent: string
-  moodleUrl: string
   origin: 'manual'
   recipients: Array<{
     personalizedMessage?: string
     studentId: string
   }>
   templateId?: string
-  token: string
 }
 
 export interface RetryBulkMessageSendPayload {
   action: 'retry_send'
+  connectionId: string
   jobId: string
-  moodleUrl: string
-  token: string
 }
 
 export type BulkMessageSendPayload = StartBulkMessageSendPayload | RetryBulkMessageSendPayload
@@ -77,25 +74,23 @@ export function parseBulkMessageSendPayload(rawBody: unknown): BulkMessageSendPa
   const body = expectBodyObject(rawBody)
   switch (body.action) {
     case 'start_send': {
-      exactFields(body, ['action', 'messageContent', 'moodleUrl', 'origin', 'recipients', 'templateId', 'token'])
+      exactFields(body, ['action', 'connectionId', 'messageContent', 'origin', 'recipients', 'templateId'])
       if (body.origin !== undefined && body.origin !== 'manual') invalid('origin')
       return {
         action: 'start_send',
+        connectionId: requiredUuid(body.connectionId, 'connectionId'),
         messageContent: requiredString(body.messageContent, 'messageContent', 12_000),
-        moodleUrl: readRequiredMoodleUrl(body),
         origin: 'manual',
         recipients: parseRecipients(body.recipients),
         templateId: optionalUuid(body.templateId, 'templateId'),
-        token: requiredString(body.token, 'token', 12_000),
       }
     }
     case 'retry_send':
-      exactFields(body, ['action', 'jobId', 'moodleUrl', 'token'])
+      exactFields(body, ['action', 'connectionId', 'jobId'])
       return {
         action: 'retry_send',
+        connectionId: requiredUuid(body.connectionId, 'connectionId'),
         jobId: requiredUuid(body.jobId, 'jobId'),
-        moodleUrl: readRequiredMoodleUrl(body),
-        token: requiredString(body.token, 'token', 12_000),
       }
     default:
       invalid('action')

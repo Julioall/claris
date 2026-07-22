@@ -35,7 +35,7 @@ function isNonNegativeInteger(value: unknown): value is number {
 }
 
 function hasContractVersion(value: unknown): value is Record<string, unknown> {
-  return isRecord(value) && value.contractVersion === 1;
+  return isRecord(value) && value.contractVersion === 2;
 }
 
 function isCourse(value: unknown): value is MoodleSyncCourseDto {
@@ -67,6 +67,7 @@ function isStep(value: unknown): value is MoodleSyncJobStepDto {
 function isJob(value: unknown): value is MoodleSyncJobDto {
   return isRecord(value)
     && typeof value.id === 'string'
+    && typeof value.connectionId === 'string'
     && (value.kind === 'initial' || value.kind === 'incremental')
     && typeof value.status === 'string'
     && STATUSES.has(value.status as MoodleSyncJobStatusDto)
@@ -102,23 +103,27 @@ async function invoke<T>(body: Record<string, unknown>): Promise<T> {
   return await invokeEdgeFunction<T>(FUNCTION_NAME, { body, timeoutMs: 60_000 });
 }
 
-export async function listAvailableMoodleCourses(): Promise<Course[]> {
-  const response = await invoke<MoodleSyncCoursesDto>({ action: 'list_available_courses' });
+export async function listAvailableMoodleCourses(connectionId: string): Promise<Course[]> {
+  const response = await invoke<MoodleSyncCoursesDto>({ action: 'list_available_courses', connectionId });
   if (!hasContractVersion(response) || !Array.isArray(response.items) || !response.items.every(isCourse)) {
     invalidResponse();
   }
   return response.items.map(mapMoodleSyncCourse);
 }
 
-export async function startInitialMoodleSync(courseIds: string[]): Promise<MoodleSyncJobResponseDto> {
-  return readJobResponse(await invoke({ action: 'start_initial_sync', courseIds }));
+export async function startInitialMoodleSync(
+  connectionId: string,
+  courseIds: string[],
+): Promise<MoodleSyncJobResponseDto> {
+  return readJobResponse(await invoke({ action: 'start_initial_sync', connectionId, courseIds }));
 }
 
 export async function startCourseMoodleSync(
+  connectionId: string,
   courseIds: string[],
   entities: MoodleSyncEntityDto[],
 ): Promise<MoodleSyncJobResponseDto> {
-  return readJobResponse(await invoke({ action: 'start_course_sync', courseIds, entities }));
+  return readJobResponse(await invoke({ action: 'start_course_sync', connectionId, courseIds, entities }));
 }
 
 export async function getMoodleSyncJob(jobId: string): Promise<MoodleSyncJobDto> {
@@ -134,19 +139,19 @@ export async function listActiveMoodleSyncJobs(): Promise<MoodleSyncJobDto[]> {
 }
 
 export async function retryMoodleSyncJob(jobId: string): Promise<MoodleSyncJobDto> {
-  const response = await invoke<{ contractVersion: 1; job: MoodleSyncJobDto }>({ action: 'retry_job', jobId });
+  const response = await invoke<{ contractVersion: 2; job: MoodleSyncJobDto }>({ action: 'retry_job', jobId });
   if (!hasContractVersion(response) || !isJob(response.job)) invalidResponse();
   return response.job;
 }
 
 export async function cancelMoodleSyncJob(jobId: string): Promise<MoodleSyncJobDto> {
-  const response = await invoke<{ contractVersion: 1; job: MoodleSyncJobDto }>({ action: 'cancel_job', jobId });
+  const response = await invoke<{ contractVersion: 2; job: MoodleSyncJobDto }>({ action: 'cancel_job', jobId });
   if (!hasContractVersion(response) || !isJob(response.job)) invalidResponse();
   return response.job;
 }
 
-export async function fetchMoodleSyncPreferences(): Promise<MoodleSyncPreferencesDto> {
-  const response = await invoke<MoodleSyncPreferencesDto>({ action: 'get_preferences' });
+export async function fetchMoodleSyncPreferences(connectionId: string): Promise<MoodleSyncPreferencesDto> {
+  const response = await invoke<MoodleSyncPreferencesDto>({ action: 'get_preferences', connectionId });
   if (
     !hasContractVersion(response)
     || typeof response.includeEmptyCourses !== 'boolean'
@@ -160,6 +165,7 @@ export async function fetchMoodleSyncPreferences(): Promise<MoodleSyncPreference
 }
 
 export async function saveMoodleSyncPreferences(preferences: {
+  connectionId: string;
   includeEmptyCourses: boolean;
   includeFinished: boolean;
   selectedKeys: string[];
@@ -169,8 +175,15 @@ export async function saveMoodleSyncPreferences(preferences: {
   return response;
 }
 
-export async function fetchMoodleCourseStudentCounts(courseIds: string[]): Promise<Map<string, number>> {
-  const response = await invoke<MoodleSyncCourseCountsDto>({ action: 'get_course_student_counts', courseIds });
+export async function fetchMoodleCourseStudentCounts(
+  connectionId: string,
+  courseIds: string[],
+): Promise<Map<string, number>> {
+  const response = await invoke<MoodleSyncCourseCountsDto>({
+    action: 'get_course_student_counts',
+    connectionId,
+    courseIds,
+  });
   if (
     !hasContractVersion(response)
     || !Array.isArray(response.counts)
@@ -183,8 +196,11 @@ export async function fetchMoodleCourseStudentCounts(courseIds: string[]): Promi
   return new Map(response.counts.map((item) => [item.courseId, item.studentCount]));
 }
 
-export async function recalculateMoodleRisk(courseIds: string[]): Promise<MoodleRiskRecalculationDto> {
-  const response = await invoke<MoodleRiskRecalculationDto>({ action: 'recalculate_risk', courseIds });
+export async function recalculateMoodleRisk(
+  connectionId: string,
+  courseIds: string[],
+): Promise<MoodleRiskRecalculationDto> {
+  const response = await invoke<MoodleRiskRecalculationDto>({ action: 'recalculate_risk', connectionId, courseIds });
   if (
     !hasContractVersion(response)
     || !isNonNegativeInteger(response.failedCount)

@@ -34,7 +34,6 @@ export interface AccessUserRow {
   group_name: string | null
   group_slug: string | null
   is_admin: boolean
-  moodle_username: string
   total_count: number | string
   user_id: string
 }

@@ -409,7 +409,7 @@ export default function AdminJobs() {
                           <div className="space-y-1">
                             <p className="text-sm">{job.user?.full_name || job.user_id}</p>
                             <p className="text-xs text-muted-foreground">
-                              {job.user?.moodle_username || 'Sem usuário associado'}
+                              {job.user?.email || 'Sem usuário associado'}
                             </p>
                           </div>
                         </TableCell>

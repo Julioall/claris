@@ -12,39 +12,11 @@ export type UserProfileUpdate = TablesUpdate<'users'>
 export async function findUserById(
   supabase: AppSupabaseClient,
   userId: string,
-): Promise<Pick<UserProfile, 'id' | 'moodle_user_id'> | null> {
+): Promise<Pick<UserProfile, 'id'> | null> {
   const { data, error } = await supabase
     .from('users')
-    .select('id, moodle_user_id')
+    .select('id')
     .eq('id', userId)
-    .maybeSingle()
-
-  if (error) throw error
-  return data
-}
-
-export async function findUserByMoodleUserId(
-  supabase: AppSupabaseClient,
-  moodleUserId: string,
-): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('moodle_user_id', moodleUserId)
-    .maybeSingle()
-
-  if (error) throw error
-  return data
-}
-
-export async function findUserByMoodleUsername(
-  supabase: AppSupabaseClient,
-  moodleUsername: string,
-): Promise<UserProfile | null> {
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .eq('moodle_username', moodleUsername)
     .maybeSingle()
 
   if (error) throw error

@@ -2,8 +2,6 @@ export const APP_SETTINGS_CONTRACT_VERSION = 1 as const
 
 export interface PublicAppSettingsDto {
   contractVersion: typeof APP_SETTINGS_CONTRACT_VERSION
-  moodleConnectionService: string
-  moodleConnectionUrl: string
 }
 
 export interface RiskThresholdDaysDto {

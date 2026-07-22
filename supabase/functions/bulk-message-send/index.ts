@@ -15,6 +15,8 @@ import {
   findJobForUser,
 } from '../_shared/domain/bulk-messaging/repository.ts'
 import { processBulkMessageJob } from '../_shared/domain/bulk-messaging/service.ts'
+import { resolveMoodleAccess } from '../_shared/domain/moodle-connections/access.ts'
+import { resolveOwnedMoodleConnectionScope } from '../_shared/domain/moodle-connections/scope.ts'
 import {
   BULK_MESSAGE_SEND_CONTRACT_VERSION,
   type BulkMessageSendMetadataDto,
@@ -48,11 +50,19 @@ Deno.serve(createHandler(async ({ body, correlationId, user }) => {
   let result: BulkMessageSendResultDto
 
   if (body.action === 'start_send') {
+    const scope = await resolveOwnedMoodleConnectionScope(db, user.id, body.connectionId)
     await assertOwnedTemplate(user.id, body.templateId)
-    const recipients = await resolveAuthorizedRecipients(db, user.id, body.recipients)
+    const recipients = await resolveAuthorizedRecipients(
+      db,
+      user.id,
+      scope.moodleSiteId,
+      body.recipients,
+    )
+    const access = await resolveMoodleAccess(db, user.id, scope.connectionId)
     const duplicate = await findDuplicateActiveJob(
       db,
       user.id,
+      access.connectionId,
       body.messageContent,
       recipients.length,
     )
@@ -61,15 +71,23 @@ Deno.serve(createHandler(async ({ body, correlationId, user }) => {
     } else {
       const job = await createJobWithRecipients(db, {
         messageContent: body.messageContent,
+        moodleConnectionId: access.connectionId,
         origin: body.origin,
         recipients,
         templateId: body.templateId,
         userId: user.id,
       })
-      const processed = await processBulkMessageJob(db, user.id, job, body.moodleUrl, body.token)
+      const processed = await processBulkMessageJob(
+        db,
+        user.id,
+        job,
+        access.moodleUrl,
+        access.token,
+      )
       result = { ...processed, kind: 'started', metadata: metadata() }
     }
   } else {
+    const access = await resolveMoodleAccess(db, user.id, body.connectionId)
     const job = await findJobForUser(db, body.jobId, user.id)
     if (!job) throw ApiError.notFound('Bulk message job not found')
     if (job.status !== 'pending') {
@@ -77,7 +95,16 @@ Deno.serve(createHandler(async ({ body, correlationId, user }) => {
         status: job.status,
       })
     }
-    const processed = await processBulkMessageJob(db, user.id, job, body.moodleUrl, body.token)
+    if (job.moodle_connection_id !== access.connectionId) {
+      throw ApiError.conflict('Bulk message job belongs to another Moodle connection')
+    }
+    const processed = await processBulkMessageJob(
+      db,
+      user.id,
+      job,
+      access.moodleUrl,
+      access.token,
+    )
     result = { ...processed, kind: 'resumed', metadata: metadata() }
   }
 

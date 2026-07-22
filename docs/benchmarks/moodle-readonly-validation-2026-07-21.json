@@ -1,0 +1,182 @@
+{
+  "validatedAt": "2026-07-21",
+  "mode": "authenticated_read_only",
+  "writesPerformed": false,
+  "sensitiveDataPersisted": false,
+  "notes": [
+    "No credentials, tokens, user Moodle IDs, names, course names, grades or participant data are stored in this artifact.",
+    "The all-students gradebook call was explicitly authorized for the two course IDs recorded below and executed read-only with userid=0.",
+    "All counts below are aggregate. No participant identifiers or academic values were persisted."
+  ],
+  "sites": {
+    "fieg": {
+      "release": "5.1.2 (Build: 20260209)",
+      "version": "2025100602",
+      "availableFunctionCount": 448,
+      "courses": {
+        "count": 415,
+        "durationMs": 2803,
+        "responseBytes": 486928
+      },
+      "categories": {
+        "durationMs": 4139,
+        "responseBytes": 1831134
+      },
+      "participantPagination": {
+        "courseId": 32787,
+        "limit": 7,
+        "supported": true,
+        "participantCount": 10,
+        "pageCount": 2,
+        "duplicateCount": 0,
+        "studentCount": 8,
+        "staffCount": 2,
+        "rolesWithCurrentFields": false,
+        "rolesWithConnectorFields": true,
+        "suspendedPropertyPresentCount": 0,
+        "suspendedOptionsFilter": { "supported": true, "count": 1 },
+        "suspendedLegacyTopLevelFilter": { "supported": false, "error": "invalidparameter" }
+      },
+      "profileEnrichmentSample": {
+        "sampleSize": 2,
+        "rowsReturned": 2,
+        "addedCityCount": 0,
+        "addedPhoneCount": 0,
+        "addedCustomFieldsCount": 0
+      },
+      "sampleReads": {
+        "courseContents": true,
+        "ownUserGrades": true,
+        "ownCompletion": true,
+        "updatesSince": true
+      },
+      "activities": {
+        "sectionCount": 7,
+        "moduleCount": 27,
+        "supportedModuleCount": 10,
+        "assignmentCount": 5,
+        "quizCount": 1,
+        "forumCount": 4
+      },
+      "completionSample": {
+        "requestedUsers": 3,
+        "successfulUsers": 3,
+        "statusCount": 0
+      },
+      "bulkGrades": {
+        "courseId": 32787,
+        "durationMs": 351,
+        "responseBytes": 42931,
+        "userGradeCount": 8,
+        "usersWithGradeItems": 8,
+        "totalGradeItems": 80,
+        "maxGradeItemsPerUser": 10,
+        "individualComparisonSample": 3,
+        "matchingItemCounts": 3,
+        "activityItemCount": 56,
+        "activityItemsWithGradeMax": 56,
+        "activityItemsWithPercentageFormatted": 0
+      },
+      "updatesSince30Days": {
+        "instanceCount": 7,
+        "updateCount": 18,
+        "durationMs": 173,
+        "responseBytes": 1403
+      }
+    },
+    "senai": {
+      "release": "4.5.5 (Build: 20250609)",
+      "version": "2024100705",
+      "availableFunctionCount": 443,
+      "courses": {
+        "count": 51,
+        "durationMs": 719,
+        "responseBytes": 54106
+      },
+      "categories": {
+        "durationMs": 1952,
+        "responseBytes": 428763
+      },
+      "participantPagination": {
+        "courseId": 8862,
+        "limit": 7,
+        "supported": true,
+        "participantCount": 30,
+        "pageCount": 5,
+        "duplicateCount": 0,
+        "studentCount": 24,
+        "staffCount": 6,
+        "rolesWithCurrentFields": false,
+        "rolesWithConnectorFields": true,
+        "suspendedPropertyPresentCount": 0,
+        "suspendedOptionsFilter": { "supported": true, "count": 11 },
+        "suspendedLegacyTopLevelFilter": { "supported": false, "error": "invalidparameter" }
+      },
+      "profileEnrichmentSample": {
+        "sampleSize": 2,
+        "rowsReturned": 2,
+        "addedCityCount": 0,
+        "addedPhoneCount": 0,
+        "addedCustomFieldsCount": 0
+      },
+      "sampleReads": {
+        "courseContents": true,
+        "ownUserGrades": true,
+        "ownCompletion": true,
+        "updatesSince": true
+      },
+      "activities": {
+        "sectionCount": 8,
+        "moduleCount": 17,
+        "supportedModuleCount": 5,
+        "assignmentCount": 0,
+        "quizCount": 2,
+        "forumCount": 3
+      },
+      "completionSample": {
+        "requestedUsers": 3,
+        "successfulUsers": 3,
+        "statusCount": 3
+      },
+      "bulkGrades": {
+        "courseId": 8862,
+        "durationMs": 703,
+        "responseBytes": 25556,
+        "userGradeCount": 13,
+        "usersWithGradeItems": 13,
+        "totalGradeItems": 52,
+        "maxGradeItemsPerUser": 4,
+        "individualComparisonSample": 3,
+        "matchingItemCounts": 3,
+        "activityItemCount": 39,
+        "activityItemsWithGradeMax": 0,
+        "activityItemsWithPercentageFormatted": 0
+      },
+      "updatesSince30Days": {
+        "instanceCount": 4,
+        "updateCount": 6,
+        "durationMs": 585,
+        "responseBytes": 1873
+      }
+    }
+  },
+  "crossSite": {
+    "participantIdOverlapCountInValidatedCourses": 0,
+    "sameAuthenticatedExternalUserId": false,
+    "sameAuthenticatedNormalizedEmail": false
+  },
+  "requiredCapabilities": {
+    "core_webservice_get_site_info": { "fieg": true, "senai": true },
+    "core_enrol_get_users_courses": { "fieg": true, "senai": true },
+    "core_course_get_categories": { "fieg": true, "senai": true },
+    "core_enrol_get_enrolled_users": { "fieg": true, "senai": true },
+    "core_user_get_users_by_field": { "fieg": true, "senai": true },
+    "core_course_get_contents": { "fieg": true, "senai": true },
+    "core_completion_get_activities_completion_status": { "fieg": true, "senai": true },
+    "gradereport_user_get_grade_items": { "fieg": true, "senai": true },
+    "mod_assign_get_assignments": { "fieg": true, "senai": true },
+    "mod_quiz_get_quizzes_by_courses": { "fieg": true, "senai": true },
+    "mod_forum_get_forums_by_courses": { "fieg": true, "senai": true },
+    "core_course_get_updates_since": { "fieg": true, "senai": true }
+  }
+}

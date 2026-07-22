@@ -5,9 +5,9 @@ export const BACKGROUND_JOBS_CONTRACT_VERSION = 1 as const
 export type BackgroundJobStatusDto = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
 
 export interface BackgroundJobUserDto {
+  email: string | null
   fullName: string
   id: string
-  moodleUsername: string
 }
 
 export interface BackgroundJobDto {

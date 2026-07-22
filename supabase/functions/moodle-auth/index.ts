@@ -1,24 +1,13 @@
-import { createHandler } from '../_shared/http/mod.ts'
-import { login, fallbackLogin } from './service.ts'
-import { parseMoodleAuthPayload } from './payload.ts'
+// eslint-disable-next-line @typescript-eslint/triple-slash-reference
+/// <reference path="../edge-runtime.d.ts" />
 
-Deno.serve(createHandler(async ({ body }) => {
-  const { backgroundReauthEnabled, moodleUrl, username, password, service } = body
+import { corsHeaders, jsonResponse } from '../_shared/http/mod.ts'
 
-  return await login({
-    backgroundReauthEnabled,
-    moodleUrl,
-    username,
-    password,
-    service: service || 'moodle_mobile_app',
-    onMoodleUnavailable: (tokenResponse) =>
-      fallbackLogin(
-        username,
-        password,
-        tokenResponse,
-        moodleUrl,
-        service || 'moodle_mobile_app',
-        backgroundReauthEnabled,
-      ),
-  })
-}, { parseBody: parseMoodleAuthPayload }))
+// Retired before the first Claris release. This handler deliberately does not
+// read the request body, so legacy Moodle credentials are never processed.
+Deno.serve((request) => request.method === 'OPTIONS'
+  ? new Response('ok', { headers: corsHeaders })
+  : jsonResponse({
+    error: 'Moodle login was retired. Authenticate with your Claris account.',
+    errorcode: 'moodle_login_retired',
+  }, 410))

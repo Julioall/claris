@@ -1,9 +1,7 @@
 import {
   RequestBodyValidationError,
   expectBodyObject,
-  isApiV1Request,
-  readOptionalString,
-  readRequiredMoodleUrl,
+  readOptionalUuid,
   readRequiredString,
 } from '../_shared/http/mod.ts'
 
@@ -20,11 +18,10 @@ export interface ClarisChatAction {
 
 export interface ClarisChatMessagePayload {
   operation: 'send_message'
-  requestVersion: 'legacy' | 'v1'
+  requestVersion: 'v1'
   message: string
   history: ChatHistoryMessage[]
-  moodleUrl?: string
-  moodleToken?: string
+  connectionId?: string
   action?: ClarisChatAction
 }
 
@@ -40,7 +37,7 @@ const ANY_CODE_BLOCK_RE = /```(?:json|javascript|js)?\s*([\s\S]*?)\s*```/gi
 
 const V1_FIELDS = {
   get_availability: new Set(['operation']),
-  send_message: new Set(['operation', 'message', 'history', 'action']),
+  send_message: new Set(['operation', 'message', 'history', 'action', 'connectionId']),
 } as const
 
 function invalid(message: string): never {
@@ -74,26 +71,13 @@ function parseV1Payload(rawBody: unknown): ClarisChatPayload {
     requestVersion: 'v1',
     message: optimizeChatTextForLlm(readRequiredString(body, 'message', 32000)),
     history: parseV1History(body.history),
+    ...(readOptionalUuid(body, 'connectionId') ? { connectionId: readOptionalUuid(body, 'connectionId') } : {}),
     ...(action ? { action } : {}),
   }
 }
 
-function parseLegacyPayload(rawBody: unknown): ClarisChatMessagePayload {
-  const body = expectBodyObject(rawBody)
-
-  return {
-    operation: 'send_message',
-    requestVersion: 'legacy',
-    message: optimizeChatTextForLlm(readRequiredString(body, 'message', 32000)),
-    history: parseLegacyHistory(body.history),
-    moodleUrl: body.moodleUrl ? readRequiredMoodleUrl(body) : undefined,
-    moodleToken: readOptionalString(body, 'moodleToken', 4096),
-    action: parseLegacyAction(body.action),
-  }
-}
-
-export function parseClarisChatPayload(rawBody: unknown, req?: Request): ClarisChatPayload {
-  return req && isApiV1Request(req) ? parseV1Payload(rawBody) : parseLegacyPayload(rawBody)
+export function parseClarisChatPayload(rawBody: unknown): ClarisChatPayload {
+  return parseV1Payload(rawBody)
 }
 
 export function optimizeChatTextForLlm(input: string): string {
@@ -119,26 +103,6 @@ export function optimizeChatTextForLlm(input: string): string {
   return compactFormattedText(withoutVerboseJsonBlocks)
 }
 
-function parseLegacyAction(raw: unknown): ClarisChatAction | undefined {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return undefined
-  }
-
-  const kind = (raw as { kind?: unknown }).kind
-  const value = (raw as { value?: unknown }).value
-  const jobId = (raw as { jobId?: unknown }).jobId
-
-  if (kind !== 'quick_reply' || typeof value !== 'string' || !value.trim()) {
-    return undefined
-  }
-
-  return {
-    kind: 'quick_reply',
-    value: value.slice(0, 2000),
-    jobId: typeof jobId === 'string' && jobId.trim() ? jobId.slice(0, 128) : undefined,
-  }
-}
-
 function parseV1Action(raw: unknown): ClarisChatAction | undefined {
   if (raw === undefined) return undefined
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) invalid('Invalid action')
@@ -161,23 +125,6 @@ function parseV1Action(raw: unknown): ClarisChatAction | undefined {
     value,
     ...(typeof jobId === 'string' ? { jobId: jobId.trim() } : {}),
   }
-}
-
-function parseLegacyHistory(raw: unknown): ChatHistoryMessage[] {
-  if (!Array.isArray(raw)) return []
-  return raw
-    .filter(
-      (item): item is { role: string; content: string } =>
-        item !== null &&
-        typeof item === 'object' &&
-        (item.role === 'user' || item.role === 'assistant') &&
-        typeof item.content === 'string',
-    )
-    .slice(-20) // cap at 20 messages to control token usage
-    .map(({ role, content }) => ({
-      role: role as 'user' | 'assistant',
-      content: optimizeChatTextForLlm(content).slice(0, 2000),
-    }))
 }
 
 function parseV1History(raw: unknown): ChatHistoryMessage[] {

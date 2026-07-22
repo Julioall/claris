@@ -65,23 +65,26 @@ async function invoke<T extends { contractVersion: number }>(
   return assertContract(await invokeEdgeFunction<T>(FUNCTION_NAME, { body }));
 }
 
-export async function listGradeDebugCourses(): Promise<GradeDebugCourseOption[]> {
-  return (await invoke<GradeDebugCoursesResponse>({ action: 'list_grade_courses' })).items;
+export async function listGradeDebugCourses(connectionId: string): Promise<GradeDebugCourseOption[]> {
+  return (await invoke<GradeDebugCoursesResponse>({ action: 'list_grade_courses', connectionId })).items;
 }
 
-export async function listGradeDebugStudents(courseId: string): Promise<GradeDebugStudentOption[]> {
+export async function listGradeDebugStudents(connectionId: string, courseId: string): Promise<GradeDebugStudentOption[]> {
   return (await invoke<GradeDebugStudentsResponse>({
     action: 'list_grade_students',
+    connectionId,
     courseId,
   })).items;
 }
 
 export function debugStudentGrades(input: {
+  connectionId: string;
   courseId: string;
   studentId: string;
 }): Promise<GradeDebugResult> {
   return invoke({
     action: 'run_grade_diagnostic',
+    connectionId: input.connectionId,
     courseId: input.courseId,
     studentId: input.studentId,
   });

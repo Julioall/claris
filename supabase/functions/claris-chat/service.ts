@@ -1,6 +1,5 @@
 import { buildClarisSystemPrompt, selectClarisToolsForMessage } from '../_shared/claris/chat-config.ts'
 import { runClarisLoop } from '../_shared/claris/loop.ts'
-import type { MoodleAccess } from '../_shared/domain/moodle-reauth/access.ts'
 import type { ClarisChatMessagePayload } from './payload.ts'
 import type { ClarisLlmSettings } from './repository.ts'
 
@@ -15,7 +14,7 @@ export async function executeClarisChat(
   settings: ClarisLlmSettings,
   payload: ClarisChatMessagePayload,
   actorId: string,
-  moodleAccess?: MoodleAccess,
+  moodleConnectionId?: string,
 ) {
   const provider = (settings.provider || DEFAULT_PROVIDER).toLowerCase()
   const model = settings.model
@@ -42,8 +41,7 @@ export async function executeClarisChat(
     actorId,
     {
       latestUserMessage: userMessage,
-      moodleUrl: moodleAccess?.moodleUrl,
-      moodleToken: moodleAccess?.token,
+      moodleConnectionId,
       actionKind: payload.action?.kind,
       actionJobId: payload.action?.jobId,
     },

@@ -1,6 +1,10 @@
 import { lazy } from 'react';
 
 export const LoginPage = lazy(() => import('@/pages/Login'));
+export const AcceptInvitePage = lazy(() => import('@/features/auth/pages/AcceptInvitePage'));
+export const ForgotPasswordPage = lazy(() => import('@/features/auth/pages/ForgotPasswordPage'));
+export const ResetPasswordPage = lazy(() => import('@/features/auth/pages/ResetPasswordPage'));
+export const MoodleOnboardingPage = lazy(() => import('@/features/moodle-connections/pages/MoodleOnboardingPage'));
 export const DashboardPage = lazy(() => import('@/features/dashboard/pages/DashboardPage'));
 export const MyCoursesPage = lazy(() => import('@/features/courses/pages/MyCoursesPage'));
 export const SchoolsPage = lazy(() => import('@/features/courses/pages/SchoolsPage'));
@@ -22,6 +26,7 @@ export const NoAccessPage = lazy(() => import('@/pages/NoAccess'));
 export const AdminDashboardPage = lazy(() => import('@/features/admin/pages/AdminDashboard'));
 export const AdminSettingsPage = lazy(() => import('@/features/admin/pages/AdminConfiguracoes'));
 export const AdminUsersPage = lazy(() => import('@/features/admin/pages/AdminUsuarios'));
+export const AdminInvitationsPage = lazy(() => import('@/features/admin/pages/AdminConvites'));
 export const AdminGroupsPage = lazy(() => import('@/features/admin/pages/AdminGrupos'));
 export const AdminGroupEditorPage = lazy(() => import('@/features/admin/pages/AdminGrupoEditor'));
 export const AdminJobsPage = lazy(() => import('@/features/admin/pages/AdminJobs'));

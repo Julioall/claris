@@ -11,7 +11,13 @@ import {
 } from '../_shared/domain/moodle-sync/repository.ts'
 import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
-import { parseNullableNumber, parseNullablePercentage } from '../_shared/validation/mod.ts'
+import {
+  tryFetchBulkGradeReports,
+  type BulkGradeFallbackReason,
+  type GradeEnrollmentRef,
+  type MoodleUserGradeReport,
+} from './bulk.ts'
+import { normalizeMoodleGradeReport } from './records.ts'
 
 const GRADE_FETCH_POOL_SIZE = 4
 const GRADE_SYNC_REUSE_WINDOW_MINUTES = 10
@@ -19,17 +25,34 @@ const DEFAULT_STUDENT_BATCH_SIZE = 10
 const MAX_STUDENT_BATCH_SIZE = 25
 const MOODLE_BATCH_DELAY_MS = 300
 
-interface StudentBatchOptions {
+export interface GradeSyncOptions {
+  connectionId: string
+  moodleSiteId: string
+  siteSlug: string
   studentBatchPage?: number
   studentBatchSize?: number
+}
+
+interface StudentBatch<TStudent> {
+  batchSize: number
+  hasMore: boolean
+  nextStudentBatchPage: number | null
+  page: number
+  selectedStudents: TStudent[]
+  totalStudents: number
+}
+
+interface GradeBatchResult {
+  activityRecords: StudentActivityInsert[]
+  courseGradeRecord: StudentCourseGradeInsert
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function resolveStudentBatch<TStudent>(
   students: TStudent[],
-  options: StudentBatchOptions = {},
-) {
+  options: Pick<GradeSyncOptions, 'studentBatchPage' | 'studentBatchSize'> = {},
+): StudentBatch<TStudent> {
   const page = Math.max(1, options.studentBatchPage ?? 1)
   const batchSize = Math.min(
     MAX_STUDENT_BATCH_SIZE,
@@ -49,121 +72,111 @@ function resolveStudentBatch<TStudent>(
   }
 }
 
-function readOptionalText(value: unknown): string | null {
-  if (typeof value !== 'string') return null
-
-  const trimmedValue = value.trim()
-  return trimmedValue.length > 0 ? trimmedValue : null
+function normalizeResult(
+  enrollment: GradeEnrollmentRef,
+  report: MoodleUserGradeReport,
+  clarisCourseId: string,
+  syncedAt: string,
+): GradeBatchResult {
+  return normalizeMoodleGradeReport(report, {
+    clarisCourseId,
+    studentId: enrollment.student_id,
+    syncedAt,
+  })
 }
 
-function parseNullableWeight(value: unknown): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value !== 'string') return null
+async function fetchIndividualGradeReports(
+  moodleUrl: string,
+  token: string,
+  courseId: number,
+  enrollments: GradeEnrollmentRef[],
+  clarisCourseId: string,
+  syncedAt: string,
+): Promise<{ errorCount: number; results: GradeBatchResult[] }> {
+  const results: GradeBatchResult[] = []
+  let errorCount = 0
 
-  const normalized = value
-    .trim()
-    .replace('%', '')
-    .replace(',', '.')
+  for (let i = 0; i < enrollments.length; i += GRADE_FETCH_POOL_SIZE) {
+    const batch = enrollments.slice(i, i + GRADE_FETCH_POOL_SIZE)
+    const settled = await Promise.allSettled(batch.map(async (enrollment) => {
+      const moodleUserId = Number(enrollment.moodle_user_id)
+      const payload = await callMoodleApi(
+        moodleUrl,
+        token,
+        'gradereport_user_get_grade_items',
+        { courseid: courseId, userid: moodleUserId },
+      )
+      const usergrades = payload && typeof payload === 'object' && !Array.isArray(payload)
+        ? (payload as { usergrades?: unknown }).usergrades
+        : undefined
+      const report = Array.isArray(usergrades) && usergrades[0]
+      if (!report || typeof report !== 'object' || Array.isArray(report)) {
+        throw new Error('Moodle returned an invalid individual grade report.')
+      }
+      return normalizeResult(
+        enrollment,
+        report as MoodleUserGradeReport,
+        clarisCourseId,
+        syncedAt,
+      )
+    }))
 
-  if (!normalized) return null
+    for (const result of settled) {
+      if (result.status === 'fulfilled') {
+        results.push(result.value)
+      } else {
+        errorCount += 1
+        console.error('[moodle-sync-grades] Individual grade fetch failed.', {
+          errorType: result.reason instanceof Error ? result.reason.name : 'unknown',
+          moodleCourseId: courseId,
+        })
+      }
+    }
 
-  const parsed = Number(normalized)
-  return Number.isFinite(parsed) ? parsed : null
-}
+    if (i + GRADE_FETCH_POOL_SIZE < enrollments.length) {
+      await wait(MOODLE_BATCH_DELAY_MS)
+    }
+  }
 
-/**
- * Determines if a grade item should contribute to course metrics.
- * 
- * Returns true if the item:
- * 1. Is not explicitly hidden (hidden === true or gradeishidden === true)
- * 2. Has explicit weight > 0 in gradebook (weightraw, weight, aggregationweight, etc.)
- * 3. Falls back to: has grademax > 0 AND is not a category/course item
- * 
- * Returns false for categories, course totals, and explicitly hidden items.
- */
-function hasGradebookWeight(item: Record<string, unknown>, itemGradeMax: number | null): boolean {
-  const itemType = readOptionalText(item.itemtype)?.toLowerCase()
-  
-  // 1. Categories and course totals never contribute individually
-  if (itemType === 'category' || itemType === 'course') {
-    return false
-  }
-  
-  // 2. Explicitly hidden items do not contribute
-  if (item.hidden === true || item.gradeishidden === true) {
-    return false
-  }
-  
-  // 3. Check for explicit weight (numeric, from Moodle)
-  const numericWeightCandidates = [
-    item.weightraw,
-    item.weight,
-    item.aggregationweight,
-    item.contributiontocoursetotal,
-  ]
-  
-  for (const candidate of numericWeightCandidates) {
-    const parsed = parseNullableWeight(candidate)
-    // Weight > 0 means contributes. Weight = 0 means explicitly excluded.
-    if (parsed !== null) return parsed > 0
-  }
-  
-  // 4. Check for formatted weight (fallback for parsing errors)
-  const formattedWeightCandidates = [
-    item.weightformatted,
-    item.weightrawformatted,
-    item.aggregationweightformatted,
-  ]
-  
-  for (const candidate of formattedWeightCandidates) {
-    const parsed = parseNullableWeight(candidate)
-    if (parsed !== null) return parsed > 0
-  }
-  
-  // 5. Fallback: if has grademax and is not a meta item, assume it contributes
-  // (covers cases where weight is absent but the activity is clearly gradeable)
-  return (itemGradeMax ?? 0) > 0
+  return { errorCount, results }
 }
 
 export async function syncGrades(
   moodleUrl: string,
   token: string,
   courseId: number,
-  options: StudentBatchOptions = {},
+  options: GradeSyncOptions,
 ): Promise<Response> {
   const supabase = createServiceClient()
-
-  const gradesCourse = await findCourseByMoodleCourseId(supabase, String(courseId))
-
+  const gradesCourse = await findCourseByMoodleCourseId(
+    supabase,
+    options.moodleSiteId,
+    String(courseId),
+  )
   if (!gradesCourse) return errorResponse('Course not found in database', 404)
 
   const enrolledStudents = await listCourseEnrollmentsWithMoodleUserId(supabase, gradesCourse.id)
-
-  if (!enrolledStudents?.length) {
+  if (!enrolledStudents.length) {
     await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
-    return jsonResponse({ success: true, gradesCount: 0, hasMore: false, processedStudents: 0, totalStudents: 0 })
-  }
-
-  console.log(`Syncing grades for ${enrolledStudents.length} students in course ${courseId}`)
-
-  const studentBatch = resolveStudentBatch(enrolledStudents, options)
-  if (studentBatch.selectedStudents.length === 0) {
     return jsonResponse({
       success: true,
+      contractVersion: 2,
+      connectionId: options.connectionId,
+      siteSlug: options.siteSlug,
       gradesCount: 0,
       activityGradesCount: 0,
+      errorCount: 0,
+      fetchMode: 'bulk',
       hasMore: false,
-      nextStudentBatchPage: null,
       processedStudents: 0,
       skippedStudents: 0,
-      totalStudents: studentBatch.totalStudents,
+      totalStudents: 0,
     })
   }
 
   const recentSyncCutoffIso = new Date(
-    Date.now() - (GRADE_SYNC_REUSE_WINDOW_MINUTES * 60 * 1000),
+    Date.now() - (GRADE_SYNC_REUSE_WINDOW_MINUTES * 60 * 1_000),
   ).toISOString()
-
   let recentlySyncedStudentIds = new Set<string>()
   try {
     recentlySyncedStudentIds = await listRecentlySyncedGradeStudentIds(
@@ -172,191 +185,132 @@ export async function syncGrades(
       recentSyncCutoffIso,
     )
   } catch (error) {
-    console.warn('[moodle-sync-grades] Unable to load recent sync window. Continuing without delta optimization:', error)
-  }
-
-  const studentsToFetch = studentBatch.selectedStudents.filter(
-    (enrollment) => !recentlySyncedStudentIds.has(enrollment.student_id),
-  )
-
-  if (recentlySyncedStudentIds.size > 0) {
-    console.log(
-      `[moodle-sync-grades] Reusing recent grade sync for ${recentlySyncedStudentIds.size} students (window=${GRADE_SYNC_REUSE_WINDOW_MINUTES}min)`,
-    )
-  }
-
-  if (studentsToFetch.length === 0) {
-    if (!studentBatch.hasMore) {
-      await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
-    }
-    return jsonResponse({
-      success: true,
-      gradesCount: 0,
-      activityGradesCount: 0,
-      hasMore: studentBatch.hasMore,
-      nextStudentBatchPage: studentBatch.nextStudentBatchPage,
-      processedStudents: studentBatch.selectedStudents.length,
-      skippedStudents: studentBatch.selectedStudents.length,
-      studentBatchPage: studentBatch.page,
-      studentBatchSize: studentBatch.batchSize,
-      totalStudents: studentBatch.totalStudents,
+    console.warn('[moodle-sync-grades] Recent sync window is unavailable.', {
+      errorType: error instanceof Error ? error.name : 'unknown',
     })
   }
 
-  const activityGradeRecords: StudentActivityInsert[] = []
-  const courseGradeRecords: StudentCourseGradeInsert[] = []
-  const now = new Date().toISOString()
-
-  type GradeBatchResult = {
-    courseGradeRecord: StudentCourseGradeInsert | null
-    activityRecords: StudentActivityInsert[]
+  const allStudentsToFetch = enrolledStudents.filter(
+    (enrollment) => !recentlySyncedStudentIds.has(enrollment.student_id),
+  )
+  if (allStudentsToFetch.length === 0) {
+    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
+    return jsonResponse({
+      success: true,
+      contractVersion: 2,
+      connectionId: options.connectionId,
+      siteSlug: options.siteSlug,
+      gradesCount: 0,
+      activityGradesCount: 0,
+      errorCount: 0,
+      fetchMode: 'cache',
+      hasMore: false,
+      nextStudentBatchPage: null,
+      processedStudents: enrolledStudents.length,
+      skippedStudents: enrolledStudents.length,
+      studentBatchPage: 1,
+      studentBatchSize: enrolledStudents.length,
+      totalStudents: enrolledStudents.length,
+    })
   }
 
-  for (let i = 0; i < studentsToFetch.length; i += GRADE_FETCH_POOL_SIZE) {
-    const batch = studentsToFetch.slice(i, i + GRADE_FETCH_POOL_SIZE)
+  const fetchGradeItems = (moodleUserId: number) => callMoodleApi(
+    moodleUrl,
+    token,
+    'gradereport_user_get_grade_items',
+    { courseid: courseId, userid: moodleUserId },
+  )
 
-    const settled = await Promise.allSettled(
-      batch.map(async (enrollment): Promise<GradeBatchResult> => {
-        const moodleUserId = parseInt(enrollment.moodle_user_id, 10)
+  const requestedPage = Math.max(1, options.studentBatchPage ?? 1)
+  let fallbackReason: BulkGradeFallbackReason | 'continuation_page' | null = null
+  let results: GradeBatchResult[] = []
+  let errorCount = 0
+  let page: StudentBatch<GradeEnrollmentRef>
 
-        const gradesData = await callMoodleApi(moodleUrl, token, 'gradereport_user_get_grade_items', {
-          courseid: courseId,
-          userid: moodleUserId,
-        }) as { usergrades?: Array<{ gradeitems?: Array<Record<string, unknown>> }> }
-
-        if (!gradesData.usergrades?.[0]) {
-          return { courseGradeRecord: null, activityRecords: [] }
-        }
-
-        const gradeItems = gradesData.usergrades[0].gradeitems || []
-        const courseGradeItem = gradeItems.find((item: Record<string, unknown>) => item?.itemtype === 'course') || null
-
-        const courseGradeRaw = parseNullableNumber(courseGradeItem?.graderaw)
-        const courseGradeMax = parseNullableNumber(courseGradeItem?.grademax)
-        const courseGradePercentage = parseNullablePercentage(courseGradeItem?.percentageformatted)
-        const courseGradeFormatted = readOptionalText(courseGradeItem?.gradeformatted)
-        const courseLetterGrade = readOptionalText(
-          courseGradeItem?.lettergrade ??
-          courseGradeItem?.lettergradeformatted,
-        )
-
-        const courseGradeRecord = {
-          student_id: enrollment.student_id,
-          course_id: gradesCourse.id,
-          grade_raw: courseGradeRaw,
-          grade_max: courseGradeMax,
-          grade_percentage: courseGradePercentage,
-          grade_formatted: courseGradeFormatted,
-          letter_grade: courseLetterGrade,
-          last_sync: now,
-          updated_at: now,
-        }
-
-        const activityRecords: StudentActivityInsert[] = []
-
-        for (const item of gradeItems) {
-          if (!item || item.itemtype === 'course' || item.itemtype === 'category') continue
-          const cmid = item.cmid != null ? String(item.cmid) : null
-          if (!cmid) continue
-
-          const itemGradeRaw = parseNullableNumber(item.graderaw)
-          const itemGradeMax = parseNullableNumber(item.grademax)
-          const showInMetrics = hasGradebookWeight(item, itemGradeMax)
-          let itemPercentage: number | null = null
-          if (itemGradeRaw !== null && itemGradeMax && itemGradeMax > 0) {
-            itemPercentage = (itemGradeRaw / itemGradeMax) * 100
-          } else {
-            itemPercentage = parseNullablePercentage(item.percentageformatted)
-          }
-
-          const gradedAtTimestamp = parseNullableNumber(item.gradedategraded)
-          const submittedAtTimestamp = parseNullableNumber(item.gradedatesubmitted)
-          const gradedAt = gradedAtTimestamp && gradedAtTimestamp > 0
-            ? new Date(gradedAtTimestamp * 1000).toISOString()
-            : null
-          const submittedAt = submittedAtTimestamp && submittedAtTimestamp > 0
-            ? new Date(submittedAtTimestamp * 1000).toISOString()
-            : null
-
-          let activityStatus = 'pending'
-          if (itemGradeRaw !== null && gradedAt) {
-            activityStatus = 'graded'
-          } else if (submittedAt) {
-            activityStatus = 'submitted'
-          }
-
-          activityRecords.push({
-            student_id: enrollment.student_id,
-            course_id: gradesCourse.id,
-            moodle_activity_id: cmid,
-            activity_name: readOptionalText(item.itemname) ?? 'Atividade',
-            activity_type: readOptionalText(item.itemmodule),
-            grade: itemGradeRaw,
-            grade_max: itemGradeMax,
-            percentage: itemPercentage,
-            status: activityStatus,
-            graded_at: gradedAt,
-            submitted_at: submittedAt,
-            completed_at: gradedAt || submittedAt,
-            hidden: !showInMetrics,
-            updated_at: now,
-          })
-        }
-
-        return { courseGradeRecord, activityRecords }
+  // Page > 1 can only be a continuation of an already selected individual
+  // fallback. Avoid retrying a known-incompatible bulk request on every page.
+  if (requestedPage === 1) {
+    const bulk = await tryFetchBulkGradeReports(enrolledStudents, fetchGradeItems)
+    if (bulk.mode === 'bulk') {
+      const now = new Date().toISOString()
+      results = allStudentsToFetch.flatMap((enrollment) => {
+        const report = bulk.reportsByMoodleUserId.get(String(Number(enrollment.moodle_user_id)))
+        return report ? [normalizeResult(enrollment, report, gradesCourse.id, now)] : []
       })
-    )
-
-    for (const result of settled) {
-      if (result.status === 'fulfilled') {
-        if (result.value.courseGradeRecord) {
-          courseGradeRecords.push(result.value.courseGradeRecord)
-        }
-        activityGradeRecords.push(...result.value.activityRecords)
-      } else {
-        console.error(`Error fetching grades for course ${courseId}:`, result.reason)
+      page = {
+        batchSize: enrolledStudents.length,
+        hasMore: false,
+        nextStudentBatchPage: null,
+        page: 1,
+        selectedStudents: enrolledStudents,
+        totalStudents: enrolledStudents.length,
       }
+    } else {
+      fallbackReason = bulk.reason
+      page = resolveStudentBatch(enrolledStudents, options)
     }
-
-    if (i + GRADE_FETCH_POOL_SIZE < studentsToFetch.length) {
-      await wait(MOODLE_BATCH_DELAY_MS)
-    }
+  } else {
+    fallbackReason = 'continuation_page'
+    page = resolveStudentBatch(enrolledStudents, options)
   }
 
-  // Batch upsert activity grades
+  if (fallbackReason) {
+    const studentsToFetch = page.selectedStudents.filter(
+      (enrollment) => !recentlySyncedStudentIds.has(enrollment.student_id),
+    )
+    const individual = await fetchIndividualGradeReports(
+      moodleUrl,
+      token,
+      courseId,
+      studentsToFetch,
+      gradesCourse.id,
+      new Date().toISOString(),
+    )
+    results = individual.results
+    errorCount = individual.errorCount
+  }
+
+  const activityGradeRecords = results.flatMap((result) => result.activityRecords)
+  const courseGradeRecords = results.map((result) => result.courseGradeRecord)
+
   let activityGradesCount = 0
   if (activityGradeRecords.length > 0) {
-    try {
-      activityGradesCount = await upsertStudentActivities(supabase, activityGradeRecords, 200)
-    } catch (error) {
-      console.error('Error upserting activity grades:', error)
-    }
+    activityGradesCount = await upsertStudentActivities(supabase, activityGradeRecords, 200)
   }
 
   let gradesCount = 0
   if (courseGradeRecords.length > 0) {
-    try {
-      gradesCount = await upsertStudentCourseGrades(supabase, courseGradeRecords, 100)
-    } catch (error) {
-      console.error('Error upserting course grades:', error)
-    }
+    gradesCount = await upsertStudentCourseGrades(supabase, courseGradeRecords, 100)
   }
 
-  if (!studentBatch.hasMore) {
+  if (!page.hasMore) {
     await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
   }
 
+  const skippedStudents = page.selectedStudents.filter(
+    (enrollment) => recentlySyncedStudentIds.has(enrollment.student_id),
+  ).length
+  const unmatchedStudents = fallbackReason
+    ? 0
+    : allStudentsToFetch.length - results.length
   return jsonResponse({
-    success: true,
+    success: errorCount === 0,
+    contractVersion: 2,
+    connectionId: options.connectionId,
+    siteSlug: options.siteSlug,
     gradesCount,
     activityGradesCount,
-    hasMore: studentBatch.hasMore,
-    nextStudentBatchPage: studentBatch.nextStudentBatchPage,
-    processedStudents: studentBatch.selectedStudents.length,
-    skippedStudents: studentBatch.selectedStudents.length - studentsToFetch.length,
-    studentBatchPage: studentBatch.page,
-    studentBatchSize: studentBatch.batchSize,
-    totalStudents: studentBatch.totalStudents,
+    errorCount,
+    fetchMode: fallbackReason ? 'individual' : 'bulk',
+    fallbackReason,
+    hasMore: page.hasMore,
+    nextStudentBatchPage: page.nextStudentBatchPage,
+    processedStudents: page.selectedStudents.length,
+    skippedStudents,
+    unmatchedStudents,
+    studentBatchPage: page.page,
+    studentBatchSize: page.batchSize,
+    totalStudents: page.totalStudents,
   })
 }
 
@@ -367,6 +321,8 @@ async function refreshDashboardAggregatesForCourse(
   try {
     await refreshDashboardCourseActivityAggregates(supabase, [courseId])
   } catch (error) {
-    console.error('[moodle-sync-grades] Error refreshing dashboard aggregates:', error)
+    console.error('[moodle-sync-grades] Dashboard aggregate refresh failed.', {
+      errorType: error instanceof Error ? error.name : 'unknown',
+    })
   }
 }

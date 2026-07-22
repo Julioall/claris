@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { MoodleIcon } from '@/components/ui/MoodleIcon';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
@@ -362,35 +361,6 @@ export default function AdminConfiguracoes() {
         <h1 className="text-2xl font-bold tracking-tight">Configuracoes Globais</h1>
         <p className="text-muted-foreground">Gerencie as configuracoes da plataforma Claris</p>
       </div>
-
-      {/* Moodle Connection */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <MoodleIcon className="h-5 w-5" />
-            Conexao Moodle
-          </CardTitle>
-          <CardDescription>URL e servico do Moodle para autenticacao de todos os usuarios</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            A conexao com o Moodle esta fixa para o dominio institucional. Edicao via painel foi desabilitada.
-          </p>
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-md border p-3">
-              <Label className="text-xs text-muted-foreground">URL do Moodle</Label>
-              <p className="font-mono text-sm break-words">{DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionUrl}</p>
-            </div>
-            <div className="rounded-md border p-3">
-              <Label className="text-xs text-muted-foreground">Nome do Servico Web</Label>
-              <p className="font-mono text-sm">{DEFAULT_GLOBAL_APP_SETTINGS.moodleConnectionService}</p>
-            </div>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Para alterar este valor, atualize a configuracao fixa da aplicacao.
-          </p>
-        </CardContent>
-      </Card>
 
       {/* Risk Thresholds */}
       <Card>

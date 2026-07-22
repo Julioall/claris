@@ -4,6 +4,7 @@ import {
 } from './contract.ts'
 import type { BulkMessageAudiencePayload } from './payload.ts'
 import type { BulkMessageAudienceRepository } from './repository.ts'
+import { ApiError } from '../_shared/http/mod.ts'
 
 export const BULK_MESSAGE_AUDIENCE_PERMISSION = 'messages.bulk_send'
 
@@ -20,9 +21,13 @@ export async function executeBulkMessageAudience(
   actorId: string,
   _payload: BulkMessageAudiencePayload,
 ): Promise<BulkMessageAudienceDto> {
-  const audience = await repository.listAudience(actorId)
+  const scope = await repository.resolveOwnedConnectionScope(actorId, _payload.connectionId)
+  if (!scope) throw ApiError.forbidden('Moodle connection is not available to this user.')
+  const audience = await repository.listAudience(actorId, scope.moodleSiteId)
   return {
     ...audience,
+    connectionId: scope.connectionId,
+    moodleSiteId: scope.moodleSiteId,
     metadata: {
       contractVersion: BULK_MESSAGE_AUDIENCE_CONTRACT_VERSION,
       generatedAt: new Date().toISOString(),

@@ -1,27 +1,32 @@
 import {
+  RequestBodyValidationError,
   expectBodyObject,
   readOptionalPositiveInteger,
-  readRequiredMoodleUrl,
-  readRequiredPositiveInteger,
-  readRequiredString,
+  readRequiredUuid,
 } from '../_shared/http/mod.ts'
 
 export interface MoodleSyncActivitiesPayload {
-  courseId: number
-  moodleUrl: string
+  connectionId: string
+  courseId: string
   studentBatchPage?: number
   studentBatchSize?: number
-  token: string
 }
 
 export function parseMoodleSyncActivitiesPayload(rawBody: unknown): MoodleSyncActivitiesPayload {
   const body = expectBodyObject(rawBody)
+  if (Object.keys(body).some((field) => ![
+    'connectionId',
+    'courseId',
+    'studentBatchPage',
+    'studentBatchSize',
+  ].includes(field))) {
+    throw new RequestBodyValidationError('Invalid request fields', 422)
+  }
 
   return {
-    courseId: readRequiredPositiveInteger(body, 'courseId'),
-    moodleUrl: readRequiredMoodleUrl(body),
+    connectionId: readRequiredUuid(body, 'connectionId'),
+    courseId: readRequiredUuid(body, 'courseId'),
     studentBatchPage: readOptionalPositiveInteger(body, 'studentBatchPage'),
     studentBatchSize: readOptionalPositiveInteger(body, 'studentBatchSize'),
-    token: readRequiredString(body, 'token'),
   }
 }

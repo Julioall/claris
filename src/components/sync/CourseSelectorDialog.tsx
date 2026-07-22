@@ -17,6 +17,7 @@ import {
 import type { Course } from '@/features/courses/types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { loadSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
 import { isCourseEffectivelyActive, withEffectiveCourseDates } from '@/lib/course-dates';
 
 interface CourseSelectorDialogProps {
@@ -53,18 +54,18 @@ function isCourseFinishedForSyncFilter(course: Course): boolean {
   return !isCourseEffectivelyActive(course);
 }
 
-async function loadPreferencesFromDB(): Promise<SyncPreferences | null> {
+async function loadPreferencesFromDB(connectionId: string): Promise<SyncPreferences | null> {
   try {
-    return await fetchUserSyncPreferences();
+    return await fetchUserSyncPreferences(connectionId);
   } catch (e) {
     console.error('Error loading sync preferences:', e);
   }
   return null;
 }
 
-async function savePreferencesToDB(prefs: SyncPreferences) {
+async function savePreferencesToDB(connectionId: string, prefs: SyncPreferences) {
   try {
-    await saveUserSyncPreferences(prefs);
+    await saveUserSyncPreferences(connectionId, prefs);
   } catch (e) {
     console.error('Error saving sync preferences:', e);
   }
@@ -78,6 +79,7 @@ export function CourseSelectorDialog({
   isLoading,
 }: CourseSelectorDialogProps) {
   const { user } = useAuth();
+  const connectionId = user ? loadSelectedMoodleConnectionId(user.id) : null;
   const normalizedCourses = useMemo(() => withEffectiveCourseDates(courses), [courses]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [includeEmptyCourses, setIncludeEmptyCourses] = useState(false);
@@ -89,7 +91,7 @@ export function CourseSelectorDialog({
 
   // Fetch student counts when dialog opens
   useEffect(() => {
-    if (!open || courses.length === 0) {
+    if (!open || !connectionId || courses.length === 0) {
       setCountsLoaded(false);
       return;
     }
@@ -99,7 +101,7 @@ export function CourseSelectorDialog({
       setCountsLoaded(false);
       try {
         const courseIds = courses.map(c => c.id);
-        const allCounts = await fetchStudentCountsByCourseIds(courseIds);
+        const allCounts = await fetchStudentCountsByCourseIds(connectionId, courseIds);
         if (cancelled) return;
         setStudentCounts(allCounts);
         console.log(`✓ Loaded student counts for ${allCounts.size} courses out of ${courseIds.length} total courses`);
@@ -117,17 +119,17 @@ export function CourseSelectorDialog({
     return () => {
       cancelled = true;
     };
-  }, [open, courses]);
+  }, [connectionId, open, courses]);
 
   // Load preferences when dialog opens
   useEffect(() => {
-    if (!open || !user) {
+    if (!open || !user || !connectionId) {
       setPrefsLoaded(false);
       return;
     }
 
     const load = async () => {
-      const prefs = await loadPreferencesFromDB();
+      const prefs = await loadPreferencesFromDB(connectionId);
       if (prefs) {
         setSelectedKeys(new Set(prefs.selectedKeys));
         setIncludeEmptyCourses(prefs.includeEmptyCourses);
@@ -136,7 +138,7 @@ export function CourseSelectorDialog({
       setPrefsLoaded(true);
     };
     load();
-  }, [open, user]);
+  }, [connectionId, open, user]);
 
   const selectableCourses = useMemo(() => {
     return normalizedCourses.filter(course => {
@@ -319,8 +321,8 @@ export function CourseSelectorDialog({
   const totalEventsCount = schools.reduce((sum, s) => sum + s.events.length, 0);
 
   const handleSync = () => {
-    if (user) {
-      savePreferencesToDB({
+    if (user && connectionId) {
+      void savePreferencesToDB(connectionId, {
         selectedKeys: Array.from(selectedKeys),
         includeEmptyCourses,
         includeFinished,

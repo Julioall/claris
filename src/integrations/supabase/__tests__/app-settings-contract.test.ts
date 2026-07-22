@@ -17,8 +17,6 @@ function v1Request(path = 'app-settings') {
 }
 
 const initialState: AppSettingsState = {
-  moodleConnectionUrl: 'https://ead.fieg.com.br',
-  moodleConnectionService: 'moodle_mobile_app',
   riskThresholdDays: { atencao: 7, risco: 14, critico: 30 },
   clarisSettings: {
     provider: 'openai',
@@ -36,10 +34,7 @@ function repository(): AppSettingsRepository & { state: AppSettingsState } {
     state: structuredClone(initialState),
     isApplicationAdmin: vi.fn(async () => true),
     readAdminSettings: vi.fn(async () => repo.state),
-    readPublicSettings: vi.fn(async () => ({
-      moodleConnectionUrl: repo.state.moodleConnectionUrl,
-      moodleConnectionService: repo.state.moodleConnectionService,
-    })),
+    readPublicSettings: vi.fn(async () => ({})),
     updateRiskThresholdDays: vi.fn(async (settings: Record<string, number>) => {
       repo.state.riskThresholdDays = settings;
     }),
@@ -84,8 +79,6 @@ describe('app-settings backend contract', () => {
 
     expect(publicDto).toEqual({
       contractVersion: 1,
-      moodleConnectionUrl: 'https://ead.fieg.com.br',
-      moodleConnectionService: 'moodle_mobile_app',
     });
     expect(adminDto.clarisSettings).toMatchObject({
       apiKeyConfigured: true,

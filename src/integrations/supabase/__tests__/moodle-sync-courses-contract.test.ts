@@ -11,6 +11,7 @@ import {
 } from '../../../../supabase/functions/moodle-sync-courses/eligibility.ts';
 
 const ACTOR_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const CONNECTION_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const COURSE_ID = '11111111-1111-4111-8111-111111111111';
 const SECOND_COURSE_ID = '22222222-2222-4222-8222-222222222222';
 
@@ -29,12 +30,28 @@ function linkDependencies(overrides: Record<string, unknown> = {}) {
 }
 
 describe('moodle-sync-courses selection payload', () => {
+  it('uses only an internal connection id for Moodle discovery', () => {
+    expect(parseMoodleSyncCoursesPayload({
+      action: 'sync_courses',
+      connectionId: CONNECTION_ID,
+    })).toEqual({ action: 'sync_courses', connectionId: CONNECTION_ID });
+
+    expect(() => parseMoodleSyncCoursesPayload({
+      action: 'sync_courses',
+      connectionId: CONNECTION_ID,
+      moodleUrl: 'https://attacker.invalid',
+      token: 'browser-token',
+    })).toThrowError(expect.objectContaining({ status: 422 }));
+  });
+
   it('accepts only unique UUIDs and normalizes their case', () => {
     expect(parseMoodleSyncCoursesPayload({
       action: 'link_selected_courses',
+      connectionId: CONNECTION_ID,
       selectedCourseIds: [COURSE_ID.toUpperCase(), SECOND_COURSE_ID],
     })).toEqual({
       action: 'link_selected_courses',
+      connectionId: CONNECTION_ID,
       selectedCourseIds: [COURSE_ID, SECOND_COURSE_ID],
     });
   });
@@ -43,28 +60,34 @@ describe('moodle-sync-courses selection payload', () => {
     const courseIds = Array.from({ length: 500 }, (_, index) => courseId(index));
     expect(parseMoodleSyncCoursesPayload({
       action: 'link_selected_courses',
+      connectionId: CONNECTION_ID,
       selectedCourseIds: courseIds,
     })).toMatchObject({ selectedCourseIds: courseIds });
   });
 
   it.each([
-    { action: 'link_selected_courses', selectedCourseIds: [] },
-    { action: 'link_selected_courses', selectedCourseIds: ['not-a-uuid'] },
+    { action: 'link_selected_courses', connectionId: CONNECTION_ID, selectedCourseIds: [] },
+    { action: 'link_selected_courses', connectionId: CONNECTION_ID, selectedCourseIds: ['not-a-uuid'] },
+    { action: 'link_selected_courses', selectedCourseIds: [COURSE_ID] },
     {
       action: 'link_selected_courses',
+      connectionId: CONNECTION_ID,
       selectedCourseIds: [COURSE_ID, COURSE_ID.toUpperCase()],
     },
     {
       action: 'link_selected_courses',
+      connectionId: CONNECTION_ID,
       selectedCourseIds: Array.from({ length: 501 }, (_, index) => courseId(index)),
     },
     {
       action: 'link_selected_courses',
+      connectionId: CONNECTION_ID,
       selectedCourseIds: [COURSE_ID],
       userId: 'spoofed-user',
     },
     {
       action: 'link_selected_courses',
+      connectionId: CONNECTION_ID,
       selectedCourseIds: [COURSE_ID],
       p_user_id: ACTOR_ID,
     },
@@ -102,6 +125,7 @@ describe('moodle-sync-courses eligibility persistence', () => {
     await expect(upsertCoursesAndReplaceEligibility(
       {} as never,
       ACTOR_ID,
+      CONNECTION_ID,
       [{ moodle_course_id: '101', name: 'Matematica' }],
       {
         replaceUserCourseEligibility: replaceEligibility,
@@ -110,7 +134,7 @@ describe('moodle-sync-courses eligibility persistence', () => {
     )).resolves.toEqual(syncedCourses);
 
     expect(calls).toEqual(['upsert', 'replace']);
-    expect(replaceEligibility).toHaveBeenCalledWith({}, ACTOR_ID, [COURSE_ID]);
+    expect(replaceEligibility).toHaveBeenCalledWith({}, ACTOR_ID, CONNECTION_ID, [COURSE_ID]);
   });
 
   it('uses the typed service-only RPCs without writing protected tables directly', async () => {
@@ -122,17 +146,20 @@ describe('moodle-sync-courses eligibility persistence', () => {
     await expect(replaceUserCourseEligibility(
       client,
       ACTOR_ID,
+      CONNECTION_ID,
       [COURSE_ID, SECOND_COURSE_ID],
     )).resolves.toBe(2);
-    await expect(linkEligibleUserCourses(client, ACTOR_ID, [COURSE_ID])).resolves.toBe(1);
+    await expect(linkEligibleUserCourses(client, ACTOR_ID, CONNECTION_ID, [COURSE_ID])).resolves.toBe(1);
 
     expect(rpc.mock.calls).toEqual([
       ['backend_replace_user_course_eligibility', {
         p_course_ids: [COURSE_ID, SECOND_COURSE_ID],
+        p_moodle_connection_id: CONNECTION_ID,
         p_user_id: ACTOR_ID,
       }],
       ['backend_link_eligible_user_courses', {
         p_course_ids: [COURSE_ID],
+        p_moodle_connection_id: CONNECTION_ID,
         p_user_id: ACTOR_ID,
       }],
     ]);
@@ -146,6 +173,7 @@ describe('moodle-sync-courses eligible linking', () => {
     const response = await executeEligibleCourseLink(
       {} as never,
       ACTOR_ID,
+      CONNECTION_ID,
       [COURSE_ID, SECOND_COURSE_ID],
       dependencies,
     );
@@ -153,6 +181,8 @@ describe('moodle-sync-courses eligible linking', () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       success: true,
+      contractVersion: 2,
+      connectionId: CONNECTION_ID,
       added: 2,
       removed: 0,
     });
@@ -160,6 +190,7 @@ describe('moodle-sync-courses eligible linking', () => {
     expect(dependencies.linkEligibleUserCourses).toHaveBeenCalledWith(
       {},
       ACTOR_ID,
+      CONNECTION_ID,
       [COURSE_ID, SECOND_COURSE_ID],
     );
     expect(dependencies.touchUserLastSync).toHaveBeenCalledWith(
@@ -177,6 +208,7 @@ describe('moodle-sync-courses eligible linking', () => {
     const response = await executeEligibleCourseLink(
       {} as never,
       ACTOR_ID,
+      CONNECTION_ID,
       [COURSE_ID, SECOND_COURSE_ID],
       dependencies,
     );
@@ -186,6 +218,7 @@ describe('moodle-sync-courses eligible linking', () => {
     expect(dependencies.linkEligibleUserCourses).toHaveBeenCalledWith(
       {},
       ACTOR_ID,
+      CONNECTION_ID,
       [COURSE_ID, SECOND_COURSE_ID],
     );
     expect(dependencies.touchUserLastSync).not.toHaveBeenCalled();
@@ -203,6 +236,7 @@ describe('moodle-sync-courses eligible linking', () => {
     const response = await executeEligibleCourseLink(
       {} as never,
       ACTOR_ID,
+      CONNECTION_ID,
       [COURSE_ID],
       dependencies,
     );
@@ -219,6 +253,7 @@ describe('moodle-sync-courses eligible linking', () => {
     const response = await executeEligibleCourseLink(
       {} as never,
       ACTOR_ID,
+      CONNECTION_ID,
       [COURSE_ID],
       dependencies,
     );

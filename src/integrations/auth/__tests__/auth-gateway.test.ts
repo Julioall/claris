@@ -2,10 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authMock = vi.hoisted(() => ({
   getSession: vi.fn(),
+  exchangeCodeForSession: vi.fn(),
   onAuthStateChange: vi.fn(),
   refreshSession: vi.fn(),
+  resetPasswordForEmail: vi.fn(),
   setSession: vi.fn(),
+  signInWithPassword: vi.fn(),
   signOut: vi.fn(),
+  updateUser: vi.fn(),
 }));
 
 vi.mock('@/integrations/supabase/client', () => ({
@@ -29,7 +33,11 @@ describe('authGateway', () => {
       error: null,
     });
     authMock.setSession.mockResolvedValue({ error: null });
+    authMock.exchangeCodeForSession.mockResolvedValue({ data: { session: rawSession }, error: null });
+    authMock.resetPasswordForEmail.mockResolvedValue({ error: null });
+    authMock.signInWithPassword.mockResolvedValue({ data: { session: rawSession }, error: null });
     authMock.signOut.mockResolvedValue({ error: null });
+    authMock.updateUser.mockResolvedValue({ error: null });
   });
 
   it('maps the provider session to a stable application contract', async () => {
@@ -81,5 +89,21 @@ describe('authGateway', () => {
       refresh_token: 'refresh-new',
     });
     expect(authMock.signOut).toHaveBeenCalledWith({ scope: 'local' });
+  });
+
+  it('exposes Claris password login, recovery, invite exchange and password update', async () => {
+    await expect(authGateway.signInWithPassword('user@example.test', 'claris-password'))
+      .resolves.toMatchObject({ user: { id: 'user-1' } });
+    await authGateway.resetPasswordForEmail('user@example.test', 'https://claris.test/reset-password');
+    await authGateway.exchangeCodeForSession('one-time-code');
+    await authGateway.updatePassword('new-claris-password');
+
+    expect(authMock.signInWithPassword).toHaveBeenCalledWith({
+      email: 'user@example.test', password: 'claris-password',
+    });
+    expect(authMock.resetPasswordForEmail).toHaveBeenCalledWith('user@example.test', {
+      redirectTo: 'https://claris.test/reset-password',
+    });
+    expect(authMock.updateUser).toHaveBeenCalledWith({ password: 'new-claris-password' });
   });
 });

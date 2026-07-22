@@ -1,4 +1,3 @@
-import type { MoodleSession } from '@/features/auth/domain/session';
 import { invokeMoodleFunctionWithTimeout } from '@/features/auth/infrastructure/moodle-api';
 import {
   ApiClientError,
@@ -74,7 +73,7 @@ function parseFindLatestRelevantResponse(value: unknown): FindLatestRelevantGrad
 }
 
 export async function generateStudentGradeSuggestion(params: {
-  session: MoodleSession;
+  connectionId: string;
   courseId: string;
   studentId: string;
   moodleActivityId: string;
@@ -87,8 +86,7 @@ export async function generateStudentGradeSuggestion(params: {
       courseId: params.courseId,
       studentId: params.studentId,
       moodleActivityId: params.moodleActivityId,
-      moodleUrl: params.session.moodleUrl,
-      token: params.session.moodleToken,
+      connectionId: params.connectionId,
     },
   }) as {
     data: StudentGradeSuggestionResponse | null;
@@ -97,7 +95,7 @@ export async function generateStudentGradeSuggestion(params: {
 }
 
 export async function generateActivityGradeSuggestions(params: {
-  session: MoodleSession;
+  connectionId: string;
   courseId: string;
   moodleActivityId: string;
 }) {
@@ -108,8 +106,7 @@ export async function generateActivityGradeSuggestions(params: {
       action: 'generate_activity_suggestions',
       courseId: params.courseId,
       moodleActivityId: params.moodleActivityId,
-      moodleUrl: params.session.moodleUrl,
-      token: params.session.moodleToken,
+      connectionId: params.connectionId,
     },
   }) as {
     data: ActivityGradeSuggestionResponse | null;
@@ -137,7 +134,6 @@ export async function findLatestRelevantActivityGradeSuggestionJob(params: {
 }
 
 export async function getActivityGradeSuggestionJob(params: {
-  session: MoodleSession;
   jobId: string;
 }) {
   return await invokeMoodleFunctionWithTimeout({
@@ -154,7 +150,7 @@ export async function getActivityGradeSuggestionJob(params: {
 }
 
 export async function resumeActivityGradeSuggestionJob(params: {
-  session: MoodleSession;
+  connectionId: string;
   jobId: string;
 }) {
   return await invokeMoodleFunctionWithTimeout({
@@ -163,8 +159,7 @@ export async function resumeActivityGradeSuggestionJob(params: {
     body: {
       action: 'resume_activity_suggestion_job',
       jobId: params.jobId,
-      moodleUrl: params.session.moodleUrl,
-      token: params.session.moodleToken,
+      connectionId: params.connectionId,
     },
   }) as {
     data: ActivityGradeSuggestionResponse | null;
@@ -189,7 +184,7 @@ export async function cancelActivityGradeSuggestionJob(params: {
 }
 
 export async function approveStudentGradeSuggestion(params: {
-  session: MoodleSession;
+  connectionId: string;
   auditId: string;
   approvedGrade: number;
   approvedFeedback: string;
@@ -200,8 +195,7 @@ export async function approveStudentGradeSuggestion(params: {
     body: {
       action: 'approve_suggestion',
       auditId: params.auditId,
-      moodleUrl: params.session.moodleUrl,
-      token: params.session.moodleToken,
+      connectionId: params.connectionId,
       approvedGrade: params.approvedGrade,
       approvedFeedback: params.approvedFeedback,
     },

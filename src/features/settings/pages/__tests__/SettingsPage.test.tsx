@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 
 import SettingsPage from '@/features/settings/pages/SettingsPage';
 import { MESSAGE_PREFERENCES_STORAGE_KEY } from '@/features/messages/lib/message-preferences';
@@ -24,7 +25,6 @@ const setAuthUser = () => {
     user: {
       id: 'u-1',
       full_name: 'Julio Tutor',
-      moodle_username: 'julio',
       email: 'julio@example.com',
     },
     logout: logoutMock,
@@ -45,9 +45,11 @@ const renderPage = () => {
   });
 
   return render(
-    <QueryClientProvider client={queryClient}>
-      <SettingsPage />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <SettingsPage />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 };
 
@@ -58,20 +60,13 @@ describe('Settings page', () => {
 
     logoutMock.mockResolvedValue(undefined);
     invokeMock.mockImplementation(async (functionName: string) => {
-      if (functionName === 'app-settings') {
+      if (functionName === 'moodle-connections') {
         return {
-          contractVersion: 1,
-          moodleConnectionUrl: 'https://ead.fieg.com.br',
-          moodleConnectionService: 'moodle_mobile_app',
+          contractVersion: 2,
+          connections: [],
         };
       }
-      return {
-        preferenceEnabled: true,
-        credentialActive: false,
-        lastError: null,
-        lastReauthAt: null,
-        requiresLogin: false,
-      };
+      return {};
     });
     setAuthUser();
   });
@@ -86,11 +81,7 @@ describe('Settings page', () => {
     expect(screen.getByRole('tab', { name: /mensagens/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /limpeza operacional do banco/i })).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith('app-settings', {
-        body: { action: 'get_public' },
-      });
-    });
+    await waitFor(() => expect(screen.getByText(/nenhum moodle conectado/i)).toBeInTheDocument());
   });
 
   it('triggers initial general sync', async () => {
@@ -101,24 +92,10 @@ describe('Settings page', () => {
     expect(syncDataMock).toHaveBeenCalledTimes(1);
   });
 
-  it('shows the background job reauthorization preference and allows disabling it', async () => {
-    const user = userEvent.setup();
+  it('exposes per-connection Moodle onboarding instead of global reauthorization', async () => {
     renderPage();
-
-    const reauthSwitch = await screen.findByRole('switch', {
-      name: /permitir reautorizacao automatica para jobs em segundo plano/i,
-    });
-
-    expect(reauthSwitch).toHaveAttribute('data-state', 'checked');
-
-    await user.click(reauthSwitch);
-
-    expect(invokeMock).toHaveBeenCalledWith('moodle-reauth-settings', {
-      body: {
-        action: 'update_settings',
-        enabled: false,
-      },
-    });
+    expect(await screen.findByRole('link', { name: /adicionar conexao moodle/i })).toHaveAttribute('href', '/onboarding/moodle');
+    expect(screen.queryByText(/reautorizacao automatica para jobs/i)).not.toBeInTheDocument();
   });
 
   it('persists the send on Enter preference inside the messages tab', async () => {

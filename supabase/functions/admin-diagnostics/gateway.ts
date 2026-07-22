@@ -1,21 +1,21 @@
-import { resolveMoodleAccess } from '../_shared/domain/moodle-reauth/access.ts'
+import { resolveMoodleAccess } from '../_shared/domain/moodle-connections/access.ts'
 import type { AppSupabaseClient } from '../_shared/db/mod.ts'
 import { ApiError } from '../_shared/http/mod.ts'
 import { callMoodleApi } from '../_shared/moodle/mod.ts'
 import type { GradeDiagnosticTarget } from './repository.ts'
 
 export interface GradeDiagnosticGateway {
-  fetchGrades(actorId: string, target: GradeDiagnosticTarget): Promise<unknown>
+  fetchGrades(actorId: string, connectionId: string, target: GradeDiagnosticTarget): Promise<unknown>
 }
 
 export function createGradeDiagnosticGateway(
   supabase: AppSupabaseClient,
 ): GradeDiagnosticGateway {
   return {
-    async fetchGrades(actorId, target) {
+    async fetchGrades(actorId, connectionId, target) {
       let access
       try {
-        access = await resolveMoodleAccess(supabase, actorId)
+        access = await resolveMoodleAccess(supabase, actorId, connectionId)
       } catch (error) {
         throw ApiError.conflict(
           error instanceof Error

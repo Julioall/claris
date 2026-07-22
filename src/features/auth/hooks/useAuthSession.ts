@@ -1,202 +1,107 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { authGateway } from '@/integrations/auth/auth-gateway';
 import type { User } from '@/features/auth/types';
+import { authGateway, type AuthSession } from '@/integrations/auth/auth-gateway';
 import { toast } from '@/hooks/use-toast';
-import { resolveFunctionsInvokeErrorMessage } from '@/lib/moodle-errors';
+import { saveSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
 import { trackEvent } from '@/lib/tracking';
 
-import { isInvalidRefreshTokenError, type MoodleSession, type SessionContext } from '../domain/session';
-import { authenticateMoodleUser } from '../infrastructure/moodle-api';
-import { clearStoredSession, loadStoredSession, saveStoredSession } from '../infrastructure/session-storage';
+import { isInvalidRefreshTokenError } from '../domain/session';
 
 export interface UseAuthSessionResult {
   user: User | null;
-  moodleSession: MoodleSession | null;
   isLoading: boolean;
   lastSync: string | null;
   setLastSync: (value: string | null) => void;
-  login: (
-    username: string,
-    password: string,
-    moodleUrl: string,
-    service?: string,
-    options?: {
-      backgroundReauthEnabled?: boolean;
-    },
-  ) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
   clearInvalidSession: () => Promise<void>;
-  resolveSessionContext: () => Promise<SessionContext | null>;
+}
+
+function mapClarisUser(session: AuthSession): User {
+  const email = session.user.email?.trim().toLowerCase();
+  return {
+    id: session.user.id,
+    full_name: session.user.fullName || email || 'Usuario Claris',
+    email,
+    avatar_url: session.user.avatarUrl,
+    created_at: session.user.createdAt,
+  };
 }
 
 export function useAuthSession(): UseAuthSessionResult {
   const [user, setUser] = useState<User | null>(null);
-  const [moodleSession, setMoodleSession] = useState<MoodleSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSyncState, setLastSyncState] = useState<string | null>(null);
 
-  const applyLocalSnapshot = useCallback((nextUser: User | null, nextSession: MoodleSession | null) => {
-    setUser(nextUser);
-    setMoodleSession(nextSession);
-    setLastSyncState(nextUser?.last_sync || null);
+  const applySession = useCallback((session: AuthSession | null) => {
+    setUser(session ? mapClarisUser(session) : null);
+    if (!session) setLastSyncState(null);
   }, []);
 
-  const persistSnapshot = useCallback(async (nextUser: User | null, nextSession: MoodleSession | null) => {
-    await saveStoredSession(nextUser ? { user: nextUser, moodleSession: nextSession } : null);
-  }, []);
-
-  const resetAuthState = useCallback(() => {
-    applyLocalSnapshot(null, null);
-    clearStoredSession();
-  }, [applyLocalSnapshot]);
-
-  const hydrateFromStorage = useCallback(async () => {
-    const stored = await loadStoredSession();
-    if (!stored) return;
-    applyLocalSnapshot(stored.user, stored.moodleSession);
-  }, [applyLocalSnapshot]);
+  const resetAuthState = useCallback(() => applySession(null), [applySession]);
 
   useEffect(() => {
-    const handleInvalidRefreshToken = async () => {
-      resetAuthState();
-      await authGateway.signOut('local');
-    };
-
     const unsubscribe = authGateway.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        resetAuthState();
-        setIsLoading(false);
-        return;
-      }
-
-      if (session?.user) {
-        void hydrateFromStorage().finally(() => setIsLoading(false));
-        return;
-      }
-
+      if (event === 'SIGNED_OUT' || !session) resetAuthState();
+      else applySession(session);
       setIsLoading(false);
     });
 
-    const initializeSession = async () => {
-      try {
-        const session = await authGateway.getSession();
-
-        if (session?.user) {
-          await hydrateFromStorage();
-        }
-      } catch (error) {
+    void authGateway.getSession()
+      .then(applySession)
+      .catch(async (error) => {
         if (isInvalidRefreshTokenError(error)) {
-          await handleInvalidRefreshToken();
+          resetAuthState();
+          await authGateway.signOut('local').catch(() => undefined);
         }
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    void initializeSession();
+      })
+      .finally(() => setIsLoading(false));
 
     return unsubscribe;
-  }, [hydrateFromStorage, resetAuthState]);
+  }, [applySession, resetAuthState]);
 
   const setLastSync = useCallback((value: string | null) => {
     setLastSyncState(value);
-    setUser((currentUser) => {
-      if (!currentUser) return currentUser;
+    setUser((current) => current ? { ...current, last_sync: value ?? undefined } : current);
+  }, []);
 
-      const nextUser = {
-        ...currentUser,
-        last_sync: value || undefined,
-      };
-
-      void persistSnapshot(nextUser, moodleSession);
-      return nextUser;
-    });
-  }, [moodleSession, persistSnapshot]);
-
-  const login = useCallback(async (
-    username: string,
-    password: string,
-    moodleUrl: string,
-    service = 'moodle_mobile_app',
-    options?: {
-      backgroundReauthEnabled?: boolean;
-    },
-  ): Promise<boolean> => {
+  const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     setIsLoading(true);
-
     try {
-      const authParams = {
-        username,
-        password,
-        moodleUrl,
-        service,
-        ...(typeof options?.backgroundReauthEnabled === 'boolean'
-          ? { backgroundReauthEnabled: options.backgroundReauthEnabled }
-          : {}),
-      };
-      const result = await authenticateMoodleUser(authParams);
-      if (!result.success) {
-        toast({
-          title: 'Erro de autenticacao',
-          description: result.error,
-          variant: 'destructive',
-        });
-        return false;
-      }
-
-      if (result.authSession) {
-        try {
-          await authGateway.setSession({
-            accessToken: result.authSession.accessToken,
-            refreshToken: result.authSession.refreshToken,
-          });
-        } catch (sessionError) {
-          console.error('Error setting auth session:', sessionError);
-        }
-      }
-
-      applyLocalSnapshot(result.user, result.moodleSession);
-      await persistSnapshot(result.user, result.moodleSession);
-
-      const offlineNote = result.offlineMode ? ' (modo offline)' : '';
+      const session = await authGateway.signInWithPassword(email.trim().toLowerCase(), password);
+      applySession(session);
       toast({
         title: 'Login realizado com sucesso',
-        description: result.backgroundReauthError
-          ? `Bem-vindo, ${result.user.full_name}!${offlineNote} A reautorizacao para jobs nao foi salva.`
-          : `Bem-vindo, ${result.user.full_name}!${offlineNote}`,
+        description: `Bem-vindo, ${session.user.fullName || session.user.email || 'usuario'}!`,
       });
-
       void trackEvent('login');
       return true;
-    } catch (error) {
-      console.error('Login error:', error);
+    } catch {
+      resetAuthState();
       toast({
         title: 'Erro de autenticacao',
-        description: resolveFunctionsInvokeErrorMessage(error),
+        description: 'E-mail ou senha invalidos.',
         variant: 'destructive',
       });
       return false;
     } finally {
       setIsLoading(false);
     }
-  }, [applyLocalSnapshot, persistSnapshot]);
+  }, [applySession, resetAuthState]);
 
   const logout = useCallback(async () => {
     const userId = user?.id;
-
     await trackEvent('logout');
     await authGateway.signOut();
     resetAuthState();
 
     if (userId) {
+      saveSelectedMoodleConnectionId(userId, null);
       localStorage.removeItem(`claris_chat_history:${userId}`);
     }
 
-    toast({
-      title: 'Logout realizado',
-      description: 'Voce foi desconectado com sucesso.',
-    });
+    toast({ title: 'Logout realizado', description: 'Voce foi desconectado com sucesso.' });
   }, [resetAuthState, user]);
 
   const clearInvalidSession = useCallback(async () => {
@@ -204,37 +109,13 @@ export function useAuthSession(): UseAuthSessionResult {
     await authGateway.signOut('local');
   }, [resetAuthState]);
 
-  const resolveSessionContext = useCallback(async (): Promise<SessionContext | null> => {
-    let userToUse = user;
-    let sessionToUse = moodleSession;
-
-    if (!userToUse || !sessionToUse) {
-      const stored = await loadStoredSession();
-      if (stored) {
-        userToUse = stored.user;
-        sessionToUse = stored.moodleSession;
-      }
-    }
-
-    if (!userToUse || !sessionToUse) {
-      return null;
-    }
-
-    return {
-      user: userToUse,
-      session: sessionToUse,
-    };
-  }, [moodleSession, user]);
-
   return {
     user,
-    moodleSession,
     isLoading,
     lastSync: lastSyncState,
     setLastSync,
     login,
     logout,
     clearInvalidSession,
-    resolveSessionContext,
   };
 }

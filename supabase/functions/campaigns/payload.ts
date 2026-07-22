@@ -26,7 +26,7 @@ export interface CampaignScheduleInput {
 export interface ScheduledMessageInput {
   channel: 'moodle' | 'whatsapp'
   messageContent: string
-  moodleUrl?: string
+  moodleConnectionId?: string
   notes?: string
   schedule: CampaignScheduleInput
   scheduledAt: string
@@ -204,7 +204,7 @@ function scheduledInput(value: unknown): ScheduledMessageInput {
   exactFields(input, [
     'channel',
     'messageContent',
-    'moodleUrl',
+    'moodleConnectionId',
     'notes',
     'schedule',
     'scheduledAt',
@@ -214,20 +214,11 @@ function scheduledInput(value: unknown): ScheduledMessageInput {
     'whatsappInstanceId',
   ])
   if (input.channel !== 'moodle' && input.channel !== 'whatsapp') invalid('input.channel')
-  const moodleUrl = string(input.moodleUrl, 'input.moodleUrl', 2_048)
-  if (moodleUrl) {
-    let parsedUrl: URL
-    try {
-      parsedUrl = new URL(moodleUrl)
-    } catch {
-      invalid('input.moodleUrl')
-    }
-    if (!['http:', 'https:'].includes(parsedUrl!.protocol)) invalid('input.moodleUrl')
-  }
+  const moodleConnectionId = uuid(input.moodleConnectionId, 'input.moodleConnectionId', false)
   return {
     channel: input.channel,
     messageContent: string(input.messageContent, 'input.messageContent', 12_000, true) as string,
-    ...(moodleUrl ? { moodleUrl } : {}),
+    ...(moodleConnectionId ? { moodleConnectionId } : {}),
     ...(string(input.notes, 'input.notes', 4_000) ? { notes: string(input.notes, 'input.notes', 4_000) } : {}),
     schedule: schedule(input.schedule),
     scheduledAt: timestamp(input.scheduledAt, 'input.scheduledAt'),

@@ -68,4 +68,21 @@ export interface MoodleUserProfile {
 
 export interface MoodleSiteInfo extends MoodleUser {
   userid: number
+  functions?: Array<{ name?: string; version?: string }>
+  release?: string
+  version?: string
+}
+
+export interface MoodleCourseUpdatesSince {
+  instances?: Array<{
+    contextlevel?: string
+    id?: number
+    updates?: Array<{ action?: string; name?: string; timeupdated?: number }>
+  }>
+  warnings?: Array<{
+    item?: string
+    itemid?: number
+    message?: string
+    warningcode?: string
+  }>
 }

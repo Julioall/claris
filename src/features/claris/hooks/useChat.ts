@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useMoodleSession } from '@/features/auth/context/MoodleSessionContext';
 import {
   fetchMoodleConversations,
   fetchMoodleMessages,
   sendMoodleMessage,
 } from '@/features/claris/api/moodle-messaging';
+import { loadSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
 import { useErrorLog } from '@/hooks/useErrorLog';
 import { useTrackEvent } from '@/hooks/useTrackEvent';
 import { useAuth } from '@/contexts/AuthContext';
@@ -103,9 +103,9 @@ function cloneChatCache(cache: PersistedChatCache): PersistedChatCache {
   };
 }
 
-function buildChatCacheKey(userId: string | undefined, session: { moodleUrl: string } | null) {
-  if (!userId || !session) return null;
-  return `${userId}:${session.moodleUrl}`;
+function buildChatCacheKey(userId: string | undefined, connectionId: string | null) {
+  if (!userId || !connectionId) return null;
+  return `${userId}:${connectionId}`;
 }
 
 function buildChatStorageKey(cacheKey: string) {
@@ -185,10 +185,13 @@ function patchConversationCollection(
 
 export function useChat(): UseChatResult {
   const { user } = useAuth();
-  const session = useMoodleSession();
+  const connectionId = useMemo(
+    () => user?.id ? loadSelectedMoodleConnectionId(user.id) : null,
+    [user?.id],
+  );
   const { track } = useTrackEvent();
   const { logError } = useErrorLog();
-  const chatCacheKey = useMemo(() => buildChatCacheKey(user?.id, session), [user?.id, session]);
+  const chatCacheKey = useMemo(() => buildChatCacheKey(user?.id, connectionId), [connectionId, user?.id]);
   const initialCache = useMemo(() => readPersistedChatCache(chatCacheKey), [chatCacheKey]);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
   const [isRefreshingConversations, setIsRefreshingConversations] = useState(false);
@@ -265,7 +268,7 @@ export function useChat(): UseChatResult {
   }, [chatCacheKey]);
 
   const fetchConversations = useCallback(async () => {
-    if (!session) return;
+    if (!connectionId) return;
 
     const hasCachedConversations = conversationsCacheRef.current.length > 0;
 
@@ -280,7 +283,7 @@ export function useChat(): UseChatResult {
     }
 
     try {
-      const response = await fetchMoodleConversations();
+      const response = await fetchMoodleConversations(connectionId);
       syncCurrentMoodleUserId(response.currentMoodleUserId);
 
       const mapped: Conversation[] = response.items.map((conversation) => ({
@@ -313,10 +316,10 @@ export function useChat(): UseChatResult {
       setIsLoadingConversations(false);
       setIsRefreshingConversations(false);
     }
-  }, [persistCurrentCache, session, syncConversationsState, syncCurrentMoodleUserId]);
+  }, [connectionId, persistCurrentCache, syncConversationsState, syncCurrentMoodleUserId]);
 
   const fetchMessages = useCallback(async (moodleUserId: number | string, limit?: number) => {
-    if (!session) return;
+    if (!connectionId) return;
 
     const messagesKey = String(moodleUserId);
     const cachedMessages = messagesCacheRef.current.get(messagesKey);
@@ -335,7 +338,7 @@ export function useChat(): UseChatResult {
     }
 
     try {
-      const response = await fetchMoodleMessages(Number(moodleUserId), limit || 50);
+      const response = await fetchMoodleMessages(connectionId, Number(moodleUserId), limit || 50);
       syncCurrentMoodleUserId(response.currentMoodleUserId);
 
       const mapped: ChatMessage[] = response.items.map((message) => ({
@@ -370,10 +373,10 @@ export function useChat(): UseChatResult {
         setIsRefreshingMessages(false);
       }
     }
-  }, [persistCurrentCache, session, syncConversationPatch, syncCurrentMoodleUserId, syncMessagesState]);
+  }, [connectionId, persistCurrentCache, syncConversationPatch, syncCurrentMoodleUserId, syncMessagesState]);
 
   const sendMessage = useCallback(async (moodleUserId: number | string, text: string) => {
-    if (!session || !text.trim()) return false;
+    if (!connectionId || !text.trim()) return false;
 
     const messagesKey = String(moodleUserId);
     const normalizedText = text.trim();
@@ -382,7 +385,7 @@ export function useChat(): UseChatResult {
     setMessagesError(null);
 
     try {
-      const response = await sendMoodleMessage(Number(moodleUserId), normalizedText);
+      const response = await sendMoodleMessage(connectionId, Number(moodleUserId), normalizedText);
 
       const sentAt = Math.floor(Date.now() / 1000);
       const newMessage: ChatMessage = {
@@ -421,7 +424,7 @@ export function useChat(): UseChatResult {
       persistCurrentCache();
       setIsSending(false);
     }
-  }, [logError, persistCurrentCache, session, syncConversationPatch, syncMessagesState, track]);
+  }, [connectionId, logError, persistCurrentCache, syncConversationPatch, syncMessagesState, track]);
 
   return {
     conversations,
