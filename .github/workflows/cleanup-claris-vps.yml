@@ -1,0 +1,403 @@
+name: Cleanup Claris VPS
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_full_reset:
+        description: Type RESET_CLARIS to remove Claris containers, volumes, environment files and application files.
+        required: true
+        type: string
+      remove_all_docker_data:
+        description: Stop every container and remove all unused Docker data from the VPS, including volumes.
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      clear_apt_cache:
+        description: Clear the apt package cache and downloaded package lists.
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claris-vps-production
+  cancel-in-progress: false
+
+env:
+  VPS_APP_DIR: ${{ vars.VPS_APP_DIR || '/opt/claris' }}
+  VPS_SSH_PORT: ${{ vars.VPS_SSH_PORT || '22' }}
+  COMPOSE_PROJECT_NAME: ${{ vars.COMPOSE_PROJECT_NAME || 'claris' }}
+  SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID || 'local' }}
+  CONFIRM_FULL_RESET: ${{ inputs.confirm_full_reset }}
+  REMOVE_ALL_DOCKER_DATA: ${{ inputs.remove_all_docker_data }}
+  CLEAR_APT_CACHE: ${{ inputs.clear_apt_cache }}
+  VPS_AUTH_SECRET: ${{ secrets.VPS_SSH_KEY || secrets.VPS_SSH_PASSWORD }}
+
+jobs:
+  cleanup:
+    name: Reset VPS for a clean Claris deployment
+    runs-on: ubuntu-latest
+    environment: vps
+    timeout-minutes: 20
+
+    steps:
+      - name: Validate cleanup configuration
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+
+          require_value() {
+            [ -n "$2" ] || {
+              echo "::error::Configure $1 in the vps environment"
+              exit 1
+            }
+          }
+
+          require_bool() {
+            case "$2" in
+              true|false) ;;
+              *)
+                echo "::error::$1 must be true or false"
+                exit 1
+                ;;
+            esac
+          }
+
+          require_value VPS_HOST "$VPS_HOST"
+          require_value VPS_USER "$VPS_USER"
+          require_value VPS_SSH_KEY_or_VPS_SSH_PASSWORD "$VPS_AUTH_SECRET"
+
+          if [ "$CONFIRM_FULL_RESET" != "RESET_CLARIS" ]; then
+            echo "::error::This cleanup is destructive. Type RESET_CLARIS in confirm_full_reset to continue."
+            exit 1
+          fi
+
+          require_bool REMOVE_ALL_DOCKER_DATA "$REMOVE_ALL_DOCKER_DATA"
+          require_bool CLEAR_APT_CACHE "$CLEAR_APT_CACHE"
+
+          case "$VPS_SSH_PORT" in
+            ''|*[!0-9]*)
+              echo "::error::VPS_SSH_PORT must be numeric"
+              exit 1
+              ;;
+          esac
+
+          if [ "$VPS_SSH_PORT" -lt 1 ] || [ "$VPS_SSH_PORT" -gt 65535 ]; then
+            echo "::error::VPS_SSH_PORT must be between 1 and 65535"
+            exit 1
+          fi
+
+          case "$VPS_APP_DIR" in
+            /opt/*|/srv/*|/home/*) ;;
+            *)
+              echo "::error::VPS_APP_DIR must be an application directory below /opt, /srv or /home"
+              exit 1
+              ;;
+          esac
+
+          case "$VPS_APP_DIR" in
+            /|/opt|/opt/|/srv|/srv/|/home|/home/)
+              echo "::error::Refusing unsafe VPS_APP_DIR: $VPS_APP_DIR"
+              exit 1
+              ;;
+          esac
+
+          case "$COMPOSE_PROJECT_NAME" in
+            ''|*[!a-zA-Z0-9_.-]*)
+              echo "::error::COMPOSE_PROJECT_NAME contains unsupported characters"
+              exit 1
+              ;;
+          esac
+
+          case "$SUPABASE_PROJECT_ID" in
+            ''|*[!a-zA-Z0-9_.-]*)
+              echo "::error::SUPABASE_PROJECT_ID contains unsupported characters"
+              exit 1
+              ;;
+          esac
+
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H -p "$VPS_SSH_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+          if printf '%s' "$VPS_AUTH_SECRET" | grep -q 'BEGIN .*PRIVATE KEY'; then
+            printf '%s\n' "$VPS_AUTH_SECRET" > ~/.ssh/deploy_key
+            chmod 600 ~/.ssh/deploy_key
+            echo 'VPS_AUTH_MODE=key' >> "$GITHUB_ENV"
+          else
+            sudo apt-get update
+            sudo apt-get install -y sshpass
+            echo 'VPS_AUTH_MODE=password' >> "$GITHUB_ENV"
+          fi
+
+      - name: Reset remote Claris state
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          set -euo pipefail
+
+          REMOTE_SCRIPT="$(cat <<'EOF'
+          set -euo pipefail
+
+          validate_remote_configuration() {
+            case "$VPS_APP_DIR" in
+              /opt/*|/srv/*|/home/*) ;;
+              *)
+                echo "Refusing unsafe VPS_APP_DIR: $VPS_APP_DIR"
+                exit 1
+                ;;
+            esac
+
+            case "$VPS_APP_DIR" in
+              /|/opt|/opt/|/srv|/srv/|/home|/home/)
+                echo "Refusing unsafe VPS_APP_DIR: $VPS_APP_DIR"
+                exit 1
+                ;;
+            esac
+
+            case "$COMPOSE_PROJECT_NAME" in
+              ''|*[!a-zA-Z0-9_.-]*)
+                echo "Invalid COMPOSE_PROJECT_NAME"
+                exit 1
+                ;;
+            esac
+
+            case "$SUPABASE_PROJECT_ID" in
+              ''|*[!a-zA-Z0-9_.-]*)
+                echo "Invalid SUPABASE_PROJECT_ID"
+                exit 1
+                ;;
+            esac
+          }
+
+          validate_remote_configuration
+
+          SUDO=''
+          if [ "$(id -u)" -ne 0 ]; then
+            SUDO='sudo'
+          fi
+
+          echo "Claris application directory: $VPS_APP_DIR"
+          echo "Compose project: $COMPOSE_PROJECT_NAME"
+          echo "Supabase project ID: $SUPABASE_PROJECT_ID"
+          echo "Remove all Docker data: $REMOVE_ALL_DOCKER_DATA"
+
+          if command -v docker >/dev/null 2>&1; then
+            DOCKER='docker'
+            if ! docker info >/dev/null 2>&1; then
+              DOCKER='sudo docker'
+            fi
+
+            run_compose() {
+              if $DOCKER compose version >/dev/null 2>&1; then
+                $DOCKER compose \
+                  --env-file .env.production \
+                  -f docker-compose.yml \
+                  -f docker-compose.dev.yml \
+                  -f docker-compose.vps.yml \
+                  "$@"
+              elif command -v docker-compose >/dev/null 2>&1; then
+                if docker info >/dev/null 2>&1; then
+                  docker-compose \
+                    --env-file .env.production \
+                    -f docker-compose.yml \
+                    -f docker-compose.dev.yml \
+                    -f docker-compose.vps.yml \
+                    "$@"
+                else
+                  sudo docker-compose \
+                    --env-file .env.production \
+                    -f docker-compose.yml \
+                    -f docker-compose.dev.yml \
+                    -f docker-compose.vps.yml \
+                    "$@"
+                fi
+              else
+                return 1
+              fi
+            }
+
+            echo "Docker disk usage before cleanup:"
+            $DOCKER system df || true
+
+            if [ -d "$VPS_APP_DIR" ]; then
+              cd "$VPS_APP_DIR"
+              export COMPOSE_PROJECT_NAME
+
+              if [ -f docker-compose.yml ] &&
+                 [ -f docker-compose.dev.yml ] &&
+                 [ -f docker-compose.vps.yml ] &&
+                 [ -f .env.production ]; then
+                echo "Stopping the Claris Compose stack"
+                run_compose --profile evolution down \
+                  --volumes \
+                  --remove-orphans \
+                  --rmi local || true
+              else
+                echo "Compose files or .env.production are incomplete; using name and label cleanup"
+              fi
+            fi
+
+            echo "Removing known Claris containers"
+            for container in \
+              claris-supabase \
+              claris-frontend \
+              claris-scheduled-messages-runner \
+              claris-evolution \
+              claris-caddy; do
+              $DOCKER rm -f "$container" >/dev/null 2>&1 || true
+            done
+
+            echo "Removing Compose resources for project $COMPOSE_PROJECT_NAME"
+            PROJECT_CONTAINERS="$($DOCKER ps -aq \
+              --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" 2>/dev/null || true)"
+            if [ -n "$PROJECT_CONTAINERS" ]; then
+              $DOCKER rm -f $PROJECT_CONTAINERS || true
+            fi
+
+            PROJECT_NETWORKS="$($DOCKER network ls -q \
+              --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" 2>/dev/null || true)"
+            if [ -n "$PROJECT_NETWORKS" ]; then
+              $DOCKER network rm $PROJECT_NETWORKS || true
+            fi
+
+            PROJECT_VOLUMES="$($DOCKER volume ls -q \
+              --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" 2>/dev/null || true)"
+            if [ -n "$PROJECT_VOLUMES" ]; then
+              $DOCKER volume rm -f $PROJECT_VOLUMES || true
+            fi
+
+            echo "Removing Supabase CLI resources for project $SUPABASE_PROJECT_ID"
+            SUPABASE_CONTAINERS="$(
+              $DOCKER ps -a --format '{{.ID}} {{.Names}}' 2>/dev/null |
+                awk -v suffix="_${SUPABASE_PROJECT_ID}$" \
+                  '$2 ~ /^supabase_/ && $2 ~ suffix { print $1 }' || true
+            )"
+            if [ -n "$SUPABASE_CONTAINERS" ]; then
+              $DOCKER rm -f $SUPABASE_CONTAINERS || true
+            fi
+
+            $DOCKER network rm "supabase_network_${SUPABASE_PROJECT_ID}" \
+              >/dev/null 2>&1 || true
+
+            SUPABASE_VOLUMES="$(
+              $DOCKER volume ls --format '{{.Name}}' 2>/dev/null |
+                awk -v suffix="_${SUPABASE_PROJECT_ID}$" \
+                  '$0 ~ /^supabase_/ && $0 ~ suffix { print $0 }' || true
+            )"
+            if [ -n "$SUPABASE_VOLUMES" ]; then
+              $DOCKER volume rm -f $SUPABASE_VOLUMES || true
+            fi
+
+            echo "Removing known Claris named volumes"
+            for volume in \
+              "${COMPOSE_PROJECT_NAME}_evolution_instances" \
+              "${COMPOSE_PROJECT_NAME}_caddy_data" \
+              "${COMPOSE_PROJECT_NAME}_caddy_config"; do
+              $DOCKER volume rm -f "$volume" >/dev/null 2>&1 || true
+            done
+
+            if [ "$REMOVE_ALL_DOCKER_DATA" = "true" ]; then
+              echo "Stopping and removing every Docker container on the VPS"
+              ALL_CONTAINERS="$($DOCKER ps -aq 2>/dev/null || true)"
+              if [ -n "$ALL_CONTAINERS" ]; then
+                $DOCKER rm -f $ALL_CONTAINERS || true
+              fi
+
+              echo "Pruning all unused Docker data, including volumes"
+              $DOCKER system prune -af --volumes
+              $DOCKER builder prune -af
+            else
+              echo "Pruning unused Docker data without stopping unrelated containers"
+              $DOCKER container prune -f
+              $DOCKER image prune -af
+              $DOCKER network prune -f
+              $DOCKER builder prune -af
+            fi
+
+            echo "Docker disk usage after cleanup:"
+            $DOCKER system df || true
+          else
+            echo "Docker is not installed; skipping Docker cleanup"
+          fi
+
+          echo "Removing Claris deployment files"
+          if [ -d "$VPS_APP_DIR" ]; then
+            $SUDO find "$VPS_APP_DIR" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -exec rm -rf -- {} +
+          fi
+
+          $SUDO mkdir -p "$VPS_APP_DIR"
+          $SUDO chown -R "$REMOTE_DEPLOY_USER": "$VPS_APP_DIR" || true
+
+          echo "Removing known Claris environment files"
+          $SUDO rm -f \
+            /etc/default/claris \
+            /etc/environment.d/claris.conf \
+            /etc/profile.d/claris.sh \
+            /etc/claris.env || true
+
+          echo "Removing Claris temporary files"
+          $SUDO rm -rf \
+            /tmp/claris \
+            /tmp/claris-* \
+            /var/tmp/claris \
+            /var/tmp/claris-* || true
+
+          if [ "$CLEAR_APT_CACHE" = "true" ] &&
+             command -v apt-get >/dev/null 2>&1; then
+            echo "Clearing apt cache"
+            $SUDO apt-get clean || true
+            $SUDO rm -rf /var/lib/apt/lists/* || true
+          fi
+
+          echo "Claris VPS cleanup completed."
+          echo "The next deploy will sync a fresh repository copy and create a new .env.production."
+          EOF
+          )"
+
+          REMOTE_ENV="$(printf \
+            'VPS_APP_DIR=%q COMPOSE_PROJECT_NAME=%q SUPABASE_PROJECT_ID=%q REMOVE_ALL_DOCKER_DATA=%q CLEAR_APT_CACHE=%q REMOTE_DEPLOY_USER=%q bash -s' \
+            "$VPS_APP_DIR" \
+            "$COMPOSE_PROJECT_NAME" \
+            "$SUPABASE_PROJECT_ID" \
+            "$REMOVE_ALL_DOCKER_DATA" \
+            "$CLEAR_APT_CACHE" \
+            "$VPS_USER")"
+
+          SSH_OPTIONS=(
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=20
+            -p "$VPS_SSH_PORT"
+          )
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            ssh "${SSH_OPTIONS[@]}" \
+              -i ~/.ssh/deploy_key \
+              "$VPS_USER@$VPS_HOST" \
+              "$REMOTE_ENV" <<< "$REMOTE_SCRIPT"
+          else
+            sshpass -p "$VPS_AUTH_SECRET" ssh \
+              "${SSH_OPTIONS[@]}" \
+              "$VPS_USER@$VPS_HOST" \
+              "$REMOTE_ENV" <<< "$REMOTE_SCRIPT"
+          fi
