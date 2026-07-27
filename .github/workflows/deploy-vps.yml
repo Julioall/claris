@@ -2,7 +2,8 @@ name: Deploy frontend Claris to VPS
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - src/**
       - public/**
@@ -50,7 +51,10 @@ jobs:
           set -euo pipefail
 
           require_value() {
-            [ -n "$2" ] || { echo "::error::Configure $1 in the vps environment"; exit 1; }
+            [ -n "$2" ] || {
+              echo "::error::Configure $1 in the vps environment"
+              exit 1
+            }
           }
 
           require_value VPS_HOST "$VPS_HOST"
@@ -60,59 +64,135 @@ jobs:
           require_value SUPABASE_PUBLISHABLE_KEY "$MANAGED_SUPABASE_PUBLISHABLE_KEY"
 
           case "$APP_DOMAIN" in
-            ''|*://*|*/*|*:*|*' '*) echo "::error::APP_DOMAIN must be a hostname without protocol, path or port"; exit 1 ;;
+            ''|*://*|*/*|*:*|*' '*)
+              echo "::error::APP_DOMAIN must be a hostname without protocol, path or port"
+              exit 1
+              ;;
           esac
 
           case "$PUBLIC_PROXY_NETWORK" in
-            ''|*[!a-zA-Z0-9_.-]*) echo "::error::PUBLIC_PROXY_NETWORK contains invalid characters"; exit 1 ;;
+            ''|*[!a-zA-Z0-9_.-]*)
+              echo "::error::PUBLIC_PROXY_NETWORK contains invalid characters"
+              exit 1
+              ;;
           esac
 
           case "$MANAGED_SUPABASE_URL" in
-            https://*) ;;
-            *) echo "::error::SUPABASE_URL must be an absolute HTTPS URL"; exit 1 ;;
+            https://*)
+              ;;
+            *)
+              echo "::error::SUPABASE_URL must be an absolute HTTPS URL"
+              exit 1
+              ;;
           esac
 
           case "$VPS_SSH_PORT" in
-            ''|*[!0-9]*) echo "::error::VPS_SSH_PORT must be numeric"; exit 1 ;;
+            ''|*[!0-9]*)
+              echo "::error::VPS_SSH_PORT must be numeric"
+              exit 1
+              ;;
           esac
 
-      - name: Test and build frontend for managed Supabase
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck frontend
+        run: npm run typecheck
+
+      - name: Test frontend
+        run: npm test -- --run
+
+      - name: Build frontend for managed Supabase
         env:
-          VITE_EVOLUTION_ENABLED: 'false'
+          VITE_EVOLUTION_ENABLED: "false"
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ env.MANAGED_SUPABASE_PUBLISHABLE_KEY }}
           VITE_SUPABASE_URL: ${{ env.MANAGED_SUPABASE_URL }}
         run: |
           set -euo pipefail
-          npm ci
-          npm run typecheck
-          npm test -- --run
+
           npm run build
+
           test -f dist/index.html
-          grep -R --fixed-strings "$MANAGED_SUPABASE_URL" dist >/dev/null
-          ! grep -R --fixed-strings '127.0.0.1:65421' dist >/dev/null
+
+          grep -R \
+            --fixed-strings \
+            "$MANAGED_SUPABASE_URL" \
+            dist >/dev/null
+
+          if grep -R \
+            --fixed-strings \
+            "127.0.0.1:65421" \
+            dist >/dev/null; then
+            echo "::error::Local Supabase URL found in production build"
+            exit 1
+          fi
+
+      - name: Validate required deployment files
+        run: |
+          set -euo pipefail
+
+          test -f Dockerfile.frontend.production || {
+            echo "::error::Dockerfile.frontend.production is missing"
+            exit 1
+          }
+
+          test -f docker-compose.vps.yml || {
+            echo "::error::docker-compose.vps.yml is missing"
+            exit 1
+          }
+
+          test -f deploy/nginx.conf || {
+            echo "::error::deploy/nginx.conf is missing"
+            exit 1
+          }
+
+          test -f dist/index.html || {
+            echo "::error::dist/index.html is missing"
+            exit 1
+          }
 
       - name: Validate frontend-only production Compose
         env:
           PUBLIC_PROXY_NETWORK: ${{ env.PUBLIC_PROXY_NETWORK }}
-        run: docker compose -f docker-compose.vps.yml config --quiet
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.vps.yml config --quiet
+
+      - name: Validate production frontend image
+        run: |
+          set -euo pipefail
+
+          docker build \
+            --file Dockerfile.frontend.production \
+            --tag claris-frontend:validation \
+            .
 
       - name: Configure SSH
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
         run: |
           set -euo pipefail
+
           sudo apt-get update
           sudo apt-get install -y rsync
-          mkdir -p ~/.ssh
-          ssh-keyscan -p "$VPS_SSH_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
 
-          if printf '%s' "$VPS_AUTH_SECRET" | grep -q 'BEGIN .*PRIVATE KEY'; then
-            printf '%s\n' "$VPS_AUTH_SECRET" > ~/.ssh/deploy_key
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          ssh-keyscan \
+            -p "$VPS_SSH_PORT" \
+            "$VPS_HOST" \
+            >> ~/.ssh/known_hosts
+
+          chmod 600 ~/.ssh/known_hosts
+
+          if printf "%s" "$VPS_AUTH_SECRET" | grep -q "BEGIN .*PRIVATE KEY"; then
+            printf "%s\n" "$VPS_AUTH_SECRET" > ~/.ssh/deploy_key
             chmod 600 ~/.ssh/deploy_key
-            echo 'VPS_AUTH_MODE=key' >> "$GITHUB_ENV"
+            echo "VPS_AUTH_MODE=key" >> "$GITHUB_ENV"
           else
             sudo apt-get install -y sshpass
-            echo 'VPS_AUTH_MODE=password' >> "$GITHUB_ENV"
+            echo "VPS_AUTH_MODE=password" >> "$GITHUB_ENV"
           fi
 
       - name: Prepare VPS
@@ -121,29 +201,53 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -euo pipefail
-          REMOTE_SCRIPT="set -euo pipefail
-            SUDO=''
-            if [ \"\$(id -u)\" -ne 0 ]; then SUDO='sudo'; fi
-            if ! command -v docker >/dev/null 2>&1; then
-              curl -fsSL https://get.docker.com | \$SUDO sh
-            fi
-            if [ -n \"\$SUDO\" ] && ! docker info >/dev/null 2>&1; then
-              \$SUDO usermod -aG docker '$VPS_USER'
-            fi
-            if ! \$SUDO docker compose version >/dev/null 2>&1 && ! command -v docker-compose >/dev/null 2>&1; then
-              \$SUDO apt-get update
-              \$SUDO apt-get install -y docker-compose-plugin || \$SUDO apt-get install -y docker-compose
-            fi
-            if ! \$SUDO docker network inspect '$PUBLIC_PROXY_NETWORK' >/dev/null 2>&1; then
-              \$SUDO docker network create '$PUBLIC_PROXY_NETWORK'
-            fi
-            \$SUDO mkdir -p '$VPS_APP_DIR'
-            \$SUDO chown -R '$VPS_USER': '$VPS_APP_DIR'"
 
-          if [ "$VPS_AUTH_MODE" = key ]; then
-            ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+          REMOTE_SCRIPT="set -euo pipefail
+
+          SUDO=''
+
+          if [ \"\$(id -u)\" -ne 0 ]; then
+            SUDO='sudo'
+          fi
+
+          if ! command -v docker >/dev/null 2>&1; then
+            curl -fsSL https://get.docker.com | \$SUDO sh
+          fi
+
+          if [ -n \"\$SUDO\" ] && ! docker info >/dev/null 2>&1; then
+            \$SUDO usermod -aG docker '$VPS_USER'
+          fi
+
+          if ! \$SUDO docker compose version >/dev/null 2>&1 &&
+             ! command -v docker-compose >/dev/null 2>&1; then
+            \$SUDO apt-get update
+            \$SUDO apt-get install -y docker-compose-plugin ||
+              \$SUDO apt-get install -y docker-compose
+          fi
+
+          if ! \$SUDO docker network inspect '$PUBLIC_PROXY_NETWORK' >/dev/null 2>&1; then
+            \$SUDO docker network create '$PUBLIC_PROXY_NETWORK'
+          fi
+
+          \$SUDO mkdir -p '$VPS_APP_DIR'
+          \$SUDO chown -R '$VPS_USER': '$VPS_APP_DIR'
+          "
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            ssh \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              -i ~/.ssh/deploy_key \
+              -p "$VPS_SSH_PORT" \
+              "$VPS_USER@$VPS_HOST" \
+              "$REMOTE_SCRIPT"
           else
-            sshpass -p "$VPS_AUTH_SECRET" ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+            sshpass -p "$VPS_AUTH_SECRET" ssh \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              -p "$VPS_SSH_PORT" \
+              "$VPS_USER@$VPS_HOST" \
+              "$REMOTE_SCRIPT"
           fi
 
       - name: Sync frontend bundle
@@ -152,15 +256,39 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -euo pipefail
+
           DEPLOY_BUNDLE="$(mktemp -d)"
           trap 'rm -rf "$DEPLOY_BUNDLE"' EXIT
-          cp -R dist "$DEPLOY_BUNDLE/dist"
-          cp Dockerfile.frontend.production docker-compose.vps.yml "$DEPLOY_BUNDLE/"
 
-          if [ "$VPS_AUTH_MODE" = key ]; then
-            rsync -az --delete -e "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -i ~/.ssh/deploy_key -p $VPS_SSH_PORT" "$DEPLOY_BUNDLE/" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
+          cp -R dist "$DEPLOY_BUNDLE/dist"
+
+          mkdir -p "$DEPLOY_BUNDLE/deploy"
+          cp deploy/nginx.conf "$DEPLOY_BUNDLE/deploy/nginx.conf"
+
+          cp \
+            Dockerfile.frontend.production \
+            docker-compose.vps.yml \
+            "$DEPLOY_BUNDLE/"
+
+          test -f "$DEPLOY_BUNDLE/dist/index.html"
+          test -f "$DEPLOY_BUNDLE/deploy/nginx.conf"
+          test -f "$DEPLOY_BUNDLE/Dockerfile.frontend.production"
+          test -f "$DEPLOY_BUNDLE/docker-compose.vps.yml"
+
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            rsync \
+              -az \
+              --delete \
+              -e "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -i ~/.ssh/deploy_key -p $VPS_SSH_PORT" \
+              "$DEPLOY_BUNDLE/" \
+              "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
           else
-            sshpass -p "$VPS_AUTH_SECRET" rsync -az --delete -e "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p $VPS_SSH_PORT" "$DEPLOY_BUNDLE/" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
+            sshpass -p "$VPS_AUTH_SECRET" rsync \
+              -az \
+              --delete \
+              -e "ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p $VPS_SSH_PORT" \
+              "$DEPLOY_BUNDLE/" \
+              "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/"
           fi
 
       - name: Write frontend production environment
@@ -169,18 +297,31 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -euo pipefail
+
           ENV_FILE="$(mktemp)"
+          trap 'rm -f "$ENV_FILE"' EXIT
+
           {
-            printf 'APP_DOMAIN=%s\n' "$APP_DOMAIN"
-            printf 'PUBLIC_PROXY_NETWORK=%s\n' "$PUBLIC_PROXY_NETWORK"
+            printf "APP_DOMAIN=%s\n" "$APP_DOMAIN"
+            printf "PUBLIC_PROXY_NETWORK=%s\n" "$PUBLIC_PROXY_NETWORK"
           } > "$ENV_FILE"
 
-          if [ "$VPS_AUTH_MODE" = key ]; then
-            scp -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -i ~/.ssh/deploy_key -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            scp \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              -i ~/.ssh/deploy_key \
+              -P "$VPS_SSH_PORT" \
+              "$ENV_FILE" \
+              "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
           else
-            sshpass -p "$VPS_AUTH_SECRET" scp -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -P "$VPS_SSH_PORT" "$ENV_FILE" "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
+            sshpass -p "$VPS_AUTH_SECRET" scp \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              -P "$VPS_SSH_PORT" \
+              "$ENV_FILE" \
+              "$VPS_USER@$VPS_HOST:$VPS_APP_DIR/.env.production"
           fi
-          rm -f "$ENV_FILE"
 
       - name: Restart frontend container
         env:
@@ -188,21 +329,36 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
         run: |
           set -euo pipefail
+
           REMOTE_SCRIPT="$(cat <<EOF
           set -euo pipefail
+
           cd '$VPS_APP_DIR'
           export COMPOSE_PROJECT_NAME='$COMPOSE_PROJECT_NAME'
 
           run_compose() {
-            if docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-              docker compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+            if docker info >/dev/null 2>&1 &&
+               docker compose version >/dev/null 2>&1; then
+              docker compose \
+                --env-file .env.production \
+                -f docker-compose.vps.yml \
+                "\$@"
             elif sudo docker compose version >/dev/null 2>&1; then
-              sudo docker compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+              sudo docker compose \
+                --env-file .env.production \
+                -f docker-compose.vps.yml \
+                "\$@"
             elif command -v docker-compose >/dev/null 2>&1; then
               if docker info >/dev/null 2>&1; then
-                docker-compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+                docker-compose \
+                  --env-file .env.production \
+                  -f docker-compose.vps.yml \
+                  "\$@"
               else
-                sudo docker-compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+                sudo docker-compose \
+                  --env-file .env.production \
+                  -f docker-compose.vps.yml \
+                  "\$@"
               fi
             else
               echo 'Docker Compose is unavailable'
@@ -210,25 +366,59 @@ jobs:
             fi
           }
 
-          run_compose up -d --build --remove-orphans frontend
+          test -f dist/index.html
+          test -f deploy/nginx.conf
+          test -f Dockerfile.frontend.production
+          test -f docker-compose.vps.yml
+          test -f .env.production
+
+          run_compose up \
+            -d \
+            --build \
+            --remove-orphans \
+            frontend
+
           run_compose ps
 
           attempt=1
-          while [ \"\$attempt\" -le 24 ]; do
-            if curl --fail --silent --show-error --max-time 15 'https://$APP_DOMAIN/health' >/dev/null; then
+
+          while [ "\$attempt" -le 24 ]; do
+            if curl \
+              --fail \
+              --silent \
+              --show-error \
+              --max-time 15 \
+              'https://$APP_DOMAIN/health' >/dev/null; then
               echo 'Frontend is healthy.'
               exit 0
             fi
+
+            echo "Waiting for frontend health check (\$attempt/24)..."
+
             attempt=\$((attempt + 1))
             sleep 10
           done
-          run_compose logs --tail=150 frontend
+
+          run_compose ps --all || true
+          run_compose logs --tail=150 frontend || true
+
           exit 1
           EOF
           )"
 
-          if [ "$VPS_AUTH_MODE" = key ]; then
-            ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -i ~/.ssh/deploy_key -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+          if [ "$VPS_AUTH_MODE" = "key" ]; then
+            ssh \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              -i ~/.ssh/deploy_key \
+              -p "$VPS_SSH_PORT" \
+              "$VPS_USER@$VPS_HOST" \
+              "$REMOTE_SCRIPT"
           else
-            sshpass -p "$VPS_AUTH_SECRET" ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=20 -p "$VPS_SSH_PORT" "$VPS_USER@$VPS_HOST" "$REMOTE_SCRIPT"
+            sshpass -p "$VPS_AUTH_SECRET" ssh \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=20 \
+              -p "$VPS_SSH_PORT" \
+              "$VPS_USER@$VPS_HOST" \
+              "$REMOTE_SCRIPT"
           fi
