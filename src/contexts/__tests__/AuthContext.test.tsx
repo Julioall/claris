@@ -1,6 +1,7 @@
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { BackgroundActivityProvider } from '@/contexts/BackgroundActivityContext';
@@ -30,6 +31,7 @@ const session = {
   user: { id: 'claris-user', email: 'tutor@example.test', fullName: 'Tutor Claris' },
 };
 let authRef: ReturnType<typeof useAuth> | null = null;
+let queryClient: QueryClient;
 
 function Probe() {
   authRef = useAuth();
@@ -37,13 +39,20 @@ function Probe() {
 }
 
 function renderProvider() {
-  return render(<BackgroundActivityProvider><AuthProvider><Probe /></AuthProvider></BackgroundActivityProvider>);
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <BackgroundActivityProvider><AuthProvider><Probe /></AuthProvider></BackgroundActivityProvider>
+    </QueryClientProvider>,
+  );
 }
 
 describe('AuthContext with independent Claris account', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     authRef = null;
+    sessionStorage.clear();
+    localStorage.clear();
     gateway.getSession.mockResolvedValue(null);
     gateway.onAuthStateChange.mockReturnValue(vi.fn());
     gateway.signOut.mockResolvedValue(undefined);
@@ -86,10 +95,40 @@ describe('AuthContext with independent Claris account', () => {
   it('clears account-scoped local state on logout', async () => {
     gateway.getSession.mockResolvedValue(session);
     localStorage.setItem('claris_chat_history:claris-user', 'private');
+    sessionStorage.setItem('claris_moodle_chat_cache:claris-user%3Aconnection-fieg', 'private');
     renderProvider();
     await waitFor(() => expect(authRef?.user?.id).toBe('claris-user'));
+    queryClient.setQueryData(['private-query'], { account: 'claris-user' });
     await act(async () => authRef!.logout());
     expect(gateway.signOut).toHaveBeenCalled();
     expect(localStorage.getItem('claris_chat_history:claris-user')).toBeNull();
+    expect(sessionStorage.getItem('claris_moodle_chat_cache:claris-user%3Aconnection-fieg')).toBeNull();
+    expect(queryClient.getQueryData(['private-query'])).toBeUndefined();
+  });
+
+  it('resets sync state and cached responses when the authenticated account changes', async () => {
+    const secondSession = {
+      ...session,
+      user: { id: 'claris-user-2', email: 'second@example.test', fullName: 'Segunda Conta' },
+    };
+    let stateListener: ((event: string, nextSession: typeof session | typeof secondSession | null) => void) | undefined;
+    gateway.getSession.mockResolvedValue(session);
+    gateway.onAuthStateChange.mockImplementation((listener) => {
+      stateListener = listener;
+      return vi.fn();
+    });
+    sessionStorage.setItem('claris:selected-moodle-connection:claris-user', 'connection-a');
+    sessionStorage.setItem('claris:selected-moodle-connection:claris-user-2', 'connection-b');
+
+    renderProvider();
+    await waitFor(() => expect(authRef?.user?.id).toBe('claris-user'));
+    await act(async () => authRef!.setCourses([{ id: 'course-a' } as never]));
+    queryClient.setQueryData(['private-query'], { account: 'claris-user' });
+
+    await act(async () => stateListener?.('SIGNED_IN', secondSession));
+
+    await waitFor(() => expect(authRef?.user?.id).toBe('claris-user-2'));
+    expect(authRef?.courses).toEqual([]);
+    expect(queryClient.getQueryData(['private-query'])).toBeUndefined();
   });
 });

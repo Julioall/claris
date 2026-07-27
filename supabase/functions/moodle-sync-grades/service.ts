@@ -9,8 +9,17 @@ import {
   upsertStudentActivities,
   upsertStudentCourseGrades,
 } from '../_shared/domain/moodle-sync/repository.ts'
-import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
-import { callMoodleApi } from '../_shared/moodle/mod.ts'
+import { computeContentHash } from '../_shared/domain/moodle-sync/content-hash.ts'
+import {
+  callMoodleApi,
+  combineMoodleApiTelemetry,
+  type MoodleApiTelemetry,
+} from '../_shared/moodle/mod.ts'
+import { createMoodleSyncAttemptTelemetry } from '../_shared/domain/moodle-sync/attempt-telemetry.ts'
+import {
+  createMoodleProviderMetrics,
+  toMoodleProviderMetricsMetadata,
+} from '../_shared/domain/moodle-sync/provider-metrics.ts'
 import {
   tryFetchBulkGradeReports,
   type BulkGradeFallbackReason,
@@ -31,6 +40,7 @@ export interface GradeSyncOptions {
   siteSlug: string
   studentBatchPage?: number
   studentBatchSize?: number
+  telemetry?: MoodleApiTelemetry
 }
 
 interface StudentBatch<TStudent> {
@@ -72,26 +82,65 @@ function resolveStudentBatch<TStudent>(
   }
 }
 
-function normalizeResult(
+async function normalizeResult(
   enrollment: GradeEnrollmentRef,
   report: MoodleUserGradeReport,
   clarisCourseId: string,
   syncedAt: string,
-): GradeBatchResult {
-  return normalizeMoodleGradeReport(report, {
+  connectionId: string,
+): Promise<GradeBatchResult> {
+  const normalized = normalizeMoodleGradeReport(report, {
     clarisCourseId,
     studentId: enrollment.student_id,
     syncedAt,
   })
+  const activityRecords = await Promise.all(normalized.activityRecords.map(async (record) => {
+    const stableContent = {
+      activity_name: record.activity_name,
+      activity_type: record.activity_type,
+      completed_at: record.completed_at,
+      grade: record.grade,
+      grade_max: record.grade_max,
+      graded_at: record.graded_at,
+      hidden: record.hidden,
+      percentage: record.percentage,
+      status: record.status,
+      submitted_at: record.submitted_at,
+    }
+    return {
+      ...record,
+      content_hash: await computeContentHash(stableContent),
+      last_synced_connection_id: connectionId,
+      observed_at: syncedAt,
+      source_updated_at: record.graded_at ?? record.submitted_at ?? null,
+    }
+  }))
+  const stableCourseGrade = {
+    grade_formatted: normalized.courseGradeRecord.grade_formatted,
+    grade_max: normalized.courseGradeRecord.grade_max,
+    grade_percentage: normalized.courseGradeRecord.grade_percentage,
+    grade_raw: normalized.courseGradeRecord.grade_raw,
+    letter_grade: normalized.courseGradeRecord.letter_grade,
+  }
+
+  return {
+    activityRecords,
+    courseGradeRecord: {
+      ...normalized.courseGradeRecord,
+      content_hash: await computeContentHash(stableCourseGrade),
+      last_synced_connection_id: connectionId,
+      observed_at: syncedAt,
+    },
+  }
 }
 
 async function fetchIndividualGradeReports(
-  moodleUrl: string,
-  token: string,
   courseId: number,
   enrollments: GradeEnrollmentRef[],
   clarisCourseId: string,
   syncedAt: string,
+  connectionId: string,
+  fetchGradeItems: (moodleUserId: number) => Promise<unknown>,
 ): Promise<{ errorCount: number; results: GradeBatchResult[] }> {
   const results: GradeBatchResult[] = []
   let errorCount = 0
@@ -100,12 +149,7 @@ async function fetchIndividualGradeReports(
     const batch = enrollments.slice(i, i + GRADE_FETCH_POOL_SIZE)
     const settled = await Promise.allSettled(batch.map(async (enrollment) => {
       const moodleUserId = Number(enrollment.moodle_user_id)
-      const payload = await callMoodleApi(
-        moodleUrl,
-        token,
-        'gradereport_user_get_grade_items',
-        { courseid: courseId, userid: moodleUserId },
-      )
+      const payload = await fetchGradeItems(moodleUserId)
       const usergrades = payload && typeof payload === 'object' && !Array.isArray(payload)
         ? (payload as { usergrades?: unknown }).usergrades
         : undefined
@@ -113,11 +157,12 @@ async function fetchIndividualGradeReports(
       if (!report || typeof report !== 'object' || Array.isArray(report)) {
         throw new Error('Moodle returned an invalid individual grade report.')
       }
-      return normalizeResult(
+      return await normalizeResult(
         enrollment,
         report as MoodleUserGradeReport,
         clarisCourseId,
         syncedAt,
+        connectionId,
       )
     }))
 
@@ -148,6 +193,14 @@ export async function syncGrades(
   options: GradeSyncOptions,
 ): Promise<Response> {
   const supabase = createServiceClient()
+  const providerMetrics = createMoodleProviderMetrics()
+  const attemptTelemetry = combineMoodleApiTelemetry(
+    options.telemetry ?? createMoodleSyncAttemptTelemetry({
+      connectionId: options.connectionId,
+      siteSlug: options.siteSlug,
+    }),
+    providerMetrics.telemetry(),
+  )
   const gradesCourse = await findCourseByMoodleCourseId(
     supabase,
     options.moodleSiteId,
@@ -157,7 +210,6 @@ export async function syncGrades(
 
   const enrolledStudents = await listCourseEnrollmentsWithMoodleUserId(supabase, gradesCourse.id)
   if (!enrolledStudents.length) {
-    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
     return jsonResponse({
       success: true,
       contractVersion: 2,
@@ -171,6 +223,7 @@ export async function syncGrades(
       processedStudents: 0,
       skippedStudents: 0,
       totalStudents: 0,
+      ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
     })
   }
 
@@ -194,7 +247,6 @@ export async function syncGrades(
     (enrollment) => !recentlySyncedStudentIds.has(enrollment.student_id),
   )
   if (allStudentsToFetch.length === 0) {
-    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
     return jsonResponse({
       success: true,
       contractVersion: 2,
@@ -211,15 +263,18 @@ export async function syncGrades(
       studentBatchPage: 1,
       studentBatchSize: enrolledStudents.length,
       totalStudents: enrolledStudents.length,
+      ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
     })
   }
 
-  const fetchGradeItems = (moodleUserId: number) => callMoodleApi(
+  const fetchGradeItems = (moodleUserId: number) => providerMetrics.call(() => callMoodleApi(
     moodleUrl,
     token,
     'gradereport_user_get_grade_items',
     { courseid: courseId, userid: moodleUserId },
-  )
+    25_000,
+    attemptTelemetry,
+  ))
 
   const requestedPage = Math.max(1, options.studentBatchPage ?? 1)
   let fallbackReason: BulkGradeFallbackReason | 'continuation_page' | null = null
@@ -233,10 +288,17 @@ export async function syncGrades(
     const bulk = await tryFetchBulkGradeReports(enrolledStudents, fetchGradeItems)
     if (bulk.mode === 'bulk') {
       const now = new Date().toISOString()
-      results = allStudentsToFetch.flatMap((enrollment) => {
+      const matchedReports = allStudentsToFetch.flatMap((enrollment) => {
         const report = bulk.reportsByMoodleUserId.get(String(Number(enrollment.moodle_user_id)))
-        return report ? [normalizeResult(enrollment, report, gradesCourse.id, now)] : []
+        return report ? [{ enrollment, report }] : []
       })
+      results = await Promise.all(matchedReports.map(({ enrollment, report }) => normalizeResult(
+        enrollment,
+        report,
+        gradesCourse.id,
+        now,
+        options.connectionId,
+      )))
       page = {
         batchSize: enrolledStudents.length,
         hasMore: false,
@@ -259,12 +321,12 @@ export async function syncGrades(
       (enrollment) => !recentlySyncedStudentIds.has(enrollment.student_id),
     )
     const individual = await fetchIndividualGradeReports(
-      moodleUrl,
-      token,
       courseId,
       studentsToFetch,
       gradesCourse.id,
       new Date().toISOString(),
+      options.connectionId,
+      fetchGradeItems,
     )
     results = individual.results
     errorCount = individual.errorCount
@@ -281,10 +343,6 @@ export async function syncGrades(
   let gradesCount = 0
   if (courseGradeRecords.length > 0) {
     gradesCount = await upsertStudentCourseGrades(supabase, courseGradeRecords, 100)
-  }
-
-  if (!page.hasMore) {
-    await refreshDashboardAggregatesForCourse(supabase, gradesCourse.id)
   }
 
   const skippedStudents = page.selectedStudents.filter(
@@ -311,18 +369,6 @@ export async function syncGrades(
     studentBatchPage: page.page,
     studentBatchSize: page.batchSize,
     totalStudents: page.totalStudents,
+    ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
   })
-}
-
-async function refreshDashboardAggregatesForCourse(
-  supabase: ReturnType<typeof createServiceClient>,
-  courseId: string,
-) {
-  try {
-    await refreshDashboardCourseActivityAggregates(supabase, [courseId])
-  } catch (error) {
-    console.error('[moodle-sync-grades] Dashboard aggregate refresh failed.', {
-      errorType: error instanceof Error ? error.name : 'unknown',
-    })
-  }
 }

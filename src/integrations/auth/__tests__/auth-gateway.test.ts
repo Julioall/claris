@@ -80,6 +80,22 @@ describe('authGateway', () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  it('accepts password updates on the reset route only after a recovery auth event', () => {
+    let providerListener: ((event: string, session: typeof rawSession | null) => void) | undefined;
+    authMock.onAuthStateChange.mockImplementation((listener) => {
+      providerListener = listener;
+      return { data: { subscription: { unsubscribe: vi.fn() } } };
+    });
+
+    authGateway.onAuthStateChange(vi.fn());
+    providerListener?.('SIGNED_IN', rawSession);
+    expect(authGateway.consumePasswordRecoverySession()).toBeNull();
+
+    providerListener?.('PASSWORD_RECOVERY', rawSession);
+    expect(authGateway.consumePasswordRecoverySession()).toMatchObject({ user: { id: 'user-1' } });
+    expect(authGateway.consumePasswordRecoverySession()).toBeNull();
+  });
+
   it('maps session writes and sign-out scope', async () => {
     await authGateway.setSession({ accessToken: 'access-new', refreshToken: 'refresh-new' });
     await authGateway.signOut('local');

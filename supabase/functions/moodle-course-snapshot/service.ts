@@ -28,6 +28,13 @@ export async function executeMoodleCourseSnapshot(
   now = new Date(),
 ): Promise<{ body: Record<string, unknown>; status: number; retryAfterSeconds?: number }> {
   if (payload.action === 'request_course_refresh') {
+    if (!await repository.isFreshnessRolloutEnabled(actorId, payload.connectionId)) {
+      throw new ApiError(
+        'moodle_sync_freshness_rollout_disabled',
+        'Moodle freshness rollout is disabled for this connection site.',
+        409,
+      )
+    }
     const refresh = await repository.requestRefresh(
       actorId, payload.connectionId, payload.courseId, payload.entities, 'manual',
     )
@@ -55,7 +62,11 @@ export async function executeMoodleCourseSnapshot(
     }
   }
 
-  await repository.reclassify(payload.connectionId, payload.courseId)
+  const freshnessEnabled = payload.refreshPolicy === 'if_stale'
+    && await repository.isFreshnessRolloutEnabled(actorId, payload.connectionId)
+  if (freshnessEnabled) {
+    await repository.reclassify(payload.connectionId, payload.courseId)
+  }
   const snapshot = await repository.getSnapshot(payload.connectionId, payload.courseId, payload.entities)
   if (!snapshot.connection) throw new ApiError('moodle_connection_not_found', 'Moodle connection not found.', 404)
   if (!snapshot.course) throw ApiError.notFound('Course not found.')
@@ -93,7 +104,7 @@ export async function executeMoodleCourseSnapshot(
 
   let refresh: RefreshRequestResult | null = null
   const staleEntities = needsRefresh(freshness)
-  if (payload.refreshPolicy === 'if_stale' && staleEntities.length > 0) {
+  if (freshnessEnabled && staleEntities.length > 0) {
     refresh = await repository.requestRefresh(
       actorId, payload.connectionId, payload.courseId, staleEntities, 'stale_read',
     )
@@ -119,10 +130,15 @@ export async function executeMoodleCourseSnapshot(
       freshness,
       refresh: refresh
         ? mapRefresh(refresh)
-        : { jobId: null, retryAfterSeconds: null, status: 'not_requested' },
+        : {
+            jobId: null,
+            retryAfterSeconds: null,
+            status: payload.refreshPolicy === 'if_stale' && !freshnessEnabled
+              ? 'disabled'
+              : 'not_requested',
+          },
       siteId: snapshot.connection.moodle_site_id,
     },
     status: 200,
   }
 }
-

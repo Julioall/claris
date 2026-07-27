@@ -49,6 +49,21 @@ function metadataStringArray(value: unknown): string[] {
     : []
 }
 
+function metadataConnectionId(value: Json): string | null {
+  const connectionId = metadataRecord(value).connection_id
+  return typeof connectionId === 'string' && connectionId.length > 0 ? connectionId : null
+}
+
+async function assertBulkRollout(
+  repository: MoodleSyncJobsRepository,
+  actorId: string,
+  connectionId: string,
+): Promise<void> {
+  if (!await repository.isRolloutEnabled(actorId, connectionId, 'bulk')) {
+    throw ApiError.conflict('Moodle bulk synchronization rollout is disabled for this connection site.')
+  }
+}
+
 function itemEntity(item: BackgroundJobItemRecord): MoodleSyncStepEntityDto | null {
   const key = item.item_key ?? ''
   const entity = key.includes(':') ? key.split(':', 1)[0] : key
@@ -110,7 +125,7 @@ export function mapMoodleSyncJob(
   )
   const stepEntities: MoodleSyncStepEntityDto[] = [
     ...entities,
-    ...(entities.includes('students') ? ['risk' as const] : []),
+    'risk',
   ]
   return {
     completedAt: job.completed_at,
@@ -179,9 +194,11 @@ function buildItems(
       label: labels[entity],
       metadata: { course_id: courseId, entity } as Json,
     }))),
-    ...(entities.includes('students')
-      ? [{ itemKey: 'risk', label: 'Recalcular risco', metadata: { entity: 'risk' } as Json }]
-      : []),
+    {
+      itemKey: 'risk',
+      label: 'Finalizar curso e recalcular risco',
+      metadata: { entity: 'risk' } as Json,
+    },
   ]
 }
 
@@ -197,6 +214,7 @@ async function startJob(
   if (!await repository.hasCourseScope(actorId, connectionId, courseIds, kind)) {
     throw ApiError.forbidden('One or more courses are outside the authenticated actor scope')
   }
+  await assertBulkRollout(repository, actorId, connectionId)
   if (kind === 'initial') {
     try {
       await repository.linkEligibleCourses(actorId, connectionId, courseIds)
@@ -283,6 +301,7 @@ export async function executeMoodleSyncJobs(
 ): Promise<MoodleSyncJobsResponseDto> {
   switch (payload.action) {
     case 'list_available_courses': {
+      await assertBulkRollout(repository, actorId, payload.connectionId)
       const items = await runtime.listAvailableCourses(actorId, payload.connectionId)
       return { contractVersion: MOODLE_SYNC_JOBS_CONTRACT_VERSION, items } satisfies MoodleSyncCoursesDto
     }
@@ -322,6 +341,9 @@ export async function executeMoodleSyncJobs(
       } satisfies MoodleSyncActiveJobsDto
     }
     case 'retry_job': {
+      const existing = await repository.getJob(actorId, payload.jobId)
+      const connectionId = existing ? metadataConnectionId(existing.metadata) : null
+      if (connectionId) await assertBulkRollout(repository, actorId, connectionId)
       const job = await repository.resetOwnedJob(actorId, payload.jobId)
       if (!job) throw ApiError.conflict('Only failed or cancelled Moodle sync jobs can be retried')
       runtime.schedule(job.id)

@@ -15,6 +15,8 @@ export interface AuthSession {
 export type AuthStateListener = (event: string, session: AuthSession | null) => void;
 export type SignOutScope = 'global' | 'local' | 'others';
 
+let pendingPasswordRecoverySession: AuthSession | null = null;
+
 export class AuthSessionMissingError extends Error {
   constructor() {
     super('Sessao expirada. Faca login novamente.');
@@ -77,9 +79,26 @@ export const authGateway = {
 
   onAuthStateChange(listener: AuthStateListener): () => void {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      listener(event, mapSession(session));
+      const mappedSession = mapSession(session);
+      if (event === 'PASSWORD_RECOVERY' && mappedSession) {
+        pendingPasswordRecoverySession = mappedSession;
+      } else if (event === 'SIGNED_OUT' || !mappedSession) {
+        pendingPasswordRecoverySession = null;
+      }
+      listener(event, mappedSession);
     });
     return () => subscription.unsubscribe();
+  },
+
+  /**
+   * Returns the one-time recovery proof observed from Supabase Auth. A normal
+   * signed-in session is deliberately not accepted by the reset-password
+   * route, even when that user could otherwise change their own password.
+   */
+  consumePasswordRecoverySession(): AuthSession | null {
+    const recoverySession = pendingPasswordRecoverySession;
+    pendingPasswordRecoverySession = null;
+    return recoverySession;
   },
 
   refreshSession,
@@ -112,6 +131,7 @@ export const authGateway = {
   async signOut(scope: SignOutScope = 'global'): Promise<void> {
     const { error } = await supabase.auth.signOut({ scope });
     if (error) throw error;
+    pendingPasswordRecoverySession = null;
   },
 
   async updatePassword(password: string): Promise<void> {

@@ -5,14 +5,14 @@ enabled = false
 
 [api]
 enabled = true
-port = 54321
+port = 65421
 schemas = ["public", "graphql_public"]
 extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-port = 54322
-shadow_port = 54320
+port = 65422
+shadow_port = 65420
 major_version = 15
 
 [edge_runtime]
@@ -20,14 +20,14 @@ policy = "per_worker"
 
 [studio]
 enabled = true
-port = 54323
-api_url = "http://127.0.0.1:54321"
+port = 65423
+api_url = "http://127.0.0.1:65421"
 
 [inbucket]
 enabled = true
-port = 54324
-smtp_port = 54325
-pop3_port = 54326
+port = 65424
+smtp_port = 65425
+pop3_port = 65426
 
 [storage]
 enabled = true
@@ -113,7 +113,13 @@ verify_jwt = false
 [functions.moodle-sync-jobs]
 verify_jwt = false
 
+[functions.moodle-sync-rollouts]
+verify_jwt = false
+
 [functions.moodle-sync-worker]
+verify_jwt = false
+
+[functions.moodle-sync-dispatcher]
 verify_jwt = false
 
 [functions.moodle-course-snapshot]

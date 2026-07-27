@@ -137,7 +137,7 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - Definir convencao `/v1`, nomes de actions, paginacao, filtros e datas ISO-8601.
   - Definir envelope de sucesso e `ApiError` com `code`, `message`, `details` e `correlationId`.
   - AC: exemplos documentados e usados por uma function piloto.
-  - Implementado de forma opt-in em `_shared/http/contract.ts`; `moodle-reauth-settings` preserva o payload legado e responde no envelope V1 quando solicitado.
+  - Implementado de forma opt-in em `_shared/http/contract.ts`; os pilotos legados de reautorizacao foram removidos antes do primeiro release Claris.
 
 - [x] `SB-0102` Completar o runtime HTTP compartilhado
   - Consolidar CORS, parse de body, autenticacao, autorizacao, correlation ID, logs e mapeamento de erros em `_shared/http`.
@@ -154,7 +154,7 @@ Para migrations, validar tambem banco local, policies, grants, rollback logico e
   - Convencao: `index.ts`, `payload.ts`, `service.ts`, `repository.ts`, `mapper.ts` e testes.
   - `index.ts` deve apenas adaptar HTTP e chamar o service.
   - AC: template documentado em `EDGE_FUNCTIONS.md`.
-  - Implementado e aplicado no piloto `moodle-reauth-settings`, com service testavel por repository injetado.
+  - Implementado e aplicado nas functions V1 atuais, com services testaveis por repositories injetados.
 
 - [x] `SB-0105` Criar client HTTP unico no frontend
   - Encapsular `functions.invoke`, normalizacao de erro, timeout, abort signal e correlation ID.

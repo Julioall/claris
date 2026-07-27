@@ -9,6 +9,7 @@ import {
 } from './contract.ts'
 import type { ClarisInvitationsPayload } from './payload.ts'
 import type { ClarisInvitationRecord, ClarisInvitationsRepository } from './repository.ts'
+import { normalizeClarisInviteRedirect } from './redirect.ts'
 
 function maskEmail(email: string): string {
   const [local, domain] = email.split('@')
@@ -70,11 +71,12 @@ export async function executeClarisInvitationAction(
       throw error
     }
 
-    const redirectTo = (Deno.env.get('CLARIS_INVITE_REDIRECT_URL') ?? '').trim()
-    if (!redirectTo) {
+    const configuredRedirect = Deno.env.get('CLARIS_INVITE_REDIRECT_URL') ?? ''
+    if (!configuredRedirect.trim()) {
       await repository.deletePending(invitation.id)
       throw new Error('CLARIS_INVITE_REDIRECT_URL is not configured')
     }
+    const redirectTo = normalizeClarisInviteRedirect(configuredRedirect)
     const { error } = await authClient.auth.admin.inviteUserByEmail(payload.email, {
       redirectTo,
       data: { full_name: payload.fullName },
@@ -89,8 +91,7 @@ export async function executeClarisInvitationAction(
   const invitation = await repository.findPending(payload.invitationId)
   if (!invitation) throw ApiError.notFound('Pending invitation was not found.')
   if (payload.action === 'resend') {
-    const redirectTo = (Deno.env.get('CLARIS_INVITE_REDIRECT_URL') ?? '').trim()
-    if (!redirectTo) throw new Error('CLARIS_INVITE_REDIRECT_URL is not configured')
+    const redirectTo = normalizeClarisInviteRedirect(Deno.env.get('CLARIS_INVITE_REDIRECT_URL') ?? '')
     const { error } = await authClient.auth.admin.inviteUserByEmail(invitation.email_normalized, {
       redirectTo,
       data: { full_name: invitation.full_name },

@@ -21,7 +21,7 @@ Para o frontend local, os valores usados sao:
 
 - `VITE_SUPABASE_PROJECT_ID=local`
 - `VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH`
-- `VITE_SUPABASE_URL=http://127.0.0.1:54321`
+- `VITE_SUPABASE_URL=http://127.0.0.1:65421`
 
 ## Documentacao
 
@@ -78,9 +78,9 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build -d
 Servicos esperados:
 
 - Frontend: `http://127.0.0.1:8080`
-- Supabase API: `http://127.0.0.1:54321`
-- Supabase Studio: `http://127.0.0.1:54323`
-- Supabase Mailpit: `http://127.0.0.1:54324`
+- Supabase API: `http://127.0.0.1:65421`
+- Supabase Studio: `http://127.0.0.1:65423`
+- Supabase Mailpit: `http://127.0.0.1:65424`
 - Evolution API: `http://127.0.0.1:8081` quando o `docker-compose.dev.yml` estiver ativo
 
 Observacao para WhatsApp / Evolution API:
@@ -97,7 +97,7 @@ O container `supabase` executa automaticamente:
 - `supabase gen types typescript --local --schema public` para regenerar [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts)
 - sincronizacao de [src/integrations/supabase/types.ts](src/integrations/supabase/types.ts) para [supabase/functions/_shared/db/generated.types.ts](supabase/functions/_shared/db/generated.types.ts)
 - sincronizacao dos secrets locais de Edge Functions a partir do `docker-compose.yml` para [supabase/functions/.env](supabase/functions/.env)
-- carregamento das Edge Functions locais em `supabase/functions/` (ex.: `moodle-auth`)
+- carregamento das Edge Functions locais em `supabase/functions/` (ex.: `moodle-sync-jobs`)
 
 ## Validacao rapida
 
@@ -113,12 +113,12 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml ps
 docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f supabase
 ```
 
-1. Verificar function local (retorno esperado: HTTP 400 por falta de campos, provando que a function esta ativa):
+1. Verificar function local (retorno esperado: HTTP 401 sem sessao, provando que a function esta ativa):
 
 ```bash
-curl -i -X POST http://127.0.0.1:54321/functions/v1/moodle-auth \
+curl -i -X POST http://127.0.0.1:65421/functions/v1/moodle-sync-jobs \
   -H "Content-Type: application/json" \
-  -d '{"moodleUrl":"foo","username":"demo","password":"demo"}'
+  -d '{"action":"list_active_jobs"}'
 ```
 
 ## Smoke test das Edge Functions
@@ -144,8 +144,9 @@ node scripts/smoke-edge-functions.mjs
 
 Em push com mudancas relevantes, o workflow
 [.github/workflows/edge-smoke.yml](.github/workflows/edge-smoke.yml) valida as
-Edge Functions contra uma stack Supabase local descartavel. A publicacao da
-aplicacao e da stack Supabase acontece exclusivamente pelo deploy da VPS.
+Edge Functions contra uma stack Supabase local descartavel. O frontend e
+publicado na VPS; a publicacao de migrations e Edge Functions no Supabase
+gerenciado e uma operacao separada, deliberada e autorizada.
 
 ## Tornar o smoke obrigatório na main
 
@@ -186,21 +187,22 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 ## Deploy na VPS
 
 O workflow [`.github/workflows/deploy-vps.yml`](.github/workflows/deploy-vps.yml)
-publica a stack completa usando `docker-compose.vps.yml`, Nginx para o build
-estatico do frontend e Caddy para HTTPS automatico.
+publica somente o frontend estatico na VPS, usando Nginx no container da
+aplicacao. O HTTPS e a entrada publica ficam no Caddy central do
+`moodle-conector`, que encaminha `claris.novascript.com.br` pela rede Docker
+externa compartilhada. Banco, Auth, Storage, Realtime e Edge Functions ficam no
+projeto gerenciado da conta Supabase; a VPS nao sobe Supabase, runners de Edge
+Functions, Postgres, Evolution ou um proxy para a API.
 
 Crie no GitHub o environment `vps` e configure:
 
-Dominios fixos do deploy:
-
-- site: `https://claris.novascript.com.br/`;
-- Supabase: `https://api.novascript.com.br/`;
-- Evolution: `https://evolution.novascript.com.br/`.
-
 Variables:
 
-- `ACME_EMAIL`: e-mail usado pelo Caddy para os certificados;
-- `EVOLUTION_ENABLED`: use `true` para iniciar a Evolution API e exibir as telas de WhatsApp/servicos; o padrao e `false`;
+- `APP_DOMAIN` (opcional; padrao `claris.novascript.com.br`);
+- `PUBLIC_PROXY_NETWORK` (opcional; padrao `novascript-proxy`), a rede Docker
+  externa criada e atendida pelo `moodle-conector`;
+- `SUPABASE_URL`: URL HTTPS do projeto hospedado, por exemplo `https://<project-ref>.supabase.co`;
+- `SUPABASE_PUBLISHABLE_KEY`: chave publishable/anon do mesmo projeto;
 - `VPS_APP_DIR` (opcional, padrao `/opt/claris`);
 - `VPS_SSH_PORT` (opcional, padrao `22`).
 
@@ -208,37 +210,78 @@ Secrets:
 
 - `VPS_HOST` e `VPS_USER`;
 - `VPS_SSH_KEY` (recomendado) ou `VPS_SSH_PASSWORD`;
-- `EVOLUTION_API_KEY`;
-- `MOODLE_REAUTH_SECRET`;
-- `SCHEDULED_MESSAGES_CRON_SECRET`;
-- `WEBHOOK_SECRET`.
+- `MOODLE_SYNC_WORKER_CRON_SECRET` somente se o workflow agendado de sincronizacao Moodle for usado.
 
-Todos os segredos da aplicacao devem ser valores aleatorios longos, sem quebras
-de linha nem `$`. Exemplo para gerar um valor hexadecimal:
+O build recebe `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` apenas no
+GitHub Actions. Nenhuma service-role key, segredo Moodle, senha de banco ou
+credencial da Evolution e enviada para a VPS.
 
-```bash
-openssl rand -hex 32
-```
+Crie o DNS de `APP_DOMAIN`, sem `https://`, apontando para a VPS. As portas TCP
+`80` e `443`, UDP `443` e a porta SSH sao atendidas pelo Caddy do
+`moodle-conector`; o Claris nao publica portas. Nao crie `api.*` nem
+`evolution.*` na VPS: o navegador chama diretamente o projeto Supabase hospedado.
 
-Crie registros DNS `A`/`AAAA` para `claris.novascript.com.br`,
-`api.novascript.com.br` e `evolution.novascript.com.br`, todos apontando para a VPS, e libere
-as portas TCP `80` e `443`, UDP `443` e a porta SSH. Banco, Studio, Mailpit e a
-porta direta da Evolution nao sao publicados pelo Compose de VPS.
+Antes do primeiro deploy Claris, publique o `moodle-conector` com
+`CLARIS_DOMAIN=claris.novascript.com.br` e
+`PUBLIC_PROXY_NETWORK=novascript-proxy`. Depois publique o Claris; seu container
+entra nessa rede e o Caddy central resolve `claris-frontend` internamente.
 
-O deploy ocorre em push para `main` nos arquivos relevantes ou manualmente por
-`workflow_dispatch`. O primeiro boot pode levar alguns minutos enquanto o
-Supabase baixa imagens e aplica as migrations.
+No painel Supabase, configure `Site URL` para `https://<APP_DOMAIN>` e inclua:
 
-> Importante: o runner atual usa o Supabase CLI, que e adequado para
-> desenvolvimento e homologacao. Antes de armazenar dados reais ou abrir o
-> sistema para usuarios, migre a camada Supabase para o Compose oficial de
-> self-hosting, com chaves proprias, backups e monitoramento.
+- `https://<APP_DOMAIN>/auth/accept-invite`;
+- `https://<APP_DOMAIN>/reset-password`.
+
+Tambem configure SMTP, templates e rate limits no Supabase Auth antes de usar
+convites ou recuperacao de senha.
+
+### Backend Supabase gerenciado
+
+Migrations e Edge Functions nao sao aplicadas pela VPS. O workflow
+[`deploy-supabase.yml`](.github/workflows/deploy-supabase.yml) publica Edge
+Functions quando houver alteracao em `supabase/functions/` na `main` e usa o
+environment protegido `vps`.
+
+Configure no environment `vps`:
+
+- Variable `SUPABASE_PROJECT_REF`: o project ref da conta Supabase hospedada;
+- Secret `SUPABASE_ACCESS_TOKEN`: token pessoal criado no painel Supabase;
+- Secret `SUPABASE_DB_PASSWORD`: senha do banco remoto, usada somente quando
+  uma migration for solicitada.
+
+Migrations nunca sao aplicadas automaticamente em `push`. Para aplica-las,
+dispare manualmente o workflow e marque `apply_migrations`; ele mostra o plano
+com `supabase db push --dry-run` antes de executar `supabase db push --yes`.
+Nao usa seed nem comandos de reset e nao altera secrets de Edge Functions.
+
+As configuracoes operacionais das functions, como
+`MOODLE_SYNC_WORKER_CRON_SECRET`, continuam sendo cadastradas no painel
+Supabase (ou por um procedimento explicito separado) e nao ficam no
+repositorio nem no workflow de deploy.
+
+O deploy de frontend ocorre em push para `main` nos arquivos relevantes ou por
+`workflow_dispatch`. A VPS recebe somente `dist`,
+`Dockerfile.frontend.production` e `docker-compose.vps.yml`.
+
+### Sincronizacao Moodle sem VPS backend
+
+O workflow [`.github/workflows/moodle-sync-runner.yml`](.github/workflows/moodle-sync-runner.yml)
+executa dispatcher e worker a cada cinco minutos contra as Edge Functions do
+Supabase gerenciado. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` e o
+mesmo `MOODLE_SYNC_WORKER_CRON_SECRET` tanto no environment `vps` do GitHub
+quanto nos secrets das Edge Functions do projeto Supabase. Ele nao habilita
+rollout Moodle: as flags continuam deny-by-default.
+
+Evolution permanece no codigo, mas o build de producao fixa
+`VITE_EVOLUTION_ENABLED=false` e nenhum container Evolution e iniciado. Para
+reativa-la no futuro, sera preciso provisionar o provedor e criar um deploy
+proprio para ele; mudar somente a flag visual nao e suficiente.
 
 ### Desenvolvimento local
 
-Para as Edge Functions locais, o `docker compose` ja injeta defaults de teste para:
+Para as Edge Functions locais, o `docker compose` de desenvolvimento ainda injeta defaults de teste para:
 
 - `MOODLE_REAUTH_SECRET`
+- `MOODLE_SYNC_WORKER_CRON_SECRET`
 - `SCHEDULED_MESSAGES_CRON_SECRET`
 - `EVOLUTION_API_URL`
 - `EVOLUTION_API_KEY`
@@ -254,10 +297,13 @@ O runner local copia esses segredos automaticamente para `supabase/functions/.en
 
 O repositorio utiliza GitHub Actions (`.github/workflows/ci.yml`) para rodar lint, testes e build automaticamente em cada push ou pull request para a branch `main`.
 
-O unico fluxo de publicacao e
-[.github/workflows/deploy-vps.yml](.github/workflows/deploy-vps.yml). O scheduler
-de mensagens tambem roda continuamente na VPS pelo container
-`claris-scheduled-messages-runner`.
+O frontend e publicado por
+[.github/workflows/deploy-vps.yml](.github/workflows/deploy-vps.yml). O backend
+e os agendamentos residem no Supabase gerenciado: o tick Moodle esta em
+[.github/workflows/moodle-sync-runner.yml](.github/workflows/moodle-sync-runner.yml)
+e requer `MOODLE_SYNC_WORKER_CRON_SECRET` com pelo menos 32 caracteres. Ele nao
+habilita Moodle por si so: `moodle_sync_rollouts` permanece deny-by-default ate
+que um canario seja liberado por site e, quando aplicavel, por usuario.
 
 ### GITHUB_TOKEN
 
@@ -299,5 +345,5 @@ permissions:
 
 ## Observacoes
 
-- `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:54321` para o ambiente local.
-- `SUPABASE_PUBLIC_URL` deve apontar para a URL alcancavel pela Evolution API ao registrar webhooks. No local com Docker Compose, o padrao e `http://127.0.0.1:54321`.
+- `VITE_SUPABASE_URL` no frontend Docker deve permanecer `http://127.0.0.1:65421` para o ambiente local.
+- `SUPABASE_PUBLIC_URL` deve apontar para a URL alcancavel pela Evolution API ao registrar webhooks. No local com Docker Compose, o padrao e `http://127.0.0.1:65421`.

@@ -13,9 +13,10 @@ services:
     network_mode: host
     environment:
       RUNNER_CONTAINER_NAME: claris-supabase
-      SUPABASE_API_URL: http://127.0.0.1:54321
-      SUPABASE_PUBLIC_URL: http://127.0.0.1:54321
+      SUPABASE_API_URL: http://127.0.0.1:65421
+      SUPABASE_PUBLIC_URL: http://127.0.0.1:65421
       MOODLE_REAUTH_SECRET: ${MOODLE_REAUTH_SECRET:-claris-moodle-reauth-local-secret}
+      MOODLE_SYNC_WORKER_CRON_SECRET: ${MOODLE_SYNC_WORKER_CRON_SECRET:-claris-moodle-sync-worker-local-secret}
       SCHEDULED_MESSAGES_CRON_SECRET: ${SCHEDULED_MESSAGES_CRON_SECRET:-claris-scheduled-messages-local-secret}
       EVOLUTION_API_URL: http://host.docker.internal:8081
       EVOLUTION_API_KEY: claris-evolution-local-key
@@ -24,7 +25,7 @@ services:
       - ./:/workspace
       - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/supabase-runner-ready && curl -fsS http://127.0.0.1:54321/rest/v1/ > /dev/null"]
+      test: ["CMD-SHELL", "test -f /tmp/supabase-runner-ready && curl -fsS http://127.0.0.1:65421/rest/v1/ > /dev/null"]
       interval: 10s
       timeout: 5s
       retries: 15

@@ -1,60 +1,14 @@
 services:
-  supabase:
-    environment:
-      SUPABASE_PUBLIC_URL: https://${SUPABASE_DOMAIN}
-      SUPABASE_SITE_URL: https://${APP_DOMAIN}
-      MOODLE_REAUTH_SECRET: ${MOODLE_REAUTH_SECRET}
-      SCHEDULED_MESSAGES_CRON_SECRET: ${SCHEDULED_MESSAGES_CRON_SECRET}
-      EVOLUTION_ENABLED: ${EVOLUTION_ENABLED:-false}
-      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
-
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend.production
-    ports: !reset []
-    environment: !reset {}
-    volumes: !reset []
-
-  scheduled-messages-runner:
-    environment:
-      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY}
-      SCHEDULED_MESSAGES_CRON_SECRET: ${SCHEDULED_MESSAGES_CRON_SECRET}
-
-  evolution-api:
-    profiles: ["evolution"]
-    ports: !reset []
-    environment:
-      SERVER_URL: https://${EVOLUTION_DOMAIN}
-      CORS_ORIGIN: https://${APP_DOMAIN}
-      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-
-  caddy:
-    image: caddy:2.10-alpine
-    container_name: claris-caddy
-    depends_on:
-      frontend:
-        condition: service_healthy
-      supabase:
-        condition: service_healthy
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    environment:
-      ACME_EMAIL: ${ACME_EMAIL}
-      APP_DOMAIN: ${APP_DOMAIN}
-      SUPABASE_DOMAIN: ${SUPABASE_DOMAIN}
-      EVOLUTION_DOMAIN: ${EVOLUTION_DOMAIN}
-    volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
+    container_name: claris-frontend
     restart: unless-stopped
+    networks:
+      - public-proxy
 
-volumes:
-  caddy_data:
-  caddy_config:
+networks:
+  public-proxy:
+    name: ${PUBLIC_PROXY_NETWORK:-novascript-proxy}
+    external: true

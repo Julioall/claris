@@ -4,12 +4,14 @@ import {
   type AdminClarisConversationDto,
   type AdminConversationMessageDto,
   type AdminErrorLogDto,
+  type AdminMoodleSyncOperationalMetricDto,
   type AdminPageDto,
   type AdminUsageEventDto,
 } from './contract.ts'
 import type {
   AdminConversationRow,
   AdminErrorLogRow,
+  MoodleSyncOperationalMetricRow,
   AdminUsageEventRow,
 } from './repository.ts'
 
@@ -26,6 +28,46 @@ export function pageDto<TItem>(
     pageSize,
     totalCount,
     totalPages: Math.max(1, Math.ceil(totalCount / pageSize)),
+  }
+}
+
+export function mapMoodleSyncOperationalMetric(
+  row: MoodleSyncOperationalMetricRow,
+): AdminMoodleSyncOperationalMetricDto {
+  return {
+    siteSlug: row.site_slug,
+    connectionId: row.moodle_connection_id,
+    window: {
+      startedAt: row.window_started_at,
+      endedAt: row.window_ended_at,
+    },
+    jobs: {
+      started: row.jobs_started,
+      completed: row.jobs_completed,
+      failed: row.jobs_failed,
+    },
+    activeJobs: row.active_jobs,
+    items: {
+      completed: row.completed_items,
+      failed: row.failed_items,
+      stuck: row.stuck_items,
+      oldestStuckAt: row.oldest_stuck_at,
+    },
+    retryAttempts: row.retry_attempts,
+    transport: {
+      apiCalls: row.moodle_api_calls,
+      responseBytes: row.moodle_response_bytes,
+    },
+    durations: {
+      averageJobMs: row.avg_job_duration_ms,
+      p95JobMs: row.p95_job_duration_ms,
+      averageItemMs: row.avg_item_duration_ms,
+      p95ItemMs: row.p95_item_duration_ms,
+    },
+    circuit: {
+      state: row.circuit_state === 'open' ? 'open' : 'closed',
+      openUntil: row.circuit_open_until,
+    },
   }
 }
 

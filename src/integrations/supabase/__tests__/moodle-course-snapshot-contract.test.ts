@@ -24,6 +24,7 @@ function refresh(status: RefreshRequestResult['refresh_status']): RefreshRequest
 
 function repository(overrides: Partial<SnapshotRepository> = {}): SnapshotRepository {
   return {
+    isFreshnessRolloutEnabled: vi.fn().mockResolvedValue(true),
     getSnapshot: vi.fn().mockResolvedValue({
       activeJobs: [],
       connection: { moodle_site_id: SITE_ID },
@@ -112,6 +113,37 @@ describe('Moodle course snapshot V2 contract', () => {
     })
   })
 
+  it('serves the Claris snapshot without reclassification or refresh when freshness rollout is disabled', async () => {
+    const repo = repository({ isFreshnessRolloutEnabled: vi.fn().mockResolvedValue(false) })
+    const result = await executeMoodleCourseSnapshot(repo, 'actor', {
+      action: 'get_course_snapshot', connectionId: CONNECTION_ID, courseId: COURSE_ID,
+      entities: ['grades'], refreshPolicy: 'if_stale',
+    }, new Date('2026-07-21T12:00:00.000Z'))
+
+    expect(result).toMatchObject({
+      status: 200,
+      body: {
+        data: { counts: { grades: 12 } },
+        refresh: { jobId: null, status: 'disabled' },
+      },
+    })
+    expect(repo.reclassify).not.toHaveBeenCalled()
+    expect(repo.requestRefresh).not.toHaveBeenCalled()
+  })
+
+  it('rejects an explicit freshness request while the rollout is disabled', async () => {
+    const repo = repository({ isFreshnessRolloutEnabled: vi.fn().mockResolvedValue(false) })
+
+    await expect(executeMoodleCourseSnapshot(repo, 'actor', {
+      action: 'request_course_refresh', connectionId: CONNECTION_ID, courseId: COURSE_ID,
+      entities: ['grades'], reason: 'manual',
+    })).rejects.toMatchObject({
+      code: 'moodle_sync_freshness_rollout_disabled',
+      status: 409,
+    })
+    expect(repo.requestRefresh).not.toHaveBeenCalled()
+  })
+
   it('preserves an active refresh instead of enqueuing another job', async () => {
     const repo = repository({
       getSnapshot: vi.fn().mockResolvedValue({
@@ -136,4 +168,3 @@ describe('Moodle course snapshot V2 contract', () => {
     expect(repo.requestRefresh).not.toHaveBeenCalled()
   })
 })
-

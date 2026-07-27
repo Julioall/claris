@@ -11,9 +11,51 @@ import {
 import type { CourseSyncRecord } from '../_shared/domain/moodle-sync/repository.ts'
 import type { MoodleAccess } from '../_shared/domain/moodle-connections/mod.ts'
 import { computeContentHash } from '../_shared/domain/moodle-sync/content-hash.ts'
-import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
-import { getCourseEnrolledUsers, getCourseSuspendedUserIds } from '../_shared/moodle/mod.ts'
+import {
+  callMoodleApi,
+  combineMoodleApiTelemetry,
+  MoodleApiError,
+  type MoodleApiTelemetry,
+  type MoodleEnrolledUser,
+} from '../_shared/moodle/mod.ts'
+import { createMoodleSyncAttemptTelemetry } from '../_shared/domain/moodle-sync/attempt-telemetry.ts'
+import {
+  createMoodleProviderMetrics,
+  toMoodleProviderMetricsMetadata,
+} from '../_shared/domain/moodle-sync/provider-metrics.ts'
 import { isStudentLikeUser } from '../_shared/moodle/student-role.ts'
+
+const ENROLLED_USERS_PAGE_SIZE = 100
+const ENROLLED_USERS_OPTIONAL_FIELDS = [
+  'id',
+  'username',
+  'firstname',
+  'lastname',
+  'fullname',
+  'email',
+  'address',
+  'phone1',
+  'phone2',
+  'department',
+  'institution',
+  'idnumber',
+  'city',
+  'profileimageurl',
+  'lastaccess',
+  'lastcourseaccess',
+  'roles',
+  'groups',
+  'suspended',
+].join(',')
+
+type MeasuredMoodleApiCall = (
+  operation: string,
+  parameters?: Record<string, string | number>,
+) => Promise<unknown>
+
+interface StudentSyncOptions {
+  telemetry?: MoodleApiTelemetry
+}
 
 const MOBILE_CUSTOM_FIELD_KEYS = new Set([
   'celular',
@@ -245,19 +287,121 @@ function resolveEnrollmentStatus(args: {
   return 'ativo'
 }
 
+function isInvalidEnrolledUsersParameter(error: unknown): boolean {
+  if (error instanceof MoodleApiError && error.category === 'invalid_payload') return true
+  const message = error instanceof Error
+    ? error.message
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+    : ''
+  return message.includes('valor invalido de parametro')
+}
+
+async function getCourseEnrolledUsersWithMetrics(
+  callApi: MeasuredMoodleApiCall,
+  courseId: number,
+): Promise<MoodleEnrolledUser[]> {
+  const baseOptions: Record<string, string | number> = {
+    'options[0][name]': 'onlyactive',
+    'options[0][value]': 0,
+    'options[1][name]': 'userfields',
+    'options[1][value]': ENROLLED_USERS_OPTIONAL_FIELDS,
+  }
+  const usersById = new Map<number, MoodleEnrolledUser>()
+  let offset = 0
+
+  while (true) {
+    let page: unknown
+    try {
+      page = await callApi('core_enrol_get_enrolled_users', {
+        courseid: courseId,
+        ...baseOptions,
+        limitfrom: offset,
+        limitnumber: ENROLLED_USERS_PAGE_SIZE,
+      })
+    } catch (error) {
+      if (!isInvalidEnrolledUsersParameter(error)) throw error
+      console.warn('[moodle-sync-students] Enrolment endpoint rejected userfields; using minimal fields.', {
+        courseId,
+      })
+      page = await callApi('core_enrol_get_enrolled_users', {
+        'options[0][name]': 'onlyactive',
+        'options[0][value]': 0,
+        courseid: courseId,
+        limitfrom: offset,
+        limitnumber: ENROLLED_USERS_PAGE_SIZE,
+      })
+    }
+
+    const users = Array.isArray(page) ? page : []
+    for (const rawUser of users) {
+      const user = rawUser as MoodleEnrolledUser
+      if (typeof user.id !== 'number' || !Number.isFinite(user.id)) {
+        throw new MoodleApiError({
+          category: 'invalid_payload',
+          code: 'invalid_enrolled_user',
+          message: 'Moodle returned an enrolled user without a valid id.',
+        })
+      }
+      usersById.set(user.id, user)
+    }
+
+    if (users.length < ENROLLED_USERS_PAGE_SIZE) break
+    offset += ENROLLED_USERS_PAGE_SIZE
+  }
+
+  return Array.from(usersById.values()).sort((left, right) => left.id - right.id)
+}
+
+async function getCourseSuspendedUserIdsWithMetrics(
+  callApi: MeasuredMoodleApiCall,
+  courseId: number,
+): Promise<Set<number>> {
+  const users = await callApi('core_enrol_get_enrolled_users', {
+    'options[0][name]': 'onlysuspended',
+    'options[0][value]': 1,
+    courseid: courseId,
+  })
+  return new Set(
+    (Array.isArray(users) ? users : [])
+      .map((user: { id?: unknown }) => user.id)
+      .filter((id): id is number => typeof id === 'number' && Number.isFinite(id)),
+  )
+}
+
 export async function syncStudents(
   access: MoodleAccess,
   dbCourse: CourseSyncRecord,
+  options: StudentSyncOptions = {},
 ): Promise<Response> {
   const supabase = createServiceClient()
   const courseId = Number.parseInt(dbCourse.moodle_course_id, 10)
   if (!Number.isSafeInteger(courseId) || courseId <= 0) {
     return errorResponse('Course has an invalid Moodle id', 409)
   }
+  const providerMetrics = createMoodleProviderMetrics()
+  const attemptTelemetry = combineMoodleApiTelemetry(
+    options.telemetry ?? createMoodleSyncAttemptTelemetry({
+      connectionId: access.connectionId,
+      siteSlug: access.siteSlug,
+    }),
+    providerMetrics.telemetry(),
+  )
+  const callMoodleApiWithMetrics: MeasuredMoodleApiCall = (operation, parameters = {}) => (
+    providerMetrics.call(() => callMoodleApi(
+      access.moodleUrl,
+      access.token,
+      operation,
+      parameters,
+      25_000,
+      attemptTelemetry,
+    ))
+  )
 
   const [enrolledUsers, suspendedUserIds] = await Promise.all([
-    getCourseEnrolledUsers(access.moodleUrl, access.token, courseId),
-    getCourseSuspendedUserIds(access.moodleUrl, access.token, courseId),
+    getCourseEnrolledUsersWithMetrics(callMoodleApiWithMetrics, courseId),
+    getCourseSuspendedUserIdsWithMetrics(callMoodleApiWithMetrics, courseId),
   ])
   console.log(`Found ${enrolledUsers.length} enrolled users in course ${courseId}`)
 
@@ -306,8 +450,11 @@ export async function syncStudents(
   }
 
   if (students.length === 0) {
-    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
-    return jsonResponse({ success: true, students: [] })
+    return jsonResponse({
+      success: true,
+      students: [],
+      ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
+    })
   }
 
   const now = new Date().toISOString()
@@ -562,7 +709,6 @@ export async function syncStudents(
     }
   }
 
-  await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
   await touchCourseLastSync(supabase, dbCourse.id, now)
 
   return jsonResponse({
@@ -571,16 +717,6 @@ export async function syncStudents(
     connectionId: access.connectionId,
     siteSlug: access.siteSlug,
     students: syncedStudents || [],
+    ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
   })
-}
-
-async function refreshDashboardAggregatesForCourse(
-  supabase: ReturnType<typeof createServiceClient>,
-  courseId: string,
-) {
-  try {
-    await refreshDashboardCourseActivityAggregates(supabase, [courseId])
-  } catch (error) {
-    console.error('[moodle-sync-students] Error refreshing dashboard aggregates:', error)
-  }
 }

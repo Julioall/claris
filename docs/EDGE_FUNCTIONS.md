@@ -53,7 +53,7 @@ supabase/functions/<function-name>/
   mapper.ts      # converte modelos de persistencia em DTOs
 ```
 
-Arquivos podem ser omitidos quando nao agregarem uma responsabilidade real, mas `index.ts` nao deve conter query, regra de negocio nem mapping de linha do banco. Services recebem repositories por parametro para permitir testes sem banco. O piloto completo e `moodle-reauth-settings`.
+Arquivos podem ser omitidos quando nao agregarem uma responsabilidade real, mas `index.ts` nao deve conter query, regra de negocio nem mapping de linha do banco. Services recebem repositories por parametro para permitir testes sem banco. As functions atuais de sincronizacao Moodle seguem esse desenho.
 
 ## Contrato HTTP V1
 
@@ -110,7 +110,7 @@ Requests paginados usam `page` (iniciando em 1), `pageSize` e um objeto opcional
 }
 ```
 
-Os tipos compartilhados e helpers opt-in ficam em `_shared/http/contract.ts` e `_shared/http/response.ts`. `moodle-reauth-settings` e o endpoint piloto: clientes legados continuam recebendo o payload antigo, enquanto requests V1 recebem o envelope padronizado.
+Os tipos compartilhados e helpers opt-in ficam em `_shared/http/contract.ts` e `_shared/http/response.ts`. Requests V1 recebem o envelope padronizado; nao ha endpoint legado de reautorizacao Moodle.
 
 ## Runtime compartilhado
 
@@ -201,10 +201,9 @@ O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e
 - `moodle-*`: autenticacao e sincronizacao incremental com Moodle
 - `admin-diagnostics`: lista cursos/alunos e executa diagnostico de notas admin-only; recebe UUIDs internos, renova a credencial Moodle no servidor, audita a consulta e omite o payload bruto do provedor
 - `data-cleanup`: limpeza operacional admin-only; recebe categorias funcionais em vez de nomes de tabela, exige confirmacao literal, resolve/ordena alvos no servidor, redige erros internos e registra eventos imutaveis antes/depois da operacao
-- `moodle-reauth-settings`: referencia de handler fino com payload, contrato, service, repository e mapper separados
 - `app-telemetry`: coleta autenticada e best-effort de uso/erros, sem permitir identidade fornecida pelo frontend
 - `support-tickets`: abre tickets para o ator autenticado e concentra listagem/atualizacao administrativa; atribuicao, contexto e data de resolucao sao definidos no servidor
-- `admin-observability`: agrega o dashboard e pagina metricas, logs e conversas Claris; exige administrador, redige campos sensiveis e limita conversas às 100 mensagens mais recentes
+- `admin-observability`: agrega o dashboard e pagina metricas, logs e conversas Claris; exige administrador, redige campos sensiveis e limita conversas às 100 mensagens mais recentes. O intent `get_moodle_sync_metrics` retorna somente agregados por site/conexao (duracao, retries, falhas, itens presos, circuit breaker, chamadas logicas e tamanho do JSON processado), sem identidades Moodle, URL, credenciais, payload ou texto de erro.
 - `access-control`: entrega o contexto do ator e administra permissoes, grupos e acessos; comandos usam RPCs service-only com ator explicito, auditoria imutavel e atualizacao atomica de papel/grupo
 - `task-tag-suggestions`: busca course-scoped de entidades para tags de tarefas, sem expor tabelas ou aceitar escopo do browser
 - `dashboard-summary`: compoe indicadores, prioridades, fila de correcao e feed em uma unica chamada autenticada, com escopo tutor derivado do token
@@ -217,7 +216,8 @@ O smoke de Edge Functions valida o V1 de ponta a ponta: `Content-Type`, header e
 - `tasks`: lista tarefas com filtros e ordenacao estaveis, consolida detalhe/comentarios/tags e executa comandos escopados ao criador ou responsavel
 - `calendar-events`: executa o CRUD de agenda owner-scoped, valida intervalos e deriva proprietario/origem do token
 - `moodle-sync-jobs`: contrato V2 que inicia, retoma e consulta sincronizacoes por `connectionId`; tambem concentra preferencias, contagem por curso e recalculo de risco
-- `moodle-sync-worker`: dispatcher protegido por `MOODLE_SYNC_WORKER_CRON_SECRET`; executa claims curtos com budget, lease, heartbeat e checkpoint
+- `moodle-sync-dispatcher`: planejador protegido por `MOODLE_SYNC_WORKER_CRON_SECRET`; transforma estados Claris vencidos em jobs incrementais/reconciliation deduplicados, sem chamar Moodle
+- `moodle-sync-worker`: executor protegido por `MOODLE_SYNC_WORKER_CRON_SECRET`; executa claims curtos com budget, lease, heartbeat e checkpoint
 - `background-jobs`: entrega polling actor-scoped e operacoes administrativas de lista, detalhe, retry e cancelamento
 - `activity-feed`: lista notificacoes do ator sem expor a tabela ao navegador
 
@@ -248,7 +248,7 @@ start_* -> pending -> processing -> completed
 
 A chave canonica considera ator, conexao, tipo, cursos e entidades. Um indice unico parcial bloqueia dois registros `pending/processing` equivalentes, inclusive em corrida. O worker resolve no servidor a conexao, o site aprovado e um token Moodle; cada claim usa `FOR UPDATE SKIP LOCKED`, lease e limites por conexao/site. Paginas de atividades/notas salvam cursor e liberam a lease, e o watermark so avanca na mesma transacao da conclusao do item.
 
-`EdgeRuntime.waitUntil` apenas acelera o primeiro ciclo. Um agendador duravel deve chamar `moodle-sync-worker` periodicamente com um segredo aleatorio de no minimo 32 caracteres em `MOODLE_SYNC_WORKER_CRON_SECRET`. A chamada usa `{}` por padrao; budget, lease e limites possuem tetos validados no endpoint. Sem esse agendamento, retries e leases expiradas continuam persistidos, mas nao progridem autonomamente.
+`EdgeRuntime.waitUntil` apenas acelera o primeiro ciclo. Em desenvolvimento local, o container `claris-moodle-sync-runner` chama periodicamente `moodle-sync-dispatcher` e, em seguida, `moodle-sync-worker`. No deploy com Supabase gerenciado, o workflow versionado `moodle-sync-runner.yml` executa as mesmas chamadas a cada cinco minutos. Ambos usam um segredo aleatorio de no minimo 32 caracteres em `MOODLE_SYNC_WORKER_CRON_SECRET`. O dispatcher usa `FOR UPDATE SKIP LOCKED`, circuit breaker por site e a chave canonica de job para criar somente trabalho Claris-local; o worker e a unica etapa que pode consultar Moodle. A chamada do worker usa `{}` por padrao; budget, lease e limites possuem tetos validados no endpoint. Sem esse agendamento, retries e leases expiradas continuam persistidos, mas nao progridem autonomamente.
 
 O frontend recebe um DTO V2 agregado em `camelCase` e faz polling. Fechar a aba nao cancela o trabalho; ao reconstruir a sessao, `useCourseSync` retoma somente jobs da conexao explicitamente selecionada. `background-jobs` oferece a visao operacional. Jobs e contexto, itens, eventos, watermarks e `user_moodle_sync_preferences` sao service-only.
 

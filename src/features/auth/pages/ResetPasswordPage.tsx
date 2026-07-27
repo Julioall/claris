@@ -14,21 +14,56 @@ export default function ResetPasswordPage() {
   const [confirmation, setConfirmation] = useState('');
   const [isPreparing, setIsPreparing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hasRecoverySession, setHasRecoverySession] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const code = searchParams.get('code');
-    void (code ? authGateway.exchangeCodeForSession(code) : authGateway.getSession())
-      .then((session) => {
-        if (!session) setError('O link de recuperacao e invalido ou expirou.');
-      })
-      .catch(() => setError('O link de recuperacao e invalido ou expirou.'))
-      .finally(() => setIsPreparing(false));
+    let active = true;
+    let recovered = false;
+
+    const authorizeRecovery = () => {
+      const recoverySession = authGateway.consumePasswordRecoverySession();
+      if (!recoverySession || !active) return false;
+      recovered = true;
+      setHasRecoverySession(true);
+      return true;
+    };
+
+    if (authorizeRecovery()) {
+      setIsPreparing(false);
+      return () => { active = false; };
+    }
+
+    const unsubscribe = authGateway.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY' && session) authorizeRecovery();
+    });
+
+    void (async () => {
+      try {
+        if (code) await authGateway.exchangeCodeForSession(code);
+        if (!recovered) authorizeRecovery();
+        if (!recovered && active) setError('O link de recuperacao e invalido ou expirou.');
+      } catch {
+        if (active) setError('O link de recuperacao e invalido ou expirou.');
+      } finally {
+        if (active) setIsPreparing(false);
+      }
+    })();
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
   }, [searchParams]);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    if (!hasRecoverySession) {
+      setError('O link de recuperacao e invalido ou expirou.');
+      return;
+    }
     if (password.length < 12) return setError('A senha deve ter ao menos 12 caracteres.');
     if (password !== confirmation) return setError('As senhas nao conferem.');
     setIsSubmitting(true);
@@ -49,7 +84,7 @@ export default function ResetPasswordPage() {
         <div className="space-y-2"><Label htmlFor="reset-password">Nova senha</Label><Input id="reset-password" type="password" autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} disabled={isPreparing} /></div>
         <div className="space-y-2"><Label htmlFor="reset-confirmation">Confirmar senha</Label><Input id="reset-confirmation" type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} disabled={isPreparing} /></div>
         {error && <p className="text-sm text-destructive">{error}</p>}
-        <Button className="w-full" type="submit" disabled={isPreparing || isSubmitting}>{isSubmitting ? 'Salvando...' : 'Salvar nova senha'}</Button>
+        <Button className="w-full" type="submit" disabled={isPreparing || isSubmitting || !hasRecoverySession}>{isSubmitting ? 'Salvando...' : 'Salvar nova senha'}</Button>
       </form>
     </AuthShell>
   );

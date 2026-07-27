@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { parseClarisInvitationsPayload } from '../../../../supabase/functions/claris-invitations/payload.ts';
+import { normalizeClarisInviteRedirect } from '../../../../supabase/functions/claris-invitations/redirect.ts';
 import { executeClarisInvitationAction } from '../../../../supabase/functions/claris-invitations/service.ts';
 
 const ACTOR_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
@@ -37,6 +38,15 @@ describe('Claris invitation contract', () => {
       action: 'provision_account',
       appRole: 'admin',
     })).toThrowError(expect.objectContaining({ status: 422 }));
+  });
+
+  it('accepts only the configured HTTPS invitation callback path', () => {
+    expect(normalizeClarisInviteRedirect('https://claris.example.test/auth/accept-invite'))
+      .toBe('https://claris.example.test/auth/accept-invite');
+    expect(() => normalizeClarisInviteRedirect('http://claris.example.test/auth/accept-invite')).toThrow();
+    expect(() => normalizeClarisInviteRedirect('https://claris.example.test/reset-password')).toThrow();
+    expect(() => normalizeClarisInviteRedirect('https://claris.example.test/auth/accept-invite?next=/')).toThrow();
+    expect(() => normalizeClarisInviteRedirect('https://user:pass@claris.example.test/auth/accept-invite')).toThrow();
   });
 
   it('provisions from the confirmed authenticated email and ignores user metadata roles', async () => {

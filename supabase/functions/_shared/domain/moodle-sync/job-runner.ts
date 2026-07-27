@@ -5,6 +5,7 @@ import {
   type MoodleAccess,
 } from '../moodle-connections/mod.ts'
 import { recalculateRiskForCourses } from '../risk/recalculation.ts'
+import { refreshDashboardCourseActivityAggregates } from '../dashboard-activity-aggregates.ts'
 import { findCourseById, type CourseSyncRecord } from './repository.ts'
 import {
   checkpointMoodleSyncItem,
@@ -12,11 +13,31 @@ import {
   completeMoodleSyncItem,
   failMoodleSyncItem,
   heartbeatMoodleSyncItem,
+  loadMoodleDeltaShadowContext,
+  recordMoodleSiteCircuitResult,
   type DurableMoodleSyncItem,
 } from './worker-repository.ts'
+import { evaluateDeltaShadow, type DeltaShadowDecision } from './delta-shadow.ts'
+import { isMoodleSyncRolloutEnabled } from './rollout.ts'
+import {
+  createMoodleProviderMetrics,
+  mergeMoodleProviderMetrics,
+  readMoodleProviderMetrics,
+  toMoodleProviderMetricsMetadata,
+  type MoodleProviderMetrics,
+} from './provider-metrics.ts'
 import { syncStudents } from '../../../moodle-sync-students/service.ts'
-import { syncActivities } from '../../../moodle-sync-activities/service.ts'
+import {
+  syncActivities,
+  type ActivityStaticSnapshot,
+} from '../../../moodle-sync-activities/service.ts'
 import { syncGrades } from '../../../moodle-sync-grades/service.ts'
+import {
+  combineMoodleApiTelemetry,
+  getCourseUpdatesSince,
+  type MoodleApiTelemetry,
+} from '../../moodle/mod.ts'
+import { createMoodleSyncAttemptTelemetry } from './attempt-telemetry.ts'
 
 export { resolveMoodleAccess } from '../moodle-connections/mod.ts'
 
@@ -64,8 +85,32 @@ interface ItemExecutionResult {
 }
 
 interface PagedCursor {
+  activityStaticSnapshot?: ActivityStaticSnapshot
+  deltaShadow?: Json
   page: number
+  providerMetrics: MoodleProviderMetrics
   totalCount: number
+  watermarkCandidate?: string
+}
+
+interface DeltaShadowEvaluation {
+  decision: DeltaShadowDecision
+  providerMetrics: MoodleProviderMetrics
+}
+
+function readActivityStaticSnapshot(value: unknown): ActivityStaticSnapshot | undefined {
+  if (!isRecord(value) || !Array.isArray(value.activities)) return undefined
+  const activities = value.activities
+  if (!activities.every((activity) => (
+    isRecord(activity)
+    && typeof activity.id === 'string'
+    && typeof activity.name === 'string'
+    && typeof activity.type === 'string'
+    && (activity.dueDate === null || typeof activity.dueDate === 'string')
+  ))) {
+    return undefined
+  }
+  return { activities: activities as ActivityStaticSnapshot['activities'] }
 }
 
 class MoodleSyncExecutionError extends Error {
@@ -149,8 +194,83 @@ function readNonnegativeInteger(value: unknown, fallback = 0): number {
 function readPagedCursor(value: Json | null): PagedCursor {
   const cursor = record(value)
   return {
+    activityStaticSnapshot: readActivityStaticSnapshot(cursor.activity_static_snapshot),
+    deltaShadow: cursor.delta_shadow === undefined
+      ? undefined
+      : cursor.delta_shadow as Json,
     page: Math.max(1, readNonnegativeInteger(cursor.page, 1)),
+    providerMetrics: readMoodleProviderMetrics(cursor.provider_metrics),
     totalCount: readNonnegativeInteger(cursor.total_count, 0),
+    watermarkCandidate: typeof cursor.watermark_candidate === 'string'
+      ? cursor.watermark_candidate
+      : undefined,
+  }
+}
+
+function deltaDecisionAsJson(value: DeltaShadowDecision): Json {
+  return value as unknown as Json
+}
+
+async function evaluateItemDeltaShadow(
+  supabase: AppSupabaseClient,
+  item: DurableMoodleSyncItem,
+  access: MoodleAccess,
+  course: CourseSyncRecord,
+  entity: MoodleSyncEntity,
+): Promise<DeltaShadowEvaluation> {
+  const providerMetrics = createMoodleProviderMetrics()
+  const attemptTelemetry = createMoodleSyncAttemptTelemetry({
+    connectionId: item.moodleConnectionId,
+    itemId: item.itemId,
+    jobId: item.jobId,
+    siteSlug: access.siteSlug,
+  })
+  try {
+    if (!await isMoodleSyncRolloutEnabled(supabase, {
+      capability: 'delta',
+      siteId: item.moodleSiteId,
+      userId: item.userId,
+    })) {
+      return { decision: { mode: 'full', reason: 'rollout_disabled' }, providerMetrics: providerMetrics.snapshot() }
+    }
+    const context = await loadMoodleDeltaShadowContext(supabase, {
+      connectionId: item.moodleConnectionId,
+      courseId: course.id,
+      entity,
+      siteId: item.moodleSiteId,
+    })
+    const preliminary = evaluateDeltaShadow({ ...context, response: null })
+    if (preliminary.mode === 'full' && preliminary.reason !== 'ambiguous') {
+      return { decision: preliminary, providerMetrics: providerMetrics.snapshot() }
+    }
+
+    const externalCourseId = Number.parseInt(course.moodle_course_id, 10)
+    if (!Number.isSafeInteger(externalCourseId) || externalCourseId <= 0) {
+      return { decision: { mode: 'full', reason: 'ambiguous' }, providerMetrics: providerMetrics.snapshot() }
+    }
+    const since = new Date(context.watermarkSince as string)
+    const response = await providerMetrics.call(() => getCourseUpdatesSince(
+      access.moodleUrl,
+      access.token,
+      externalCourseId,
+      since,
+      combineMoodleApiTelemetry(attemptTelemetry, providerMetrics.telemetry()),
+    ))
+    return {
+      decision: evaluateDeltaShadow({ ...context, response }),
+      providerMetrics: providerMetrics.snapshot(),
+    }
+  } catch (error) {
+    console.warn('[moodle-sync-worker] Delta shadow signal unavailable; full sync preserved.', {
+      entity,
+      errorType: error instanceof Error ? error.name : 'unknown',
+      itemId: item.itemId,
+      jobId: item.jobId,
+    })
+    return {
+      decision: { mode: 'full', reason: 'ambiguous' },
+      providerMetrics: providerMetrics.snapshot(),
+    }
   }
 }
 
@@ -266,6 +386,7 @@ async function executePagedEntity(
   access: MoodleAccess,
   course: CourseSyncRecord,
   cursor: Json | null,
+  telemetry: MoodleApiTelemetry,
 ): Promise<ItemExecutionResult> {
   const state = readPagedCursor(cursor)
   const externalCourseId = Number.parseInt(course.moodle_course_id, 10)
@@ -275,8 +396,11 @@ async function executePagedEntity(
 
   const response = entity === 'activities'
     ? await syncActivities(access, course, {
+      activityStaticSnapshot: state.activityStaticSnapshot,
+      includeActivityStaticSnapshot: true,
       studentBatchPage: state.page,
       studentBatchSize: 12,
+      telemetry,
     })
     : await syncGrades(access.moodleUrl, access.token, externalCourseId, {
       connectionId: access.connectionId,
@@ -284,31 +408,65 @@ async function executePagedEntity(
       siteSlug: access.siteSlug,
       studentBatchPage: state.page,
       studentBatchSize: 10,
+      telemetry,
     })
   const payload = await parseServiceResponse(response)
   const pageCount = readNonnegativeInteger(
     payload[entity === 'activities' ? 'activitiesCount' : 'gradesCount'],
     0,
   )
+  const providerMetrics = mergeMoodleProviderMetrics(
+    state.providerMetrics,
+    readMoodleProviderMetrics(payload),
+  )
   const totalCount = state.totalCount + pageCount
 
   if (payload.hasMore === true) {
+    const activityStaticSnapshot = entity === 'activities'
+      ? readActivityStaticSnapshot(payload.activityStaticSnapshot)
+      : undefined
+    if (entity === 'activities' && !activityStaticSnapshot) {
+      throw new MoodleSyncExecutionError(
+        'invalid_activity_checkpoint',
+        'Activity synchronization did not return reusable course metadata.',
+      )
+    }
     const responseNextPage = readNonnegativeInteger(payload.nextStudentBatchPage, state.page + 1)
     const nextPage = responseNextPage > state.page ? responseNextPage : state.page + 1
     return {
       checkpoint: {
-        cursor: { page: nextPage, total_count: totalCount },
+        cursor: {
+          ...(activityStaticSnapshot
+            ? { activity_static_snapshot: activityStaticSnapshot as unknown as Json }
+            : {}),
+          ...(state.deltaShadow === undefined ? {} : { delta_shadow: state.deltaShadow }),
+          page: nextPage,
+          provider_metrics: toMoodleProviderMetricsMetadata(providerMetrics),
+          total_count: totalCount,
+          ...(state.watermarkCandidate
+            ? { watermark_candidate: state.watermarkCandidate }
+            : {}),
+        },
         progressCurrent: state.page,
       },
     }
   }
 
   return {
-    cursor: { page: state.page, total_count: totalCount },
+    cursor: {
+      page: state.page,
+      provider_metrics: toMoodleProviderMetricsMetadata(providerMetrics),
+      total_count: totalCount,
+    },
     resultMetadata: {
+      ...(state.deltaShadow === undefined ? {} : { delta_shadow: state.deltaShadow }),
       error_count: 0,
       fetch_mode: typeof payload.fetchMode === 'string' ? payload.fetchMode : null,
+      ...toMoodleProviderMetricsMetadata(providerMetrics),
       total_count: totalCount,
+      ...(state.watermarkCandidate
+        ? { watermark_candidate: state.watermarkCandidate }
+        : {}),
     },
   }
 }
@@ -345,6 +503,7 @@ async function executeClaimedItem(
         result.missingRpc === false,
       )
     }
+    await refreshDashboardCourseActivityAggregates(supabase, metadata.course_ids)
     return {
       resultMetadata: {
         error_count: 0,
@@ -364,20 +523,61 @@ async function executeClaimedItem(
     resolveScopedAccess(supabase, item, accessCache),
     loadScopedCourse(supabase, item),
   ])
+  const attemptTelemetry = createMoodleSyncAttemptTelemetry({
+    connectionId: item.moodleConnectionId,
+    itemId: item.itemId,
+    jobId: item.jobId,
+    siteSlug: access.siteSlug,
+  })
+
+  const cursorState = record(item.cursor)
+  const persistedDelta = cursorState.delta_shadow
+  let deltaDecision: Json | undefined
+  let deltaProviderMetrics = readMoodleProviderMetrics({})
+  if (metadata.sync_kind === 'incremental') {
+    if (persistedDelta === undefined) {
+      const deltaEvaluation = await evaluateItemDeltaShadow(supabase, item, access, course, entity)
+      deltaDecision = deltaDecisionAsJson(deltaEvaluation.decision)
+      deltaProviderMetrics = deltaEvaluation.providerMetrics
+    } else {
+      deltaDecision = persistedDelta as Json
+    }
+  }
+  const watermarkCandidate = typeof cursorState.watermark_candidate === 'string'
+    ? cursorState.watermark_candidate
+    : new Date().toISOString()
 
   if (entity === 'students') {
-    const payload = await parseServiceResponse(await syncStudents(access, course))
+    const payload = await parseServiceResponse(await syncStudents(access, course, {
+      telemetry: attemptTelemetry,
+    }))
+    const providerMetrics = mergeMoodleProviderMetrics(
+      deltaProviderMetrics,
+      readMoodleProviderMetrics(payload),
+    )
     return {
       resultMetadata: {
+        ...(deltaDecision === undefined ? {} : { delta_shadow: deltaDecision }),
         error_count: 0,
+        ...toMoodleProviderMetricsMetadata(providerMetrics),
         total_count: Array.isArray(payload.students)
           ? payload.students.length
           : readNonnegativeInteger(payload.studentsCount, 0),
+        watermark_candidate: watermarkCandidate,
       },
     }
   }
 
-  return await executePagedEntity(entity, access, course, item.cursor)
+  const pagedCursor: Json = {
+    ...cursorState,
+    ...(deltaDecision === undefined ? {} : { delta_shadow: deltaDecision }),
+    provider_metrics: toMoodleProviderMetricsMetadata(mergeMoodleProviderMetrics(
+      readMoodleProviderMetrics(cursorState.provider_metrics),
+      deltaProviderMetrics,
+    )),
+    watermark_candidate: watermarkCandidate,
+  }
+  return await executePagedEntity(entity, access, course, pagedCursor, attemptTelemetry)
 }
 
 async function executeWithLeaseHeartbeat<T>(
@@ -425,6 +625,33 @@ function emptyWorkerResult(): MoodleSyncWorkerResult {
     checkpointedItems: 0,
     failedItems: 0,
     retryScheduledItems: 0,
+  }
+}
+
+function isMoodleProviderItem(item: DurableMoodleSyncItem): boolean {
+  const entity = item.itemKey.split(':', 1)[0]
+  return entity === 'students' || entity === 'activities' || entity === 'grades'
+}
+
+async function safelyRecordMoodleSiteCircuitResult(
+  supabase: AppSupabaseClient,
+  item: DurableMoodleSyncItem,
+  success: boolean,
+  failureCode: string | null = null,
+): Promise<void> {
+  if (!isMoodleProviderItem(item)) return
+  try {
+    await recordMoodleSiteCircuitResult(supabase, {
+      failureCode,
+      moodleSiteId: item.moodleSiteId,
+      success,
+    })
+  } catch (error) {
+    console.warn('[moodle-sync-worker] Circuit breaker state was not recorded.', {
+      errorType: error instanceof Error ? error.name : 'unknown',
+      itemId: item.itemId,
+      siteId: item.moodleSiteId,
+    })
   }
 }
 
@@ -491,6 +718,7 @@ export async function runMoodleSyncJob(
         workerId,
       })
       if (completed === null) throw new MoodleSyncLeaseLostError()
+      await safelyRecordMoodleSiteCircuitResult(supabase, item, true)
       result.completedItems += 1
     } catch (error) {
       if (error instanceof MoodleSyncLeaseLostError) {
@@ -511,6 +739,9 @@ export async function runMoodleSyncJob(
         retryable: classified.retryable,
         workerId,
       })
+      if (classified.retryable && failureStatus !== null) {
+        await safelyRecordMoodleSiteCircuitResult(supabase, item, false, classified.code)
+      }
       if (failureStatus === null) {
         console.warn('[moodle-sync-worker] Failure ignored after lease loss or cancellation.', {
           errorCode: classified.code,

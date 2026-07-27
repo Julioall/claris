@@ -6,23 +6,42 @@ import {
   listRecentlySyncedActivityStudentIds,
   listStudentIdsByCourseId,
   listStudentsWithMoodleUserId,
+  type StudentActivityInsert,
   upsertStudentActivities,
 } from '../_shared/domain/moodle-sync/repository.ts'
+import { computeContentHash } from '../_shared/domain/moodle-sync/content-hash.ts'
+import {
+  loadActivityStaticSnapshot,
+  type ActivityStaticItem,
+  type ActivityStaticSnapshot,
+} from '../_shared/domain/moodle-sync/activity-static-snapshot.ts'
 import type { CourseSyncRecord } from '../_shared/domain/moodle-sync/repository.ts'
 import type { MoodleAccess } from '../_shared/domain/moodle-connections/mod.ts'
-import { refreshDashboardCourseActivityAggregates } from '../_shared/domain/dashboard-activity-aggregates.ts'
-import { callMoodleApi } from '../_shared/moodle/mod.ts'
+import {
+  callMoodleApi,
+  combineMoodleApiTelemetry,
+  type MoodleApiTelemetry,
+} from '../_shared/moodle/mod.ts'
+import { createMoodleSyncAttemptTelemetry } from '../_shared/domain/moodle-sync/attempt-telemetry.ts'
+import {
+  createMoodleProviderMetrics,
+  toMoodleProviderMetricsMetadata,
+} from '../_shared/domain/moodle-sync/provider-metrics.ts'
 
-const ALLOWED_ACTIVITY_TYPES = ['quiz', 'assign', 'forum']
 const COMPLETION_FETCH_POOL_SIZE = 4
 const COMPLETION_REUSE_WINDOW_MINUTES = 10
 const DEFAULT_STUDENT_BATCH_SIZE = 12
 const MAX_STUDENT_BATCH_SIZE = 25
 const MOODLE_BATCH_DELAY_MS = 300
 
+export type { ActivityStaticSnapshot }
+
 interface StudentBatchOptions {
+  activityStaticSnapshot?: ActivityStaticSnapshot
+  includeActivityStaticSnapshot?: boolean
   studentBatchPage?: number
   studentBatchSize?: number
+  telemetry?: MoodleApiTelemetry
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -62,21 +81,30 @@ export async function syncActivities(
   }
   const moodleUrl = access.moodleUrl
   const token = access.token
-
-  let courseContents: unknown[] = []
-  let activitiesFromFallback: unknown[] | null = null
-  try {
-    courseContents = await callMoodleApi(moodleUrl, token, 'core_course_get_contents', { courseid: courseId })
-    console.log(`Found ${courseContents?.length || 0} sections in course ${courseId}`)
-  } catch (err) {
-    console.error(`Error fetching course contents for ${courseId}:`, err)
-    activitiesFromFallback = await fetchActivitiesFallback(moodleUrl, token, courseId)
-    console.log(`Fallback found ${activitiesFromFallback.length} activities in course ${courseId}`)
-  }
+  const providerMetrics = createMoodleProviderMetrics()
+  const attemptTelemetry = combineMoodleApiTelemetry(
+    options.telemetry ?? createMoodleSyncAttemptTelemetry({
+      connectionId: access.connectionId,
+      siteSlug: access.siteSlug,
+    }),
+    providerMetrics.telemetry(),
+  )
+  const callMoodleApiWithMetrics = (
+    requestMoodleUrl: string,
+    requestToken: string,
+    operation: string,
+    parameters: Record<string, string | number> = {},
+  ) => providerMetrics.call(() => callMoodleApi(
+    requestMoodleUrl,
+    requestToken,
+    operation,
+    parameters,
+    25_000,
+    attemptTelemetry,
+  ))
 
   const studentIds = await listStudentIdsByCourseId(supabase, dbCourse.id)
   if (studentIds.length === 0) {
-    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
     return jsonResponse({
       success: true,
       contractVersion: 2,
@@ -86,6 +114,7 @@ export async function syncActivities(
       hasMore: false,
       processedStudents: 0,
       totalStudents: 0,
+      ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
     })
   }
 
@@ -101,14 +130,15 @@ export async function syncActivities(
       nextStudentBatchPage: null,
       processedStudents: 0,
       totalStudents: studentBatch.totalStudents,
+      ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
     })
   }
 
-  // Extract activities
-  const activities = activitiesFromFallback ?? extractActivities(courseContents)
+  const staticSnapshot = options.activityStaticSnapshot
+    ?? await loadActivityStaticSnapshot(callMoodleApiWithMetrics, moodleUrl, token, courseId)
+  const activities = staticSnapshot.activities
   console.log(`Found ${activities.length} activities (quiz/assign/forum) in course ${courseId}`)
   if (activities.length === 0) {
-    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
     return jsonResponse({
       success: true,
       contractVersion: 2,
@@ -119,222 +149,71 @@ export async function syncActivities(
       nextStudentBatchPage: null,
       processedStudents: studentBatch.selectedStudentIds.length,
       totalStudents: studentBatch.totalStudents,
+      ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
     })
   }
 
-  // Fetch due dates
-  const [assignDueDates, quizDueDates] = await Promise.all([
-    fetchAssignDueDates(moodleUrl, token, courseId, activities),
-    fetchQuizDueDates(moodleUrl, token, courseId, activities),
-  ])
-
   // Fetch per-student completion status
-  const completionByStudent = await fetchCompletionStatuses(moodleUrl, token, courseId, studentBatch.selectedStudentIds, dbCourse.id, supabase)
+  const completion = await fetchCompletionStatuses(
+    moodleUrl,
+    token,
+    courseId,
+    studentBatch.selectedStudentIds,
+    dbCourse.id,
+    supabase,
+    callMoodleApiWithMetrics,
+  )
 
   // Build and upsert records
   const now = new Date().toISOString()
-  const activityRecords = buildActivityRecords(activities, studentBatch.selectedStudentIds, dbCourse.id, assignDueDates, quizDueDates, completionByStudent, now)
+  const activityRecords = await buildActivityRecords(
+    activities,
+    studentBatch.selectedStudentIds,
+    dbCourse.id,
+    completion.statuses,
+    now,
+    access.connectionId,
+  )
 
   console.log(`Preparing to upsert ${activityRecords.length} activity records`)
 
   const BATCH_SIZE = 500
-  let activitiesCount = 0
-  try {
-    activitiesCount = await upsertStudentActivities(supabase, activityRecords, BATCH_SIZE)
-  } catch (error) {
-    console.error('Error upserting activities:', error)
-  }
-
-  if (!studentBatch.hasMore) {
-    await refreshDashboardAggregatesForCourse(supabase, dbCourse.id)
-  }
+  const activitiesCount = await upsertStudentActivities(supabase, activityRecords, BATCH_SIZE)
 
   console.log(`Upserted ${activitiesCount} activity records`)
   return jsonResponse({
-    success: true,
+    success: completion.errorCount === 0,
     contractVersion: 2,
     connectionId: access.connectionId,
     siteSlug: access.siteSlug,
     activitiesCount,
+    errorCount: completion.errorCount,
     hasMore: studentBatch.hasMore,
+    ...(options.includeActivityStaticSnapshot && studentBatch.hasMore
+      ? { activityStaticSnapshot: staticSnapshot }
+      : {}),
     nextStudentBatchPage: studentBatch.nextStudentBatchPage,
     processedStudents: studentBatch.selectedStudentIds.length,
     studentBatchPage: studentBatch.page,
     studentBatchSize: studentBatch.batchSize,
     totalStudents: studentBatch.totalStudents,
+    ...toMoodleProviderMetricsMetadata(providerMetrics.snapshot()),
   })
-}
-
-async function refreshDashboardAggregatesForCourse(
-  supabase: AppSupabaseClient,
-  courseId: string,
-) {
-  try {
-    await refreshDashboardCourseActivityAggregates(supabase, [courseId])
-  } catch (error) {
-    console.error('[moodle-sync-activities] Error refreshing dashboard aggregates:', error)
-  }
 }
 
 // --- Helper functions ---
 
-async function fetchActivitiesFallback(
-  moodleUrl: string,
-  token: string,
-  courseId: number
-): Promise<unknown[]> {
-  const activities: unknown[] = []
-
-  try {
-    const assignData = await callMoodleApi(moodleUrl, token, 'mod_assign_get_assignments', { 'courseids[0]': courseId })
-    const assignments = assignData?.courses?.[0]?.assignments || []
-    for (const assign of assignments) {
-      const activityId = assign.cmid || assign.coursemodule || assign.id
-      if (!activityId) continue
-      activities.push({
-        id: activityId,
-        name: assign.name || `Assignment ${activityId}`,
-        modname: 'assign',
-        completiondata: null,
-      })
-    }
-  } catch (err) {
-    console.error(`Fallback assign fetch failed for course ${courseId}:`, err)
-  }
-
-  try {
-    const quizData = await callMoodleApi(moodleUrl, token, 'mod_quiz_get_quizzes_by_courses', { 'courseids[0]': courseId })
-    const quizzes = quizData?.quizzes || []
-    for (const quiz of quizzes) {
-      const activityId = quiz.coursemodule || quiz.cmid || quiz.id
-      if (!activityId) continue
-      activities.push({
-        id: activityId,
-        name: quiz.name || `Quiz ${activityId}`,
-        modname: 'quiz',
-        completiondata: null,
-      })
-    }
-  } catch (err) {
-    console.error(`Fallback quiz fetch failed for course ${courseId}:`, err)
-  }
-
-  try {
-    const forumData = await callMoodleApi(moodleUrl, token, 'mod_forum_get_forums_by_courses', { 'courseids[0]': courseId })
-    const forums = forumData?.forums || []
-    for (const forum of forums) {
-      const activityId = forum.cmid || forum.coursemodule || forum.id
-      if (!activityId) continue
-      activities.push({
-        id: activityId,
-        name: forum.name || `Forum ${activityId}`,
-        modname: 'forum',
-        completiondata: null,
-      })
-    }
-  } catch (err) {
-    console.error(`Fallback forum fetch failed for course ${courseId}:`, err)
-  }
-
-  const uniqueById = new Map<string, unknown>()
-  for (const activity of activities) {
-    uniqueById.set(String(activity.id), activity)
-  }
-
-  return Array.from(uniqueById.values())
-}
-
-function extractActivities(courseContents: unknown[]): unknown[] {
-  const activities: unknown[] = []
-  for (const section of courseContents) {
-    if (section.modules) {
-      for (const mod of section.modules) {
-        if (ALLOWED_ACTIVITY_TYPES.includes(mod.modname)) {
-          activities.push({
-            id: mod.id,
-            name: mod.name,
-            modname: mod.modname,
-            completion: mod.completion,
-            completiondata: mod.completiondata,
-          })
-        }
-      }
-    }
-  }
-  return activities
-}
-
-async function fetchAssignDueDates(
-  moodleUrl: string,
-  token: string,
-  courseId: number,
-  activities: unknown[]
-): Promise<Record<string, string | null>> {
-  const dueDates: Record<string, string | null> = {}
-  const assignActivities = activities.filter((a) => a.modname === 'assign')
-
-  if (assignActivities.length === 0) return dueDates
-
-  try {
-    const assignData = await callMoodleApi(moodleUrl, token, 'mod_assign_get_assignments', { 'courseids[0]': courseId })
-    if (assignData?.courses?.[0]?.assignments) {
-      for (const assignment of assignData.courses[0].assignments) {
-        if (assignment.cmid && assignment.duedate && assignment.duedate > 0) {
-          dueDates[String(assignment.cmid)] = new Date(assignment.duedate * 1000).toISOString()
-        }
-      }
-    }
-    console.log(`Fetched due dates for ${Object.keys(dueDates).length} assignments`)
-  } catch (err) {
-    console.error('Error fetching assignment details:', err)
-  }
-
-  return dueDates
-}
-
-async function fetchQuizDueDates(
-  moodleUrl: string,
-  token: string,
-  courseId: number,
-  activities: unknown[]
-): Promise<Record<string, string | null>> {
-  const dueDates: Record<string, string | null> = {}
-  const quizActivities = activities.filter((a) => a.modname === 'quiz')
-
-  if (quizActivities.length === 0) return dueDates
-
-  try {
-    const quizData = await callMoodleApi(moodleUrl, token, 'mod_quiz_get_quizzes_by_courses', { 'courseids[0]': courseId })
-    if (quizData?.quizzes) {
-      for (const q of quizData.quizzes) {
-        if (q.coursemodule && q.timeclose && q.timeclose > 0) {
-          dueDates[String(q.coursemodule)] = new Date(q.timeclose * 1000).toISOString()
-        }
-      }
-    }
-  } catch (err) {
-    console.error('Error fetching quiz details:', err)
-  }
-
-  return dueDates
-}
-
-function buildActivityRecords(
-  activities: unknown[],
+async function buildActivityRecords(
+  activities: ActivityStaticItem[],
   studentIds: string[],
   courseDbId: string,
-  assignDueDates: Record<string, string | null>,
-  quizDueDates: Record<string, string | null>,
   completionByStudent: Map<string, Map<string, { state: number; timecompleted: number | null }>>,
-  now: string
-): Record<string, unknown>[] {
-  const records: Record<string, unknown>[] = []
+  now: string,
+  connectionId: string,
+): Promise<StudentActivityInsert[]> {
+  const recordPromises: Promise<StudentActivityInsert>[] = []
 
   for (const activity of activities) {
-    let dueDate: string | null = null
-    if (activity.modname === 'assign') dueDate = assignDueDates[String(activity.id)] || null
-    else if (activity.modname === 'quiz') dueDate = quizDueDates[String(activity.id)] || null
-
     for (const studentId of studentIds) {
       const studentCompletion = completionByStudent.get(studentId)
       const actCompletion = studentCompletion?.get(String(activity.id))
@@ -352,23 +231,28 @@ function buildActivityRecords(
         }
       }
 
-      const record: Record<string, unknown> = {
+      const stableContent = {
+        activity_name: activity.name,
+        activity_type: activity.type,
+        completed_at: completedAt,
+        due_date: activity.dueDate,
+        hidden: false,
+        status,
+      }
+      recordPromises.push(computeContentHash(stableContent).then((contentHash) => ({
         student_id: studentId,
         course_id: courseDbId,
         moodle_activity_id: String(activity.id),
-        activity_name: activity.name,
-        activity_type: activity.modname,
-        status,
-        completed_at: completedAt,
+        ...stableContent,
+        content_hash: contentHash,
+        last_synced_connection_id: connectionId,
+        observed_at: now,
         updated_at: now,
-        hidden: false,
-      }
-      if (dueDate) record.due_date = dueDate
-      records.push(record)
+      })))
     }
   }
 
-  return records
+  return Promise.all(recordPromises)
 }
 
 /**
@@ -381,13 +265,23 @@ async function fetchCompletionStatuses(
   courseId: number,
   studentIds: string[],
   courseDbId: string,
-  supabase: AppSupabaseClient
-): Promise<Map<string, Map<string, { state: number; timecompleted: number | null }>>> {
+  supabase: AppSupabaseClient,
+  callApi: (
+    moodleUrl: string,
+    token: string,
+    operation: string,
+    parameters?: Record<string, string | number>,
+  ) => Promise<unknown>,
+): Promise<{
+  errorCount: number
+  statuses: Map<string, Map<string, { state: number; timecompleted: number | null }>>
+}> {
   const result = new Map<string, Map<string, { state: number; timecompleted: number | null }>>()
+  let errorCount = 0
 
   const students = await listStudentsWithMoodleUserId(supabase, studentIds)
 
-  if (!students?.length) return result
+  if (!students?.length) return { errorCount, statuses: result }
 
   const recentCompletionCutoffIso = new Date(
     Date.now() - (COMPLETION_REUSE_WINDOW_MINUTES * 60 * 1000),
@@ -404,13 +298,18 @@ async function fetchCompletionStatuses(
     console.warn('[moodle-sync-activities] Unable to load recent completion window. Continuing without delta optimization:', error)
   }
 
-  const cachedStudentIds = students
+  const candidateCachedStudentIds = students
     .map((student) => student.id)
     .filter((studentId) => recentlySyncedStudentIds.has(studentId))
+  const reusedStudentIds = new Set<string>()
 
-  if (cachedStudentIds.length > 0) {
+  if (candidateCachedStudentIds.length > 0) {
     try {
-      const cachedRows = await listExistingStudentActivityStatuses(supabase, courseDbId, cachedStudentIds)
+      const cachedRows = await listExistingStudentActivityStatuses(
+        supabase,
+        courseDbId,
+        candidateCachedStudentIds,
+      )
 
       for (const row of cachedRows) {
         const existingMap = result.get(row.student_id) ?? new Map<string, { state: number; timecompleted: number | null }>()
@@ -422,6 +321,7 @@ async function fetchCompletionStatuses(
 
         existingMap.set(String(row.moodle_activity_id), { state, timecompleted })
         result.set(row.student_id, existingMap)
+        reusedStudentIds.add(row.student_id)
       }
     } catch (error) {
       console.warn('[moodle-sync-activities] Failed to load cached completion statuses:', error)
@@ -429,12 +329,12 @@ async function fetchCompletionStatuses(
   }
 
   const studentsToFetch = students.filter(
-    (student) => !recentlySyncedStudentIds.has(student.id),
+    (student) => !reusedStudentIds.has(student.id),
   )
 
-  if (cachedStudentIds.length > 0) {
+  if (reusedStudentIds.size > 0) {
     console.log(
-      `[moodle-sync-activities] Reusing cached completion for ${cachedStudentIds.length} students (window=${COMPLETION_REUSE_WINDOW_MINUTES}min)`,
+      `[moodle-sync-activities] Reusing cached completion for ${reusedStudentIds.size} students (window=${COMPLETION_REUSE_WINDOW_MINUTES}min)`,
     )
   }
 
@@ -448,35 +348,32 @@ async function fetchCompletionStatuses(
           return { studentId: student.id, activityMap: new Map<string, { state: number; timecompleted: number | null }>() }
         }
 
-        try {
-          const completionData = await callMoodleApi(
-            moodleUrl,
-            token,
-            'core_completion_get_activities_completion_status',
-            { courseid: courseId, userid: moodleUserId }
-          )
+        const completionData = await callApi(
+          moodleUrl,
+          token,
+          'core_completion_get_activities_completion_status',
+          { courseid: courseId, userid: moodleUserId },
+        )
 
-          const activityMap = new Map<string, { state: number; timecompleted: number | null }>()
-          if (completionData?.statuses) {
-            for (const s of completionData.statuses) {
-              activityMap.set(String(s.cmid), {
-                state: s.state ?? 0,
-                timecompleted: s.timecompleted ?? null,
-              })
-            }
+        const activityMap = new Map<string, { state: number; timecompleted: number | null }>()
+        if (completionData?.statuses) {
+          for (const s of completionData.statuses) {
+            activityMap.set(String(s.cmid), {
+              state: s.state ?? 0,
+              timecompleted: s.timecompleted ?? null,
+            })
           }
-
-          return { studentId: student.id, activityMap }
-        } catch (err) {
-          console.warn(`Completion API failed for student ${moodleUserId} in course ${courseId}:`, err)
-          return { studentId: student.id, activityMap: new Map<string, { state: number; timecompleted: number | null }>() }
         }
+
+        return { studentId: student.id, activityMap }
       })
     )
 
     for (const item of settled) {
       if (item.status === 'fulfilled') {
         result.set(item.value.studentId, item.value.activityMap)
+      } else {
+        errorCount += 1
       }
     }
 
@@ -485,5 +382,5 @@ async function fetchCompletionStatuses(
     }
   }
 
-  return result
+  return { errorCount, statuses: result }
 }

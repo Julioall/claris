@@ -1,5 +1,9 @@
+import fs from 'node:fs'
+import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { evaluateDeltaShadow } from '../../../../supabase/functions/_shared/domain/moodle-sync/delta-shadow'
+
+const ROOT = process.cwd()
 
 describe('Moodle delta shadow safety', () => {
   const base = {
@@ -32,5 +36,22 @@ describe('Moodle delta shadow safety', () => {
       response: { instances: [{ updates: [{ name: 'configuration' }, { name: 'content' }] }] },
     })).toEqual({ changed: true, instanceCount: 1, mode: 'shadow_full', updateCount: 2 })
   })
-})
 
+  it('is wired into the worker and advances a safe transactional watermark', () => {
+    const runner = fs.readFileSync(path.join(
+      ROOT,
+      'supabase/functions/_shared/domain/moodle-sync/job-runner.ts',
+    ), 'utf8')
+    const migration = fs.readFileSync(path.join(
+      ROOT,
+      'supabase/migrations/20260721320000_add_durable_moodle_sync_worker.sql',
+    ), 'utf8')
+
+    expect(runner).toContain('getCourseUpdatesSince(')
+    expect(runner).toContain("capability: 'delta'")
+    expect(runner).toContain("reason: 'rollout_disabled'")
+    expect(runner).toContain('Delta shadow signal unavailable; full sync preserved.')
+    expect(migration).toContain("v_item_metadata ->> 'watermark_candidate'")
+    expect(migration).toContain('moodle_since = EXCLUDED.moodle_since')
+  })
+})

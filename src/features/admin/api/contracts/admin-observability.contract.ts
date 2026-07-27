@@ -23,6 +23,50 @@ export interface AdminDashboardSummaryDto {
   usageTrend: Array<{ count: number; day: string }>;
 }
 
+export interface AdminMoodleSyncOperationalMetricDto {
+  activeJobs: number;
+  circuit: {
+    openUntil: string | null;
+    state: 'closed' | 'open';
+  };
+  connectionId: string;
+  durations: {
+    averageItemMs: number;
+    averageJobMs: number;
+    p95ItemMs: number;
+    p95JobMs: number;
+  };
+  items: {
+    completed: number;
+    failed: number;
+    oldestStuckAt: string | null;
+    stuck: number;
+  };
+  jobs: {
+    completed: number;
+    failed: number;
+    started: number;
+  };
+  retryAttempts: number;
+  siteSlug: string;
+  transport: {
+    apiCalls: number;
+    responseBytes: number;
+  };
+  window: {
+    endedAt: string;
+    startedAt: string;
+  };
+}
+
+export interface AdminMoodleSyncOperationalMetricsDto {
+  contractVersion: typeof ADMIN_OBSERVABILITY_CONTRACT_VERSION;
+  generatedAt: string;
+  items: AdminMoodleSyncOperationalMetricDto[];
+  stuckAfterSeconds: number;
+  windowHours: number;
+}
+
 export interface AdminUsageEventDto {
   createdAt: string;
   eventType: string;

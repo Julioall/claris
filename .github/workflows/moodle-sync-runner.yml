@@ -1,0 +1,48 @@
+name: Run managed Moodle sync ticks
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: claris-managed-moodle-sync
+  cancel-in-progress: false
+
+jobs:
+  tick:
+    name: Dispatch and run short Moodle sync leases
+    runs-on: ubuntu-latest
+    environment: vps
+    timeout-minutes: 5
+    env:
+      SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+      SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+      MOODLE_SYNC_WORKER_CRON_SECRET: ${{ secrets.MOODLE_SYNC_WORKER_CRON_SECRET }}
+    steps:
+      - name: Validate managed runner configuration
+        run: |
+          set -euo pipefail
+          [ -n "$SUPABASE_URL" ] || { echo '::error::Configure SUPABASE_URL'; exit 1; }
+          [ -n "$SUPABASE_PUBLISHABLE_KEY" ] || { echo '::error::Configure SUPABASE_PUBLISHABLE_KEY'; exit 1; }
+          [ "${#MOODLE_SYNC_WORKER_CRON_SECRET}" -ge 32 ] || { echo '::error::Configure a MOODLE_SYNC_WORKER_CRON_SECRET with at least 32 characters'; exit 1; }
+          case "$SUPABASE_URL" in https://*) ;; *) echo '::error::SUPABASE_URL must be HTTPS'; exit 1 ;; esac
+
+      - name: Dispatch due work and run one short worker tick
+        run: |
+          set -euo pipefail
+          functions_url="${SUPABASE_URL%/}/functions/v1"
+          headers=(
+            -H 'Content-Type: application/json'
+            -H "apikey: $SUPABASE_PUBLISHABLE_KEY"
+            -H "x-moodle-sync-worker-secret: $MOODLE_SYNC_WORKER_CRON_SECRET"
+          )
+          curl --fail-with-body --silent --show-error --max-time 55 \
+            -X POST "${functions_url}/moodle-sync-dispatcher" "${headers[@]}" \
+            --data '{"limit":25}'
+          curl --fail-with-body --silent --show-error --max-time 55 \
+            -X POST "${functions_url}/moodle-sync-worker" "${headers[@]}" \
+            --data '{}'

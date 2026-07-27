@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   mapConversation,
   mapErrorLog,
+  mapMoodleSyncOperationalMetric,
 } from '../../../../supabase/functions/admin-observability/mapper.ts';
 import { parseAdminObservabilityPayload } from '../../../../supabase/functions/admin-observability/payload.ts';
 import type {
@@ -12,10 +13,12 @@ import type {
   AdminErrorLogRow,
   AdminObservabilityRepository,
   AdminUsageEventRow,
+  MoodleSyncOperationalMetricRow,
 } from '../../../../supabase/functions/admin-observability/repository.ts';
 import {
   executeAdminObservability,
   getAdminDashboardSummary,
+  getMoodleSyncOperationalMetrics,
 } from '../../../../supabase/functions/admin-observability/service.ts';
 import { mapSupportTicket } from '../../../../supabase/functions/support-tickets/mapper.ts';
 import { parseSupportTicketsPayload } from '../../../../supabase/functions/support-tickets/payload.ts';
@@ -68,6 +71,30 @@ const conversationRow: AdminConversationRow = {
   updated_at: NOW,
 };
 
+const moodleMetricRow: MoodleSyncOperationalMetricRow = {
+  site_slug: 'fieg',
+  moodle_connection_id: '44444444-4444-4444-8444-444444444444',
+  window_started_at: '2026-07-14T15:00:00.000Z',
+  window_ended_at: NOW,
+  jobs_started: 5,
+  jobs_completed: 4,
+  jobs_failed: 1,
+  active_jobs: 1,
+  moodle_api_calls: 28,
+  moodle_response_bytes: 1_572_864,
+  completed_items: 11,
+  failed_items: 1,
+  retry_attempts: 2,
+  stuck_items: 1,
+  oldest_stuck_at: '2026-07-21T14:40:00.000Z',
+  avg_job_duration_ms: 1_200,
+  p95_job_duration_ms: 2_400,
+  avg_item_duration_ms: 800,
+  p95_item_duration_ms: 1_600,
+  circuit_state: 'open',
+  circuit_open_until: '2026-07-21T15:05:00.000Z',
+};
+
 const ticketRow: SupportTicketRow = {
   id: RECORD_ID,
   user_id: ACTOR_ID,
@@ -97,6 +124,7 @@ function observabilityRepository(): AdminObservabilityRepository {
     isApplicationAdmin: vi.fn(async () => true),
     listConversations: vi.fn(async () => ({ rows: [conversationRow], totalCount: 1 })),
     listErrorLogs: vi.fn(async () => ({ rows: [errorRow], totalCount: 1 })),
+    listMoodleSyncOperationalMetrics: vi.fn(async () => [moodleMetricRow]),
     listRecentUsageEvents: vi.fn(async () => [
       { created_at: '2026-07-20T15:00:00.000Z' },
       { created_at: '2026-07-21T15:00:00.000Z' },
@@ -139,6 +167,8 @@ describe('admin-observability backend contract', () => {
   it('accepts bounded intents and rejects browser identity or raw mutation fields', () => {
     expect(parseAdminObservabilityPayload({ action: 'get_dashboard' }))
       .toEqual({ action: 'get_dashboard' });
+    expect(parseAdminObservabilityPayload({ action: 'get_moodle_sync_metrics' }))
+      .toEqual({ action: 'get_moodle_sync_metrics', windowHours: 168, stuckAfterSeconds: 300 });
     expect(parseAdminObservabilityPayload({
       action: 'list_error_logs',
       page: 2,
@@ -148,6 +178,8 @@ describe('admin-observability backend contract', () => {
 
     for (const payload of [
       { action: 'get_dashboard', userId: ACTOR_ID },
+      { action: 'get_moodle_sync_metrics', windowHours: 24, connectionId: RECORD_ID },
+      { action: 'get_moodle_sync_metrics', stuckAfterSeconds: 59 },
       { action: 'resolve_error_log', logId: RECORD_ID, resolvedBy: ACTOR_ID },
       { action: 'list_usage_events', pageSize: 201 },
       { action: 'list_error_logs', page: 1, dateFrom: '2026-07-22T00:00:00Z', dateTo: '2026-07-21T00:00:00Z' },
@@ -196,6 +228,52 @@ describe('admin-observability backend contract', () => {
       expect.any(String),
     );
     expect(result.log).toMatchObject({ resolved: true, resolvedBy: ACTOR_ID });
+  });
+
+  it('exposes aggregate Moodle sync health without identities, payloads or error text', async () => {
+    const repository = observabilityRepository();
+    const result = await getMoodleSyncOperationalMetrics(repository, {
+      windowHours: 168,
+      stuckAfterSeconds: 300,
+    }, new Date(NOW));
+
+    expect(repository.listMoodleSyncOperationalMetrics).toHaveBeenCalledWith({
+      windowHours: 168,
+      stuckAfterSeconds: 300,
+    });
+    expect(result).toMatchObject({
+      contractVersion: 1,
+      generatedAt: NOW,
+      items: [{
+        siteSlug: 'fieg',
+        connectionId: moodleMetricRow.moodle_connection_id,
+        retryAttempts: 2,
+        transport: { apiCalls: 28, responseBytes: 1_572_864 },
+        items: { stuck: 1 },
+        durations: { p95JobMs: 2_400 },
+        circuit: { state: 'open' },
+      }],
+    });
+    expect(JSON.stringify(result)).not.toMatch(/moodle_site_id|error_message|moodle_username|token|payload/i);
+
+    const dto = mapMoodleSyncOperationalMetric(moodleMetricRow);
+    expect(dto).not.toHaveProperty('moodleSiteId');
+    expect(dto.transport).toEqual({ apiCalls: 28, responseBytes: 1_572_864 });
+    expect(dto.circuit).toEqual({ state: 'open', openUntil: moodleMetricRow.circuit_open_until });
+  });
+
+  it('routes bounded Moodle metrics through the same admin-only use case', async () => {
+    const repository = observabilityRepository();
+    const result = await executeAdminObservability(repository, ACTOR_ID, {
+      action: 'get_moodle_sync_metrics',
+      windowHours: 24,
+      stuckAfterSeconds: 120,
+    });
+    expect(result.items).toHaveLength(1);
+    expect(repository.listMoodleSyncOperationalMetrics).toHaveBeenCalledWith({
+      windowHours: 24,
+      stuckAfterSeconds: 120,
+    });
   });
 });
 
@@ -275,5 +353,33 @@ describe('admin observability database boundary', () => {
     expect(migration).toMatch(/GRANT SELECT ON TABLE public\.support_tickets TO authenticated/i);
     expect(migration).toMatch(/support_tickets_admin_realtime_select[\s\S]*is_application_admin/i);
     expect(migration).not.toMatch(/GRANT (?:INSERT|UPDATE|DELETE)[^;]*support_tickets[^;]*authenticated/i);
+  });
+
+  it('keeps Moodle operational aggregates service-only and free of raw Moodle identity fields', () => {
+    const migration = readFileSync(resolve(
+      process.cwd(),
+      'supabase/migrations/20260721400000_add_moodle_sync_operational_observability.sql',
+    ), 'utf8');
+    expect(migration).toContain('backend_get_moodle_sync_operational_metrics');
+    expect(migration).toMatch(/REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/i);
+    expect(migration).toMatch(/GRANT EXECUTE ON FUNCTION[\s\S]*TO service_role/i);
+    expect(migration).toContain('retry_attempts');
+    expect(migration).toContain('stuck_items');
+    expect(migration).not.toMatch(/moodle_username|credential_ciphertext|last_error|error_message/i);
+  });
+
+  it('projects only bounded transport counters from item metadata', () => {
+    const migration = readFileSync(resolve(
+      process.cwd(),
+      'supabase/migrations/20260721410000_add_moodle_sync_network_metrics_projection.sql',
+    ), 'utf8');
+    expect(migration).toContain('moodle_api_calls');
+    expect(migration).toContain('moodle_response_bytes');
+    expect(migration).toContain("'students', 'activities', 'grades'");
+    expect(migration).toContain('100000::BIGINT');
+    expect(migration).toContain('16777216::BIGINT');
+    expect(migration).toMatch(/REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/i);
+    const returnsClause = migration.split('RETURNS TABLE (', 2)[1]?.split(')\nLANGUAGE', 2)[0] ?? '';
+    expect(returnsClause).not.toMatch(/moodle_username|credential_ciphertext|error_message|api_url|moodle_url|payload|metadata/i);
   });
 });

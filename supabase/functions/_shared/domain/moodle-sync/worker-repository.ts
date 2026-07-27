@@ -41,6 +41,13 @@ export interface CreateMoodleSyncJobV2Input {
   userId: string
 }
 
+export interface MoodleDeltaShadowContext {
+  capabilityAvailable: boolean
+  currentRelease: string | null
+  watermarkRelease: string | null
+  watermarkSince: string | null
+}
+
 function asRpcClient(supabase: AppSupabaseClient): WorkerRpcClient {
   return supabase as unknown as WorkerRpcClient
 }
@@ -135,7 +142,7 @@ export async function createMoodleSyncJobV2(
   supabase: AppSupabaseClient,
   input: CreateMoodleSyncJobV2Input,
 ): Promise<string> {
-  const result = await invokeRpc(supabase, 'backend_create_moodle_sync_job_v2', {
+  const result = await invokeRpc(supabase, 'backend_create_moodle_sync_job_v2_gated', {
     p_course_ids: input.courseIds,
     p_entities: input.entities,
     p_items: input.items.map((item) => ({
@@ -153,6 +160,60 @@ export async function createMoodleSyncJobV2(
     throw new Error('Invalid job id returned by schema-v2 Moodle job creation')
   }
   return result
+}
+
+function hasUpdatesSinceCapability(value: unknown): boolean {
+  if (!isRecord(value)) return false
+  const functions = value.functions
+  return Array.isArray(functions)
+    && functions.some((name) => name === 'core_course_get_updates_since')
+}
+
+export async function loadMoodleDeltaShadowContext(
+  supabase: AppSupabaseClient,
+  input: {
+    connectionId: string
+    courseId: string
+    entity: 'students' | 'activities' | 'grades'
+    siteId: string
+  },
+): Promise<MoodleDeltaShadowContext> {
+  const [{ data: connection, error: connectionError }, { data: site, error: siteError }, {
+    data: watermark,
+    error: watermarkError,
+  }] = await Promise.all([
+    supabase
+      .from('user_moodle_connections')
+      .select('capabilities, moodle_site_id')
+      .eq('id', input.connectionId)
+      .maybeSingle(),
+    supabase
+      .from('moodle_sites')
+      .select('release')
+      .eq('id', input.siteId)
+      .maybeSingle(),
+    supabase
+      .from('moodle_sync_watermarks')
+      .select('moodle_since, source_release')
+      .eq('moodle_connection_id', input.connectionId)
+      .eq('course_id', input.courseId)
+      .eq('entity', input.entity)
+      .maybeSingle(),
+  ])
+
+  if (connectionError) throw connectionError
+  if (siteError) throw siteError
+  if (watermarkError) throw watermarkError
+  if (!connection || connection.moodle_site_id !== input.siteId || !site) {
+    throw new Error('Moodle delta context is outside the connection scope')
+  }
+
+  return {
+    capabilityAvailable: hasUpdatesSinceCapability(connection.capabilities),
+    currentRelease: site.release,
+    watermarkRelease: watermark?.source_release ?? null,
+    watermarkSince: watermark?.moodle_since ?? null,
+  }
 }
 
 export async function heartbeatMoodleSyncItem(
@@ -233,6 +294,21 @@ export async function failMoodleSyncItem(
     p_retryable: input.retryable ?? false,
     p_worker_id: input.workerId,
   }), 'Moodle sync failure')
+}
+
+export async function recordMoodleSiteCircuitResult(
+  supabase: AppSupabaseClient,
+  input: {
+    failureCode?: string | null
+    moodleSiteId: string
+    success: boolean
+  },
+): Promise<void> {
+  await invokeRpc(supabase, 'backend_record_moodle_site_circuit_result', {
+    p_failure_code: input.failureCode ?? null,
+    p_moodle_site_id: input.moodleSiteId,
+    p_success: input.success,
+  })
 }
 
 export async function cancelMoodleSyncJob(
