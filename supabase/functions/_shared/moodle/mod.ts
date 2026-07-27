@@ -17,7 +17,12 @@ export {
   MoodleApiError,
 } from './client.ts'
 
-export type { MoodleApiErrorCategory } from './client.ts'
+export {
+  combineMoodleApiTelemetry,
+  type MoodleApiAttemptMetric,
+  type MoodleApiErrorCategory,
+  type MoodleApiTelemetry,
+} from './client.ts'
 export { normalizeApprovedMoodleBaseUrl } from './site-url.ts'
 
 export type {

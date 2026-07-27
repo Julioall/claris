@@ -3,7 +3,6 @@ export const DATA_CLEANUP_CONFIRMATION = 'CONFIRM_OPERATIONAL_DATA_CLEANUP_V1' a
 export const CLEANUP_SELECTION_IDS = [
   'sync_preferences',
   'ignored_courses',
-  'moodle_reauthorization',
   'course_catalog',
   'students',
   'academic_activities',

@@ -1,14 +1,14 @@
 # Spec / Epic - Sincronizacao Moodle multi-site e otimizada
 
-Atualizado em `2026-07-21`.
+Atualizado em `2026-07-26`.
 
 ## Identificacao
 
 - Epic: `MSYNC`
-- Status: implementacao em andamento; Epics 0, 1, 2, 3, 5 e 6 concluidos em codigo
+- Status: implementacao local concluida nos Epics 0 a 6; Epic 7 em validacao de ambiente e rollout
 - Prioridade: alta
 - Ambientes alvo: FIEG Moodle `5.1.2` e SENAI Moodle `4.5.5`
-- Evidencias: [`MOODLE_SYNC_OPTIMIZATION_PLAN.md`](./MOODLE_SYNC_OPTIMIZATION_PLAN.md) e [`benchmarks/moodle-readonly-validation-2026-07-21.json`](./benchmarks/moodle-readonly-validation-2026-07-21.json)
+- Evidencias: [`MOODLE_SYNC_OPTIMIZATION_PLAN.md`](./MOODLE_SYNC_OPTIMIZATION_PLAN.md), [`benchmarks/moodle-readonly-validation-2026-07-21.json`](./benchmarks/moodle-readonly-validation-2026-07-21.json) e [`runbooks/MOODLE_SYNC_STAGING_CANARY.md`](./runbooks/MOODLE_SYNC_STAGING_CANARY.md)
 
 ## Status de execucao
 
@@ -20,10 +20,26 @@ Este quadro e a fonte resumida de status. Os checklists detalhados abaixo contin
 | Epic 1 - fundacao multi-Moodle | concluido em codigo | sites, N conexoes, escopo composto, preferencias, proveniencia e schema greenfield reproduzivel | nenhuma pendencia de codigo conhecida |
 | Epic 2 - conta e conexoes | concluido em codigo | login/recovery Claris, convite administrativo, aceite, onboarding opcional e gestao de conexoes | configurar SMTP e redirects allowlisted em staging/producao |
 | Epic 3 - adaptador resiliente | concluido em codigo | client por conexao, capabilities, paginacao, papeis, suspensos, retries e campos opcionais | validar fixtures finais no gate do Epic 7 |
-| Epic 4 - pipeline otimizado | em andamento | bulk de notas, hashes de cursos/alunos, politicas de frescor e stale-while-revalidate | reutilizar metadata estatica de atividades entre checkpoints, ligar delta shadow ao worker, completar hashes de atividades/notas e eliminar agregacoes/erros silenciosos intermediarios |
-| Epic 5 - worker duravel | concluido em codigo | jobs V2, claim/lease/heartbeat, checkpoint, retry, cancelamento, retomada e finalizacao transacional | configurar segredo e agendamento do worker no deploy |
-| Epic 6 - consumidores | concluido em codigo | mensagens, campanhas, notas, Claris Chat e diagnosticos exigem conexao/site explicitos | validar smoke autenticado consolidado |
-| Epic 7 - qualidade e rollout | em andamento | banco recriado do zero, tipos regenerados, guards, testes de contrato e smoke HTTP local | fechar suite completa, SMTP/staging, benchmark comparativo e canarios FIEG/SENAI |
+| Epic 4 - pipeline otimizado | concluido em codigo | bulk de notas, snapshot estatico reutilizavel, delta shadow ligado ao worker, watermark transacional, hashes/upserts diferenciais, frescor adaptativo e agregacao final unica | habilitar skip por delta somente depois do benchmark shadow e dos canarios |
+| Epic 5 - worker duravel | concluido em codigo | jobs V2, claim/lease/heartbeat, checkpoint, retry, cancelamento, retomada, finalizacao transacional, circuit breaker por site e dispatcher local | fornecer `MOODLE_SYNC_WORKER_CRON_SECRET` no ambiente publicado e validar dois ciclos reais |
+| Epic 6 - consumidores | concluido em codigo | mensagens, campanhas, notas, Claris Chat e diagnosticos exigem conexao/site explicitos | nenhuma pendencia de codigo conhecida |
+| Epic 7 - qualidade e rollout | em andamento | banco recriado do zero, tipos regenerados, fixtures 4.5/5.1, isolamento/rollout/dispatcher/circuit breaker transacionais, suite completa, benchmark sintetico, smoke HTTP V2 e painel operacional | SMTP/redirects, benchmark comparativo e resiliencia em staging, segredo/agendamento publicado e canarios FIEG/SENAI |
+
+### Validacao local consolidada em 2026-07-26
+
+- `npm test -- --run`: suite completa aprovada; os testes focados de fixture, resiliencia, dispatcher, circuit breaker e rollout tambem passaram;
+- typecheck, lint, build e todos os guards de fronteira aprovados;
+- schema recriado do zero e tipos Supabase regenerados;
+- smoke Edge V2 autenticado aprovado contra o banco local, sem credencial Moodle valida e sem chamada remota;
+- transacao PostgreSQL revertida confirmou `grades -> risk`, finalizacao atomica e watermark no mesmo commit;
+- `scripts/validate-moodle-multisite-isolation.sql` confirmou IDs externos iguais, preferencias e elegibilidade isolados entre FIEG/SENAI e reverteu todos os dados sinteticos;
+- `scripts/validate-moodle-sync-rollouts.sql` confirmou o deny-by-default, a allow-list por usuario e o kill switch por site; `scripts/validate-moodle-sync-dispatcher.sql` confirmou os ramos fresh/queue, o gate de worker e o circuit breaker;
+- a telemetria de provider registra por tentativa, sem segredo ou payload, a funcao Moodle, tentativa, status, duracao e bytes; o item concluido persiste agregados limitados por funcao e a tentativa que falha antes da conclusao permanece em log estruturado com job/item/conexao/site;
+- `npm run benchmark:moodle-sync` aprovou os cenarios sinteticos 0, 10, 100 e 500 alunos com metadados estaticos reutilizados, notas bulk e limites de memoria/tempo versionados em `docs/benchmarks/`;
+- `npm run validate:moodle-sync:staging` e o runbook do Epic 7 deixam o preflight externo reproduzivel e estritamente de leitura; esse comando ainda nao foi executado contra staging;
+- nenhuma escrita ou alteracao foi executada nos Moodles FIEG/SENAI.
+
+Os itens marcados abaixo representam implementacao e verificacao local. Configuracao de ambiente, benchmark em staging e canarios permanecem desmarcados ate serem realmente executados.
 
 ### Decisao greenfield consolidada
 
@@ -545,25 +561,25 @@ As tasks devem ser executadas na ordem dos epics. Uma checkbox so pode ser marca
 
 Objetivo: remover riscos do prototipo antes de qualquer canario.
 
-- [ ] `MSYNC-0001` Criar registry de sites e validacao SSRF
+- [x] `MSYNC-0001` Criar registry de sites e validacao SSRF
   - Semear FIEG e SENAI por migration; permitir novos sites por operacao administrativa auditada.
   - Resolver URL/service no backend e validar HTTPS, host, DNS e redirects.
   - AC: URL arbitraria, IP privado/link-local, HTTP, userinfo, porta nao permitida e redirect cross-host falham antes de enviar credenciais.
 
-- [ ] `MSYNC-0002` Redigir logs e desativar o login Moodle do prototipo
+- [x] `MSYNC-0002` Redigir logs e desativar o login Moodle do prototipo
   - Remover corpo de autenticacao dos logs; permitir apenas status, host cadastrado, duracao e correlation ID.
   - Impedir novos usos de `moodle-auth`; nao corrigir fluxo morto que sera removido no Epic 2.
   - AC: testes de redacao impedem token/senha em logs/erros e guard bloqueia nova dependencia do login Moodle.
 
-- [ ] `MSYNC-0003` Remover `PRIMARY_MOODLE_URL` depois do registry
+- [x] `MSYNC-0003` Remover `PRIMARY_MOODLE_URL` depois do registry
   - Fazer `syncCourses` aceitar somente um contexto de conexao ja resolvido pelo backend, nunca URL bruta do request.
   - AC: teste de contrato prova que token SENAI nunca e enviado ao host FIEG e vice-versa.
 
-- [ ] `MSYNC-0004` Instrumentar baseline segura
-  - Registrar funcao, site, tentativa, duracao, bytes, resultado e correlation/job/item IDs.
-  - AC: nenhuma metrica contem token, senha, nome, e-mail, nota ou payload bruto.
+- [x] `MSYNC-0004` Instrumentar baseline segura
+  - Registrar funcao, site, tentativa, duracao, bytes, resultado e job/item IDs. O item concluido recebe agregados limitados por funcao; logs estruturados mantem tambem a tentativa que encerra em falha antes da conclusao do item.
+  - AC: nenhuma metrica ou log estruturado contem token, senha, nome, e-mail, nota, URL ou payload bruto.
 
-- [ ] `MSYNC-0005` Fechar a arquitetura de autenticacao da conta Claris
+- [x] `MSYNC-0005` Fechar a arquitetura de autenticacao da conta Claris
   - Definir convite administrativo, aceite/definicao de senha, login, recuperacao, logout e provisioning idempotente, sem cadastro publico.
   - Provisionar o primeiro administrador por seed seguro/operacao controlada, nunca por e-mail hardcoded no frontend ou migration publica.
   - AC: conta nasce sem Moodle, papel vem apenas do backend e indisponibilidade Moodle nao impede cadastro, login ou recuperacao Claris.
@@ -572,32 +588,32 @@ Objetivo: remover riscos do prototipo antes de qualquer canario.
 
 Objetivo: criar o schema greenfield definitivo com site/conexao obrigatorios desde a primeira gravacao.
 
-- [ ] `MSYNC-0101` Criar `moodle_sites`
+- [x] `MSYNC-0101` Criar `moodle_sites`
   - Schema, seeds, RLS/grants service-only e leitura publica sanitizada.
   - AC: slugs e URLs sao unicos, normalizados e imutaveis para chamadas em andamento.
 
-- [ ] `MSYNC-0102` Criar `user_moodle_connections`
+- [x] `MSYNC-0102` Criar `user_moodle_connections`
   - Suportar alias por conta e N conexoes, com criptografia, capabilities, status e write gate.
   - AC: schema nasce com constraints finais; browser nao le ciphertext e fixtures criam FIEG/SENAI sem linha legada.
 
-- [ ] `MSYNC-0103` Escopar cursos e alunos por site
+- [x] `MSYNC-0103` Escopar cursos e alunos por site
   - Criar `moodle_site_id not null` e constraints compostas diretamente no schema final; dados de desenvolvimento podem ser descartados/reseeded.
   - AC: fixtures permitem o mesmo ID Moodle em FIEG e SENAI sem update cruzado.
 
-- [ ] `MSYNC-0104` Atualizar repositories centrais, elegibilidade, RPCs e views
+- [x] `MSYNC-0104` Atualizar repositories centrais, elegibilidade, RPCs e views
   - Inventariar toda consulta por `moodle_user_id`, `moodle_course_id` e `moodle_activity_id`.
   - Escopar discovery/elegibilidade por conexao e impedir que a substituicao de catalogo de um site remova o outro.
   - AC: guard automatizado bloqueia novas consultas de ID Moodle sem escopo aprovado.
 
-- [ ] `MSYNC-0105` Separar preferencias globais e de sync
+- [x] `MSYNC-0105` Separar preferencias globais e de sync
   - Criar `user_moodle_sync_preferences` para selecao/exibicao por conexao e manter risco/LLM em `user_sync_preferences`. Temperaturas/intervalos sao politica backend, nao preferencia livre do usuario.
   - AC: alterar selecao SENAI nao modifica FIEG nem preferencias globais; browser nao grava intervalo, temperatura ou prioridade.
 
-- [ ] `MSYNC-0106` Regenerar tipos e validar schema reproduzivel
+- [x] `MSYNC-0106` Regenerar tipos e validar schema reproduzivel
   - Atualizar tipos Supabase compartilhados/frontend.
   - AC: banco local/staging sobe do zero com seeds tecnicos e todos os testes passam sem dados ou colunas legadas.
 
-- [ ] `MSYNC-0107` Tornar o modelo Claris canonico e rastreavel
+- [x] `MSYNC-0107` Tornar o modelo Claris canonico e rastreavel
   - Adicionar proveniencia, frescor, hash e ultima conexao de sync onde aplicavel; criar leitura consolidada sem fan-out Moodle.
   - AC: uma consulta FIEG + SENAI usa apenas o banco Claris, mostra origem/frescor e preserva o ultimo snapshot valido quando uma origem falha.
 
@@ -605,7 +621,7 @@ Objetivo: criar o schema greenfield definitivo com site/conexao obrigatorios des
 
 Objetivo: criar a conta Claris independente e permitir adicionar/alternar N conexoes Moodle sem confiar em URLs operacionais do browser.
 
-- [ ] `MSYNC-0201` Implementar convites e provisioning da conta Claris
+- [x] `MSYNC-0201` Implementar convites e provisioning da conta Claris
   - Implementar `claris_invitations`, casos de uso administrativos, provisioning transacional e runbook idempotente do primeiro administrador.
   - AC: papel vem do backend; convite expirado/revogado falha; reenvio nao cria duas contas; nenhuma credencial/token de convite e persistida ou exposta.
 
@@ -614,19 +630,19 @@ Objetivo: criar a conta Claris independente e permitir adicionar/alternar N cone
   - Configurar redirects allowlisted, templates, expiracao/rate limit e SMTP de staging/producao; remover pagina/endpoint `moodle-auth`.
   - AC: convite -> senha -> login funciona ponta a ponta; recovery nao enumera e-mails; onboarding pode ser adiado; conta com zero Moodle entra normalmente; nao existe `/signup` publico nem codigo de login Moodle alcancavel.
 
-- [ ] `MSYNC-0203` Expor registry e seletor de conexoes
+- [x] `MSYNC-0203` Expor registry e seletor de conexoes
   - Remover FIEG hardcoded; listar sites aprovados e conexoes da conta com alias.
   - AC: FIEG/SENAI aparecem pelo backend, alias e unico por conta, site desabilitado nao aceita credenciais e nenhuma operacao escolhe conexao implicitamente.
 
-- [ ] `MSYNC-0204` Implementar gerenciamento de conexoes
+- [x] `MSYNC-0204` Implementar gerenciamento de conexoes
   - Adicionar, validar, editar alias/credencial, definir write gate, alterar reauth e desconectar.
   - AC: adicionar SENAI nao altera identidade/senha/perfil Claris; desconexao respeita jobs ativos e nao apaga cursos/alunos compartilhados.
 
-- [ ] `MSYNC-0205` Implementar reautorizacao por conexao
+- [x] `MSYNC-0205` Implementar reautorizacao por conexao
   - `resolveMoodleAccess` passa a exigir `connectionId`; cache de token e por conexao e curto.
   - AC: falha/revogacao SENAI nao invalida FIEG; erro de auth invalida o cache correspondente.
 
-- [ ] `MSYNC-0206` Atualizar sessao e caches frontend
+- [x] `MSYNC-0206` Atualizar sessao e caches frontend
   - Manter `selectedConnectionId` apenas como contexto explicito da UI; query/cache keys que dependem de Moodle incluem `connectionId`.
   - AC: alternar conexao nao reutiliza cursos, conversas ou progresso do outro site.
 
@@ -634,24 +650,24 @@ Objetivo: criar a conta Claris independente e permitir adicionar/alternar N cone
 
 Objetivo: concentrar diferencas entre Moodle 4.5 e 5.1 em uma fronteira testavel.
 
-- [ ] `MSYNC-0301` Criar client por conexao
+- [x] `MSYNC-0301` Criar client por conexao
   - Pooling, timeout, abort, retry seletivo, limite de resposta e correlation ID.
   - AC: politica de retry e testada para timeout, 429, 5xx, parametro invalido, permissao e cancelamento.
 
-- [ ] `MSYNC-0302` Persistir snapshot de capabilities
+- [x] `MSYNC-0302` Persistir snapshot de capabilities
   - Normalizar `release`/`version` por site e lista de funcoes por conexao.
   - AC: capability ausente aciona fallback documentado, nunca chamada repetidamente invalida.
 
-- [ ] `MSYNC-0303` Corrigir participantes e papeis
+- [x] `MSYNC-0303` Corrigir participantes e papeis
   - Paginar por ID com lote inicial 100; solicitar `roles`, `groups`, `suspended` e campos realmente persistidos.
   - Remover "sem papel = aluno" do caminho normal.
   - AC: fixtures separam aluno/equipe, lidam com papel ausente e nao removem vinculo por resposta ambigua.
 
-- [ ] `MSYNC-0304` Corrigir suspensos
+- [x] `MSYNC-0304` Corrigir suspensos
   - Enviar diretamente `options[name/value]=onlysuspended/1`; remover a tentativa top-level invalida.
   - AC: fixtures 4.5/5.1 e smoke dos dois cursos retornam as contagens validadas sem chamada duplicada.
 
-- [ ] `MSYNC-0305` Normalizar notas e atividades
+- [x] `MSYNC-0305` Normalizar notas e atividades
   - Campos ausentes permanecem `null`; percentual so e derivado com valores validos.
   - AC: fixture SENAI sem `grademax` nao grava zero nem produz percentual enganoso.
 
@@ -659,63 +675,63 @@ Objetivo: concentrar diferencas entre Moodle 4.5 e 5.1 em uma fronteira testavel
 
 Objetivo: reduzir chamadas e gravacoes mantendo equivalencia funcional.
 
-- [ ] `MSYNC-0401` Otimizar descoberta de cursos/categorias
+- [x] `MSYNC-0401` Otimizar descoberta de cursos/categorias
   - Usar o contexto da conexao, cache normalizado de categorias por conexao e evitar nova listagem no inicio do job.
   - AC: job iniciado a partir da selecao nao repete os ~2,3 MB de discovery FIEG dentro do TTL.
 
-- [ ] `MSYNC-0402` Otimizar estudantes
+- [x] `MSYNC-0402` Otimizar estudantes
   - Consumir paginas incrementalmente e evitar `core_user_get_users_by_field` quando os campos ja vierem na matricula.
   - AC: 100 alunos usam no maximo paginas de matricula + uma consulta paginada de suspensos, salvo fallback registrado.
 
-- [ ] `MSYNC-0403` Otimizar atividades/completion
+- [x] `MSYNC-0403` Otimizar atividades/completion
   - Buscar contents, assignments, quizzes e forums uma vez por curso/job; reutilizar entre paginas.
   - AC: numero dessas chamadas e constante em relacao ao total de alunos.
 
-- [ ] `MSYNC-0404` Implementar bulk de notas
+- [x] `MSYNC-0404` Implementar bulk de notas
   - Uma chamada `gradereport_user_get_grade_items` com `userid=0`; mapear por usuario e curso.
   - Aplicar limite previo por numero de matriculados e leitura com teto de bytes/memoria; usar fallback individual paginado quando o bulk nao for seguro ou permitido.
   - AC: os cursos 32787 e 8862 mantem a quantidade de itens da amostra individual; caminho principal faz uma chamada.
 
-- [ ] `MSYNC-0405` Implementar delta e watermarks
+- [x] `MSYNC-0405` Implementar delta e watermarks
   - Executar inicialmente em shadow mode, comparar com full sync e habilitar skip por entidade/versao somente depois de provar ausencia de falso negativo.
   - Manter reconciliacao full periodica e executar full em warning, watermark antigo ou resposta ambigua.
   - AC: incremental aprovado sem mudanca nao faz upsert massivo; falha antes do commit nao avanca watermark; divergencia desabilita delta daquela conexao.
 
-- [ ] `MSYNC-0406` Reduzir writes e agregacoes
+- [x] `MSYNC-0406` Reduzir writes e agregacoes
   - Comparar hash/colunas relevantes, upsert apenas alterados e recalcular agregados/risco uma vez ao final.
   - AC: reprocessar o mesmo payload e idempotente e nao altera `updated_at` academico sem mudanca.
 
-- [ ] `MSYNC-0407` Implementar frescor adaptativo e stale-while-revalidate
+- [x] `MSYNC-0407` Implementar frescor adaptativo e stale-while-revalidate
   - Criar `moodle_sync_policies` e `moodle_course_sync_state`; classificar cursos em `hot`, `warm`, `cold` ou `archived` usando apenas sinais Claris.
   - Implementar `get_course_snapshot` e `request_course_refresh` conforme o contrato V2, sempre servindo o snapshot antes de enfileirar trabalho Moodle.
-  - Aplicar cooldown, deduplicacao atomica, jitter, backpressure e reconciliacao full por temperatura; usuario nao controla intervalo/prioridade.
+  - Aplicar cooldown, deduplicacao atomica, jitter, backpressure e reconciliacao full por temperatura; usuario nao controla intervalo/prioridade. O dispatcher duravel seleciona estados vencidos com `SKIP LOCKED`, enfileira localmente e respeita o circuit breaker por site antes de o worker consultar Moodle.
   - AC: leitura fresca ou stale faz zero chamadas Moodle no request; dez pedidos identicos concorrentes produzem um unico job; cooldown retorna `429`/`Retry-After`; falha mantem o snapshot e erro sanitizado; relogio controlado prova transicoes de temperatura, SLAs e full reconciliation em FIEG/SENAI.
 
 ### Epic 5 - Worker curto e retomavel
 
 Objetivo: remover a dependencia de uma invocacao longa e sequencial.
 
-- [ ] `MSYNC-0501` Evoluir jobs para metadata V2
+- [x] `MSYNC-0501` Evoluir jobs para metadata V2
   - Criar `moodle_sync_job_context`, incluir `connectionId` na chave canonica e criar work items por `curso + entidade + pagina/fase`.
   - AC: item nao pode acessar curso de outro site e o endpoint rejeita payload/job V1; nao existe migracao de job ativo.
 
-- [ ] `MSYNC-0502` Implementar claim/lease atomico
+- [x] `MSYNC-0502` Implementar claim/lease atomico
   - RPC com `SKIP LOCKED`, heartbeat e recuperacao de lease expirada.
   - AC: dois workers nao concluem o mesmo item simultaneamente; worker morto e recuperado apos expiry.
 
-- [ ] `MSYNC-0503` Aplicar budget de execucao e checkpoint
-  - Processar com budget inicial configuravel de 20-30 s, salvar cursor e deixar o dispatcher duravel reivindicar a continuacao.
+- [x] `MSYNC-0503` Aplicar budget de execucao e checkpoint
+  - Processar com budget inicial configuravel de 20-30 s, salvar cursor e deixar o dispatcher duravel reivindicar a continuacao. No ambiente local, o Compose inclui `claris-moodle-sync-runner`; no deploy com Supabase gerenciado, o workflow `moodle-sync-runner.yml` chama o planejador e o worker com segredo de cron separado do browser.
   - AC: interrupcao em cada checkpoint retoma sem duplicar dados ou perder pagina; item pendente/lease expirada progride mesmo sem request de usuario aberto.
 
-- [ ] `MSYNC-0504` Implementar dependencias e backpressure
+- [x] `MSYNC-0504` Implementar dependencias e backpressure
   - Estudantes precedem dependentes; atividades/notas podem rodar com concorrencia limitada por site e conexao.
   - AC: indisponibilidade do host SENAI abre circuit breaker do site sem bloquear FIEG; falha de auth afeta somente a conexao correspondente.
 
-- [ ] `MSYNC-0505` Tornar progresso e erros verdadeiros
+- [x] `MSYNC-0505` Tornar progresso e erros verdadeiros
   - Services retornam resultado tipado ou lancam erro; remover catches que convertem falha em zero.
   - AC: erro parcial incrementa `error_count`, identifica item/codigo e impede status `completed` enganoso.
 
-- [ ] `MSYNC-0506` Cancelamento, retry e finalizacao
+- [x] `MSYNC-0506` Cancelamento, retry e finalizacao
   - Retry cria novas tentativas dos itens elegiveis; cancelamento impede novos claims; finalizacao e atomica.
   - AC: nenhuma transicao reativa job cancelado e somente um evento terminal e produzido.
 
@@ -723,19 +739,19 @@ Objetivo: remover a dependencia de uma invocacao longa e sequencial.
 
 Objetivo: impedir mistura de sites em operacoes dependentes da conexao.
 
-- [ ] `MSYNC-0601` Atualizar mensagens e campanhas
+- [x] `MSYNC-0601` Atualizar mensagens e campanhas
   - `moodle-messaging`, bulk, agendamentos e campanhas referenciam `connectionId`/site; destinatarios guardam contexto imutavel.
   - AC: destinatario SENAI nunca e enviado por uma conexao FIEG.
 
-- [ ] `MSYNC-0602` Atualizar sugestoes de nota
+- [x] `MSYNC-0602` Atualizar sugestoes de nota
   - Contexto e jobs usam conexao do curso; operacoes de escrita continuam separadas do sync e exigem confirmacao/autorizacao existentes.
   - AC: curso/conexao divergentes falham antes de consultar ou escrever no Moodle.
 
-- [ ] `MSYNC-0603` Atualizar Claris e diagnosticos administrativos
+- [x] `MSYNC-0603` Atualizar Claris e diagnosticos administrativos
   - Ferramentas resolvem conexao por IDs internos e respostas permanecem sanitizadas.
   - AC: nenhum payload do browser contem token/URL; testes cobrem acesso cruzado.
 
-- [ ] `MSYNC-0604` Atualizar preferencias, query keys e observabilidade
+- [x] `MSYNC-0604` Atualizar preferencias, query keys e observabilidade
   - Consumir `user_moodle_sync_preferences`, apos a separacao feita no Epic 1, e particionar metricas por site/conexao sem cardinalidade sensivel.
   - AC: estado FIEG e SENAI aparece separado na UI e nos jobs administrativos.
 
@@ -743,23 +759,28 @@ Objetivo: impedir mistura de sites em operacoes dependentes da conexao.
 
 Objetivo: validar o schema greenfield, remover o prototipo incompatível e liberar com seguranca.
 
-- [ ] `MSYNC-0701` Criar fixtures de contrato 4.5.x e 5.1.x
+- [x] `MSYNC-0701` Criar fixtures de contrato 4.5.x e 5.1.x
   - Incluir campos opcionais ausentes, lista vazia valida, warning, exception e payload grande.
   - AC: todas as funcoes usadas possuem ao menos sucesso e falha representativos sem dados pessoais.
 
-- [ ] `MSYNC-0702` Criar suite de isolamento multi-site
+- [x] `MSYNC-0702` Criar suite de isolamento multi-site
   - Uma conta com N conexoes, aliases distintos e IDs de usuario, curso e atividade deliberadamente iguais nos sites.
   - AC: sync, cache, preferencias, elegibilidade, leitura, mensagem, diagnostico e sugestao nao cruzam registros.
 
-- [ ] `MSYNC-0703` Criar testes de resiliencia em staging
+- [ ] `MSYNC-0703` Executar testes de resiliencia em staging
   - Timeout, 429, 5xx, token expirado, lease perdida, worker interrompido e corrida de finalizacao.
-  - AC: retries sao limitados, checkpoints retomam e circuit breaker fica isolado por site.
+  - Implementacao local: `moodle-sync-resilience.test.ts` cobre retries, falha de auth, lease/cancelamento e corrida de finalizacao; o circuit breaker por site e validado em transacao PostgreSQL.
+  - AC: retries sao limitados, checkpoints retomam e circuit breaker fica isolado por site sob condicoes reais de staging.
 
-- [ ] `MSYNC-0704` Executar benchmark controlado
+- [x] `MSYNC-0704` Executar benchmark sintetico controlado local
   - Cursos sinteticos com 0, 10, 100 e 500+ alunos.
-  - AC: metas globais de desempenho e memoria aprovadas e registradas em artefato versionado.
+  - AC: metas de chamadas logicas, lotes, tempo e memoria aprovadas e registradas em `docs/benchmarks/moodle-sync-synthetic-contract.json`.
 
-- [ ] `MSYNC-0707` Validar remocao do prototipo antes do canario
+- [ ] `MSYNC-0708` Executar benchmark comparativo em staging
+  - Repetir a matriz 0/10/100/500+ em conexoes de staging autorizadas, comparar com a linha de base e registrar latencia, tamanho de resposta e taxa de retries por site.
+  - AC: nenhum budget e aumentado sem justificativa; os resultados nao registram dados academicos, tokens ou payloads brutos.
+
+- [x] `MSYNC-0707` Validar remocao do prototipo antes do canario
   - Remover contratos/pagina `moodle-auth`, `users.moodle_user_id`, tabela de reauth unica, URLs/tokens no browser, constraints globais e fallbacks FIEG.
   - AC: busca automatizada, schema do zero e testes confirmam zero codigo alcancavel ou fonte de verdade do prototipo.
 
@@ -828,7 +849,9 @@ Um epic so esta concluido quando todas as tasks e seus criterios de aceite estao
 - URL hardcoded removida;
 - isolamento por site e por conexao ativo;
 - bulk/delta/frescor adaptativo/worker sob feature flags separadas;
-- dashboard operacional mostra chamadas, bytes, latencia, retries, itens presos e erros por site.
+- dashboard operacional mostra volume de execucoes/itens, latencia, retries, itens presos, falhas e circuito por site; chamadas logicas e bytes processados entram como metrica de gate por instrumentacao sem persistir payloads.
+  - A entrega local expoe no `admin-observability` os agregados duraveis por `siteSlug + connectionId`: duracao media/P95 de jobs e itens, retries, falhas, itens presos, jobs ativos, estado do circuit breaker e os contadores persistidos `moodle_api_calls`/`moodle_response_bytes`. `moodle_api_calls` conta chamadas logicas feitas por itens concluidos; `moodle_response_bytes` e o tamanho do JSON processado, nao bytes de transferencia na rede. A metadata do item tambem preserva totais limitados por funcao (tentativas, status, duracao, falhas e bytes), enquanto logs estruturados correlacionam tentativas de falha a job/item/conexao/site. Nenhuma superficie inclui alias, usuario Moodle, URL, credenciais, payload ou texto de erro.
+  - O limiar de item preso e configuravel somente dentro de 60–3600 segundos; o endpoint limita a janela a 1 hora–90 dias e e acessivel exclusivamente por administradores.
 
 ### Gate C - Canario SENAI
 

@@ -16,6 +16,10 @@ import {
   createMoodleSyncJobV2,
   retryMoodleSyncJob,
 } from '../_shared/domain/moodle-sync/worker-repository.ts'
+import {
+  isMoodleSyncConnectionRolloutEnabled,
+  type MoodleSyncRolloutCapability,
+} from '../_shared/domain/moodle-sync/rollout.ts'
 import { linkEligibleUserCourses } from '../_shared/domain/moodle-sync/repository.ts'
 
 export interface SyncPreferencesRecord {
@@ -45,6 +49,7 @@ export interface MoodleSyncJobsRepository {
   getPreferences(actorId: string, connectionId: string): Promise<SyncPreferencesRecord | null>
   hasCourseScope(actorId: string, connectionId: string, courseIds: string[], kind: 'initial' | 'incremental'): Promise<boolean>
   hasPermission(actorId: string, permission: string): Promise<boolean>
+  isRolloutEnabled(actorId: string, connectionId: string, capability: MoodleSyncRolloutCapability): Promise<boolean>
   resetOwnedJob(actorId: string, jobId: string): Promise<BackgroundJobRecord | null>
   savePreferences(actorId: string, connectionId: string, preferences: SyncPreferencesRecord): Promise<SyncPreferencesRecord>
 }
@@ -55,6 +60,14 @@ export function createMoodleSyncJobsRepository(
   return {
     hasPermission(actorId, permission) {
       return checkPermission(supabase, actorId, permission)
+    },
+
+    isRolloutEnabled(actorId, connectionId, capability) {
+      return isMoodleSyncConnectionRolloutEnabled(supabase, {
+        capability,
+        connectionId,
+        userId: actorId,
+      })
     },
 
     async hasCourseScope(actorId, connectionId, courseIds, kind) {

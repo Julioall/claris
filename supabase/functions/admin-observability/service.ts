@@ -2,8 +2,15 @@ import { ApiError } from '../_shared/http/mod.ts'
 import {
   ADMIN_OBSERVABILITY_CONTRACT_VERSION,
   type AdminDashboardSummaryDto,
+  type AdminMoodleSyncOperationalMetricsDto,
 } from './contract.ts'
-import { mapConversation, mapErrorLog, mapUsageEvent, pageDto } from './mapper.ts'
+import {
+  mapConversation,
+  mapErrorLog,
+  mapMoodleSyncOperationalMetric,
+  mapUsageEvent,
+  pageDto,
+} from './mapper.ts'
 import type { AdminObservabilityPayload } from './payload.ts'
 import type { AdminObservabilityRepository } from './repository.ts'
 
@@ -48,11 +55,32 @@ export async function getAdminDashboardSummary(
   }
 }
 
+export async function getMoodleSyncOperationalMetrics(
+  repository: AdminObservabilityRepository,
+  input: { stuckAfterSeconds: number; windowHours: number },
+  now = new Date(),
+): Promise<AdminMoodleSyncOperationalMetricsDto> {
+  const rows = await repository.listMoodleSyncOperationalMetrics(input)
+  return {
+    contractVersion: ADMIN_OBSERVABILITY_CONTRACT_VERSION,
+    generatedAt: now.toISOString(),
+    windowHours: input.windowHours,
+    stuckAfterSeconds: input.stuckAfterSeconds,
+    items: rows.map(mapMoodleSyncOperationalMetric),
+  }
+}
+
 export async function executeAdminObservability(
   repository: AdminObservabilityRepository,
   actorId: string,
   payload: Exclude<AdminObservabilityPayload, { action: 'get_dashboard' }>,
 ) {
+  if (payload.action === 'get_moodle_sync_metrics') {
+    return getMoodleSyncOperationalMetrics(repository, {
+      windowHours: payload.windowHours,
+      stuckAfterSeconds: payload.stuckAfterSeconds,
+    })
+  }
   if (payload.action === 'resolve_error_log') {
     const row = await repository.resolveErrorLog(actorId, payload.logId, new Date().toISOString())
     if (!row) throw ApiError.notFound('Error log not found.')

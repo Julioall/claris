@@ -70,8 +70,8 @@ describe("AppSidebar", () => {
     vi.clearAllMocks();
     useAuthMock.mockReturnValue({
       user: {
+        email: "julio@claris.local",
         full_name: "Julio Tutor",
-        moodle_username: "julio",
       },
       logout: logoutMock,
     });
@@ -106,7 +106,7 @@ describe("AppSidebar", () => {
     expect(screen.getByText("Configuracoes")).toBeInTheDocument();
     expect(screen.getByText("Suporte")).toBeInTheDocument();
     expect(screen.getByText("Julio Tutor")).toBeInTheDocument();
-    expect(screen.getByText("julio")).toBeInTheDocument();
+    expect(screen.getByText("julio@claris.local")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /resumo da semana/i })).toHaveAttribute(
       "href",
       "/",

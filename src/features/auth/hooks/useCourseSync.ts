@@ -112,6 +112,7 @@ export function useCourseSync(params: {
   const [showCourseSelector, setShowCourseSelector] = useState(false);
   const [syncProgress, setSyncProgress] = useState<SyncProgress>(createInitialSyncProgress());
   const monitoredJobIdRef = useRef<string | null>(null);
+  const scopeRef = useRef<{ connectionId: string | null; userId?: string } | null>(null);
 
   const resetSyncState = useCallback(() => {
     monitoredJobIdRef.current = null;
@@ -122,7 +123,13 @@ export function useCourseSync(params: {
   }, []);
 
   useEffect(() => {
-    if (!userId || !connectionId) resetSyncState();
+    const previousScope = scopeRef.current;
+    const scopeChanged = previousScope !== null && (
+      previousScope.userId !== userId || previousScope.connectionId !== connectionId
+    );
+
+    if (!userId || !connectionId || scopeChanged) resetSyncState();
+    scopeRef.current = { userId, connectionId };
   }, [connectionId, resetSyncState, userId]);
 
   const closeSyncProgress = useCallback(() => {

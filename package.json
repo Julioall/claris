@@ -7,6 +7,7 @@
     "branch-protection:edge-smoke": "node scripts/require-edge-smoke-check.mjs status",
     "branch-protection:edge-smoke:apply": "node scripts/require-edge-smoke-check.mjs apply",
     "benchmark:dashboard": "node scripts/benchmark-dashboard-summary.mjs",
+    "benchmark:moodle-sync": "node scripts/benchmark-moodle-sync.mjs",
     "dev": "vite",
     "build": "vite build",
     "build:github-pages": "vite build && node scripts/prepare-github-pages.mjs",
@@ -26,6 +27,7 @@
     "supabase:functions:deploy:claris": "node scripts/deploy-supabase-functions.mjs claris-llm-test claris-chat",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "validate:moodle-sync:staging": "node scripts/validate-moodle-sync-staging.mjs",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

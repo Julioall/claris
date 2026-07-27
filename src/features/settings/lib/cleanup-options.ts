@@ -9,7 +9,6 @@ export type CleanupCategory =
 export type CleanupSelectionId =
   | 'sync_preferences'
   | 'ignored_courses'
-  | 'moodle_reauthorization'
   | 'course_catalog'
   | 'students'
   | 'academic_activities'
@@ -57,12 +56,6 @@ export const CLEANUP_OPTIONS: CleanupOption[] = [
     id: 'ignored_courses',
     label: 'Cursos ignorados',
     description: 'Remove a lista global de cursos ignorados.',
-    category: 'preferences',
-  },
-  {
-    id: 'moodle_reauthorization',
-    label: 'Credenciais Moodle salvas',
-    description: 'Remove as credenciais criptografadas usadas para reautenticacao.',
     category: 'preferences',
   },
   {

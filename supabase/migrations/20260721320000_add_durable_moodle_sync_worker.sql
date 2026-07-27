@@ -253,8 +253,15 @@ BEGIN
       AND job_row.status IN ('pending', 'processing')
       AND (p_job_id IS NULL OR job_row.id = p_job_id)
       AND item_row.available_at <= v_now
-      AND item_row.attempt_count < item_row.max_attempts
-      AND (
+       AND item_row.attempt_count < item_row.max_attempts
+       AND NOT EXISTS (
+         SELECT 1
+         FROM public.moodle_site_circuit_breakers circuit_row
+         WHERE circuit_row.moodle_site_id = connection_row.moodle_site_id
+           AND circuit_row.state = 'open'
+           AND circuit_row.open_until > v_now
+       )
+       AND (
         item_row.status = 'pending'
         OR (
           item_row.status = 'processing'
@@ -297,7 +304,7 @@ BEGIN
           SELECT 1
           FROM public.background_job_items prerequisite
           WHERE prerequisite.job_id = job_row.id
-            AND prerequisite.item_key LIKE 'students:%'
+            AND prerequisite.item_key <> 'risk'
             AND prerequisite.status <> 'completed'
         )
       )
@@ -514,6 +521,7 @@ BEGIN
       course_id,
       entity,
       last_successful_sync_at,
+      moodle_since,
       source_release
     )
     SELECT
@@ -521,6 +529,7 @@ BEGIN
       course_row.id,
       split_part(v_item_key, ':', 1),
       v_now,
+      COALESCE((v_item_metadata ->> 'watermark_candidate')::TIMESTAMPTZ, v_now),
       site_row.release
     FROM public.moodle_sync_job_context context_row
     JOIN public.user_moodle_connections connection_row
@@ -535,6 +544,7 @@ BEGIN
     ON CONFLICT (moodle_connection_id, course_id, entity) DO UPDATE
     SET
       last_successful_sync_at = EXCLUDED.last_successful_sync_at,
+      moodle_since = EXCLUDED.moodle_since,
       source_release = EXCLUDED.source_release,
       updated_at = EXCLUDED.last_successful_sync_at;
 
@@ -895,7 +905,7 @@ BEGIN
     FROM unnest(p_entities) entity_row
     CROSS JOIN unnest(p_course_ids) course_id
     UNION ALL
-    SELECT 'risk' WHERE 'students' = ANY(p_entities)
+    SELECT 'risk'
   ) expected;
 
   SELECT array_agg(item_row ->> 'item_key' ORDER BY item_row ->> 'item_key')

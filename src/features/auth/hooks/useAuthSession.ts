@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import type { User } from '@/features/auth/types';
 import { authGateway, type AuthSession } from '@/integrations/auth/auth-gateway';
 import { toast } from '@/hooks/use-toast';
-import { saveSelectedMoodleConnectionId } from '@/features/moodle-connections/state/selected-connection';
+import { clearClarisAccountSessionState } from '@/features/moodle-connections/state/selected-connection';
 import { trackEvent } from '@/lib/tracking';
 
 import { isInvalidRefreshTokenError } from '../domain/session';
@@ -30,16 +31,33 @@ function mapClarisUser(session: AuthSession): User {
 }
 
 export function useAuthSession(): UseAuthSessionResult {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [lastSyncState, setLastSyncState] = useState<string | null>(null);
+  const authenticatedUserIdRef = useRef<string | null>(null);
 
   const applySession = useCallback((session: AuthSession | null) => {
-    setUser(session ? mapClarisUser(session) : null);
+    const nextUser = session ? mapClarisUser(session) : null;
+    if (
+      authenticatedUserIdRef.current &&
+      nextUser?.id &&
+      authenticatedUserIdRef.current !== nextUser.id
+    ) {
+      queryClient.clear();
+    }
+    authenticatedUserIdRef.current = nextUser?.id ?? null;
+    setUser(nextUser);
     if (!session) setLastSyncState(null);
-  }, []);
+  }, [queryClient]);
 
-  const resetAuthState = useCallback(() => applySession(null), [applySession]);
+  const resetAuthState = useCallback(() => {
+    // The QueryClient survives a route change and can otherwise retain an
+    // authenticated account's responses until a second account signs in.
+    queryClient.clear();
+    authenticatedUserIdRef.current = null;
+    applySession(null);
+  }, [applySession, queryClient]);
 
   useEffect(() => {
     const unsubscribe = authGateway.onAuthStateChange((event, session) => {
@@ -92,13 +110,21 @@ export function useAuthSession(): UseAuthSessionResult {
 
   const logout = useCallback(async () => {
     const userId = user?.id;
-    await trackEvent('logout');
-    await authGateway.signOut();
-    resetAuthState();
+    void trackEvent('logout').catch(() => undefined);
 
-    if (userId) {
-      saveSelectedMoodleConnectionId(userId, null);
-      localStorage.removeItem(`claris_chat_history:${userId}`);
+    try {
+      await authGateway.signOut();
+    } catch {
+      // A global revoke can fail while offline. A local sign-out is still
+      // required so the next browser user cannot resume this account.
+      await authGateway.signOut('local').catch(() => undefined);
+    } finally {
+      resetAuthState();
+
+      if (userId) {
+        clearClarisAccountSessionState(userId);
+        localStorage.removeItem(`claris_chat_history:${userId}`);
+      }
     }
 
     toast({ title: 'Logout realizado', description: 'Voce foi desconectado com sucesso.' });

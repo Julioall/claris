@@ -48,7 +48,6 @@ export const CLEANUP_DELETE_ORDER = [
   'user_courses',
   'user_ignored_courses',
   'task_recurrence_configs',
-  'user_moodle_reauth_credentials',
   'user_sync_preferences',
   'task_templates',
   'message_templates',
@@ -62,7 +61,6 @@ export const CLEANUP_DELETE_ORDER = [
 export const CLEANUP_SELECTION_TABLES: Record<CleanupSelectionId, readonly string[]> = {
   sync_preferences: ['user_sync_preferences'],
   ignored_courses: ['user_ignored_courses'],
-  moodle_reauthorization: ['user_moodle_reauth_credentials'],
   course_catalog: [
     'background_job_events',
     'background_job_items',

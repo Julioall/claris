@@ -3,7 +3,7 @@ set -eu
 
 RUNNER_CONTAINER_NAME="${RUNNER_CONTAINER_NAME:-claris-supabase}"
 EVOLUTION_CONTAINER_NAME="${EVOLUTION_CONTAINER_NAME:-claris-evolution}"
-SUPABASE_API_URL="${SUPABASE_API_URL:-http://127.0.0.1:54321}"
+SUPABASE_API_URL="${SUPABASE_API_URL:-http://127.0.0.1:65421}"
 SUPABASE_API_HEALTH_PATH="${SUPABASE_API_HEALTH_PATH:-/rest/v1/}"
 SUPABASE_API_WAIT_SECONDS="${SUPABASE_API_WAIT_SECONDS:-300}"
 READY_FILE="${SUPABASE_READY_FILE:-/tmp/supabase-runner-ready}"
@@ -107,8 +107,14 @@ set_function_secrets() {
   write_secret "EVOLUTION_API_KEY" "${EVOLUTION_API_KEY:-}"
   write_secret "EVOLUTION_ENABLED" "${EVOLUTION_ENABLED:-true}"
   write_secret "MOODLE_REAUTH_SECRET" "${MOODLE_REAUTH_SECRET:-}"
+  write_secret "MOODLE_SYNC_WORKER_CRON_SECRET" "${MOODLE_SYNC_WORKER_CRON_SECRET:-}"
   write_secret "SCHEDULED_MESSAGES_CRON_SECRET" "${scheduled_messages_secret}"
   write_secret "SUPABASE_PUBLIC_URL" "${SUPABASE_PUBLIC_URL:-${SUPABASE_API_URL}}"
+  claris_invite_redirect_url="${CLARIS_INVITE_REDIRECT_URL:-}"
+  if [ -z "${claris_invite_redirect_url}" ] && [ -n "${SUPABASE_SITE_URL:-}" ]; then
+    claris_invite_redirect_url="${SUPABASE_SITE_URL%/}/auth/accept-invite"
+  fi
+  write_secret "CLARIS_INVITE_REDIRECT_URL" "${claris_invite_redirect_url}"
   write_secret "WEBHOOK_SECRET"    "${WEBHOOK_SECRET:-}"
 
   log "Edge function secrets written to ${env_file} from docker-compose defaults."
@@ -187,10 +193,31 @@ configure_public_auth_url() {
       ;;
   esac
 
-  # The production checkout is refreshed on every deploy, so replacing this
-  # development-only value is deterministic and does not affect local usage.
+  # The production checkout is refreshed on every deploy, so replacing these
+  # development-only values is deterministic and does not affect local usage.
   sed -i "s#^site_url = .*#site_url = \"${site_url}\"#" "${config_file}"
-  log "Auth site URL configured as ${site_url}."
+
+  invite_redirect_url="${site_url%/}/auth/accept-invite"
+  recovery_redirect_url="${site_url%/}/reset-password"
+  auth_config_file="${config_file}.auth.tmp"
+  awk -v invite_url="${invite_redirect_url}" -v recovery_url="${recovery_redirect_url}" '
+    /^additional_redirect_urls = \[/ {
+      print "additional_redirect_urls = ["
+      print "  \"" invite_url "\","
+      print "  \"" recovery_url "\""
+      print "]"
+      in_redirects = 1
+      next
+    }
+    in_redirects && /^\]/ {
+      in_redirects = 0
+      next
+    }
+    !in_redirects { print }
+  ' "${config_file}" > "${auth_config_file}"
+  mv "${auth_config_file}" "${config_file}"
+
+  log "Auth site URL and invite/recovery redirects configured for ${site_url}."
 }
 
 cleanup() {

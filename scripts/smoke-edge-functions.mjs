@@ -4,6 +4,8 @@ const RUNNER_CONTAINER = process.env.SUPABASE_RUNNER_CONTAINER || 'claris-supaba
 const DATABASE_CONTAINER = process.env.SUPABASE_DATABASE_CONTAINER || 'supabase_db_local'
 const SCHEDULED_MESSAGES_SECRET =
   process.env.SCHEDULED_MESSAGES_CRON_SECRET || 'claris-scheduled-messages-local-secret'
+const MOODLE_SYNC_WORKER_SECRET =
+  process.env.MOODLE_SYNC_WORKER_CRON_SECRET || 'claris-moodle-sync-worker-local-secret'
 
 const seed = {
   connectionId: '10000000-0000-4000-8000-000000000001',
@@ -29,6 +31,63 @@ function sleep(ms) {
 
 function fail(message) {
   throw new Error(message)
+}
+
+let runnerTransportAvailable
+
+function canUseRunnerTransport(url) {
+  if (process.env.EDGE_SMOKE_DOCKER_TRANSPORT === '0') return false
+  if (!/^http:\/\/127\.0\.0\.1:\d+\//.test(url)) return false
+  if (runnerTransportAvailable !== undefined) return runnerTransportAvailable
+  try {
+    execFileSync('docker', ['inspect', RUNNER_CONTAINER], { stdio: 'ignore' })
+    runnerTransportAvailable = true
+  } catch {
+    runnerTransportAvailable = false
+  }
+  return runnerTransportAvailable
+}
+
+function requestThroughRunner(url, { body, headers, method }) {
+  const marker = '__CLARIS_SMOKE_HTTP_STATUS__:'
+  const args = ['exec', RUNNER_CONTAINER, 'curl', '-sS', '-D', '-', '-X', method]
+  for (const [name, value] of Object.entries(headers)) {
+    args.push('-H', `${name}: ${value}`)
+  }
+  if (body !== undefined) args.push('--data-binary', JSON.stringify(body))
+  args.push('-w', `\n${marker}%{http_code}`, url)
+
+  const raw = execFileSync('docker', args, {
+    encoding: 'utf8',
+    maxBuffer: 16 * 1024 * 1024,
+  })
+  const markerIndex = raw.lastIndexOf(`\n${marker}`)
+  if (markerIndex < 0) fail(`Resposta HTTP invalida via ${RUNNER_CONTAINER}.`)
+  const status = Number(raw.slice(markerIndex + marker.length + 1).trim())
+  let remaining = raw.slice(0, markerIndex)
+  let headerBlock = ''
+
+  while (/^HTTP\/\d(?:\.\d)?\s/.test(remaining)) {
+    const separator = remaining.search(/\r?\n\r?\n/)
+    if (separator < 0) break
+    const separatorLength = remaining.slice(separator).startsWith('\r\n\r\n') ? 4 : 2
+    headerBlock = remaining.slice(0, separator)
+    remaining = remaining.slice(separator + separatorLength)
+  }
+
+  const responseHeaders = new Map()
+  for (const line of headerBlock.split(/\r?\n/).slice(1)) {
+    const separator = line.indexOf(':')
+    if (separator > 0) {
+      responseHeaders.set(line.slice(0, separator).trim().toLowerCase(), line.slice(separator + 1).trim())
+    }
+  }
+
+  return {
+    status,
+    text: remaining,
+    headers: { get: (name) => responseHeaders.get(String(name).toLowerCase()) ?? null },
+  }
 }
 
 function extractJsonBlock(rawOutput) {
@@ -96,13 +155,14 @@ async function waitForEdgeFunctions(status) {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     try {
-      const response = await fetch(testUrl, {
-        method: 'POST',
+      const { response } = await requestJson(testUrl, {
+        acceptStatuses: [400, 401, 502],
+        body: testBody,
         headers: {
           'Content-Type': 'application/json',
           apikey: status.PUBLISHABLE_KEY,
         },
-        body: JSON.stringify(testBody),
+        method: 'POST',
       })
 
       if (response.status !== 502) {
@@ -124,16 +184,20 @@ async function requestJson(url, {
   headers = {},
   method = 'GET',
 } = {}) {
-  const response = await fetch(url, {
+  const requestHeaders = {
+    ...headers,
+    ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+  }
+  const runnerResponse = canUseRunnerTransport(url)
+    ? requestThroughRunner(url, { body, headers: requestHeaders, method })
+    : null
+  const response = runnerResponse ?? await fetch(url, {
     method,
-    headers: {
-      ...headers,
-      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
-    },
+    headers: requestHeaders,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
 
-  const text = await response.text()
+  const text = runnerResponse ? runnerResponse.text : await response.text()
   const data = text ? (() => {
     try {
       return JSON.parse(text)
@@ -455,6 +519,12 @@ async function callScheduledMessageProcessor(status, body, secret) {
 
 async function runUnauthenticatedContractChecks(status) {
   const cases = [
+    {
+      body: {},
+      expectedStatus: 401,
+      name: 'moodle-sync-dispatcher rejects-missing-cron-secret',
+      path: 'moodle-sync-dispatcher',
+    },
     {
       body: {
         action: 'get_course_snapshot',
@@ -2951,6 +3021,75 @@ async function runSyncAndBackgroundJobsChecks(status, accessToken, authUserId, c
   log('Sincronizacao V2, risco, preferencias por conexao, jobs e activity feed validados.')
 }
 
+async function callMoodleSyncDispatcher(status, body, secret) {
+  const headers = {
+    apikey: status.PUBLISHABLE_KEY,
+    ...(secret ? { 'x-moodle-sync-worker-secret': secret } : {}),
+  }
+  const { data, response } = await requestJson(`${status.FUNCTIONS_URL}/moodle-sync-dispatcher`, {
+    acceptStatuses: [200, 401, 422],
+    body,
+    headers,
+    method: 'POST',
+  })
+  return { data, status: response.status }
+}
+
+async function callMoodleSyncWorker(status, body, secret) {
+  const headers = {
+    apikey: status.PUBLISHABLE_KEY,
+    ...(secret ? { 'x-moodle-sync-worker-secret': secret } : {}),
+  }
+  const { data, response } = await requestJson(`${status.FUNCTIONS_URL}/moodle-sync-worker`, {
+    acceptStatuses: [200, 401, 422],
+    body,
+    headers,
+    method: 'POST',
+  })
+  return { data, status: response.status }
+}
+
+async function runMoodleSyncDispatcherCheck(status) {
+  const unauthorized = await callMoodleSyncDispatcher(status, {}, null)
+  if (unauthorized.status !== 401) {
+    fail(`moodle-sync-dispatcher deveria bloquear chamada sem secret, mas retornou ${unauthorized.status}`)
+  }
+
+  const dispatched = await callMoodleSyncDispatcher(status, { limit: 25 }, MOODLE_SYNC_WORKER_SECRET)
+  if (
+    dispatched.status !== 200
+    || dispatched.data?.contract_version !== 2
+    || !Array.isArray(dispatched.data?.items)
+    || !dispatched.data?.counts
+  ) {
+    fail(`moodle-sync-dispatcher retornou contrato invalido: ${JSON.stringify(dispatched.data)}`)
+  }
+
+  log('Dispatcher Moodle validado com secret; nenhuma chamada Moodle remota foi disparada.')
+}
+
+async function runMoodleSyncWorkerCheck(status) {
+  const unauthorized = await callMoodleSyncWorker(status, {}, null)
+  if (unauthorized.status !== 401) {
+    fail(`moodle-sync-worker deveria bloquear chamada sem secret, mas retornou ${unauthorized.status}`)
+  }
+
+  const worked = await callMoodleSyncWorker(status, {}, MOODLE_SYNC_WORKER_SECRET)
+  if (
+    worked.status !== 200
+    || worked.data?.contract_version !== 2
+    || !Number.isSafeInteger(worked.data?.claimedItems)
+    || !Number.isSafeInteger(worked.data?.completedItems)
+    || !Number.isSafeInteger(worked.data?.checkpointedItems)
+    || !Number.isSafeInteger(worked.data?.failedItems)
+    || !Number.isSafeInteger(worked.data?.retryScheduledItems)
+  ) {
+    fail(`moodle-sync-worker retornou contrato invalido: ${JSON.stringify(worked.data)}`)
+  }
+
+  log('Worker Moodle validado com secret; nenhuma chamada Moodle remota foi disparada.')
+}
+
 async function runClarisConversationChecks(status, accessToken, authUserId) {
   const smokeTitle = 'Smoke Claris Conversation'
   await deleteRows(status, 'claris_conversations', { title: smokeTitle })
@@ -4228,12 +4367,6 @@ async function runAdminDiagnosticsAndCleanupChecks(
 ) {
   const errorId = '00000000-0000-4000-8000-000000000935'
   await deleteRows(status, 'admin_user_roles', { user_id: authUserId })
-  await deleteRows(
-    status,
-    'user_moodle_reauth_credentials',
-    { user_id: authUserId },
-    'user_id',
-  )
   await deleteRows(status, 'app_error_logs', { id: errorId })
 
   try {
@@ -4779,6 +4912,108 @@ async function runAuthenticatedServiceCheck(status, accessToken, authUserId, con
   log('process-scheduled-messages validado com secret e falha controlada por falta de reautorizacao.')
 }
 
+async function runCurrentMoodleAuthenticatedCheck(
+  status,
+  accessToken,
+  connectionId,
+  courseId,
+) {
+  const sites = await callEdgeFunction(
+    status,
+    'moodle-connections',
+    { action: 'list_sites' },
+    accessToken,
+  )
+  const sitesPayload = sites.data?.data ?? sites.data
+  if (
+    sites.status !== 200
+    || sitesPayload?.contractVersion !== 2
+    || !Array.isArray(sitesPayload?.sites)
+    || !sitesPayload.sites.some((site) => site.slug === 'fieg')
+    || !sitesPayload.sites.some((site) => site.slug === 'senai')
+  ) {
+    fail(`Registry Moodle V2 invalido: ${JSON.stringify(sites.data)}`)
+  }
+
+  const connections = await callEdgeFunction(
+    status,
+    'moodle-connections',
+    { action: 'list_connections' },
+    accessToken,
+  )
+  const connectionsPayload = connections.data?.data ?? connections.data
+  if (
+    connections.status !== 200
+    || connectionsPayload?.contractVersion !== 2
+    || !connectionsPayload?.connections?.some((connection) => connection.id === connectionId)
+  ) {
+    fail(`Conexoes Moodle V2 invalidas: ${JSON.stringify(connections.data)}`)
+  }
+
+  const snapshot = await callEdgeFunction(
+    status,
+    'moodle-course-snapshot',
+    {
+      action: 'get_course_snapshot',
+      connectionId,
+      courseId,
+      entities: ['students', 'activities', 'grades'],
+      refreshPolicy: 'never',
+    },
+    accessToken,
+  )
+  const snapshotPayload = snapshot.data?.data ?? snapshot.data
+  if (
+    snapshot.status !== 200
+    || snapshotPayload?.contractVersion !== 2
+    || snapshotPayload?.connectionId !== connectionId
+    || snapshotPayload?.courseId !== courseId
+    || snapshotPayload?.data?.counts?.students !== 1
+    || !Array.isArray(snapshotPayload?.freshness)
+    || snapshotPayload.freshness.length !== 3
+  ) {
+    fail(`Snapshot Claris-first invalido: ${JSON.stringify(snapshot.data)}`)
+  }
+
+  const savedPreferences = await callEdgeFunction(
+    status,
+    'moodle-sync-jobs',
+    {
+      action: 'save_preferences',
+      connectionId,
+      includeEmptyCourses: true,
+      includeFinished: false,
+      selectedKeys: [`course:${courseId}`],
+    },
+    accessToken,
+  )
+  const savedPreferencesPayload = savedPreferences.data?.data ?? savedPreferences.data
+  if (
+    savedPreferences.status !== 200
+    || savedPreferencesPayload?.contractVersion !== 2
+    || savedPreferencesPayload?.includeEmptyCourses !== true
+    || savedPreferencesPayload?.selectedKeys?.[0] !== `course:${courseId}`
+  ) {
+    fail(`Preferencias Moodle por conexao invalidas: ${JSON.stringify(savedPreferences.data)}`)
+  }
+
+  const loadedPreferences = await callEdgeFunction(
+    status,
+    'moodle-sync-jobs',
+    { action: 'get_preferences', connectionId },
+    accessToken,
+  )
+  const loadedPreferencesPayload = loadedPreferences.data?.data ?? loadedPreferences.data
+  if (
+    loadedPreferences.status !== 200
+    || loadedPreferencesPayload?.selectedKeys?.[0] !== `course:${courseId}`
+  ) {
+    fail(`Leitura de preferencias Moodle por conexao invalida: ${JSON.stringify(loadedPreferences.data)}`)
+  }
+
+  log('Moodle V2 autenticado validado sem credencial externa ou chamada ao Moodle remoto.')
+}
+
 async function main() {
   log('Lendo status do stack local do Supabase...')
   const status = await getLocalSupabaseStatusWithRetry()
@@ -4789,13 +5024,30 @@ async function main() {
   log('Executando contratos HTTP sem autenticacao...')
   await runUnauthenticatedContractChecks(status)
 
+  log('Validando dispatcher Moodle local sem provider remoto...')
+  await runMoodleSyncDispatcherCheck(status)
+  await runMoodleSyncWorkerCheck(status)
+
   log('Seedando usuario local autenticado e dados minimos de dominio...')
   const authUserId = await ensureAuthUser(status)
   const accessToken = await signInSeedUser(status)
   const { connectionId, courseId, siteId, studentId } = await seedGenerateAutomatedTasksScenario(status, authUserId)
 
-  log('Executando smoke autenticado ate a camada de servico...')
-  await runAuthenticatedServiceCheck(status, accessToken, authUserId, connectionId, siteId, courseId, studentId)
+  log('Executando smoke Moodle V2 autenticado na camada Claris...')
+  await runCurrentMoodleAuthenticatedCheck(status, accessToken, connectionId, courseId)
+
+  if (process.env.EDGE_SMOKE_LEGACY_FULL === '1') {
+    log('Executando tambem a suite autenticada legada completa...')
+    await runAuthenticatedServiceCheck(
+      status,
+      accessToken,
+      authUserId,
+      connectionId,
+      siteId,
+      courseId,
+      studentId,
+    )
+  }
 
   log('Smoke test de Edge Functions concluido com sucesso.')
 }

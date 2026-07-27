@@ -41,6 +41,7 @@ describe('claris chat payload optimization', () => {
 
   it('normalizes current message and history content through the parser', () => {
     const payload = parseClarisChatPayload({
+      operation: 'send_message',
       message: '```json\n{\n  "tipo": "evento"\n}\n```',
       history: [
         { role: 'assistant', content: '### Resumo\n\n**Tudo certo**' },

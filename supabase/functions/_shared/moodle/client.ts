@@ -55,10 +55,50 @@ export type MoodleApiErrorCategory =
   | 'response_too_large'
   | 'unknown'
 
+/**
+ * Safe transport facts for one HTTP attempt. The observer deliberately has no
+ * URL, token, parameters, response body or Moodle identity. Callers fold these
+ * facts into bounded per-item metadata instead of writing a database row for
+ * every provider request.
+ */
+export interface MoodleApiAttemptMetric {
+  attempt: number
+  durationMs: number
+  outcome: 'error' | 'success'
+  responseBytes: number
+  status: number | null
+  wsfunction: string
+}
+
+export interface MoodleApiTelemetry {
+  onAttempt?: (metric: MoodleApiAttemptMetric) => void
+}
+
+export function combineMoodleApiTelemetry(
+  ...telemetries: Array<MoodleApiTelemetry | undefined>
+): MoodleApiTelemetry | undefined {
+  const handlers = telemetries
+    .map((telemetry) => telemetry?.onAttempt)
+    .filter((handler): handler is NonNullable<MoodleApiTelemetry['onAttempt']> => Boolean(handler))
+  if (handlers.length === 0) return undefined
+  return {
+    onAttempt(metric) {
+      for (const handler of handlers) {
+        try {
+          handler(metric)
+        } catch {
+          // Independent telemetry consumers must not affect the provider call.
+        }
+      }
+    },
+  }
+}
+
 export class MoodleApiError extends Error {
   readonly category: MoodleApiErrorCategory
   readonly code: string
   readonly retryAfterMs: number | null
+  readonly responseBytes: number
   readonly status: number | null
 
   constructor(input: {
@@ -66,6 +106,7 @@ export class MoodleApiError extends Error {
     code: string
     message: string
     retryAfterMs?: number | null
+    responseBytes?: number
     status?: number | null
     cause?: unknown
   }) {
@@ -74,6 +115,9 @@ export class MoodleApiError extends Error {
     this.category = input.category
     this.code = input.code
     this.retryAfterMs = input.retryAfterMs ?? null
+    this.responseBytes = Number.isSafeInteger(input.responseBytes) && input.responseBytes >= 0
+      ? input.responseBytes
+      : 0
     this.status = input.status ?? null
   }
 }
@@ -116,10 +160,30 @@ function statusCategory(status: number): MoodleApiErrorCategory {
   return 'unknown'
 }
 
+interface ParsedMoodleResponse {
+  data: unknown
+  responseBytes: number
+}
+
+interface MoodleApiRequestResult extends ParsedMoodleResponse {
+  status: number
+}
+
+function safelyReportMoodleAttempt(
+  telemetry: MoodleApiTelemetry | undefined,
+  metric: MoodleApiAttemptMetric,
+): void {
+  try {
+    telemetry?.onAttempt?.(metric)
+  } catch {
+    // Metrics must never interfere with a Moodle request or its retry policy.
+  }
+}
+
 async function parseMoodleResponseBody(
   response: Response,
   maxResponseBytes = DEFAULT_RESPONSE_LIMIT_BYTES,
-): Promise<unknown> {
+): Promise<ParsedMoodleResponse> {
   const declaredLength = Number(response.headers.get('content-length'))
   if (Number.isFinite(declaredLength) && declaredLength > maxResponseBytes) {
     throw new MoodleApiError({
@@ -130,22 +194,24 @@ async function parseMoodleResponseBody(
     })
   }
   const rawText = await response.text()
-  if (new TextEncoder().encode(rawText).byteLength > maxResponseBytes) {
+  const responseBytes = new TextEncoder().encode(rawText).byteLength
+  if (responseBytes > maxResponseBytes) {
     throw new MoodleApiError({
       category: 'response_too_large',
       code: 'response_too_large',
       message: 'Moodle response exceeded the configured size limit.',
+      responseBytes,
       status: response.status,
     })
   }
   const trimmed = rawText.trim()
 
   if (!trimmed) {
-    return null
+    return { data: null, responseBytes }
   }
 
   try {
-    return JSON.parse(trimmed)
+    return { data: JSON.parse(trimmed), responseBytes }
   } catch {
     throw new MoodleApiError({
       category: response.ok ? 'invalid_payload' : statusCategory(response.status),
@@ -153,6 +219,7 @@ async function parseMoodleResponseBody(
       message: response.ok
         ? 'Moodle returned an invalid JSON response.'
         : `Moodle API returned HTTP ${response.status}.`,
+      responseBytes,
       retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
       status: response.status,
     })
@@ -243,9 +310,12 @@ export async function callMoodleApi(
   wsfunction: string,
   params: Record<string, string | number> = {},
   timeoutMs = 25_000,
+  telemetry?: MoodleApiTelemetry,
 ): Promise<unknown> {
   return callMoodleApiWithRetry(() =>
     performMoodleApiRequest(moodleUrl, token, wsfunction, params, timeoutMs),
+    wsfunction,
+    telemetry,
   )
 }
 
@@ -255,9 +325,12 @@ export async function callMoodleApiPost(
   wsfunction: string,
   params: Record<string, string | number>,
   timeoutMs = 25_000,
+  telemetry?: MoodleApiTelemetry,
 ): Promise<unknown> {
   return callMoodleApiWithRetry(() =>
     performMoodleApiRequest(moodleUrl, token, wsfunction, params, timeoutMs),
+    wsfunction,
+    telemetry,
   )
 }
 
@@ -266,17 +339,37 @@ export async function callMoodleApiPost(
  * Retries on network errors, timeouts, 5xx errors, and specific transient Moodle errors.
  * Does NOT retry on 4xx errors (auth, validation, etc.) or permanent failures.
  */
-async function callMoodleApiWithRetry<T>(
-  apiFn: () => Promise<T>,
+async function callMoodleApiWithRetry(
+  apiFn: (attempt: number) => Promise<MoodleApiRequestResult>,
+  wsfunction: string,
+  telemetry?: MoodleApiTelemetry,
   maxRetries = DEFAULT_MAX_RETRIES,
   baseDelayMs = 500,
-): Promise<T> {
+): Promise<unknown> {
   let lastError: Error | null = null
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const attemptStartedAt = Date.now()
     try {
-      return await apiFn()
+      const result = await apiFn(attempt + 1)
+      safelyReportMoodleAttempt(telemetry, {
+        attempt: attempt + 1,
+        durationMs: Math.max(0, Date.now() - attemptStartedAt),
+        outcome: 'success',
+        responseBytes: result.responseBytes,
+        status: result.status,
+        wsfunction,
+      })
+      return result.data
     } catch (error) {
+      safelyReportMoodleAttempt(telemetry, {
+        attempt: attempt + 1,
+        durationMs: Math.max(0, Date.now() - attemptStartedAt),
+        outcome: 'error',
+        responseBytes: error instanceof MoodleApiError ? error.responseBytes : 0,
+        status: error instanceof MoodleApiError ? error.status : null,
+        wsfunction,
+      })
       lastError = error instanceof Error ? error : new Error('Unknown Moodle request failure')
       const retryable = error instanceof MoodleApiError
         ? error.category === 'transient' || error.category === 'rate_limit'
@@ -309,7 +402,7 @@ async function performMoodleApiRequest(
   wsfunction: string,
   params: Record<string, string | number>,
   timeoutMs: number,
-): Promise<unknown> {
+): Promise<MoodleApiRequestResult> {
   const apiUrl = `${moodleUrl}/webservice/rest/server.php`
   const formData = new URLSearchParams({
     wstoken: token,
@@ -335,7 +428,8 @@ async function performMoodleApiRequest(
       status: response.status,
     })
   }
-  const data = await parseMoodleResponseBody(response)
+  const parsed = await parseMoodleResponseBody(response)
+  const data = parsed.data
 
   if (isExceptionPayload(data)) {
     const errorCode = typeof data.errorcode === 'string' ? data.errorcode : 'moodle_exception'
@@ -350,6 +444,7 @@ async function performMoodleApiRequest(
       category,
       code: errorCode,
       message: `Moodle API rejected ${wsfunction} (${errorCode}).`,
+      responseBytes: parsed.responseBytes,
       status: response.status,
     })
   }
@@ -359,12 +454,17 @@ async function performMoodleApiRequest(
       category: statusCategory(response.status),
       code: `http_${response.status}`,
       message: `Moodle API returned HTTP ${response.status}.`,
+      responseBytes: parsed.responseBytes,
       retryAfterMs: parseRetryAfter(response.headers.get('retry-after')),
       status: response.status,
     })
   }
 
-  return data
+  return {
+    data,
+    responseBytes: parsed.responseBytes,
+    status: response.status,
+  }
 }
 
 export async function getSiteInfo(moodleUrl: string, token: string): Promise<MoodleSiteInfo> {
@@ -385,6 +485,7 @@ export async function getCourseUpdatesSince(
   token: string,
   courseId: number,
   since: Date,
+  telemetry?: MoodleApiTelemetry,
 ): Promise<MoodleCourseUpdatesSince> {
   const sinceSeconds = Math.floor(since.getTime() / 1000)
   if (!Number.isSafeInteger(courseId) || courseId <= 0 || !Number.isSafeInteger(sinceSeconds)) {
@@ -399,6 +500,8 @@ export async function getCourseUpdatesSince(
     token,
     'core_course_get_updates_since',
     { courseid: courseId, since: sinceSeconds },
+    25_000,
+    telemetry,
   )
   if (!response || typeof response !== 'object' || Array.isArray(response)) {
     throw new MoodleApiError({

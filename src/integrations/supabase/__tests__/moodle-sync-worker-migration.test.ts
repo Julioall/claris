@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   cancelMoodleSyncJob,
   claimMoodleSyncItem,
+  createMoodleSyncJobV2,
   retryMoodleSyncJob,
 } from '../../../../supabase/functions/_shared/domain/moodle-sync/worker-repository.ts'
 
@@ -153,6 +154,24 @@ describe('durable Moodle sync worker repository', () => {
   it('returns null when no item is eligible', async () => {
     const rpc = vi.fn(async () => ({ data: [], error: null }))
     await expect(claimMoodleSyncItem({ rpc } as never, 'worker-a')).resolves.toBeNull()
+  })
+
+  it('creates jobs through the bulk-rollout-gated RPC', async () => {
+    const rpc = vi.fn(async () => ({ data: '40000000-0000-0000-0000-000000000001', error: null }))
+    await expect(createMoodleSyncJobV2({ rpc } as never, {
+      connectionId: '20000000-0000-0000-0000-000000000001',
+      courseIds: ['30000000-0000-0000-0000-000000000001'],
+      entities: ['grades'],
+      items: [{ itemKey: 'grades:30000000-0000-0000-0000-000000000001', label: 'Grades', metadata: {} }],
+      sourceRecordId: '40000000-0000-0000-0000-000000000001',
+      syncKind: 'incremental',
+      trigger: 'manual',
+      userId: '60000000-0000-0000-0000-000000000001',
+    })).resolves.toBe('40000000-0000-0000-0000-000000000001')
+    expect(rpc).toHaveBeenCalledWith('backend_create_moodle_sync_job_v2_gated', expect.objectContaining({
+      p_moodle_connection_id: '20000000-0000-0000-0000-000000000001',
+      p_user_id: '60000000-0000-0000-0000-000000000001',
+    }))
   })
 
   it('routes retry and cancellation through service-only transition RPCs', async () => {

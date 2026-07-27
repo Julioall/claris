@@ -22,6 +22,8 @@ const DEFAULT_FUNCTIONS = [
   'moodle-sync-grades',
   'admin-diagnostics',
   'moodle-sync-jobs',
+  'moodle-sync-rollouts',
+  'moodle-sync-dispatcher',
   'moodle-sync-worker',
   'moodle-course-snapshot',
   'moodle-grade-suggestions',

@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -7,31 +7,6 @@
   | Json[]
 
 export type Database = {
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       activity_feed: {
@@ -2244,6 +2219,50 @@ export type Database = {
           },
         ]
       }
+      moodle_site_circuit_breakers: {
+        Row: {
+          consecutive_failures: number
+          last_failure_at: string | null
+          last_failure_code: string | null
+          last_success_at: string | null
+          moodle_site_id: string
+          open_until: string | null
+          opened_at: string | null
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          last_failure_at?: string | null
+          last_failure_code?: string | null
+          last_success_at?: string | null
+          moodle_site_id: string
+          open_until?: string | null
+          opened_at?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          consecutive_failures?: number
+          last_failure_at?: string | null
+          last_failure_code?: string | null
+          last_success_at?: string | null
+          moodle_site_id?: string
+          open_until?: string | null
+          opened_at?: string | null
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_site_circuit_breakers_moodle_site_id_fkey"
+            columns: ["moodle_site_id"]
+            isOneToOne: true
+            referencedRelation: "moodle_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       moodle_sites: {
         Row: {
           base_url: string
@@ -2365,6 +2384,61 @@ export type Database = {
             columns: ["moodle_site_id"]
             isOneToOne: false
             referencedRelation: "moodle_sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      moodle_sync_rollouts: {
+        Row: {
+          capability: string
+          created_at: string
+          enabled: boolean
+          id: string
+          moodle_site_id: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string | null
+        }
+        Insert: {
+          capability: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          moodle_site_id: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          capability?: string
+          created_at?: string
+          enabled?: boolean
+          id?: string
+          moodle_site_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "moodle_sync_rollouts_moodle_site_id_fkey"
+            columns: ["moodle_site_id"]
+            isOneToOne: false
+            referencedRelation: "moodle_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moodle_sync_rollouts_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "moodle_sync_rollouts_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -4143,6 +4217,19 @@ export type Database = {
         }
         Returns: string
       }
+      backend_create_moodle_sync_job_v2_gated: {
+        Args: {
+          p_course_ids: string[]
+          p_entities: string[]
+          p_items: Json
+          p_moodle_connection_id: string
+          p_source_record_id: string
+          p_sync_kind: string
+          p_trigger: string
+          p_user_id: string
+        }
+        Returns: string
+      }
       backend_delete_access_group: {
         Args: {
           p_actor_id: string
@@ -4150,6 +4237,17 @@ export type Database = {
           p_reassign_to_group_id?: string
         }
         Returns: Json
+      }
+      backend_dispatch_due_moodle_syncs: {
+        Args: { p_limit?: number }
+        Returns: {
+          connection_id: string
+          course_id: string
+          dispatch_status: string
+          job_id: string
+          next_incremental_at: string
+          trigger: string
+        }[]
       }
       backend_fail_moodle_sync_item: {
         Args: {
@@ -4181,6 +4279,32 @@ export type Database = {
         Args: { p_actor_id: string }
         Returns: Json
       }
+      backend_get_moodle_sync_operational_metrics: {
+        Args: { p_stuck_after_seconds?: number; p_window_hours?: number }
+        Returns: {
+          active_jobs: number
+          avg_item_duration_ms: number
+          avg_job_duration_ms: number
+          circuit_open_until: string
+          circuit_state: string
+          completed_items: number
+          failed_items: number
+          jobs_completed: number
+          jobs_failed: number
+          jobs_started: number
+          moodle_api_calls: number
+          moodle_connection_id: string
+          moodle_response_bytes: number
+          oldest_stuck_at: string
+          p95_item_duration_ms: number
+          p95_job_duration_ms: number
+          retry_attempts: number
+          site_slug: string
+          stuck_items: number
+          window_ended_at: string
+          window_started_at: string
+        }[]
+      }
       backend_heartbeat_moodle_sync_item: {
         Args: {
           p_cursor?: Json
@@ -4208,6 +4332,17 @@ export type Database = {
           permissions: string[]
           slug: string
           user_count: number
+        }[]
+      }
+      backend_list_moodle_sync_rollouts: {
+        Args: { p_actor_id: string }
+        Returns: {
+          capability: string
+          enabled: boolean
+          moodle_site_id: string
+          updated_at: string
+          updated_by: string
+          user_id: string
         }[]
       }
       backend_list_permission_definitions: {
@@ -4246,6 +4381,22 @@ export type Database = {
         }
         Returns: Json
       }
+      backend_moodle_sync_connection_rollout_enabled: {
+        Args: {
+          p_capability: string
+          p_moodle_connection_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      backend_moodle_sync_rollout_enabled: {
+        Args: {
+          p_capability: string
+          p_moodle_site_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
       backend_provision_claris_account: {
         Args: { p_auth_user_id: string; p_email: string }
         Returns: Json
@@ -4258,6 +4409,14 @@ export type Database = {
         }
         Returns: string
       }
+      backend_record_moodle_site_circuit_result: {
+        Args: {
+          p_failure_code?: string
+          p_moodle_site_id: string
+          p_success: boolean
+        }
+        Returns: Json
+      }
       backend_replace_user_course_eligibility: {
         Args: {
           p_course_ids: string[]
@@ -4267,6 +4426,23 @@ export type Database = {
         Returns: number
       }
       backend_request_course_refresh: {
+        Args: {
+          p_course_id: string
+          p_entities: string[]
+          p_moodle_connection_id: string
+          p_trigger: string
+          p_user_id: string
+        }
+        Returns: {
+          accepted_entities: string[]
+          job_id: string
+          moodle_site_id: string
+          refresh_status: string
+          requested_at: string
+          retry_after_seconds: number
+        }[]
+      }
+      backend_request_course_refresh_gated: {
         Args: {
           p_course_id: string
           p_entities: string[]
@@ -4330,6 +4506,16 @@ export type Database = {
       backend_set_course_attendance_enabled: {
         Args: { p_course_ids: string[]; p_enabled: boolean; p_user_id: string }
         Returns: number
+      }
+      backend_set_moodle_sync_rollout: {
+        Args: {
+          p_actor_id: string
+          p_capability: string
+          p_enabled: boolean
+          p_moodle_site_id: string
+          p_user_id?: string
+        }
+        Returns: Json
       }
       backend_set_user_access: {
         Args: {
@@ -4709,9 +4895,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       ai_grade_suggestion_job_item_status: [

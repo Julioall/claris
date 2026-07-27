@@ -8,7 +8,11 @@ vi.mock('@/integrations/http/edge-function-client', () => ({
 
 import { listAdminConversations } from '../conversations';
 import { listAdminLogs, resolveAdminLog } from '../logs';
-import { fetchAdminDashboardSummary, listUsageEvents } from '../metrics';
+import {
+  fetchAdminDashboardSummary,
+  fetchMoodleSyncOperationalMetrics,
+  listUsageEvents,
+} from '../metrics';
 import { createSupportTicket, listSupportTickets, updateSupportTicket } from '../support';
 
 describe('admin observability HTTP adapters', () => {
@@ -21,6 +25,17 @@ describe('admin observability HTTP adapters', () => {
     await fetchAdminDashboardSummary();
     expect(invokeMock).toHaveBeenCalledWith('admin-observability', {
       body: { action: 'get_dashboard' },
+    });
+  });
+
+  it('requests bounded Moodle operational aggregates instead of data tables', async () => {
+    await fetchMoodleSyncOperationalMetrics({ windowHours: 24, stuckAfterSeconds: 120 });
+    expect(invokeMock).toHaveBeenCalledWith('admin-observability', {
+      body: {
+        action: 'get_moodle_sync_metrics',
+        windowHours: 24,
+        stuckAfterSeconds: 120,
+      },
     });
   });
 

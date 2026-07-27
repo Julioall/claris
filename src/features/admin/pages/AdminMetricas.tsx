@@ -1,7 +1,10 @@
 import { Fragment, useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { listUsageEvents } from '../api/metrics';
-import type { AdminUsageEventDto } from '../api/contracts/admin-observability.contract';
+import { fetchMoodleSyncOperationalMetrics, listUsageEvents } from '../api/metrics';
+import type {
+  AdminMoodleSyncOperationalMetricDto,
+  AdminUsageEventDto,
+} from '../api/contracts/admin-observability.contract';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,6 +17,18 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LineChart, L
 import { exportToCsv } from '@/lib/csv';
 
 const PAGE_SIZE = 50;
+
+function formatDurationMs(value: number): string {
+  if (value < 1_000) return `${value} ms`;
+  if (value < 60_000) return `${(value / 1_000).toFixed(1)} s`;
+  return `${(value / 60_000).toFixed(1)} min`;
+}
+
+function formatBytes(value: number): string {
+  if (value < 1_024) return `${value} B`;
+  if (value < 1_024 * 1_024) return `${(value / 1_024).toFixed(1)} KB`;
+  return `${(value / (1_024 * 1_024)).toFixed(1)} MB`;
+}
 
 export default function AdminMetricas() {
   const [search, setSearch] = useState('');
@@ -43,7 +58,13 @@ export default function AdminMetricas() {
     },
   });
 
+  const { data: moodleSyncMetrics } = useQuery({
+    queryKey: ['admin-moodle-sync-operational-metrics', 168, 300],
+    queryFn: () => fetchMoodleSyncOperationalMetrics(),
+  });
+
   const events: AdminUsageEventDto[] = data?.items ?? [];
+  const moodleMetrics: AdminMoodleSyncOperationalMetricDto[] = moodleSyncMetrics?.items ?? [];
   const totalCount = data?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
@@ -146,6 +167,58 @@ export default function AdminMetricas() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Operação Moodle por site e conexão (últimos 7 dias)</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {moodleMetrics.length === 0 ? (
+            <div className="p-6 text-sm text-muted-foreground">
+              Nenhuma sincronização Moodle ativa ou concluída no período.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Site</TableHead>
+                  <TableHead>Conexão</TableHead>
+                  <TableHead>Jobs</TableHead>
+                  <TableHead>Itens</TableHead>
+                  <TableHead>Retries</TableHead>
+                  <TableHead>Chamadas</TableHead>
+                  <TableHead title="Tamanho do JSON processado; nao representa bytes de rede">
+                    JSON processado
+                  </TableHead>
+                  <TableHead>P95 job</TableHead>
+                  <TableHead>Circuito</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {moodleMetrics.map((metric) => (
+                  <TableRow key={`${metric.siteSlug}:${metric.connectionId}`}>
+                    <TableCell className="font-medium uppercase">{metric.siteSlug}</TableCell>
+                    <TableCell className="font-mono text-xs">{metric.connectionId.slice(0, 8)}</TableCell>
+                    <TableCell className="text-xs">
+                      {metric.jobs.completed} concluídos · {metric.jobs.failed} falhos · {metric.activeJobs} ativos
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {metric.items.completed} concluídos · {metric.items.failed} falhos · {metric.items.stuck} presos
+                    </TableCell>
+                    <TableCell>{metric.retryAttempts}</TableCell>
+                    <TableCell>{metric.transport.apiCalls}</TableCell>
+                    <TableCell>{formatBytes(metric.transport.responseBytes)}</TableCell>
+                    <TableCell>{formatDurationMs(metric.durations.p95JobMs)}</TableCell>
+                    <TableCell className={metric.circuit.state === 'open' ? 'text-destructive font-medium' : ''}>
+                      {metric.circuit.state === 'open' ? 'Aberto' : 'Fechado'}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

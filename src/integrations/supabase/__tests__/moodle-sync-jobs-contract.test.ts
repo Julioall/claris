@@ -83,6 +83,7 @@ function createRepository(): MoodleSyncJobsRepository {
     getPreferences: vi.fn(async () => null),
     hasCourseScope: vi.fn(async () => true),
     hasPermission: vi.fn(async () => true),
+    isRolloutEnabled: vi.fn(async () => true),
     listActiveJobs: vi.fn(async () => []),
     linkEligibleCourses: vi.fn(async () => 1),
     resetOwnedJob: vi.fn(async () => null),
@@ -171,6 +172,26 @@ describe('moodle-sync-jobs V2 contract', () => {
     expect(worker.schedule).not.toHaveBeenCalled();
   });
 
+  it('does not make Moodle bulk calls or create work while the rollout is disabled', async () => {
+    vi.mocked(repository.isRolloutEnabled).mockResolvedValue(false);
+    const worker = runtime();
+
+    await expect(executeMoodleSyncJobs(repository, ACTOR_ID, {
+      action: 'start_course_sync',
+      connectionId: CONNECTION_ID,
+      courseIds: [COURSE_ID],
+      entities: ['grades'],
+    }, worker)).rejects.toMatchObject({ code: 'conflict', status: 409 });
+    expect(repository.createJob).not.toHaveBeenCalled();
+    expect(worker.schedule).not.toHaveBeenCalled();
+
+    await expect(executeMoodleSyncJobs(repository, ACTOR_ID, {
+      action: 'list_available_courses',
+      connectionId: CONNECTION_ID,
+    }, worker)).rejects.toMatchObject({ code: 'conflict', status: 409 });
+    expect(worker.listAvailableCourses).not.toHaveBeenCalled();
+  });
+
   it('returns an active canonical request without scheduling a duplicate worker', async () => {
     vi.mocked(repository.findActiveJob).mockResolvedValue(backgroundJob({ status: 'processing' }));
     vi.mocked(repository.getJobItems).mockResolvedValue([backgroundItem()]);
@@ -255,6 +276,44 @@ describe('moodle-sync-jobs V2 contract', () => {
       ]),
     });
     expect(JSON.stringify(dto)).not.toMatch(/course_ids|processed_items|total_count/);
+  });
+
+  it('adds a finalization step even when a refresh contains only grades', async () => {
+    const worker = runtime();
+    vi.mocked(repository.createJob).mockImplementation(async (input) => backgroundJob({
+      metadata: {
+        connection_id: input.connectionId,
+        course_ids: input.courseIds,
+        entities: input.entities,
+        schema_version: 2,
+        sync_kind: input.kind,
+        trigger: input.trigger,
+      },
+      total_items: input.itemDefinitions.length,
+    }));
+
+    const result = await executeMoodleSyncJobs(repository, ACTOR_ID, {
+      action: 'start_course_sync',
+      connectionId: CONNECTION_ID,
+      courseIds: [COURSE_ID],
+      entities: ['grades'],
+    }, worker);
+
+    expect(repository.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      itemDefinitions: expect.arrayContaining([
+        expect.objectContaining({ itemKey: `grades:${COURSE_ID}` }),
+        expect.objectContaining({ itemKey: 'risk' }),
+      ]),
+    }));
+    expect(result).toMatchObject({
+      job: {
+        steps: expect.arrayContaining([
+          expect.objectContaining({ entity: 'grades' }),
+          expect.objectContaining({ entity: 'risk' }),
+        ]),
+        totalItems: 2,
+      },
+    });
   });
 
   it('rejects legacy job metadata instead of running it implicitly', () => {

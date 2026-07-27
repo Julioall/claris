@@ -193,7 +193,7 @@ BEGIN
     RETURN;
   END IF;
 
-  v_total_items := cardinality(v_entities) + CASE WHEN 'students' = ANY(v_entities) THEN 1 ELSE 0 END;
+  v_total_items := cardinality(v_entities) + 1;
 
   INSERT INTO public.background_jobs (
     id, user_id, course_id, job_type, source, source_table, source_record_id,
@@ -240,15 +240,13 @@ BEGIN
     );
   END LOOP;
 
-  IF 'students' = ANY(v_entities) THEN
-    INSERT INTO public.background_job_items (
-      id, job_id, user_id, item_key, label, status, progress_current,
-      progress_total, metadata, available_at, max_attempts, created_at, updated_at
-    ) VALUES (
-      gen_random_uuid(), v_job_id, p_user_id, 'risk', 'Recalcular risco',
-      'pending', 0, 1, jsonb_build_object('entity', 'risk'), v_now, 3, v_now, v_now
-    );
-  END IF;
+  INSERT INTO public.background_job_items (
+    id, job_id, user_id, item_key, label, status, progress_current,
+    progress_total, metadata, available_at, max_attempts, created_at, updated_at
+  ) VALUES (
+    gen_random_uuid(), v_job_id, p_user_id, 'risk', 'Finalizar curso e recalcular risco',
+    'pending', 0, 1, jsonb_build_object('entity', 'risk'), v_now, 3, v_now, v_now
+  );
 
   UPDATE public.moodle_course_sync_state
   SET

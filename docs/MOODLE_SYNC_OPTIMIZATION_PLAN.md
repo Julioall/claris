@@ -1,21 +1,21 @@
 # Plano de otimizacao da sincronizacao Moodle
 
-Atualizado em `2026-07-21`.
+Atualizado em `2026-07-26`.
 
 Esta analise e o plano de otimizacao fundamentam a spec executavel [`MOODLE_SYNC_IMPLEMENTATION_SPEC.md`](./MOODLE_SYNC_IMPLEMENTATION_SPEC.md), que contem epics, contratos, modelo de dados, criterios de aceite e gates de rollout.
 
 ## Estado atual do plano
 
-A arquitetura e a jornada greenfield estao fechadas. Epics 0, 1, 2, 3, 5 e 6 estao concluidos em codigo; Epics 4 e 7 permanecem em andamento. O status detalhado e as pendencias por epic ficam na [`spec de implementacao`](./MOODLE_SYNC_IMPLEMENTATION_SPEC.md#status-de-execucao).
+A arquitetura e a jornada greenfield estao fechadas. Epics 0 a 6 estao concluidos e validados localmente; no Epic 7, fixtures 4.5/5.1, isolamento multi-site, rollout deny-by-default, circuit breaker, dispatcher e observabilidade tambem foram aprovados localmente. A suite completa, o smoke Edge V2, a recriacao do banco, as transacoes reais do worker/isolamento/rollout/dispatcher e o benchmark sintetico foram aprovados em `2026-07-26`. Restam apenas gates que dependem de staging, configuracao publicada e canario. O status detalhado fica na [`spec de implementacao`](./MOODLE_SYNC_IMPLEMENTATION_SPEC.md#status-de-execucao).
 
-O primeiro release nao tera cadastro publico nem migracao de usuarios do prototipo. O acesso nasce por convite administrativo, a senha pertence somente a Claris e o onboarding Moodle e opcional. Configuracao de SMTP/redirects, agendamento do worker, benchmark comparativo e canarios FIEG/SENAI sao gates de ambiente e rollout, nao motivos para reintroduzir login Moodle ou uma conexao default.
+O primeiro release nao tera cadastro publico nem migracao de usuarios do prototipo. O acesso nasce por convite administrativo, a senha pertence somente a Claris e o onboarding Moodle e opcional. Configuracao de SMTP/redirects, segredo/agendamento publicado do worker, benchmark comparativo e canarios FIEG/SENAI sao gates de ambiente e rollout, nao motivos para reintroduzir login Moodle ou uma conexao default.
 
 ## Resultado da analise
 
-A sincronizacao ainda nao esta pronta para ser habilitada no SENAI apenas trocando a URL. Ha dois bloqueios de corretude:
+A sincronizacao nao podia ser habilitada no SENAI apenas trocando a URL. Os dois bloqueios de corretude abaixo foram a linha de base e estao corrigidos pela implementacao greenfield:
 
-1. `moodle-sync-courses` ignora a URL resolvida da credencial e sempre usa `https://ead.fieg.com.br` (`supabase/functions/moodle-sync-courses/service.ts:28,133`). Um token do SENAI acaba sendo enviado ao FIEG.
-2. IDs externos sao globais no banco. `users.moodle_user_id`, `students.moodle_user_id` e `courses.moodle_course_id` possuem unicidade sem identificar o Moodle de origem (`supabase/migrations/20260127065717_bc641db4-cbd3-4947-8021-2474619ea29c.sql:10-60`). IDs iguais nos dois ambientes podem sobrescrever dados.
+1. `moodle-sync-courses` ignorava a URL resolvida da conexao e podia enviar token do SENAI ao FIEG. O adaptador atual resolve site/conexao somente no backend e o guard impede host default ou URL do browser.
+2. IDs externos eram globais. Cursos, alunos, preferencias, elegibilidade, cache, watermarks e jobs agora usam `moodle_site_id` e/ou `moodle_connection_id`; a transacao multi-site prova que IDs externos iguais permanecem isolados.
 
 Antes de liberar o segundo Moodle, a aplicacao deve tratar o ambiente Moodle como parte da identidade de toda entidade externa.
 
@@ -104,7 +104,7 @@ Alguns adaptadores convertem falhas Moodle em listas vazias, e alguns services c
 - o fluxo atual mistura identidade Claris e identidade Moodle: a senha Moodle e usada como senha Supabase e o perfil externo pode sobrescrever e-mail/metadata da conta;
 - a tela de login recebe sempre FIEG por configuracao hardcoded; `fetchLoginDefaults` nao consulta as configuracoes do backend (`src/features/auth/api/login.ts:8-12`);
 - ha somente uma credencial de reautorizacao por usuario (`user_id` e a chave primaria);
-- o caminho `moodle-auth` do prototipo possui referencia invalida a `authEmail`; como nao ha usuarios publicados, ele deve ser removido, nao reparado (`moodle-auth/service.ts:297`);
+- o caminho `moodle-auth` do prototipo possuia uma referencia invalida a `authEmail`; ele foi removido antes do primeiro canario, sem migracao de usuarios.
 - o cliente registra os primeiros 500 caracteres da resposta de token, o que pode expor o token em logs;
 - a validacao aceita qualquer URL HTTP/HTTPS. Para login com credenciais, deve existir um registro de sites permitido e HTTPS obrigatorio.
 
@@ -166,13 +166,15 @@ Tambem devem ser revisados os pontos que resolvem IDs Moodle fora do sync: mensa
 
 ## Plano de execucao
 
+> Os checklists desta secao registram o plano original de execucao e nao sao a fonte de status atual. A implementacao, evidencias locais e gates externos vigentes sao mantidos na [spec de implementacao](./MOODLE_SYNC_IMPLEMENTATION_SPEC.md#status-de-execucao), para evitar que tarefas historicas desmarcadas sejam interpretadas como codigo ausente.
+
 ### Fase 0 - Baseline e correcoes de bloqueio
 
 - [ ] Instrumentar por chamada: `jobId`, `connectionId`, site, funcao Moodle, tentativa, status, duracao e bytes; nunca token, senha ou URL assinada.
 - [ ] Medir um curso pequeno, medio e grande em cada Moodle antes das mudancas.
 - [ ] Usar a URL normalizada da conexao em `syncCourses`; remover `PRIMARY_MOODLE_URL`.
 - [ ] Remover o log do corpo da resposta de token e enviar credenciais em POST form-encoded quando aceito.
-- [ ] Remover o formulario/endpoint `moodle-auth` do prototipo, em vez de corrigir seu fluxo morto.
+- [x] Remover o formulario/endpoint `moodle-auth` do prototipo, em vez de corrigir seu fluxo morto.
 - [ ] Fechar o desenho greenfield de convite, aceite/definicao de senha, login, recuperacao e logout da conta Claris.
 - [ ] Classificar erros em autenticacao, permissao/funcao ausente, rate limit, transiente, payload invalido e persistencia.
 - [ ] Nao executar canario SENAI antes do schema final: a URL correta sem escopo por site pode corromper dados por colisao de IDs.

@@ -67,10 +67,12 @@ export async function upsertCourses(
   const existingHashes = new Map(
     (existing ?? []).map((course) => [course.moodle_course_id, course.content_hash]),
   )
-  const changed = payload.filter((course) => (
-    !existingHashes.has(course.moodle_course_id)
-    || existingHashes.get(course.moodle_course_id) !== (course.content_hash ?? null)
-  ))
+  const changed = payload.filter((course) => {
+    const incomingHash = course.content_hash
+    return typeof incomingHash !== 'string'
+      || !existingHashes.has(course.moodle_course_id)
+      || existingHashes.get(course.moodle_course_id) !== incomingHash
+  })
 
   if (changed.length > 0) {
     const { error } = await supabase
@@ -230,12 +232,33 @@ export async function upsertStudentActivities(
 
   for (let i = 0; i < payload.length; i += batchSize) {
     const batch = payload.slice(i, i + batchSize)
+    const { data: existing, error: existingError } = await supabase
+      .from('student_activities')
+      .select('student_id, course_id, moodle_activity_id, content_hash')
+      .in('student_id', [...new Set(batch.map((row) => row.student_id))])
+      .in('course_id', [...new Set(batch.map((row) => row.course_id))])
+      .in('moodle_activity_id', [...new Set(batch.map((row) => row.moodle_activity_id))])
+
+    if (existingError) throw existingError
+    const existingHashes = new Map((existing ?? []).map((row) => [
+      `${row.student_id}:${row.course_id}:${row.moodle_activity_id}`,
+      row.content_hash,
+    ]))
+    const changed = batch.filter((row) => {
+      const key = `${row.student_id}:${row.course_id}:${row.moodle_activity_id}`
+      const incomingHash = row.content_hash
+      return typeof incomingHash !== 'string'
+        || !existingHashes.has(key)
+        || existingHashes.get(key) !== incomingHash
+    })
+    if (changed.length === 0) continue
+
     const { error } = await supabase
       .from('student_activities')
-      .upsert(batch, { onConflict: 'student_id,course_id,moodle_activity_id', ignoreDuplicates: false })
+      .upsert(changed, { onConflict: 'student_id,course_id,moodle_activity_id', ignoreDuplicates: false })
 
     if (error) throw error
-    total += batch.length
+    total += changed.length
   }
 
   return total
@@ -261,10 +284,12 @@ export async function upsertStudents(
   const existingHashes = new Map(
     (existing ?? []).map((student) => [student.moodle_user_id, student.content_hash]),
   )
-  const changed = payload.filter((student) => (
-    !existingHashes.has(student.moodle_user_id)
-    || existingHashes.get(student.moodle_user_id) !== (student.content_hash ?? null)
-  ))
+  const changed = payload.filter((student) => {
+    const incomingHash = student.content_hash
+    return typeof incomingHash !== 'string'
+      || !existingHashes.has(student.moodle_user_id)
+      || existingHashes.get(student.moodle_user_id) !== incomingHash
+  })
 
   if (changed.length > 0) {
     const { error } = await supabase
@@ -375,12 +400,32 @@ export async function upsertStudentCourseGrades(
 
   for (let i = 0; i < payload.length; i += batchSize) {
     const batch = payload.slice(i, i + batchSize)
+    const { data: existing, error: existingError } = await supabase
+      .from('student_course_grades')
+      .select('student_id, course_id, content_hash')
+      .in('student_id', [...new Set(batch.map((row) => row.student_id))])
+      .in('course_id', [...new Set(batch.map((row) => row.course_id))])
+
+    if (existingError) throw existingError
+    const existingHashes = new Map((existing ?? []).map((row) => [
+      `${row.student_id}:${row.course_id}`,
+      row.content_hash,
+    ]))
+    const changed = batch.filter((row) => {
+      const key = `${row.student_id}:${row.course_id}`
+      const incomingHash = row.content_hash
+      return typeof incomingHash !== 'string'
+        || !existingHashes.has(key)
+        || existingHashes.get(key) !== incomingHash
+    })
+    if (changed.length === 0) continue
+
     const { error } = await supabase
       .from('student_course_grades')
-      .upsert(batch, { onConflict: 'student_id,course_id', ignoreDuplicates: false })
+      .upsert(changed, { onConflict: 'student_id,course_id', ignoreDuplicates: false })
 
     if (error) throw error
-    total += batch.length
+    total += changed.length
   }
 
   return total

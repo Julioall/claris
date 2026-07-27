@@ -1,4 +1,5 @@
 import type { AppSupabaseClient } from '../_shared/db/mod.ts'
+import { isMoodleSyncConnectionRolloutEnabled } from '../_shared/domain/moodle-sync/rollout.ts'
 import type { MoodleSnapshotEntity } from './contract.ts'
 
 export interface RefreshRequestResult {
@@ -11,6 +12,7 @@ export interface RefreshRequestResult {
 }
 
 export interface SnapshotRepository {
+  isFreshnessRolloutEnabled(actorId: string, connectionId: string): Promise<boolean>
   getSnapshot(connectionId: string, courseId: string, entities: MoodleSnapshotEntity[]): Promise<{
     activeJobs: Array<{ id: string; entities: MoodleSnapshotEntity[] }>
     connection: { moodle_site_id: string } | null
@@ -48,6 +50,14 @@ function asEntities(value: unknown): MoodleSnapshotEntity[] {
 
 export function createSnapshotRepository(supabase: AppSupabaseClient): SnapshotRepository {
   return {
+    isFreshnessRolloutEnabled(actorId, connectionId) {
+      return isMoodleSyncConnectionRolloutEnabled(supabase, {
+        capability: 'freshness',
+        connectionId,
+        userId: actorId,
+      })
+    },
+
     async getSnapshot(connectionId, courseId, entities) {
       const connectionResult = await supabase
         .from('user_moodle_connections')
@@ -136,7 +146,7 @@ export function createSnapshotRepository(supabase: AppSupabaseClient): SnapshotR
     },
 
     async requestRefresh(actorId, connectionId, courseId, entities, trigger) {
-      const { data, error } = await supabase.rpc('backend_request_course_refresh', {
+      const { data, error } = await supabase.rpc('backend_request_course_refresh_gated' as never, {
         p_user_id: actorId,
         p_moodle_connection_id: connectionId,
         p_course_id: courseId,
@@ -150,4 +160,3 @@ export function createSnapshotRepository(supabase: AppSupabaseClient): SnapshotR
     },
   }
 }
-

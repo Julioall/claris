@@ -77,6 +77,7 @@ jobs:
       - run: npm ci
       - name: Build application
         env:
-          VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
-          VITE_SUPABASE_URL: https://api.novascript.com.br
+          VITE_EVOLUTION_ENABLED: 'false'
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_URL: ${{ vars.SUPABASE_URL }}
         run: npm run build

@@ -257,7 +257,7 @@ Regra canônica:
 - `app_usage_events`, `app_error_logs` e `claris_conversations` nao possuem grants para `anon` ou `authenticated`; leitura e comandos passam pelos casos de uso com `service_role`.
 - `support_tickets` nao permite `INSERT`, `UPDATE` ou `DELETE` pelo browser. Abertura e alteracao passam por `support-tickets`, que deriva usuario, atribuicao, contexto e resolucao no servidor.
 - `support_tickets` preserva somente `SELECT` para `authenticated`, protegido pela policy `support_tickets_admin_realtime_select`, para que o `RealtimeGateway` administrativo receba notificacoes de novos tickets.
-- `admin-observability` exige application admin, pagina e filtra no backend, registra `resolved_by` com o ator e redige chaves sensiveis antes de produzir DTOs.
+- `admin-observability` exige application admin, pagina e filtra no backend, registra `resolved_by` com o ator e redige chaves sensiveis antes de produzir DTOs. Os agregados Moodle usam a RPC service-only `backend_get_moodle_sync_operational_metrics`; o DTO preserva apenas `siteSlug`, UUID interno de conexao, contadores, duracoes, estado do circuito, chamadas logicas e tamanho do JSON processado (nao bytes da rede).
 
 ### Manutencao e diagnosticos administrativos
 

@@ -13,6 +13,7 @@ import {
 
 export type AdminObservabilityPayload =
   | { action: 'get_dashboard' }
+  | { action: 'get_moodle_sync_metrics'; stuckAfterSeconds: number; windowHours: number }
   | {
       action: 'list_usage_events'
       dateFrom?: string
@@ -39,6 +40,7 @@ export type AdminObservabilityPayload =
 
 const ACTIONS = [
   'get_dashboard',
+  'get_moodle_sync_metrics',
   'list_usage_events',
   'list_error_logs',
   'resolve_error_log',
@@ -47,6 +49,7 @@ const ACTIONS = [
 
 const ACTION_FIELDS: Record<AdminObservabilityPayload['action'], ReadonlySet<string>> = {
   get_dashboard: new Set(['action']),
+  get_moodle_sync_metrics: new Set(['action', 'windowHours', 'stuckAfterSeconds']),
   list_usage_events: new Set(['action', 'page', 'pageSize', 'eventType', 'userId', 'dateFrom', 'dateTo', 'search']),
   list_error_logs: new Set(['action', 'page', 'pageSize', 'severity', 'category', 'resolved', 'dateFrom', 'dateTo', 'search']),
   resolve_error_log: new Set(['action', 'logId']),
@@ -83,6 +86,13 @@ export function parseAdminObservabilityPayload(rawBody: unknown): AdminObservabi
   assertExactFields(body, action)
 
   if (action === 'get_dashboard') return { action }
+  if (action === 'get_moodle_sync_metrics') {
+    return {
+      action,
+      windowHours: readOptionalInteger(body, 'windowHours', 1, 24 * 90) ?? 168,
+      stuckAfterSeconds: readOptionalInteger(body, 'stuckAfterSeconds', 60, 3600) ?? 300,
+    }
+  }
   if (action === 'resolve_error_log') {
     return { action, logId: readRequiredUuid(body, 'logId') }
   }

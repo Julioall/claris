@@ -1,7 +1,7 @@
 import type { MoodleCourseUpdatesSince } from '../../moodle/mod.ts'
 
 export type DeltaShadowDecision =
-  | { mode: 'full'; reason: 'capability_missing' | 'no_watermark' | 'release_changed' | 'warning' | 'ambiguous' }
+  | { mode: 'full'; reason: 'capability_missing' | 'no_watermark' | 'release_changed' | 'rollout_disabled' | 'warning' | 'ambiguous' }
   | { mode: 'shadow_full'; changed: boolean; instanceCount: number; updateCount: number }
 
 export function evaluateDeltaShadow(input: {
@@ -35,4 +35,3 @@ export function evaluateDeltaShadow(input: {
     updateCount,
   }
 }
-

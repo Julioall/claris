@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "benchmark": "moodle-sync-synthetic",
+  "benchmarkVersion": 1,
+  "description": "Contrato local e deterministico do caminho principal de sincronizacao Moodle. Nenhuma URL, token ou chamada HTTP e usada.",
+  "scenarios": [
+    {
+      "id": "empty",
+      "studentCount": 0,
+      "expected": {
+        "activityMetadataApiCalls": 0,
+        "bulkGradeApiCalls": 0,
+        "completionApiCalls": 0,
+        "moodleApiCalls": 0
+      },
+      "limits": {
+        "maxWallMs": 1000,
+        "maxHeapDeltaBytes": 16777216,
+        "maxMetrics": {
+          "activityMetadataApiCalls": 0,
+          "bulkGradeApiCalls": 0,
+          "completionApiCalls": 0,
+          "moodleApiCalls": 0
+        }
+      }
+    },
+    {
+      "id": "ten-students",
+      "studentCount": 10,
+      "expected": {
+        "activityMetadataApiCalls": 3,
+        "bulkGradeApiCalls": 1,
+        "completionApiCalls": 10,
+        "moodleApiCalls": 14
+      },
+      "limits": {
+        "maxWallMs": 1000,
+        "maxHeapDeltaBytes": 33554432,
+        "maxMetrics": {
+          "activityMetadataApiCalls": 3,
+          "bulkGradeApiCalls": 1,
+          "completionApiCalls": 10,
+          "moodleApiCalls": 14
+        }
+      }
+    },
+    {
+      "id": "one-hundred-students",
+      "studentCount": 100,
+      "expected": {
+        "activityMetadataApiCalls": 3,
+        "bulkGradeApiCalls": 1,
+        "completionApiCalls": 100,
+        "moodleApiCalls": 104
+      },
+      "limits": {
+        "maxWallMs": 2000,
+        "maxHeapDeltaBytes": 50331648,
+        "maxMetrics": {
+          "activityMetadataApiCalls": 3,
+          "bulkGradeApiCalls": 1,
+          "completionApiCalls": 100,
+          "moodleApiCalls": 104
+        }
+      }
+    },
+    {
+      "id": "five-hundred-plus-students",
+      "studentCount": 500,
+      "expected": {
+        "activityMetadataApiCalls": 3,
+        "bulkGradeApiCalls": 1,
+        "completionApiCalls": 500,
+        "moodleApiCalls": 504
+      },
+      "limits": {
+        "maxWallMs": 5000,
+        "maxHeapDeltaBytes": 100663296,
+        "maxMetrics": {
+          "activityMetadataApiCalls": 3,
+          "bulkGradeApiCalls": 1,
+          "completionApiCalls": 500,
+          "moodleApiCalls": 504
+        }
+      }
+    }
+  ]
+}

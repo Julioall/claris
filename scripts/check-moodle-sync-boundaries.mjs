@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { extname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,13 +35,23 @@ const functionsRoot = join(workspaceRoot, 'supabase', 'functions');
 for (const path of filesUnder(functionsRoot)) {
   if (extname(path) !== '.ts') continue;
   const normalized = path.replaceAll('\\', '/');
-  if (normalized.includes('/moodle-auth/') || normalized.includes('/moodle-reauth-settings/')) continue;
   if (normalized.endsWith('/index.ts') || normalized.endsWith('/payload.ts')) {
     inspect(path, [
       ['entrypoint depends on retired global Moodle reauth', /domain\/moodle-reauth/],
       ['public payload accepts a raw Moodle URL', /readRequiredMoodleUrl|['"]moodleUrl['"]/],
       ['public payload accepts a raw Moodle token', /['"](?:moodleToken|token)['"]/],
     ]);
+  }
+}
+
+for (const relativePath of [
+  'supabase/functions/moodle-auth',
+  'supabase/functions/moodle-reauth-settings',
+  'supabase/functions/_shared/domain/moodle-reauth',
+]) {
+  const path = join(workspaceRoot, relativePath);
+  if (existsSync(path) && filesUnder(path).length > 0) {
+    failures.push(`${relativePath}: retired Moodle identity artifact remains in the source tree`);
   }
 }
 
