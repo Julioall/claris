@@ -210,7 +210,6 @@ Secrets:
 
 - `VPS_HOST` e `VPS_USER`;
 - `VPS_SSH_KEY` (recomendado) ou `VPS_SSH_PASSWORD`;
-- `MOODLE_SYNC_WORKER_CRON_SECRET` somente se o workflow agendado de sincronizacao Moodle for usado.
 
 O build recebe `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` apenas no
 GitHub Actions. Nenhuma service-role key, segredo Moodle, senha de banco ou
@@ -246,17 +245,20 @@ Configure no environment `vps`:
 - Variable `SUPABASE_PROJECT_REF`: o project ref da conta Supabase hospedada;
 - Secret `SUPABASE_ACCESS_TOKEN`: token pessoal criado no painel Supabase;
 - Secret `SUPABASE_DB_PASSWORD`: senha do banco remoto, usada somente quando
-  uma migration for solicitada.
+  uma migration for solicitada;
+- Secrets `MOODLE_REAUTH_SECRET`, `MOODLE_SYNC_WORKER_CRON_SECRET`,
+  `SCHEDULED_MESSAGES_CRON_SECRET` e `WEBHOOK_SECRET`.
 
 Migrations nunca sao aplicadas automaticamente em `push`. Para aplica-las,
 dispare manualmente o workflow e marque `apply_migrations`; ele mostra o plano
 com `supabase db push --dry-run` antes de executar `supabase db push --yes`.
-Nao usa seed nem comandos de reset e nao altera secrets de Edge Functions.
+Nao usa seed nem comandos de reset.
 
-As configuracoes operacionais das functions, como
-`MOODLE_SYNC_WORKER_CRON_SECRET`, continuam sendo cadastradas no painel
-Supabase (ou por um procedimento explicito separado) e nao ficam no
-repositorio nem no workflow de deploy.
+Antes de publicar as Edge Functions, o workflow copia os quatro secrets acima
+para o projeto Supabase, define `EVOLUTION_ENABLED=false` e deriva
+`CLARIS_INVITE_REDIRECT_URL` como
+`https://<APP_DOMAIN>/auth/accept-invite`. Dessa forma os valores continuam
+protegidos no GitHub e no Supabase, sem entrarem no repositorio.
 
 O deploy de frontend ocorre em push para `main` nos arquivos relevantes ou por
 `workflow_dispatch`. A VPS recebe somente `dist`,
@@ -267,8 +269,8 @@ O deploy de frontend ocorre em push para `main` nos arquivos relevantes ou por
 O workflow [`.github/workflows/moodle-sync-runner.yml`](.github/workflows/moodle-sync-runner.yml)
 executa dispatcher e worker a cada cinco minutos contra as Edge Functions do
 Supabase gerenciado. Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` e o
-mesmo `MOODLE_SYNC_WORKER_CRON_SECRET` tanto no environment `vps` do GitHub
-quanto nos secrets das Edge Functions do projeto Supabase. Ele nao habilita
+mesmo `MOODLE_SYNC_WORKER_CRON_SECRET` no environment `vps` do GitHub; o
+workflow de backend o replica no runtime das Edge Functions. Ele nao habilita
 rollout Moodle: as flags continuam deny-by-default.
 
 Evolution permanece no codigo, mas o build de producao fixa
