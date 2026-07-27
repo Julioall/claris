@@ -260,6 +260,14 @@ para o projeto Supabase, define `EVOLUTION_ENABLED=false` e deriva
 `https://<APP_DOMAIN>/auth/accept-invite`. Dessa forma os valores continuam
 protegidos no GitHub e no Supabase, sem entrarem no repositorio.
 
+Depois de aplicar as migrations, execute manualmente o workflow
+[`provision-first-admin.yml`](.github/workflows/provision-first-admin.yml) com
+`confirm=true`. Ele usa os secrets `CLARIS_FIRST_ADMIN_EMAIL`,
+`CLARIS_FIRST_ADMIN_FULL_NAME` e `CLARIS_FIRST_ADMIN_PASSWORD` do environment
+`vps`, resolve uma chave de servidor temporaria via `SUPABASE_ACCESS_TOKEN` e
+executa o provisionamento idempotente. A chave nao e gravada como secret do
+GitHub nem exposta no log do workflow.
+
 O deploy de frontend ocorre em push para `main` nos arquivos relevantes ou por
 `workflow_dispatch`. A VPS recebe somente `dist`,
 `Dockerfile.frontend.production` e `docker-compose.vps.yml`.
