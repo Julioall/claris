@@ -195,14 +195,14 @@ jobs:
 
           run_compose() {
             if docker info >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-              docker compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+              docker compose --env-file .env.production -f docker-compose.vps.yml "\$@"
             elif sudo docker compose version >/dev/null 2>&1; then
-              sudo docker compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+              sudo docker compose --env-file .env.production -f docker-compose.vps.yml "\$@"
             elif command -v docker-compose >/dev/null 2>&1; then
               if docker info >/dev/null 2>&1; then
-                docker-compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+                docker-compose --env-file .env.production -f docker-compose.vps.yml "\$@"
               else
-                sudo docker-compose --env-file .env.production -f docker-compose.vps.yml \"\$@\"
+                sudo docker-compose --env-file .env.production -f docker-compose.vps.yml "\$@"
               fi
             else
               echo 'Docker Compose is unavailable'
@@ -214,7 +214,7 @@ jobs:
           run_compose ps
 
           attempt=1
-          while [ \"\$attempt\" -le 24 ]; do
+          while [ "\$attempt" -le 24 ]; do
             if curl --fail --silent --show-error --max-time 15 'https://$APP_DOMAIN/health' >/dev/null; then
               echo 'Frontend is healthy.'
               exit 0
